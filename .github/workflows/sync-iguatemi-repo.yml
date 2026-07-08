@@ -1,0 +1,33 @@
+name: Sync to ROM-IGUATEMI
+
+# Dispara manualmente no GitHub → Actions → Run workflow
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Iguatemi standalone branch
+        uses: actions/checkout@v4
+        with:
+          ref: cursor/rom-iguatemi-standalone-4fb3
+          fetch-depth: 0
+
+      - name: Push to ROM-IGUATEMI
+        env:
+          PAT: ${{ secrets.ROM_IGUATEMI_PAT }}
+          TARGET: contatovinicaetano93-commits/ROM-IGUATEMI
+        run: |
+          if [ -z "$PAT" ]; then
+            echo "::error::Secret ROM_IGUATEMI_PAT não configurado. Veja deploy/PUSH-IGUATEMI-VIA-GITHUB.md"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add iguatemi "https://x-access-token:${PAT}@github.com/${TARGET}.git"
+          git push iguatemi HEAD:main --force
+          echo "✓ Código publicado em https://github.com/${TARGET}"
