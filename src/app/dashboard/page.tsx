@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Area, AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { ShieldCheck, RefreshCw, Layers, TrendingUp, Users, Sparkles } from 'lucide-react'
+import { ShieldCheck, RefreshCw, Layers, TrendingUp, Users, Sparkles, ChevronRight, AlertTriangle, Clock } from 'lucide-react'
 import {
   SectionCard,
   CountBadge,
@@ -11,6 +12,14 @@ import {
   StatusPill,
   CHANNEL_LABEL,
 } from '../_components/ui'
+
+interface ActionItem {
+  contact_id: string
+  contact_name: string | null
+  overdue: number
+  due_soon: number
+  recommendations: { type: string; title: string; detail: string }[]
+}
 
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
@@ -37,6 +46,7 @@ function aggregateByChannel(rows: KpiData['byDay']) {
 
 export default function DashboardPage() {
   const [data, setData] = useState<KpiData | null>(null)
+  const [actions, setActions] = useState<ActionItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -49,6 +59,13 @@ export default function DashboardPage() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false))
+
+    fetch('/api/recommendations', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.data) setActions(json.data)
+      })
+      .catch(() => {})
   }, [])
 
   const totalContacts = data?.conversion?.total_contacts ?? 0
@@ -96,6 +113,49 @@ export default function DashboardPage() {
         <MiniStat icon={<Users size={15} />} label="Novos aguardando" value={loading ? '—' : String(novos)} />
         <MiniStat icon={<Layers size={15} />} label="Canais ativos" value={loading ? '—' : String(activeChannels)} />
       </div>
+
+      {/* Ações recomendadas — guia o front no cross/up-sell */}
+      {actions.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-1.5 text-sm font-medium">
+              <Sparkles size={15} className="text-gold" /> Ações recomendadas
+            </h2>
+            <CountBadge value={`${actions.length}`} />
+          </div>
+          {actions.slice(0, 5).map((a) => (
+            <Link
+              key={a.contact_id}
+              href={`/contatos/${a.contact_id}`}
+              className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 active:bg-surface"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-medium">{a.contact_name ?? 'Sem nome'}</p>
+                  {a.overdue > 0 && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger">
+                      <AlertTriangle size={10} />
+                      {a.overdue}
+                    </span>
+                  )}
+                  {a.due_soon > 0 && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning">
+                      <Clock size={10} />
+                      {a.due_soon}
+                    </span>
+                  )}
+                </div>
+                {a.recommendations[0] && (
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    <span className="text-gold">{a.recommendations[0].title}</span> · {a.recommendations[0].detail}
+                  </p>
+                )}
+              </div>
+              <ChevronRight size={16} className="shrink-0 text-muted" />
+            </Link>
+          ))}
+        </section>
+      )}
 
       {/* Saúde do sistema — resiliência visível */}
       <SectionCard title="Saúde do sistema">
