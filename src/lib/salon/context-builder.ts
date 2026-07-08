@@ -4,8 +4,10 @@ import type { EnrichedService, Recommendation } from '@/lib/recommendations'
 import { fetchContactKpis } from '@/lib/salon/kpis'
 import { getSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso } from '@/lib/salon/format'
+import { computeSalonIntelligence } from '@/lib/salon/intelligence'
+import { getSalonUnit, unitContextLine } from '@/lib/salon/unit'
 import { listActionItems } from '@/lib/salon/recommendations'
-import { listUpcomingSchedules } from '@/lib/services'
+import { listSchedulesForDay } from '@/lib/services'
 
 function fmtService(s: EnrichedService) {
   const parts = [s.name]
@@ -32,7 +34,7 @@ export interface SalonContext {
   salon: Awaited<ReturnType<typeof getSalonMetrics>>
   kpis_contato: Awaited<ReturnType<typeof fetchContactKpis>>
   playbook_top5: Awaited<ReturnType<typeof listActionItems>>
-  agendamentos_proximos: Awaited<ReturnType<typeof listUpcomingSchedules>>
+  agendamentos_proximos: Awaited<ReturnType<typeof listSchedulesForDay>>
 }
 
 export function buildContactContext(
@@ -58,7 +60,7 @@ export async function buildSalonContext(): Promise<SalonContext> {
     getSalonMetrics(day),
     fetchContactKpis(7),
     listActionItems(),
-    listUpcomingSchedules(1, 10),
+    listSchedulesForDay(day, 10),
   ])
 
   return {
@@ -86,7 +88,11 @@ export function hashContactContext(contact: ContactRow, services: EnrichedServic
 }
 
 export function salonContextForAI(ctx: SalonContext) {
+  const intel = computeSalonIntelligence(ctx.salon)
+  const unit = getSalonUnit()
+
   return JSON.stringify({
+    unidade: unitContextLine(unit),
     data: ctx.hoje,
     salon: ctx.salon
       ? {
@@ -99,6 +105,13 @@ export function salonContextForAI(ctx: SalonContext) {
           retornos: ctx.salon.returning_clients,
         }
       : null,
+    kpis_inteligentes: {
+      taxa_comparecimento: intel.attendance_rate,
+      receita_em_risco: intel.revenue_at_risk,
+      meta_dia: intel.daily_goal,
+      progresso_meta: intel.goal_progress,
+      falta_meta: intel.goal_gap,
+    },
     contatos: {
       por_status: ctx.kpis_contato.byStatus,
       conversao: ctx.kpis_contato.conversion,

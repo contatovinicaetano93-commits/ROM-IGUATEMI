@@ -8,7 +8,7 @@
 ## Abertura (30 segundos)
 
 > Henrique, a gente não está construindo só uma ferramenta de salão.  
-> Estamos construindo a **infraestrutura de tecnologia e marca** que vai levar o ROM de duas unidades operacionais para um **ecossistema completo**: operação, educação, conteúdo, produtos e plataforma.
+> Estamos construindo a **infraestrutura de tecnologia e marca** que vai levar o ROM de duas unidades operacionais para um **ecossistema digital**: operação, presença de marca e plataforma.
 
 O primeiro passo **já foi dado**. O resto é escalar o que funciona.
 
@@ -20,10 +20,10 @@ O primeiro passo **já foi dado**. O resto é escalar o que funciona.
 
 | Canal | Função |
 |-------|--------|
-| **WhatsApp** | Recepcionista virtual com IA — primeiro atendimento, agendamento, handoff para humano |
-| **Telegram** | Secretária da equipe — KPIs, briefings, consultas em linguagem natural |
-| **Avec** | Sync de agenda, clientes e atendimentos (2 unidades) |
-| **Painel ROM** | Contatos, métricas, playbook do dia, briefings por IA |
+| **Atendimento digital** | Recepcionista virtual — primeiro atendimento, agendamento, handoff para humano |
+| **Comunicação interna** | Secretária da equipe — KPIs, briefings, consultas em linguagem natural |
+| **Gestão do salão** | Sync de agenda, clientes e atendimentos (2 unidades) |
+| **Painel ROM** | Contatos, métricas, playbook do dia, briefings inteligentes |
 
 **O que isso prova:** tecnologia no ROM não é teoria. Já centraliza atendimento, dados e decisão operacional num só lugar.
 
@@ -39,26 +39,26 @@ O primeiro passo **já foi dado**. O resto é escalar o que funciona.
 │   [✅ HOJE]          [PRÓXIMO]         [FUTURO]         │
 │                                                          │
 │   Ferramenta    →   Marca Digital   →   Plataforma      │
-│   WhatsApp          Domínios            Academy          │
-│   Telegram          Landing Pages       Produtos         │
-│   Avec              Mídias Sociais      Faculdade        │
-│   Painel KPIs                           Híbrida          │
+│   Atendimento       Domínios                             │
+│   Comunicação       Landing Pages                        │
+│   Gestão            Mídias Sociais                       │
+│   Painel KPIs                                            │
 │                                                          │
-│   "Operação         "Presença           "Ecossistema     │
-│    inteligente"      de mercado"         completo"       │
+│   "Operação         "Presença           "Produto         │
+│    inteligente"      de mercado"         escalável"      │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## O plano — 7 frentes (na ordem certa)
+## O plano — 5 frentes (na ordem certa)
 
 ### 1. Ferramenta integrada ✅ *(feito)*
 
-WhatsApp + Telegram + Avec + painel interno.
+Canais integrados + painel interno.
 
-**Próximo passo imediato:** estabilizar nas 2 unidades (token Avec real, WhatsApp em produção, equipe treinada).
+**Próximo passo imediato:** estabilizar nas 2 unidades (integrações ativas, canais em produção, equipe treinada).
 
 ---
 
@@ -105,30 +105,8 @@ O salto de ferramenta interna para **produto de mercado**:
 - Área do cliente (histórico, agendamento, fidelidade)
 - Área da equipe (expansão do painel atual)
 - Possível SaaS para outros salões no futuro
-- Base para Academy e produtos
 
 **A ferramenta de hoje é o MVP.** A plataforma é a versão escalável.
-
----
-
-### 6. Faculdade híbrida — ROM Academy 🎓
-
-Educação presencial + online:
-
-- Cursos técnicos (cabelo, estética, gestão de salão)
-- Certificações com marca ROM
-- Receita recorrente + formação de talentos para as unidades
-- Sinergia direta com mídias
-
----
-
-### 7. Produtos ROM 🛍️
-
-Linha própria de produtos:
-
-- Cosméticos, hair care, kits profissionais
-- Venda nas unidades + e-commerce (plataforma)
-- Margem e marca própria — deixa de depender só de serviço
 
 ---
 
@@ -141,8 +119,6 @@ Linha própria de produtos:
 | **2 — Marca digital** | Mês 2–4 | Domínios + 3 landing pages | Médio |
 | **3 — Conteúdo** | Mês 3–6 | Canais de mídia | Médio |
 | **4 — Plataforma** | Mês 6–12 | Evoluir ferramenta → plataforma | Alto |
-| **5 — Educação** | Mês 9–18 | ROM Academy / faculdade híbrida | Alto |
-| **6 — Produtos** | Mês 12+ | Linha própria ROM | Alto |
 
 ---
 
@@ -157,18 +133,18 @@ Linha própria de produtos:
 
 Sem equity — contrato PJ.
 
-### Visão financeira (12 meses)
+### Visão financeira — 1 ano (12 meses)
 
 | | Meses 1–5 | Meses 6–12 |
 |---|-----------|------------|
-| Ferramenta (stack ROM) | R$ 5.100 | R$ 5.100 |
+| Ferramenta ROM | R$ 5.100 | R$ 5.100 |
 | Mão de obra | R$ 12.000 | R$ 10.000 |
 | **Total mensal** | **R$ 17.100** | **R$ 15.100** |
 
 | Período | Total |
 |---------|-------|
-| Fase 1 (5 meses) | R$ 85.500 |
-| Fase 2 (7 meses) | R$ 105.700 |
+| Fase 1 — implantação presencial (5 meses) | R$ 85.500 |
+| Fase 2 — CTO híbrido (7 meses) | R$ 105.700 |
 | **Ano 1** | **R$ 191.200** |
 
 ~R$ 7.550/unidade/mês na fase estável (2 unidades).
@@ -190,8 +166,8 @@ Sem equity — contrato PJ.
 
 Presença no salão para garantir que funciona de verdade:
 
-- Avec ativo nas 2 unidades com dados reais
-- WhatsApp + Telegram em produção
+- Integrações ativas nas 2 unidades com dados reais
+- Canais digitais em produção
 - Equipe treinada (backstaff e gestão)
 - Diagnóstico tech da operação inteira
 - Documentação e plano de contingência
@@ -201,8 +177,8 @@ Presença no salão para garantir que funciona de verdade:
 
 Operação estável, roadmap cresce:
 
-- Dono técnico do stack (Vercel, banco, Avec, IA, WhatsApp)
-- Roadmap alinhado à gestão (itens 2–7 do plano)
+- Dono técnico da plataforma, integrações e infraestrutura
+- Roadmap alinhado à gestão (itens 2–5 do plano)
 - Domínios + landing pages (ROM, Academy, Concept)
 - Suporte a incidentes em horário comercial
 - Gestão de fornecedores e orçamento de infra
@@ -212,15 +188,15 @@ Operação estável, roadmap cresce:
 
 ## Fechamento para o Henrique
 
-> **Hoje** o ROM já tem algo que a maioria dos salões não tem: inteligência operacional rodando — WhatsApp, Telegram, Avec e painel num só sistema.
+> **Hoje** o ROM já tem algo que a maioria dos salões não tem: inteligência operacional rodando — atendimento, gestão e painel num só sistema.
 >
 > **Amanhã** a gente coloca a marca no mundo: domínios, landing pages, mídias.
 >
-> **Depois** a gente escala: plataforma, educação, produtos.
+> **Depois** a gente escala: plataforma.
 >
-> Não é um projeto de TI. É a **arquitetura de crescimento do ROM** — da operação à marca, da marca ao ecossistema.
+> Não é um projeto de TI. É a **arquitetura de crescimento do ROM** — da operação à marca, da marca à plataforma.
 >
-> O investimento é **R$ 17.100/mês** nos primeiros 5 meses (com presença no salão) e **R$ 15.100/mês** depois (CTO híbrido com 25h/semana). **R$ 191.200 no ano 1** para tecnologia, operação inteligente e construção do ecossistema ROM.
+> O investimento é **R$ 17.100/mês** nos primeiros 5 meses (com presença no salão) e **R$ 15.100/mês** depois (CTO híbrido com 25h/semana). **R$ 191.200 no ano 1** para tecnologia, operação inteligente e construção da plataforma ROM.
 
 ---
 
@@ -234,7 +210,8 @@ Operação estável, roadmap cresce:
 | Equity | Não | ☐ |
 
 **Compromisso imediato (meses 1–5):** R$ 17.100/mês  
-**Compromisso recorrente (mês 6+):** R$ 15.100/mês
+**Compromisso recorrente (mês 6+):** R$ 15.100/mês  
+**Total planejado (ano 1):** R$ 191.200
 
 ---
 
@@ -255,10 +232,9 @@ Operação estável, roadmap cresce:
 │  • R$ 10.000 (pessoas) + R$ 5.100 (ferramenta)               │
 │  • Total: R$ 15.100/mês                                       │
 │                                                               │
-│  ANO 1: R$ 191.200                                            │
-│  Equity: NÃO                                                  │
+│  ANO 1: R$ 191.200 · Equity: NÃO                             │
 │                                                               │
-│  Entrega: operação inteligente hoje + ecossistema amanhã    │
+│  Entrega: operação inteligente hoje + plataforma amanhã    │
 │                                                               │
 └──────────────────────────────────────────────────────────────┘
 ```

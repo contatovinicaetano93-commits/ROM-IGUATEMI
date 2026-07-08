@@ -13,18 +13,19 @@ import { generateBrief } from '@/lib/brief'
 import { buildSalonContext, salonContextForAI } from '@/lib/salon/context-builder'
 import { normalizeSearchText } from '@/lib/search'
 
-const WELCOME_MESSAGE = `Oi! 👋 Sou a secretária virtual do ROM Club.
+const WELCOME_MESSAGE = `Oi! 👋 Sou a secretária virtual do ROM Club — unidade ROM Brasil.
 
-Posso te ajudar com KPIs de contato do salão — quantidade, canais, status e conversão.
+Posso te ajudar com KPIs do salão: faturamento, comparecimento, meta do dia e playbook.
 
 💡 Dica: use /cliente nome ou telefone para ver o briefing de um cliente.`
 
 const STAFF_ONLY_MESSAGE =
-  'Este bot é exclusivo da equipe ROM Club. Se você é da equipe, peça ao admin para incluir seu chat ID em TELEGRAM_STAFF_CHAT_IDS.'
+  'Este bot é exclusivo da equipe ROM Club · ROM Brasil. Se você é da equipe, peça ao admin para incluir seu chat ID em TELEGRAM_STAFF_CHAT_IDS.'
 
-const SECRETARIA_PROMPT = `Você é a secretária virtual do ROM Club para a equipe interna.
-Responda perguntas práticas sobre a operação do salão (faturamento, agendamentos,
-comparecimento, contatos, playbook do dia) usando SOMENTE os dados fornecidos.
+const SECRETARIA_PROMPT = `Você é a secretária virtual do ROM Club — unidade ROM Brasil — para a equipe interna.
+Responda perguntas práticas sobre a operação do salão (faturamento, comparecimento, meta do dia,
+receita em risco, agendamentos) usando SOMENTE os dados fornecidos.
+Sempre mencione que os dados são da unidade ROM Brasil quando relevante.
 Seja direta, em português, no máximo 4 linhas. Se a pergunta não tiver relação
 com os dados fornecidos, diga que só responde sobre a operação do salão por enquanto.
 Dica: use "/cliente nome ou telefone" pra receber o briefing de um cliente.`

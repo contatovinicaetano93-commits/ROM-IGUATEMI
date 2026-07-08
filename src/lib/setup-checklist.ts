@@ -28,7 +28,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Gere um segredo: openssl rand -hex 32 (ou string aleatória longa)',
       'Vercel → CRON_SECRET = o valor gerado',
-      'Protege sync automático (8h) e botão "Rodar sync" no admin',
+      'Protege sync automático: fast a cada 5 min + full 8h (ROM Brasil)',
       'Redeploy',
     ],
   },

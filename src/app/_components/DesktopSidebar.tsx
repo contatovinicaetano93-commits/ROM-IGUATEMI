@@ -56,8 +56,8 @@ export function DesktopSidebar() {
             R
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-gold-strong">Recepção</p>
-            <p className="text-xs text-muted">ROM Club · Operação</p>
+            <p className="truncate text-sm font-medium text-gold-strong">ROM Brasil</p>
+            <p className="text-xs text-muted">Recepção · ROM Club</p>
           </div>
         </div>
         <p className="mt-4 text-[0.65rem] text-muted/70">Onboarding &amp; KPIs · v0.1.0</p>

@@ -1,7 +1,11 @@
 {
   "crons": [
     {
-      "path": "/api/avec/sync",
+      "path": "/api/avec/sync?mode=fast",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/avec/sync?mode=full",
       "schedule": "0 8 * * *"
     }
   ]

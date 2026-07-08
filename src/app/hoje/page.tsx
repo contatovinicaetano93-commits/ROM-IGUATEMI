@@ -15,7 +15,11 @@ import {
   DollarSign,
 } from 'lucide-react'
 import { CountBadge } from '../_components/ui'
-import { fmtSchedule, formatCurrency } from '@/lib/salon/format'
+import {
+  fmtSchedule,
+  formatCurrency,
+} from '@/lib/salon/format'
+import { attendanceRateLabel, goalProgressLabel } from '@/lib/salon/intelligence'
 
 interface PlaybookItem {
   contact_id: string
@@ -36,6 +40,7 @@ interface ScheduleItem {
 }
 
 interface HojeData {
+  unit: { name: string; slug: string; label: string; brand: string }
   day: string
   salon: {
     revenue: number
@@ -44,6 +49,13 @@ interface HojeData {
     no_shows: number
     ticket_avg: number | null
     new_clients: number
+  }
+  intelligence: {
+    attendance_rate: number | null
+    revenue_at_risk: number
+    daily_goal: number
+    goal_progress: number | null
+    goal_gap: number
   }
   playbook: PlaybookItem[]
   scheduleToday: ScheduleItem[]
@@ -68,6 +80,8 @@ export default function HojePage() {
   }, [])
 
   const salon = data?.salon
+  const intel = data?.intelligence
+  const unitLabel = data?.unit.label ?? 'ROM Brasil · ROM Club'
   const dayLabel = data
     ? new Date(data.day + 'T12:00:00').toLocaleDateString('pt-BR', {
         weekday: 'long',
@@ -79,7 +93,7 @@ export default function HojePage() {
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
       <div>
-        <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Playbook do dia</p>
+        <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">{unitLabel}</p>
         <h1 className="mt-1 flex items-center gap-2 text-xl font-semibold capitalize lg:text-2xl">
           <Sun size={22} className="text-gold" />
           Hoje no ROM
@@ -121,6 +135,63 @@ export default function HojePage() {
           warn={(salon?.no_shows ?? 0) > 0}
         />
       </div>
+
+      {/* KPIs inteligentes — ROM Brasil */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <KpiCard
+          icon={<TrendingUp size={16} />}
+          label="Comparecimento"
+          value={loading ? '—' : attendanceRateLabel(intel?.attendance_rate ?? null)}
+          loading={loading}
+          highlight={
+            intel?.attendance_rate != null && intel.attendance_rate >= 0.85
+              ? 'success'
+              : intel?.attendance_rate != null && intel.attendance_rate < 0.7
+                ? 'warn'
+                : undefined
+          }
+          hint={
+            !loading && salon
+              ? `${salon.attended} de ${salon.appointments} agendados`
+              : undefined
+          }
+        />
+        <KpiCard
+          icon={<AlertTriangle size={16} />}
+          label="Receita em risco"
+          value={loading ? '—' : formatCurrency(intel?.revenue_at_risk)}
+          loading={loading}
+          warn={(intel?.revenue_at_risk ?? 0) > 0}
+          hint={
+            !loading && (intel?.revenue_at_risk ?? 0) > 0
+              ? `${salon?.no_shows ?? 0} no-show(s) × ticket médio`
+              : undefined
+          }
+        />
+        <KpiCard
+          icon={<DollarSign size={16} />}
+          label="Meta do dia"
+          value={loading ? '—' : goalProgressLabel(intel?.goal_progress ?? null)}
+          loading={loading}
+          hint={
+            !loading && intel
+              ? `${formatCurrency(salon?.revenue)} de ${formatCurrency(intel.daily_goal)} · faltam ${formatCurrency(intel.goal_gap)}`
+              : undefined
+          }
+        />
+      </div>
+
+      {!loading && (intel?.revenue_at_risk ?? 0) > 0 && (
+        <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4">
+          <DollarSign size={18} className="mt-0.5 shrink-0 text-warning" />
+          <p className="text-sm">
+            <span className="font-semibold text-warning">
+              {formatCurrency(intel!.revenue_at_risk)} em risco
+            </span>
+            {' — '}confirme agendamentos pendentes e recupere no-shows (ROM Brasil).
+          </p>
+        </div>
+      )}
 
       {!loading && (data?.overdue_total ?? 0) > 0 && (
         <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-4">
@@ -260,17 +331,26 @@ function KpiCard({
   value,
   loading,
   warn,
+  highlight,
+  hint,
 }: {
   icon: React.ReactNode
   label: string
   value: string
   loading: boolean
   warn?: boolean
+  highlight?: 'success' | 'warn'
+  hint?: string
 }) {
+  const border =
+    highlight === 'success'
+      ? 'border-success/40 bg-success/10'
+      : highlight === 'warn' || warn
+        ? 'border-warning/40 bg-warning/10'
+        : 'border-border bg-card'
+
   return (
-    <div
-      className={`rounded-2xl border p-4 ${warn ? 'border-warning/40 bg-warning/10' : 'border-border bg-card'}`}
-    >
+    <div className={`rounded-2xl border p-4 ${border}`}>
       <div className="mb-2 flex items-center gap-1.5 text-muted">
         {icon}
         <span className="text-[0.6rem] uppercase tracking-wide">{label}</span>
@@ -278,7 +358,16 @@ function KpiCard({
       {loading ? (
         <div className="h-7 w-16 animate-pulse rounded bg-border" />
       ) : (
-        <p className={`text-lg font-semibold tabular-nums ${warn ? 'text-warning' : ''}`}>{value}</p>
+        <>
+          <p
+            className={`text-lg font-semibold tabular-nums ${
+              highlight === 'success' ? 'text-success' : warn || highlight === 'warn' ? 'text-warning' : ''
+            }`}
+          >
+            {value}
+          </p>
+          {hint && <p className="mt-1 text-[0.65rem] leading-snug text-muted">{hint}</p>}
+        </>
       )}
     </div>
   )

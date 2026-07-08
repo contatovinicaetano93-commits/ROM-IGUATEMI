@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ROM · Painel de Contatos",
+  title: "ROM Brasil · Painel operacional",
   description:
-    "Frente de caixa do ROM Club: playbook do dia, contatos e KPIs do salão.",
+    "ROM Brasil — playbook do dia, contatos e KPIs inteligentes do salão (Avec + IA).",
   applicationName: "ROM",
   appleWebApp: {
     capable: true,
