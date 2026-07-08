@@ -81,7 +81,7 @@ export default function HojePage() {
 
   const salon = data?.salon
   const intel = data?.intelligence
-  const unitLabel = data?.unit.label ?? 'ROM Brasil · ROM Club'
+  const unitLabel = data?.unit.label ?? 'ROM Iguatemi · ROM Club'
   const dayLabel = data
     ? new Date(data.day + 'T12:00:00').toLocaleDateString('pt-BR', {
         weekday: 'long',
@@ -136,7 +136,7 @@ export default function HojePage() {
         />
       </div>
 
-      {/* KPIs inteligentes — ROM Brasil */}
+      {/* KPIs inteligentes — ROM Iguatemi */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <KpiCard
           icon={<TrendingUp size={16} />}
@@ -188,7 +188,7 @@ export default function HojePage() {
             <span className="font-semibold text-warning">
               {formatCurrency(intel!.revenue_at_risk)} em risco
             </span>
-            {' — '}confirme agendamentos pendentes e recupere no-shows (ROM Brasil).
+            {' — '}confirme agendamentos pendentes e recupere no-shows (ROM Iguatemi).
           </p>
         </div>
       )}

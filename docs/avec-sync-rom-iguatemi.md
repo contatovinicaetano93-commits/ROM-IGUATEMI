@@ -1,4 +1,4 @@
-# Sync Avec — ROM Brasil
+# Sync Avec — ROM Iguatemi
 
 ## Modos
 
@@ -18,7 +18,7 @@ O Hobby **só permite 1 cron/dia**. O `vercel.json` roda apenas o **full** às 8
 Use [cron-job.org](https://cron-job.org) ou similar:
 
 ```
-POST https://rom-club.vercel.app/api/avec/sync?mode=fast
+POST https://SEU-PROJETO-IGUATEMI.vercel.app/api/avec/sync?mode=fast
 Header: Authorization: Bearer SEU_CRON_SECRET
 Schedule: */5 * * * *
 ```
@@ -36,13 +36,17 @@ Descomente no `vercel.json`:
 
 ## Unidade
 
-Todas as métricas e logs referem **ROM Brasil** (`SALON_UNIT_NAME`).
+Todas as métricas e logs referem **ROM Iguatemi** (`SALON_UNIT_NAME`).
+
+Não reutilize o token, banco ou domínio do ROM Brasil — este projeto é da unidade Iguatemi.
 
 ## Variáveis
 
 ```
-SALON_UNIT_NAME=ROM Brasil
+SALON_UNIT_NAME=ROM Iguatemi
+SALON_UNIT_SLUG=rom-iguatemi
 SALON_DAILY_GOAL=5000
 AVEC_API_TOKEN=...
+AVEC_UNIT_ID=...
 CRON_SECRET=...
 ```

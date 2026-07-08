@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       docs: 'https://documenter.getpostman.com/view/12527228/2sA2xmUWJo',
       schedules: {
-        fast: '*/5 * * * * — relatórios do dia (ROM Brasil)',
+        fast: '*/5 * * * * — relatórios do dia (ROM Iguatemi)',
         full: '0 8 * * * — catálogo clientes + histórico',
       },
       last,

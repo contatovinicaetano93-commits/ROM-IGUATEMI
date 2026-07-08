@@ -1,8 +1,8 @@
 /** Unidade operacional do ROM — sempre cite a unidade nas respostas e no painel. */
 export interface SalonUnit {
-  /** Nome exibido: ex. "ROM Brasil" */
+  /** Nome exibido: ex. "ROM Iguatemi" */
   name: string
-  /** Identificador curto: ex. "rom-brasil" */
+  /** Identificador curto: ex. "rom-iguatemi" */
   slug: string
   /** ID da unidade no Avec (quando configurado) */
   avecUnitId: string | null
@@ -11,8 +11,8 @@ export interface SalonUnit {
 }
 
 const DEFAULT_UNIT: SalonUnit = {
-  name: 'ROM Brasil',
-  slug: 'rom-brasil',
+  name: 'ROM Iguatemi',
+  slug: 'rom-iguatemi',
   avecUnitId: null,
   brand: 'ROM Club',
 }
@@ -26,7 +26,7 @@ export function getSalonUnit(): SalonUnit {
   }
 }
 
-/** Rótulo completo para UI: "ROM Brasil · ROM Club" */
+/** Rótulo completo para UI: "ROM Iguatemi · ROM Club" */
 export function unitDisplayLabel(unit = getSalonUnit()) {
   return `${unit.name} · ${unit.brand}`
 }

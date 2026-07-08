@@ -9,7 +9,7 @@ export async function notifyStaffHandoff(contact: ContactRow, reason: string, la
   const nome = contact.name ?? 'Sem nome'
   const tel = contact.phone ?? '—'
   const text = [
-    '📲 Handoff WhatsApp — ROM Club',
+    '📲 Handoff WhatsApp — ROM Iguatemi',
     '',
     `Cliente: ${nome}`,
     `Tel: ${tel}`,

@@ -1,13 +1,15 @@
-# ROM — Onboarding & Painel de KPIs
+# ROM Iguatemi — Onboarding & Painel de KPIs
 
-Sistema interno da frente de caixa do ROM Club: recebe contatos de clientes por
-WhatsApp (IA de primeiro atendimento), Telegram (secretária de consulta prática
-pra equipe) e Avec (sync de agenda/clientes), e centraliza tudo num painel de
-KPIs.
+Sistema interno da frente de caixa do **ROM Club · unidade Iguatemi**: recebe
+contatos por WhatsApp (IA de primeiro atendimento), Telegram (secretária da
+equipe) e Avec (sync de agenda/clientes), e centraliza tudo num painel de KPIs.
 
 Stack: Next.js (App Router) + TypeScript + Tailwind + Neon (Postgres serverless),
 API-first (front-end só fala com `/api/*`). Acesso ao banco por SQL direto
 (`@neondatabase/serverless`).
+
+**Unidade:** defaults em `SALON_UNIT_NAME=ROM Iguatemi` / `rom-iguatemi`.
+Não compartilhe banco, token Avec, WhatsApp ou domínio com o ROM Brasil.
 
 **Interface adaptativa:** mobile-first no celular (bottom bar, drawer) e layout
 desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
@@ -18,7 +20,7 @@ desktop completo a partir de `lg` (sidebar fixa, conteúdo em largura total até
 - `src/app/api/webhooks/avec` — webhook push (agendamento, atendimento, cliente).
 - `src/app/api/avec/sync` — sincronização com a API de Relatórios Avec
   (clientes `0004`, agendamentos `0051`, atendidos `0002`). Roda via cron
-  1x/dia (8h) ou manualmente com `CRON_SECRET`.
+  1x/dia (8h) ou manualmente com `CRON_SECRET`. Ver `docs/avec-sync-rom-iguatemi.md`.
 - `src/app/api/webhooks/whatsapp` — recebe mensagem do provedor WhatsApp
   (Evolution API), responde com IA (primeiro atendimento guiado) e loga tudo.
 - `src/app/api/webhooks/telegram` — bot "secretária": equipe pergunta em
@@ -35,30 +37,24 @@ Resiliência: todo evento (mensagem recebida, resposta da IA, erro) vira uma
 linha em `contact_events` — nada se perde silenciosamente, dá pra reprocessar
 ou investigar depois.
 
-## PENDENTE — você precisa fazer manualmente
+## Go-live Iguatemi (checklist)
 
-1. **Criar um projeto Neon dedicado ao ROM** e copiar a `DATABASE_URL`
-   (connection string com `sslmode=require`) pro `.env.local`.
-2. **Rodar `db/schema.sql`** no SQL Editor do Neon (ou `psql`).
-3. **Claude (Anthropic)** — `ANTHROPIC_API_KEY` em [console.anthropic.com](https://console.anthropic.com)
-   para briefings IA, WhatsApp e Telegram. Modelo padrão: `claude-sonnet-4-20250514`.
-4. **Avec** — gerar `AVEC_API_TOKEN` no painel Avec. A URL padrão já é
-   `https://api.avec.beauty` ([documentação Postman](https://documenter.getpostman.com/view/12527228/2sA2xmUWJo)).
-   Opcional: `CRON_SECRET` (sync automático 8h) e `AVEC_WEBHOOK_SECRET` (webhook push).
-5. **Decidir o provedor de WhatsApp**: Evolution API (rápido, roda em minutos,
-   mas usa número real em modo não-oficial) ou WhatsApp Cloud API oficial
-   (mais lento pra configurar — verificação Meta Business — porém mais
-   resiliente a longo prazo). O código já está pronto pros dois, só falta a
-   decisão + credenciais.
-6. **Criar um bot Telegram dedicado ao ROM** via `@BotFather` (2 min, token na
-   hora) e configurar o `setWebhook` apontando para
-   `/api/webhooks/telegram` com um `secret_token`.
-7. Preencher `.env.local` com base no `.env.example`.
+1. **Vercel** — projeto novo ligado a este repo (`ROM-IGUATEMI`), não reusar `rom-club`.
+2. **Neon** — banco dedicado Iguatemi + rodar `db/schema.sql` + `DATABASE_URL`.
+3. **Auth** — `ROM_ADMIN_USER` / `ROM_ADMIN_PASSWORD` + `CRON_SECRET`.
+4. **Unidade** — `SALON_UNIT_NAME=ROM Iguatemi`, `SALON_UNIT_SLUG=rom-iguatemi`, meta diária.
+5. **Avec** — token + `AVEC_UNIT_ID` da unidade Iguatemi; Admin → Testar → Sync.
+6. **Claude** — `ANTHROPIC_API_KEY` (briefings, WhatsApp, Telegram).
+7. **WhatsApp** — Evolution com número Iguatemi → webhook deste deploy.
+8. **Telegram** — bot dedicado + `TELEGRAM_STAFF_CHAT_IDS` da equipe Iguatemi.
+9. **Cron fast** — cron-job.org → `POST /api/avec/sync?mode=fast` (Hobby).
+
+Detalhes no `/admin` (SetupChecklist) e em `.env.example`.
 
 ## Rodando local
 
 ```bash
 npm install
-cp .env.example .env.local   # preencher as chaves
+cp .env.example .env.local   # preencher as chaves da unidade Iguatemi
 npm run dev
 ```

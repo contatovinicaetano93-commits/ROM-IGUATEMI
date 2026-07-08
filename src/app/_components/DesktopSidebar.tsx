@@ -56,7 +56,7 @@ export function DesktopSidebar() {
             R
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-gold-strong">ROM Brasil</p>
+            <p className="truncate text-sm font-medium text-gold-strong">ROM Iguatemi</p>
             <p className="text-xs text-muted">Recepção · ROM Club</p>
           </div>
         </div>

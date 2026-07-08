@@ -300,7 +300,7 @@ function resolveStatus(stats: AvecSyncStats): AvecSyncRun['status'] {
 }
 
 /**
- * Sync Avec — unidade ROM Brasil (configurável via SALON_UNIT_NAME).
+ * Sync Avec — unidade ROM Iguatemi (configurável via SALON_UNIT_NAME).
  * - fast: relatórios do dia (0051, 0002, faturamento, cancelamentos) — cron a cada 5 min
  * - full: + catálogo clientes 0004 + janela ampla — cron 1×/dia
  */
