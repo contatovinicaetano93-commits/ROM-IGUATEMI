@@ -10,7 +10,7 @@ function LoginForm() {
   const params = useSearchParams()
   const next = sanitizeRedirectPath(params.get('next'))
   const loggedOut = params.get('logged_out') === '1'
-  const [username, setUsername] = useState('admin')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -42,9 +42,9 @@ function LoginForm() {
 
   return (
     <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6">
-      <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">ROM Club</p>
+      <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">ROM Iguatemi</p>
       <h1 className="mt-2 text-xl font-semibold">Acesso da equipe</h1>
-        <p className="mt-2 text-sm text-muted">Painel, contatos e playbook do ROM Club.</p>
+      <p className="mt-2 text-sm text-muted">Painel, contatos e playbook · unidade Iguatemi.</p>
       {loggedOut && (
         <p className="mt-3 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           Você saiu do sistema. Entre novamente para continuar.
@@ -60,6 +60,7 @@ function LoginForm() {
             required
             autoComplete="username"
             autoFocus
+            placeholder="ADMIN-IGUATEMI"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
           />
         </label>
@@ -71,6 +72,7 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
+            placeholder="Senha da unidade"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
           />
         </label>
