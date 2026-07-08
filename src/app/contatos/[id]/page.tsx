@@ -362,7 +362,7 @@ export default function ContactDetailPage() {
           <div className="flex flex-col gap-3">
             <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">{brief.text}</p>
             <span className="text-[0.65rem] uppercase tracking-wide text-muted">
-              {brief.source === 'ai' ? 'Gerado por IA' : 'Gerado por regras (IA indisponível)'}
+              {brief.source === 'ai' ? 'Gerado por Claude' : 'Gerado por regras (Claude não configurado)'}
             </span>
           </div>
         ) : (

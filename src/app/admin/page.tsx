@@ -52,7 +52,7 @@ interface AvecStatus {
 interface HealthStatus {
   ok: boolean
   database: { configured: boolean; connected: boolean; error: string | null }
-  openai: { configured: boolean }
+  claude: { configured: boolean; model?: string }
   avec: { configured: boolean; mock: boolean; token: boolean }
   whatsapp: { configured: boolean }
   telegram: { configured: boolean; webhook_secret: boolean }
@@ -204,9 +204,9 @@ export default function AdminPage() {
             <div className="space-y-2 text-sm">
               <HealthRow label="Banco de dados" ok={health.database.connected} detail={health.database.error ?? undefined} />
               <HealthRow
-                label="Claude (IA)"
-                ok={health.openai.configured}
-                hint={health.openai.configured ? 'Anthropic' : 'ANTHROPIC_API_KEY'}
+                label="Claude (Anthropic)"
+                ok={health.claude.configured}
+                hint={health.claude.configured ? health.claude.model ?? 'ativo' : 'ANTHROPIC_API_KEY'}
               />
               <HealthRow label="Avec token" ok={health.avec.token} hint={health.avec.mock ? 'mock ativo' : undefined} />
               <HealthRow label="WhatsApp (Evolution)" ok={health.whatsapp.configured} />

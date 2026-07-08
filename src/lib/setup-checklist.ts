@@ -93,7 +93,7 @@ export function isItemConfigured(
   id: string,
   health: {
     database: { connected: boolean }
-    openai: { configured: boolean }
+    claude: { configured: boolean }
     avec: { token: boolean }
     whatsapp: { configured: boolean }
     telegram: { configured: boolean }
@@ -107,7 +107,7 @@ export function isItemConfigured(
     case 'cron':
       return health.cron.configured
     case 'claude':
-      return health.openai.configured
+      return health.claude.configured
     case 'avec':
       return health.avec.token
     case 'whatsapp':

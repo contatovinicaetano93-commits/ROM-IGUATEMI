@@ -22,7 +22,10 @@ export async function getHealthStatus() {
   return {
     ok: database,
     database: { configured: envOk('DATABASE_URL'), connected: database, error: databaseError },
-    openai: { configured: isAiConfigured(), provider: 'claude' as const },
+    claude: {
+      configured: isAiConfigured(),
+      model: process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-20250514',
+    },
     avec: {
       configured: isAvecConfigured(),
       mock: isAvecMock(),

@@ -6,7 +6,7 @@ import { SETUP_ITEMS, isItemConfigured } from '@/lib/setup-checklist'
 
 interface HealthForSetup {
   database: { connected: boolean }
-  openai: { configured: boolean }
+  claude: { configured: boolean }
   avec: { token: boolean; mock: boolean }
   whatsapp: { configured: boolean }
   telegram: { configured: boolean }
