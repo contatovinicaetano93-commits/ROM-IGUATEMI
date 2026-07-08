@@ -41,8 +41,8 @@ O primeiro passo **já foi dado**. O resto é escalar o que funciona.
 │   Ferramenta    →   Marca Digital   →   Plataforma      │
 │   WhatsApp          Domínios            Academy          │
 │   Telegram          Landing Pages       Produtos         │
-│   Avec              Podcast             Faculdade        │
-│   Painel KPIs       Mídias Sociais      Híbrida          │
+│   Avec              Mídias Sociais      Faculdade        │
+│   Painel KPIs                           Híbrida          │
 │                                                          │
 │   "Operação         "Presença           "Ecossistema     │
 │    inteligente"      de mercado"         completo"       │
@@ -52,7 +52,7 @@ O primeiro passo **já foi dado**. O resto é escalar o que funciona.
 
 ---
 
-## O plano — 8 frentes (na ordem certa)
+## O plano — 7 frentes (na ordem certa)
 
 ### 1. Ferramenta integrada ✅ *(feito)*
 
@@ -88,19 +88,9 @@ Registrar e lançar presença digital da marca:
 
 ---
 
-### 4. Podcast 🎙️
+### 4. Canais de mídia 📱
 
-Conteúdo de autoridade no segmento beleza + negócios + lifestyle.
-
-- Romeo e convidados como voz da marca
-- Alimenta redes, SEO e credibilidade da Academy
-- Custo baixo, retorno alto em posicionamento
-
----
-
-### 5. Canais de mídia 📱
-
-Distribuir o que o podcast e a operação geram:
+Distribuir o que a operação gera:
 
 - Instagram, YouTube, TikTok, LinkedIn
 - Conteúdo recorrente: bastidores, transformações, educação, cultura ROM
@@ -108,7 +98,7 @@ Distribuir o que o podcast e a operação geram:
 
 ---
 
-### 6. Plataforma ROM 💻
+### 5. Plataforma ROM 💻
 
 O salto de ferramenta interna para **produto de mercado**:
 
@@ -121,18 +111,18 @@ O salto de ferramenta interna para **produto de mercado**:
 
 ---
 
-### 7. Faculdade híbrida — ROM Academy 🎓
+### 6. Faculdade híbrida — ROM Academy 🎓
 
 Educação presencial + online:
 
 - Cursos técnicos (cabelo, estética, gestão de salão)
 - Certificações com marca ROM
 - Receita recorrente + formação de talentos para as unidades
-- Sinergia direta com podcast e mídias
+- Sinergia direta com mídias
 
 ---
 
-### 8. Produtos ROM 🛍️
+### 7. Produtos ROM 🛍️
 
 Linha própria de produtos:
 
@@ -149,7 +139,7 @@ Linha própria de produtos:
 | **0 — Fundação** | Agora | Estabilizar ferramenta nas 2 unidades | Já em curso |
 | **1 — Diagnóstico** | Mês 1–2 | Mapear gaps tech na operação | Baixo |
 | **2 — Marca digital** | Mês 2–4 | Domínios + 3 landing pages | Médio |
-| **3 — Conteúdo** | Mês 3–6 | Podcast + canais de mídia | Médio |
+| **3 — Conteúdo** | Mês 3–6 | Canais de mídia | Médio |
 | **4 — Plataforma** | Mês 6–12 | Evoluir ferramenta → plataforma | Alto |
 | **5 — Educação** | Mês 9–18 | ROM Academy / faculdade híbrida | Alto |
 | **6 — Produtos** | Mês 12+ | Linha própria ROM | Alto |
@@ -212,7 +202,7 @@ Presença no salão para garantir que funciona de verdade:
 Operação estável, roadmap cresce:
 
 - Dono técnico do stack (Vercel, banco, Avec, IA, WhatsApp)
-- Roadmap alinhado à gestão (itens 2–8 do plano)
+- Roadmap alinhado à gestão (itens 2–7 do plano)
 - Domínios + landing pages (ROM, Academy, Concept)
 - Suporte a incidentes em horário comercial
 - Gestão de fornecedores e orçamento de infra
@@ -224,7 +214,7 @@ Operação estável, roadmap cresce:
 
 > **Hoje** o ROM já tem algo que a maioria dos salões não tem: inteligência operacional rodando — WhatsApp, Telegram, Avec e painel num só sistema.
 >
-> **Amanhã** a gente coloca a marca no mundo: domínios, landing pages, podcast, mídias.
+> **Amanhã** a gente coloca a marca no mundo: domínios, landing pages, mídias.
 >
 > **Depois** a gente escala: plataforma, educação, produtos.
 >
