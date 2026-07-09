@@ -56,7 +56,10 @@ export type DirectorReportStage = '0011' | '0021' | 'all'
 
 export interface DirectorReportPeriod {
   selected_month: MonthKey
-  compare_month: MonthKey
+  /** null = modo só um mês (sem comparativo 0021) */
+  compare_month: MonthKey | null
+  /** true quando 0021 compara dois meses */
+  compare_months: boolean
   selected_quarter: QuarterKey
   compare_quarter: QuarterKey
   /** Rótulo completo (ambas etapas) */

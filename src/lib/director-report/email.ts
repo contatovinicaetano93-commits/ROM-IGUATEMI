@@ -1,6 +1,8 @@
 import type { DirectorReport, DirectorReportStage } from './types'
 import { reactivationCsv, returnCompareCsv, revenueCompareCsv } from './csv'
 import {
+  labelMonth,
+  orderMonths,
   reportSubject0011,
   reportSubject0021,
   slug0011,
@@ -67,28 +69,71 @@ function html0011(report: DirectorReport) {
 }
 
 function html0021(report: DirectorReport) {
-  const a = report.period.selected_month
-  const b = report.period.compare_month
+  const focus = report.period.selected_month
+  const other = report.period.compare_month
+  const compare = report.period.compare_months && Boolean(other)
+
+  if (!compare || !other) {
+    const rows = report.revenue_blocks
+      .map((block) => {
+        const row = block.months.find((m) => m.month === focus)
+        return {
+          name: block.professional.name,
+          fat: row?.revenue ?? 0,
+          tick: row?.ticket_avg ?? 0,
+          attended: row?.attended ?? 0,
+        }
+      })
+      .sort((x, y) => y.fat - x.fat)
+      .slice(0, 12)
+
+    const body = rows
+      .map(
+        (r) =>
+          `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.name}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.fat)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.tick)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.attended}</td></tr>`
+      )
+      .join('')
+
+    return `<!doctype html><html><body style="font-family:Georgia,serif;color:#1a1a1a;line-height:1.45">
+  <p style="font-size:12px;color:#888;margin:0 0 4px">ETAPA 2 DE 2</p>
+  <h1 style="font-size:20px;margin:0 0 8px">ROM CLUB BRASIL · Relatório 0021</h1>
+  <p style="margin:0 0 4px;font-size:15px"><b>Mês:</b> ${labelMonth(focus)}</p>
+  <p style="margin:0 0 16px;font-size:14px"><b>Data de referência:</b> ${report.period.reference_date}</p>
+  <p>Fat. <b>${formatCurrency(report.summary.total_revenue_selected_month)}</b> · ticket médio <b>${formatCurrency(report.summary.avg_ticket_selected_month)}</b></p>
+  <table style="border-collapse:collapse;width:100%;font-size:13px;margin-top:16px">
+    <thead><tr style="text-align:left;color:#666">
+      <th style="padding:6px 10px">Profissional</th>
+      <th style="padding:6px 10px">Faturamento</th>
+      <th style="padding:6px 10px">Ticket</th>
+      <th style="padding:6px 10px">Atendimentos</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+  <p style="margin-top:24px;font-size:12px;color:#666">Anexo: faturamento + ticket do mês (sem comparativo).</p>
+  </body></html>`
+  }
+
+  const [older, newer] = orderMonths(focus, other)
   const rows = report.revenue_blocks
     .map((block) => {
       const by = new Map(block.months.map((m) => [m.month, m]))
-      const ra = by.get(a)
-      const rb = by.get(b)
+      const ro = by.get(older)
+      const rn = by.get(newer)
       return {
         name: block.professional.name,
-        fatA: ra?.revenue ?? 0,
-        tickA: ra?.ticket_avg ?? 0,
-        fatB: rb?.revenue ?? 0,
-        tickB: rb?.ticket_avg ?? 0,
+        fatOlder: ro?.revenue ?? 0,
+        tickOlder: ro?.ticket_avg ?? 0,
+        fatNewer: rn?.revenue ?? 0,
+        tickNewer: rn?.ticket_avg ?? 0,
       }
     })
-    .sort((x, y) => y.fatA - x.fatA)
+    .sort((x, y) => y.fatNewer - x.fatNewer)
     .slice(0, 12)
 
   const body = rows
     .map((r) => {
-      const delta = r.fatA - r.fatB
-      return `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.name}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.fatA)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.tickA)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.fatB)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.tickB)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(delta)}</td></tr>`
+      const delta = r.fatNewer - r.fatOlder
+      return `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.name}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.fatOlder)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.tickOlder)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.fatNewer)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(r.tickNewer)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${formatCurrency(delta)}</td></tr>`
     })
     .join('')
 
@@ -96,15 +141,16 @@ function html0021(report: DirectorReport) {
   <p style="font-size:12px;color:#888;margin:0 0 4px">ETAPA 2 DE 2</p>
   <h1 style="font-size:20px;margin:0 0 8px">ROM CLUB BRASIL · Relatório 0021</h1>
   <p style="margin:0 0 4px;font-size:15px"><b>Comparativo mês a mês:</b> ${report.period.label_0021}</p>
+  <p style="margin:0 0 8px;font-size:13px;color:#666">Δ Fat = mês mais recente − mês anterior (crescimento positivo em verde)</p>
   <p style="margin:0 0 16px;font-size:14px"><b>Data de referência:</b> ${report.period.reference_date}</p>
-  <p>Fat. mês selecionado <b>${formatCurrency(report.summary.total_revenue_selected_month)}</b> · ticket médio <b>${formatCurrency(report.summary.avg_ticket_selected_month)}</b></p>
+  <p>Fat. mês foco <b>${formatCurrency(report.summary.total_revenue_selected_month)}</b> · ticket médio <b>${formatCurrency(report.summary.avg_ticket_selected_month)}</b></p>
   <table style="border-collapse:collapse;width:100%;font-size:13px;margin-top:16px">
     <thead><tr style="text-align:left;color:#666">
       <th style="padding:6px 10px">Profissional</th>
-      <th style="padding:6px 10px">Fat ${a}</th>
-      <th style="padding:6px 10px">Ticket ${a}</th>
-      <th style="padding:6px 10px">Fat ${b}</th>
-      <th style="padding:6px 10px">Ticket ${b}</th>
+      <th style="padding:6px 10px">Fat ${labelMonth(older)}</th>
+      <th style="padding:6px 10px">Ticket ${labelMonth(older)}</th>
+      <th style="padding:6px 10px">Fat ${labelMonth(newer)}</th>
+      <th style="padding:6px 10px">Ticket ${labelMonth(newer)}</th>
       <th style="padding:6px 10px">Δ Fat</th>
     </tr></thead>
     <tbody>${body}</tbody>

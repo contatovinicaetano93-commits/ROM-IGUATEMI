@@ -40,6 +40,8 @@ export default function RelatorioDiretoriaPage() {
   const [tab, setTab] = useState<StageTab>('0011')
   const [month, setMonth] = useState('2026-03')
   const [compareMonth, setCompareMonth] = useState('2026-02')
+  /** 0021: false = só o mês selecionado (sem Δ) */
+  const [compareMonths, setCompareMonths] = useState(true)
   const [quarter, setQuarter] = useState('2026-Q1')
   const [compare, setCompare] = useState('2025-Q1')
   const [proId, setProId] = useState('')
@@ -55,6 +57,7 @@ export default function RelatorioDiretoriaPage() {
       const q = new URLSearchParams({
         month,
         compare_month: compareMonth,
+        compare_months: compareMonths ? '1' : '0',
         quarter,
         compare,
         mock: '1',
@@ -73,7 +76,7 @@ export default function RelatorioDiretoriaPage() {
     } finally {
       setLoading(false)
     }
-  }, [month, compareMonth, quarter, compare, proId])
+  }, [month, compareMonth, compareMonths, quarter, compare, proId])
 
   useEffect(() => {
     load()
@@ -90,22 +93,35 @@ export default function RelatorioDiretoriaPage() {
     })
   }, [data, quarter, compare])
 
+  /** Ordem cronológica dos dois meses (mais antigo → mais recente). */
+  const monthPair = useMemo(() => {
+    if (!compareMonths) return { older: month, newer: month }
+    return month <= compareMonth
+      ? { older: month, newer: compareMonth }
+      : { older: compareMonth, newer: month }
+  }, [month, compareMonth, compareMonths])
+
   const selectedRevenue = useMemo(() => {
     if (!data) return []
     return data.revenue_blocks
       .map((b) => {
-        const row = b.months.find((m) => m.month === month)
-        const cmp = b.months.find((m) => m.month === compareMonth)
-        return { pro: b.professional, row, cmp, months: b.months }
+        const older = b.months.find((m) => m.month === monthPair.older)
+        const newer = b.months.find((m) => m.month === monthPair.newer)
+        const focus = b.months.find((m) => m.month === month)
+        return { pro: b.professional, older, newer, focus, months: b.months }
       })
-      .sort((a, b) => (b.row?.revenue ?? 0) - (a.row?.revenue ?? 0))
-  }, [data, month, compareMonth])
+      .sort((a, b) => {
+        if (compareMonths) return (b.newer?.revenue ?? 0) - (a.newer?.revenue ?? 0)
+        return (b.focus?.revenue ?? 0) - (a.focus?.revenue ?? 0)
+      })
+  }, [data, monthPair, month, compareMonths])
 
   async function download(format: string, filename: string) {
     const q = new URLSearchParams({
       format,
       month,
       compare_month: compareMonth,
+      compare_months: compareMonths ? '1' : '0',
       quarter,
       compare,
       mock: '1',
@@ -137,6 +153,7 @@ export default function RelatorioDiretoriaPage() {
           stage,
           month,
           compare_month: compareMonth,
+          compare_months: compareMonths,
           quarter,
           compare,
         }),
@@ -367,14 +384,46 @@ export default function RelatorioDiretoriaPage() {
 
       {tab === '0021' && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FilterSelect label="Mês (0021)" value={month} onChange={setMonth} options={MONTHS} />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCompareMonths(false)}
+              className={`rounded-2xl border px-4 py-2.5 text-sm font-medium ${
+                !compareMonths
+                  ? 'border-gold/50 bg-gold/10 text-gold'
+                  : 'border-border text-muted hover:text-foreground'
+              }`}
+            >
+              Só um mês
+            </button>
+            <button
+              type="button"
+              onClick={() => setCompareMonths(true)}
+              className={`rounded-2xl border px-4 py-2.5 text-sm font-medium ${
+                compareMonths
+                  ? 'border-gold/50 bg-gold/10 text-gold'
+                  : 'border-border text-muted hover:text-foreground'
+              }`}
+            >
+              Comparar dois meses
+            </button>
+          </div>
+
+          <div className={`grid gap-3 ${compareMonths ? 'sm:grid-cols-2' : 'sm:grid-cols-1 max-w-sm'}`}>
             <FilterSelect
-              label="Comparar com mês"
-              value={compareMonth}
-              onChange={setCompareMonth}
+              label={compareMonths ? 'Mês A' : 'Mês (0021)'}
+              value={month}
+              onChange={setMonth}
               options={MONTHS}
             />
+            {compareMonths && (
+              <FilterSelect
+                label="Mês B"
+                value={compareMonth}
+                onChange={setCompareMonth}
+                options={MONTHS}
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -390,7 +439,7 @@ export default function RelatorioDiretoriaPage() {
             />
             <Kpi
               icon={<CalendarClock size={16} />}
-              label="Comparativo"
+              label={compareMonths ? 'Comparativo' : 'Período'}
               value={data?.period.label_0021 ?? '—'}
             />
           </div>
@@ -398,71 +447,122 @@ export default function RelatorioDiretoriaPage() {
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted">
             <span className="text-foreground">
               Etapa 2 · {data?.period.label_0021 ?? '…'} · ref. {data?.period.reference_date ?? '—'}
+              {compareMonths && (
+                <span className="ml-1 text-muted">
+                  (Δ = {monthPair.newer} − {monthPair.older})
+                </span>
+              )}
             </span>
             <span className="ml-auto flex flex-wrap gap-2">
-              <ExportBtn
-                onClick={() => download('csv-revenue-compare', '0021-comparativo-mes.csv')}
-                label="CSV comparativo"
-              />
-              <ExportBtn
-                onClick={() => download('csv-revenue', '0021-serie-mensal.csv')}
-                label="CSV série mensal"
-              />
+              {compareMonths ? (
+                <ExportBtn
+                  onClick={() => download('csv-revenue-compare', '0021-comparativo-mes.csv')}
+                  label="CSV comparativo"
+                />
+              ) : (
+                <ExportBtn
+                  onClick={() => download('csv-revenue', '0021-mes.csv')}
+                  label="CSV do mês"
+                />
+              )}
             </span>
           </div>
 
           <SectionCard
-            title="0021 · Comparativo mês a mês (faturamento + ticket)"
+            title={
+              compareMonths
+                ? '0021 · Comparativo mês a mês (faturamento + ticket)'
+                : '0021 · Faturamento e ticket do mês'
+            }
             badge={<CountBadge value={String(selectedRevenue.length)} tone="gold" />}
           >
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                    <th className="py-2 pr-3 font-medium">Profissional</th>
-                    <th className="py-2 pr-3 font-medium">Fat {month}</th>
-                    <th className="py-2 pr-3 font-medium">Ticket {month}</th>
-                    <th className="py-2 pr-3 font-medium">Fat {compareMonth}</th>
-                    <th className="py-2 pr-3 font-medium">Ticket {compareMonth}</th>
-                    <th className="py-2 font-medium">Δ Fat</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && (
-                    <tr>
-                      <td colSpan={6} className="py-6 text-muted">
-                        Carregando…
-                      </td>
+              {compareMonths ? (
+                <table className="w-full min-w-[800px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                      <th className="py-2 pr-3 font-medium">Profissional</th>
+                      <th className="py-2 pr-3 font-medium">Fat {monthPair.older}</th>
+                      <th className="py-2 pr-3 font-medium">Ticket {monthPair.older}</th>
+                      <th className="py-2 pr-3 font-medium">Fat {monthPair.newer}</th>
+                      <th className="py-2 pr-3 font-medium">Ticket {monthPair.newer}</th>
+                      <th className="py-2 font-medium">Δ Fat</th>
                     </tr>
-                  )}
-                  {!loading &&
-                    selectedRevenue.map(({ pro, row, cmp }) => {
-                      const delta = (row?.revenue ?? 0) - (cmp?.revenue ?? 0)
-                      return (
+                  </thead>
+                  <tbody>
+                    {loading && (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-muted">
+                          Carregando…
+                        </td>
+                      </tr>
+                    )}
+                    {!loading &&
+                      selectedRevenue.map(({ pro, older, newer }) => {
+                        const delta = (newer?.revenue ?? 0) - (older?.revenue ?? 0)
+                        return (
+                          <tr key={pro.id} className="border-b border-border/60">
+                            <td className="py-3 pr-3 font-medium">{pro.name}</td>
+                            <td className="py-3 pr-3 tabular-nums">
+                              {formatCurrency(older?.revenue)}
+                            </td>
+                            <td className="py-3 pr-3 tabular-nums">
+                              {formatCurrency(older?.ticket_avg)}
+                            </td>
+                            <td className="py-3 pr-3 tabular-nums text-gold">
+                              {formatCurrency(newer?.revenue)}
+                            </td>
+                            <td className="py-3 pr-3 tabular-nums">
+                              {formatCurrency(newer?.ticket_avg)}
+                            </td>
+                            <td
+                              className={`py-3 tabular-nums ${
+                                delta < 0 ? 'text-danger' : 'text-success'
+                              }`}
+                            >
+                              {formatCurrency(delta)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              ) : (
+                <table className="w-full min-w-[560px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                      <th className="py-2 pr-3 font-medium">Profissional</th>
+                      <th className="py-2 pr-3 font-medium">Faturamento</th>
+                      <th className="py-2 pr-3 font-medium">Ticket médio</th>
+                      <th className="py-2 font-medium">Atendimentos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading && (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-muted">
+                          Carregando…
+                        </td>
+                      </tr>
+                    )}
+                    {!loading &&
+                      selectedRevenue.map(({ pro, focus }) => (
                         <tr key={pro.id} className="border-b border-border/60">
                           <td className="py-3 pr-3 font-medium">{pro.name}</td>
                           <td className="py-3 pr-3 tabular-nums text-gold">
-                            {formatCurrency(row?.revenue)}
+                            {formatCurrency(focus?.revenue)}
                           </td>
                           <td className="py-3 pr-3 tabular-nums">
-                            {formatCurrency(row?.ticket_avg)}
+                            {formatCurrency(focus?.ticket_avg)}
                           </td>
-                          <td className="py-3 pr-3 tabular-nums">{formatCurrency(cmp?.revenue)}</td>
-                          <td className="py-3 pr-3 tabular-nums">
-                            {formatCurrency(cmp?.ticket_avg)}
-                          </td>
-                          <td
-                            className={`py-3 tabular-nums ${
-                              delta < 0 ? 'text-danger' : 'text-success'
-                            }`}
-                          >
-                            {formatCurrency(delta)}
+                          <td className="py-3 tabular-nums text-muted">
+                            {focus?.attended ?? '—'}
                           </td>
                         </tr>
-                      )
-                    })}
-                </tbody>
-              </table>
+                      ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </SectionCard>
 

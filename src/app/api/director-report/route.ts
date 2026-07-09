@@ -38,9 +38,11 @@ export async function GET(req: NextRequest) {
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { searchParams } = req.nextUrl
+    const compareMonthsParam = searchParams.get('compare_months')
     const report = await buildDirectorReport({
       selectedMonth: asMonth(searchParams.get('month')),
       compareMonth: asMonth(searchParams.get('compare_month')),
+      compareMonths: compareMonthsParam === null ? true : compareMonthsParam !== '0',
       selectedQuarter: asQuarter(searchParams.get('quarter')),
       compareQuarter: asQuarter(searchParams.get('compare')),
       professionalId: searchParams.get('professional_id') ?? undefined,
@@ -111,6 +113,7 @@ export async function POST(req: NextRequest) {
       forceMock,
       selectedMonth: asMonth(typeof body?.month === 'string' ? body.month : null),
       compareMonth: asMonth(typeof body?.compare_month === 'string' ? body.compare_month : null),
+      compareMonths: body?.compare_months !== false && body?.compare_months !== 0,
       selectedQuarter: asQuarter(typeof body?.quarter === 'string' ? body.quarter : null),
       compareQuarter: asQuarter(typeof body?.compare === 'string' ? body.compare : null),
     })

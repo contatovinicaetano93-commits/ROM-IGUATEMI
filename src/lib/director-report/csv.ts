@@ -1,5 +1,5 @@
 import type { DirectorReport, MonthKey, QuarterKey } from './types'
-import { labelMonth, labelQuarter } from './period'
+import { labelMonth, labelQuarter, orderMonths } from './period'
 
 function esc(v: string | number | null | undefined) {
   const s = v == null ? '' : String(v)
@@ -30,16 +30,24 @@ export function revenueCsv(report: DirectorReport, selectedMonth?: MonthKey) {
   return lines.join('\n')
 }
 
-/** 0021 — comparativo mês A vs mês B. */
+/**
+ * 0021 — comparativo mês a mês.
+ * Colunas em ordem cronológica; Δ = mês mais recente − mês mais antigo (crescimento).
+ */
 export function revenueCompareCsv(report: DirectorReport) {
-  const a = report.period.selected_month
-  const b = report.period.compare_month
+  const focus = report.period.selected_month
+  const other = report.period.compare_month
+  if (!report.period.compare_months || !other) {
+    return revenueCsv(report, focus)
+  }
+
+  const [older, newer] = orderMonths(focus, other)
   const header = [
     'Profissional',
-    `Fat ${labelMonth(a)}`,
-    `Ticket ${labelMonth(a)}`,
-    `Fat ${labelMonth(b)}`,
-    `Ticket ${labelMonth(b)}`,
+    `Fat ${labelMonth(older)}`,
+    `Ticket ${labelMonth(older)}`,
+    `Fat ${labelMonth(newer)}`,
+    `Ticket ${labelMonth(newer)}`,
     'Δ Fat (R$)',
     'Δ Fat %',
     'Δ Ticket (R$)',
@@ -48,16 +56,25 @@ export function revenueCompareCsv(report: DirectorReport) {
 
   for (const block of report.revenue_blocks) {
     const byMonth = new Map(block.months.map((m) => [m.month, m]))
-    const rowA = byMonth.get(a)
-    const rowB = byMonth.get(b)
-    const fatA = rowA?.revenue ?? 0
-    const fatB = rowB?.revenue ?? 0
-    const tickA = rowA?.ticket_avg ?? 0
-    const tickB = rowB?.ticket_avg ?? 0
-    const delta = fatA - fatB
-    const deltaPct = fatB > 0 ? ((delta / fatB) * 100).toFixed(1) : ''
+    const rowOlder = byMonth.get(older)
+    const rowNewer = byMonth.get(newer)
+    const fatOlder = rowOlder?.revenue ?? 0
+    const fatNewer = rowNewer?.revenue ?? 0
+    const tickOlder = rowOlder?.ticket_avg ?? 0
+    const tickNewer = rowNewer?.ticket_avg ?? 0
+    const delta = fatNewer - fatOlder
+    const deltaPct = fatOlder > 0 ? ((delta / fatOlder) * 100).toFixed(1) : ''
     lines.push(
-      [block.professional.name, fatA, tickA, fatB, tickB, delta, deltaPct, tickA - tickB]
+      [
+        block.professional.name,
+        fatOlder,
+        tickOlder,
+        fatNewer,
+        tickNewer,
+        delta,
+        deltaPct,
+        tickNewer - tickOlder,
+      ]
         .map(esc)
         .join(';')
     )

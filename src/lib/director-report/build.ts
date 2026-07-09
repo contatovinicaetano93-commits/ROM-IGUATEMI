@@ -13,11 +13,12 @@ import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
 export interface BuildDirectorReportOptions {
   selectedMonth?: MonthKey
-  compareMonth?: MonthKey
+  compareMonth?: MonthKey | null
+  /** false = 0021 só o mês selecionado (sem Δ) */
+  compareMonths?: boolean
   selectedQuarter?: QuarterKey
   compareQuarter?: QuarterKey
   professionalId?: string
-  /** Força mock mesmo com token (preview). */
   forceMock?: boolean
 }
 
@@ -25,7 +26,10 @@ export async function buildDirectorReport(
   opts: BuildDirectorReportOptions = {}
 ): Promise<DirectorReport> {
   const selectedMonth = opts.selectedMonth ?? defaultSelectedMonth()
-  const compareMonth = opts.compareMonth ?? defaultCompareMonth()
+  const compareMonths = opts.compareMonths !== false
+  const compareMonth = compareMonths
+    ? (opts.compareMonth ?? defaultCompareMonth())
+    : null
   const selectedQuarter = opts.selectedQuarter ?? defaultSelectedQuarter()
   const compareQuarter = opts.compareQuarter ?? defaultCompareQuarter()
 
@@ -58,6 +62,7 @@ export async function buildDirectorReport(
     period: {
       selected_month: selectedMonth,
       compare_month: compareMonth,
+      compare_months: compareMonths && Boolean(compareMonth),
       selected_quarter: selectedQuarter,
       compare_quarter: compareQuarter,
       label: '',
@@ -68,7 +73,7 @@ export async function buildDirectorReport(
     source: useMock ? 'mock' : 'mock',
     avec_reports: { return: '0011', revenue: '0021' },
     schedule_note:
-      'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês vs mês',
+      'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês (ou mês vs mês)',
     return_blocks,
     revenue_blocks,
     summary: {

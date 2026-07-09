@@ -28,22 +28,29 @@ export function labelQuarter(quarter: QuarterKey): string {
   return `${q}º tri/${y}`
 }
 
+/** Ordena dois YYYY-MM: [mais antigo, mais recente]. */
+export function orderMonths(a: MonthKey, b: MonthKey): [MonthKey, MonthKey] {
+  return a <= b ? [a, b] : [b, a]
+}
+
 export function label0011(report: DirectorReport): string {
   const { selected_quarter, compare_quarter } = report.period
   return `Retorno ${labelQuarter(selected_quarter)} vs ${labelQuarter(compare_quarter)}`
 }
 
 export function label0021(report: DirectorReport): string {
-  const { selected_month, compare_month } = report.period
-  return `Fat ${labelMonth(selected_month)} vs ${labelMonth(compare_month)}`
+  const { selected_month, compare_month, compare_months } = report.period
+  if (!compare_months || !compare_month) {
+    return `Fat ${labelMonth(selected_month)}`
+  }
+  const [older, newer] = orderMonths(selected_month, compare_month)
+  return `Fat ${labelMonth(older)} → ${labelMonth(newer)}`
 }
 
-/** Ex.: "Etapa 1: Retorno … · Etapa 2: Fat …" */
 export function reportPeriodLabel(report: DirectorReport): string {
   return `Etapa 1: ${label0011(report)} · Etapa 2: ${label0021(report)}`
 }
 
-/** Data de referência do relatório (último dia do mês selecionado 0021), pt-BR. */
 export function reportReferenceDate(report: DirectorReport): string {
   const [y, m] = report.period.selected_month.split('-').map(Number)
   if (!y || !m) {
@@ -63,7 +70,6 @@ export function reportSubject0021(report: DirectorReport): string {
   return `ROM Brasil · Etapa 2 · Relatório 0021 · ${label0021(report)} · ref. ${report.period.reference_date}`
 }
 
-/** @deprecated use reportSubject0011 / reportSubject0021 */
 export function reportSubject(report: DirectorReport): string {
   return `ROM Brasil · Relatório diretoria · ${reportPeriodLabel(report)} · ref. ${reportReferenceDate(report)}`
 }
@@ -74,15 +80,18 @@ export function slug0011(report: DirectorReport): string {
 }
 
 export function slug0021(report: DirectorReport): string {
-  const { selected_month, compare_month } = report.period
-  return `0021_${selected_month}_vs_${compare_month}`.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const { selected_month, compare_month, compare_months } = report.period
+  if (!compare_months || !compare_month) {
+    return `0021_${selected_month}`.replace(/[^a-zA-Z0-9_-]/g, '_')
+  }
+  const [older, newer] = orderMonths(selected_month, compare_month)
+  return `0021_${older}_para_${newer}`.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
 export function slugPeriod(report: DirectorReport): string {
   return `${slug0011(report)}_${slug0021(report)}`
 }
 
-/** Mês anterior (YYYY-MM). */
 export function previousMonth(month: MonthKey): MonthKey {
   const [y, m] = month.split('-').map(Number)
   if (!y || !m) return month
