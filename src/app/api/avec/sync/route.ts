@@ -98,8 +98,8 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        schedule: '* * * * *',
-        cadence: 'a cada 1 minuto (quase tempo real)',
+        schedule: '*/5 * * * *',
+        cadence: 'backup a cada 5 min — tempo real = /api/webhooks/avec',
         path: '/api/avec/sync',
       },
       last,

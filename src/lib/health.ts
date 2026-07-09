@@ -54,6 +54,8 @@ export async function getHealthStatus() {
       mock: isAvecMock(),
       base_url: getAvecBaseUrl(),
       token: envOk('AVEC_API_TOKEN'),
+      webhook_secret: envOk('AVEC_WEBHOOK_SECRET'),
+      webhook_url: '/api/webhooks/avec',
     },
     whatsapp: {
       configured: envOk('EVOLUTION_API_URL') && envOk('EVOLUTION_API_KEY') && envOk('EVOLUTION_API_INSTANCE'),

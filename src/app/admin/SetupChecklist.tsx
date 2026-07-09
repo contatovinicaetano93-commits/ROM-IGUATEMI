@@ -7,13 +7,14 @@ import { SETUP_ITEMS, isItemConfigured } from '@/lib/setup-checklist'
 interface HealthForSetup {
   database: { connected: boolean }
   claude: { configured: boolean }
-  avec: { token: boolean; mock: boolean }
+  avec: { token: boolean; mock: boolean; webhook_secret?: boolean }
   whatsapp: { configured: boolean }
   telegram: { configured: boolean }
   cron: { configured: boolean }
   auth: { enabled: boolean }
   deployment?: { panel: string }
   validation?: { ok: boolean }
+  webhooks?: { avec_secret?: boolean }
 }
 
 const PRIORITY_LABEL = {

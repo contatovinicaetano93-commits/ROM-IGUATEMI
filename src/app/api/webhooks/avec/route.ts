@@ -1,115 +1,68 @@
 import { NextRequest } from 'next/server'
-import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
-import {
-  upsertContact,
-  updateContact,
-  logEvent,
-  setPreferredManicurist,
-  setPreferredHairstylist,
-} from '@/lib/contacts'
-import { listServices, addService, scheduleService, markServiceDone } from '@/lib/services'
-import { guessServiceCategory, isNailService, isHairService } from '@/lib/avec/normalize'
+import { verifyAvecWebhook } from '@/lib/webhooks'
+import { ingestAvecWebhook } from '@/lib/avec/webhook-ingest'
+import { isAuthorized } from '@/lib/auth'
 
-// Webhook Avec — aceita eventos push (quando disponível) ou bridge manual.
-// Também funciona como ingestão genérica até confirmarmos o formato oficial.
-const baseSchema = z.object({
-  event: z
-    .enum(['client.upsert', 'appointment.created', 'appointment.updated', 'service.completed'])
-    .optional(),
-  client_id: z.string(),
-  name: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().email().optional(),
-  service_name: z.string().optional(),
-  scheduled_at: z.string().datetime().optional(),
-  completed_at: z.string().datetime().optional(),
-  professional_name: z.string().optional(),
-  price: z.number().positive().optional(),
-  status: z.enum(['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']).optional(),
-})
-
+/**
+ * Webhook Avec — tempo real (push).
+ * URL: https://rom-club.vercel.app/api/webhooks/avec
+ * Header: x-avec-secret: <AVEC_WEBHOOK_SECRET>
+ * (também aceita Authorization: Bearer … ou x-webhook-secret)
+ */
 export async function POST(req: NextRequest) {
   try {
-    const secret = req.headers.get('x-avec-secret')
-    if (!process.env.AVEC_WEBHOOK_SECRET || secret !== process.env.AVEC_WEBHOOK_SECRET) {
-      return err('Não autorizado', 401)
-    }
+    const auth = verifyAvecWebhook(req)
+    if (!auth.ok) return err(auth.reason, 401)
 
     const body = await req.json()
-    const payload = baseSchema.parse(body)
-    const event = payload.event ?? 'client.upsert'
+    const result = await ingestAvecWebhook(body)
+    return ok(result)
+  } catch (e) {
+    return handleError(e)
+  }
+}
 
-    const contact = await upsertContact({
-      phone: payload.phone,
-      name: payload.name,
-      email: payload.email,
-      channel: 'avec',
-      source: 'avec_webhook',
-      avecClientId: payload.client_id,
-      status: payload.status,
+/** Status + instruções (admin logado ou secret). */
+export async function GET(req: NextRequest) {
+  try {
+    const secretOk = verifyAvecWebhook(req).ok
+    const sessionOk = await isAuthorized(req)
+    if (!secretOk && !sessionOk) return err('Não autorizado', 401)
+
+    const configured = Boolean(process.env.AVEC_WEBHOOK_SECRET?.trim())
+    const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'rom-club.vercel.app'
+    const proto = req.headers.get('x-forwarded-proto') ?? 'https'
+    const url = `${proto}://${host}/api/webhooks/avec`
+
+    return ok({
+      configured,
+      mode: 'realtime',
+      url,
+      headers: {
+        preferred: 'x-avec-secret',
+        also: ['Authorization: Bearer …', 'x-webhook-secret'],
+      },
+      events: [
+        'client.upsert',
+        'appointment.created',
+        'appointment.updated',
+        'appointment.cancelled',
+        'service.completed',
+      ],
+      example: {
+        event: 'appointment.created',
+        client_id: '12345',
+        name: 'Maria Silva',
+        phone: '11999998888',
+        service_name: 'Corte feminino',
+        scheduled_at: '2026-07-10T14:00:00.000Z',
+        professional_name: 'Walter',
+        price: 180,
+      },
+      note:
+        'Configure este URL no painel Avec (ou Zapier/Make bridge). Cron /api/avec/sync fica como backup.',
     })
-
-    if (payload.status) {
-      await updateContact(contact.id, { status: payload.status })
-    }
-
-    if (event === 'appointment.created' || event === 'appointment.updated') {
-      if (payload.service_name && payload.scheduled_at) {
-        const services = await listServices(contact.id)
-        let service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
-        if (!service) {
-          service = await addService(contact.id, {
-            name: payload.service_name,
-            category: guessServiceCategory(payload.service_name),
-          })
-        }
-        await scheduleService(
-          service.id,
-          payload.scheduled_at,
-          payload.professional_name,
-          payload.price
-        )
-        if (payload.professional_name && isNailService(payload.service_name)) {
-          await setPreferredManicurist(contact.id, payload.professional_name)
-        } else if (payload.professional_name && isHairService(payload.service_name)) {
-          await setPreferredHairstylist(contact.id, payload.professional_name)
-        }
-        await updateContact(contact.id, { status: 'agendado' })
-      }
-    }
-
-    if (event === 'service.completed' && payload.service_name) {
-      const services = await listServices(contact.id)
-      let service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
-      if (!service) {
-        service = await addService(contact.id, {
-          name: payload.service_name,
-          category: guessServiceCategory(payload.service_name),
-        })
-      }
-      await markServiceDone(service.id, {
-        doneAt: payload.completed_at,
-        professionalName: payload.professional_name,
-        lastPrice: payload.price,
-      })
-      if (payload.professional_name && isNailService(payload.service_name)) {
-        await setPreferredManicurist(contact.id, payload.professional_name)
-      } else if (payload.professional_name && isHairService(payload.service_name)) {
-        await setPreferredHairstylist(contact.id, payload.professional_name)
-      }
-      await updateContact(contact.id, { status: 'convertido' })
-    }
-
-    await logEvent({
-      contactId: contact.id,
-      channel: 'avec',
-      direction: 'in',
-      handledBy: 'system',
-      payload: { event, ...body },
-    })
-
-    return ok({ contact_id: contact.id, event })
   } catch (e) {
     return handleError(e)
   }

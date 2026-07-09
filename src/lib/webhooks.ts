@@ -22,6 +22,22 @@ export function verifyWhatsAppWebhook(req: NextRequest): { ok: true } | { ok: fa
   return { ok: true }
 }
 
+export function verifyAvecWebhook(req: NextRequest): { ok: true } | { ok: false; reason: string } {
+  const expected = process.env.AVEC_WEBHOOK_SECRET?.trim()
+  if (!expected) {
+    if (isProduction()) return { ok: false, reason: 'AVEC_WEBHOOK_SECRET não configurado' }
+    return { ok: true }
+  }
+
+  const got =
+    headerSecret(req, 'x-avec-secret') ||
+    headerSecret(req, 'x-webhook-secret') ||
+    headerSecret(req, 'authorization').replace(/^Bearer\s+/i, '')
+
+  if (got !== expected) return { ok: false, reason: 'Secret inválido' }
+  return { ok: true }
+}
+
 export function verifyTelegramWebhook(req: NextRequest): { ok: true } | { ok: false; reason: string } {
   const expected = process.env.TELEGRAM_WEBHOOK_SECRET?.trim()
   if (!expected) {

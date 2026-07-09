@@ -37,14 +37,30 @@ export const SETUP_ITEMS: SetupItem[] = [
   },
   {
     id: 'cron',
-    label: 'CRON_SECRET',
+    label: 'CRON_SECRET (backup sync)',
     envVars: ['CRON_SECRET'],
     priority: 'agora',
     steps: [
       'Gere um segredo: openssl rand -hex 32',
       'Vercel → CRON_SECRET = o valor gerado',
-      'Obrigatório em produção — protege sync automático (8h) e manual',
+      'Protege o sync de backup (a cada 1 min) e disparo manual',
+      'Tempo real = webhook Avec (AVEC_WEBHOOK_SECRET) — cron é rede de segurança',
       'Redeploy',
+    ],
+  },
+  {
+    id: 'avec_webhook',
+    label: 'Webhook Avec (tempo real)',
+    envVars: ['AVEC_WEBHOOK_SECRET'],
+    priority: 'agora',
+    steps: [
+      'Gere: openssl rand -hex 32',
+      'Vercel → AVEC_WEBHOOK_SECRET = o valor gerado → Redeploy',
+      'URL: https://rom-club.vercel.app/api/webhooks/avec',
+      'Header: x-avec-secret = mesmo valor do AVEC_WEBHOOK_SECRET',
+      'Peça ao suporte Avec (ou use Zapier/Make) para POST em cada agendamento/atendimento',
+      'Eventos: appointment.created, appointment.updated, service.completed, client.upsert',
+      'Admin → Diagnóstico mostra se o secret está configurado',
     ],
   },
   {
@@ -115,13 +131,14 @@ export function isItemConfigured(
   health: {
     database: { connected: boolean }
     claude: { configured: boolean }
-    avec: { token: boolean }
+    avec: { token: boolean; webhook_secret?: boolean }
     whatsapp: { configured: boolean; webhook_secret?: boolean }
     telegram: { configured: boolean; webhook_secret?: boolean; staff_whitelist?: boolean }
     cron: { configured: boolean }
     auth: { enabled: boolean }
     deployment?: { panel: string }
     validation?: { ok: boolean }
+    webhooks?: { avec_secret?: boolean }
   }
 ) {
   switch (id) {
@@ -135,6 +152,8 @@ export function isItemConfigured(
       return health.claude.configured
     case 'avec':
       return health.avec.token
+    case 'avec_webhook':
+      return Boolean(health.avec.webhook_secret ?? health.webhooks?.avec_secret)
     case 'whatsapp':
       return health.whatsapp.configured && Boolean(health.whatsapp.webhook_secret)
     case 'telegram':
