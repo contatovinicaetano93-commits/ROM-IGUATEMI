@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { APP_NAV } from './nav'
+import { BOTTOM_NAV } from './nav'
 
 export function BottomNav() {
   const pathname = usePathname()
@@ -10,7 +10,7 @@ export function BottomNav() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 backdrop-blur pb-[env(safe-area-inset-bottom)] lg:hidden">
       <div className="mx-auto flex w-full max-w-lg">
-        {APP_NAV.map(({ href, shortLabel, icon: Icon }) => {
+        {BOTTOM_NAV.map(({ href, shortLabel, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`)
           return (
             <Link
