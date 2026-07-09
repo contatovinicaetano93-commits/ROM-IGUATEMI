@@ -48,6 +48,7 @@ ou investigar depois.
 7. **WhatsApp** — Evolution com número Iguatemi → webhook deste deploy.
 8. **Telegram** — bot dedicado + `TELEGRAM_STAFF_CHAT_IDS` da equipe Iguatemi.
 9. **Cron fast** — cron-job.org → `POST /api/avec/sync?mode=fast` (Hobby).
+10. **Bot funcionários** — plano: [`docs/plano-bot-funcionarios-iguatemi.md`](docs/plano-bot-funcionarios-iguatemi.md).
 
 Detalhes no `/admin` (SetupChecklist) e em `.env.example`.
 
