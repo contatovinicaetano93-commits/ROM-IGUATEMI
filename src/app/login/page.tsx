@@ -1,14 +1,13 @@
 'use client'
 
 import { Suspense, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { PrimaryButton } from '../_components/ui'
 import { sanitizeRedirectPath } from '@/lib/auth-redirect'
 import { getBrand } from '@/lib/brand'
 
 function LoginForm() {
   const brand = getBrand()
-  const router = useRouter()
   const params = useSearchParams()
   const next = sanitizeRedirectPath(params.get('next'))
   const loggedOut = params.get('logged_out') === '1'
@@ -25,7 +24,10 @@ function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({
+          username: username.trim(),
+          password: password.trim(),
+        }),
         credentials: 'include',
       })
       const json = await res.json()
@@ -33,8 +35,8 @@ function LoginForm() {
         setError(json.error ?? 'Usuário ou senha incorretos')
         return
       }
-      router.push(next)
-      router.refresh()
+      // Hard navigation garante que o cookie da sessão seja lido pelo middleware
+      window.location.assign(next)
     } catch (err) {
       setError(String(err))
     } finally {
@@ -47,7 +49,11 @@ function LoginForm() {
       <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">{brand.displayName}</p>
       <h1 className="mt-2 text-xl font-semibold">Acesso da equipe</h1>
       <p className="mt-2 text-sm text-muted">{brand.loginSubtitle}</p>
-      <p className="mt-2 text-xs text-muted">Admin ou funcionário — use o usuário da sua conta.</p>
+      <p className="mt-2 text-xs text-muted">
+        Admin: <span className="font-medium text-foreground">ADMIN-BRASIL</span>
+        {' · '}
+        Funcionário: <span className="font-medium text-foreground">FUNC-BRASIL</span>
+      </p>
       {loggedOut && (
         <p className="mt-3 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           Você saiu do sistema. Entre novamente para continuar.
@@ -63,6 +69,9 @@ function LoginForm() {
             required
             autoComplete="username"
             autoFocus
+            placeholder="ADMIN-BRASIL"
+            spellCheck={false}
+            autoCapitalize="characters"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
           />
         </label>
@@ -74,10 +83,20 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
+            placeholder="Senha@brasil"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
           />
         </label>
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {error && (
+          <p className="text-sm text-danger">
+            {error}
+            {error.toLowerCase().includes('incorret') && (
+              <span className="mt-1 block text-xs text-muted">
+                Confira maiúsculas. Admin: ADMIN-BRASIL / Senha@brasil · Func: FUNC-BRASIL / Senha@func
+              </span>
+            )}
+          </p>
+        )}
         <PrimaryButton type="submit" disabled={loading}>
           {loading ? 'Entrando…' : 'Entrar'}
         </PrimaryButton>

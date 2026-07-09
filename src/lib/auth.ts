@@ -28,6 +28,14 @@ function timingSafeEqual(a: string, b: string) {
   return out === 0
 }
 
+function normalizeUsername(value: string) {
+  return value.trim()
+}
+
+function usernamesMatch(a: string, b: string) {
+  return timingSafeEqual(a.toLowerCase(), b.toLowerCase())
+}
+
 export function getAdminUser() {
   return (process.env.ROM_ADMIN_USER ?? DEFAULT_ADMIN_USER).trim()
 }
@@ -92,10 +100,11 @@ export function validateCredentials(
   username: string,
   password: string
 ): { user: string; role: AuthRole } | null {
-  const user = username.trim()
-  if (!user || !password) return null
+  const user = normalizeUsername(username)
+  const pass = password.trim()
+  if (!user || !pass) return null
   for (const account of listAccounts()) {
-    if (timingSafeEqual(user, account.user) && timingSafeEqual(password, account.password)) {
+    if (usernamesMatch(user, account.user) && timingSafeEqual(pass, account.password)) {
       return { user: account.user, role: account.role }
     }
   }
@@ -125,6 +134,7 @@ export async function getSession(req: NextRequest): Promise<AuthSession | null> 
         }
       }
     }
+    // Cookie antigo (pré dual-login) — invalida silenciosamente
   }
 
   return null

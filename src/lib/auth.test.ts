@@ -54,6 +54,10 @@ describe('auth dual login', () => {
       user: 'FUNC-BRASIL',
       role: 'staff',
     })
+    expect(validateCredentials('admin-brasil', 'Senha@brasil')).toEqual({
+      user: 'ADMIN-BRASIL',
+      role: 'admin',
+    })
     expect(validateCredentials('FUNC-BRASIL', 'Senha@brasil')).toBeNull()
     expect(canViewRevenue('admin')).toBe(true)
     expect(canViewRevenue('staff')).toBe(false)
