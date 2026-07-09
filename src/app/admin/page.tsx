@@ -233,6 +233,20 @@ export default function AdminPage() {
         </div>
       )}
 
+      <Link
+        href="/admin/relatorio-diretoria"
+        className="flex items-center justify-between gap-3 rounded-2xl border border-gold/30 bg-gold/5 px-5 py-4 transition-colors hover:bg-gold/10"
+      >
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">Diretoria</p>
+          <p className="mt-1 font-semibold">Relatório semanal (Avec 0011 + 0021)</p>
+          <p className="mt-0.5 text-xs text-muted">
+            Retorno por trimestre · faturamento e ticket médio · lista de reativação · terças 08:00
+          </p>
+        </div>
+        <ChevronRight size={20} className="shrink-0 text-gold" />
+      </Link>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Configuração" badge={<EndpointBadge path="/api/health" />}>
           {health ? (

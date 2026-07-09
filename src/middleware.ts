@@ -33,7 +33,8 @@ export async function middleware(req: NextRequest) {
   const needsAuth = isProtectedPage(pathname) || isProtectedApi(pathname)
   if (!needsAuth) return NextResponse.next()
 
-  const allowHeaderTokens = pathname === '/api/avec/sync'
+  const allowHeaderTokens =
+    pathname === '/api/avec/sync' || pathname === '/api/director-report'
   if (await isAuthorized(req, { allowHeaderTokens })) return NextResponse.next()
 
   if (isProtectedApi(pathname)) {

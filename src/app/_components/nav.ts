@@ -9,8 +9,15 @@ export const APP_NAV = [
 
 export const ADMIN_NAV = { href: '/admin', label: 'Diagnóstico', shortLabel: 'API' } as const
 
+export const DIRECTOR_REPORT_NAV = {
+  href: '/admin/relatorio-diretoria',
+  label: 'Relatório diretoria',
+  shortLabel: 'Diretoria',
+} as const
+
 export function pageTitleFromPath(pathname: string) {
   const brand = getBrand()
+  if (pathname.startsWith('/admin/relatorio-diretoria')) return 'Relatório diretoria'
   if (pathname.startsWith('/admin')) return 'Diagnóstico'
   if (pathname.startsWith('/hoje')) return brand.hojeTitle
   if (pathname.startsWith('/dashboard')) return 'Visão analítica'

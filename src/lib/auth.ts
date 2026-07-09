@@ -177,3 +177,13 @@ export async function requireSession(req: NextRequest) {
   }
   return { ok: true as const, session }
 }
+
+/** Relatórios financeiros / diretoria — só admin. */
+export async function requireAdmin(req: NextRequest) {
+  const auth = await requireSession(req)
+  if (!auth.ok) return auth
+  if (auth.session.role !== 'admin') {
+    return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao admin operacional' }
+  }
+  return auth
+}
