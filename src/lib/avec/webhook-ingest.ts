@@ -62,6 +62,20 @@ function pickNested(obj: Record<string, unknown> | null, path: string[]): unknow
   return cur
 }
 
+/**
+ * Como pickStr(), mas preserva o tipo original (sem stringificar) — usado para
+ * valores monetários, onde number puro (API/webhook JSON) e string BR
+ * ("120,00") têm que ser tratados de forma diferente por parseOptionalMoney.
+ */
+function pickRaw(...vals: unknown[]): unknown {
+  for (const v of vals) {
+    if (v === null || v === undefined) continue
+    if (typeof v === 'string' && v.trim() === '') continue
+    return v
+  }
+  return undefined
+}
+
 export type NormalizedAvecWebhook = {
   event: string
   client_id: string
@@ -156,7 +170,7 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
       ? new Date(completedRaw).toISOString()
       : undefined
 
-  const priceRaw = pickStr(
+  const priceRaw = pickRaw(
     data.price,
     data.valor,
     data.preco,
@@ -166,12 +180,7 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
     pickNested(agendamento, ['preço']),
     pickNested(agendamento, ['price']),
   )
-  const priceNum =
-    typeof data.price === 'number' && data.price > 0
-      ? data.price
-      : priceRaw
-        ? parseOptionalMoney(priceRaw)
-        : null
+  const priceNum = parseOptionalMoney(priceRaw)
 
   const statusRaw = pickStr(data.status, body.status)?.toLowerCase()
   const statusMap: Record<string, NormalizedAvecWebhook['status']> = {

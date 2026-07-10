@@ -1,4 +1,5 @@
 import daniFixture from './fixtures/0011-dani-mariniello.json'
+import { previousMonth } from './period'
 import type {
   DirectorProfessional,
   MonthKey,
@@ -9,6 +10,17 @@ import type {
   ReactivationClient,
   ReturnQuarterRow,
 } from './types'
+
+function spParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(now)
+  const year = Number(parts.find((p) => p.type === 'year')?.value)
+  const month = Number(parts.find((p) => p.type === 'month')?.value)
+  return { year, month }
+}
 
 /** Série real da planilha FATURAMENTOVITOR (Vitor M) — 2025 + 2026. */
 const VITOR_REVENUE_2025 = [51947, 55962, 54108, 49162, 60735, 44140, 50696, 41295, 39690, 46587, 49601, 62639]
@@ -46,36 +58,54 @@ function buildMonthsForPro(pro: DirectorProfessional): MonthRevenueRow[] {
     })
   }
 
-  for (let m = 0; m < VITOR_REVENUE_2026.length; m++) {
-    const revenue = Math.round(VITOR_REVENUE_2026[m]! * scale)
-    const ticket = Math.round(VITOR_TICKET_2026[m]! * (0.92 + (hash(pro.name + '26' + m) % 20) / 100))
-    const attended = ticket > 0 ? Math.max(1, Math.round(revenue / ticket)) : 0
-    rows.push({
-      month: `2026-${String(m + 1).padStart(2, '0')}` as MonthKey,
-      label: `${MONTH_LABELS[m]} 2026`,
-      revenue,
-      ticket_avg: ticket,
-      attended,
-    })
+  const { year: nowY, month: nowM } = spParts()
+  const endY = Math.max(2026, nowY)
+  const endM = nowY > 2026 ? 12 : nowY === 2026 ? nowM : 3
+
+  for (let y = 2026; y <= endY; y++) {
+    const lastM = y === endY ? endM : 12
+    for (let m = 0; m < lastM; m++) {
+      const knownRev = y === 2026 ? VITOR_REVENUE_2026[m] : undefined
+      const knownTicket = y === 2026 ? VITOR_TICKET_2026[m] : undefined
+      const baseRev = knownRev ?? VITOR_REVENUE_2025[m]! * (0.85 + (hash(pro.name + y + m) % 30) / 100)
+      const baseTicket =
+        knownTicket ?? VITOR_TICKET_2025[m]! * (0.9 + (hash(pro.name + 't' + y + m) % 25) / 100)
+      const revenue = Math.round(baseRev * scale)
+      const ticket = Math.round(baseTicket * (0.92 + (hash(pro.name + String(y) + m) % 20) / 100))
+      const attended = ticket > 0 ? Math.max(1, Math.round(revenue / ticket)) : 0
+      rows.push({
+        month: `${y}-${String(m + 1).padStart(2, '0')}` as MonthKey,
+        label: `${MONTH_LABELS[m]} ${y}`,
+        revenue,
+        ticket_avg: ticket,
+        attended,
+      })
+    }
   }
 
   return rows
 }
 
-const QUARTERS: { key: QuarterKey; label: string }[] = [
-  { key: '2025-Q1', label: '1º tri 2025' },
-  { key: '2025-Q2', label: '2º tri 2025' },
-  { key: '2025-Q3', label: '3º tri 2025' },
-  { key: '2025-Q4', label: '4º tri 2025' },
-  { key: '2026-Q1', label: '1º tri 2026' },
-]
+function quarterList(): { key: QuarterKey; label: string }[] {
+  const { year, month } = spParts()
+  const currentQ = Math.ceil(month / 3)
+  const out: { key: QuarterKey; label: string }[] = []
+  for (let y = 2025; y <= year; y++) {
+    const maxQ = y === year ? currentQ : 4
+    for (let q = 1; q <= maxQ; q++) {
+      out.push({ key: `${y}-Q${q}` as QuarterKey, label: `${q}º tri ${y}` })
+    }
+  }
+  return out
+}
 
 function buildQuartersForPro(pro: DirectorProfessional): ReturnQuarterRow[] {
   const base = 0.38 + (hash(pro.name) % 25) / 100
   const rows: ReturnQuarterRow[] = []
   let prev: number | null = null
-  for (let i = 0; i < QUARTERS.length; i++) {
-    const q = QUARTERS[i]!
+  const quarters = quarterList()
+  for (let i = 0; i < quarters.length; i++) {
+    const q = quarters[i]!
     const wobble = ((hash(pro.name + q.key) % 11) - 5) / 100
     const rate = Math.min(0.85, Math.max(0.2, base + wobble + i * 0.015))
     const clients_total = 40 + (hash(pro.id + q.key) % 80)
@@ -207,18 +237,27 @@ export function buildMockRevenueBlocks(
   }))
 }
 
-export function defaultSelectedMonth(): MonthKey {
-  return '2026-03'
+/** Mês atual (fuso America/Sao_Paulo) — usado pelo cron e UI sem filtro. */
+export function defaultSelectedMonth(now = new Date()): MonthKey {
+  const { year, month } = spParts(now)
+  return `${year}-${String(month).padStart(2, '0')}` as MonthKey
 }
 
-export function defaultCompareMonth(): MonthKey {
-  return '2026-02'
+export function defaultCompareMonth(now = new Date()): MonthKey {
+  return previousMonth(defaultSelectedMonth(now))
 }
 
-export function defaultSelectedQuarter(): QuarterKey {
-  return '2026-Q1'
+export function defaultSelectedQuarter(now = new Date()): QuarterKey {
+  const { year, month } = spParts(now)
+  const q = Math.ceil(month / 3) as 1 | 2 | 3 | 4
+  return `${year}-Q${q}` as QuarterKey
 }
 
-export function defaultCompareQuarter(): QuarterKey {
-  return '2025-Q1'
+export function defaultCompareQuarter(now = new Date()): QuarterKey {
+  const selected = defaultSelectedQuarter(now)
+  const [y, qStr] = selected.split('-Q')
+  const year = Number(y)
+  const q = Number(qStr)
+  if (q === 1) return `${year - 1}-Q4` as QuarterKey
+  return `${year}-Q${q - 1}` as QuarterKey
 }

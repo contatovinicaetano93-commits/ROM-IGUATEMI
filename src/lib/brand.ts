@@ -64,6 +64,16 @@ export function getDefaultSeedPreset(): RomSeedPreset {
   return parseSeedPreset(process.env.ROM_SEED_PRESET) ?? getRomPanelId()
 }
 
+/** ID da unidade no Avec (quando configurado) — escopa o sync pra não misturar unidades. */
+export function getAvecUnitId(): string | null {
+  return process.env.AVEC_UNIT_ID?.trim() || null
+}
+
+/** Valor do param `site` nos relatórios Avec (vazio se não configurado). */
+export function avecSiteParam(): string {
+  return getAvecUnitId() ?? ''
+}
+
 export function parseSeedPreset(value: string | undefined | null): RomSeedPreset | null {
   if (!value) return null
   const v = value.toLowerCase()

@@ -298,8 +298,8 @@ export default function AdminPage() {
                     onChange={(e) => setSeedPreset(e.target.value as RomSeedPreset)}
                     className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-gold"
                   >
-                    <option value="brasil">ROM CLUB BRASIL</option>
-                    <option value="iguatemi">ROM CLUB IGUATEMI</option>
+                    <option value="brasil">{getBrand('brasil').displayName}</option>
+                    <option value="iguatemi">{getBrand('iguatemi').displayName}</option>
                   </select>
                 </label>
               </div>
@@ -309,7 +309,7 @@ export default function AdminPage() {
                 disabled={seeding}
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold disabled:opacity-60"
               >
-                {seeding ? 'Criando demo…' : `Popular seed ${seedPreset === 'iguatemi' ? 'Iguatemi' : 'Brasil'}`}
+                {seeding ? 'Criando demo…' : `Popular seed ${getBrand(seedPreset).displayName}`}
               </button>
               {seedMsg && <p className="text-xs text-muted">{seedMsg}</p>}
             </div>

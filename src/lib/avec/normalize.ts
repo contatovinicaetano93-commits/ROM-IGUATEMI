@@ -21,6 +21,31 @@ function pick(row: Record<string, unknown>, keys: string[]): string | null {
   return null
 }
 
+/**
+ * Como pick(), mas preserva o tipo original (sem stringificar) — usado para
+ * valores monetários, onde a API JSON da Avec manda number puro (ex: 1234.56)
+ * e uma string BR (ex: "1.234,56") tem que ser tratada de forma diferente.
+ */
+function pickRaw(row: Record<string, unknown>, keys: string[]): unknown {
+  for (const k of keys) {
+    const v = row[k]
+    if (v === null || v === undefined) continue
+    if (typeof v === 'string' && v.trim() === '') continue
+    return v
+  }
+  const lowerMap = new Map<string, unknown>()
+  for (const [rk, rv] of Object.entries(row)) {
+    lowerMap.set(rk.toLowerCase().trim(), rv)
+  }
+  for (const k of keys) {
+    const v = lowerMap.get(k.toLowerCase())
+    if (v === null || v === undefined) continue
+    if (typeof v === 'string' && v.trim() === '') continue
+    return v
+  }
+  return null
+}
+
 function pickNested(row: Record<string, unknown>, paths: string[][]): string | null {
   for (const path of paths) {
     let cur: unknown = row
@@ -161,7 +186,7 @@ export function normalizeAppointmentRow(row: Record<string, unknown>): Normalize
   const scheduledAt = parseAvecDateTime(datePart, timePart)
   const professional = pick(row, ['profissional', 'profissional_nome', 'nome_profissional'])
   const price = parseOptionalMoney(
-    pick(row, ['valor', 'preco', 'preço', 'valor_servico', 'valor_serviço', 'price', 'amount', 'total'])
+    pickRaw(row, ['valor', 'preco', 'preço', 'valor_servico', 'valor_serviço', 'price', 'amount', 'total'])
   )
   const status = pick(row, ['status', 'situacao', 'situação'])
 
@@ -180,7 +205,7 @@ export function normalizeAttendanceRow(row: Record<string, unknown>): Normalized
   const attendedAt = parseAvecDateTime(datePart, timePart)
   const professional = pick(row, ['profissional', 'profissional_nome', 'nome_profissional'])
   const price = parseOptionalMoney(
-    pick(row, ['valor', 'preco', 'preço', 'valor_servico', 'valor_serviço', 'price', 'amount', 'total'])
+    pickRaw(row, ['valor', 'preco', 'preço', 'valor_servico', 'valor_serviço', 'price', 'amount', 'total'])
   )
 
   if (!avecClientId && !clientName && !phone) return null
@@ -188,14 +213,23 @@ export function normalizeAttendanceRow(row: Record<string, unknown>): Normalized
   return { avecClientId, clientName, phone, serviceName, attendedAt, professional, price }
 }
 
-function parseMoney(raw: string | null): number {
+function parseMoney(raw: unknown): number {
   return parseOptionalMoney(raw) ?? 0
 }
 
-/** Preço unitário — null se ausente ou inválido (não trata 0 como valor). */
-export function parseOptionalMoney(raw: string | null | undefined): number | null {
-  if (raw == null || String(raw).trim() === '') return null
-  const cleaned = String(raw).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
+/**
+ * Preço unitário — null se ausente ou inválido (não trata 0 como valor).
+ * Aceita number puro (API JSON da Avec) sem tratar o ponto decimal como
+ * separador de milhar, e string BR ("1.234,56") vinda de export/planilha.
+ */
+export function parseOptionalMoney(raw: unknown): number | null {
+  if (raw == null) return null
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) && raw > 0 ? raw : null
+  }
+  const str = String(raw).trim()
+  if (str === '') return null
+  const cleaned = str.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
   const n = Number(cleaned)
   if (!Number.isFinite(n) || n <= 0) return null
   return n
@@ -203,7 +237,7 @@ export function parseOptionalMoney(raw: string | null | undefined): number | nul
 
 export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAvecRevenue | null {
   const revenue = parseMoney(
-    pick(row, ['valor', 'total', 'faturamento', 'receita', 'valor_total', 'amount', 'liquido'])
+    pickRaw(row, ['valor', 'total', 'faturamento', 'receita', 'valor_total', 'amount', 'liquido'])
   )
   const attended = Number(pick(row, ['atendimentos', 'qtd', 'quantidade', 'count']) ?? 0) || 0
   const datePart = pick(row, ['data', 'dia', 'date', 'periodo'])
@@ -329,11 +363,11 @@ export function normalizeP1ProfessionalRevenueRow(
   const name = pick(row, ['profissional', 'nome', 'nome_profissional', 'colaborador', 'funcionario'])
   if (!name) return null
   const revenue = parseMoney(
-    pick(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total', 'amount']),
+    pickRaw(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total', 'amount']),
   )
   const attended =
     Number(pick(row, ['atendimentos', 'comandas', 'qtd', 'quantidade', 'clientes', 'count']) ?? 0) || 0
-  const ticketRaw = parseMoney(pick(row, ['ticket', 'ticket_medio', 'ticket médio', 'media', 'média']))
+  const ticketRaw = parseMoney(pickRaw(row, ['ticket', 'ticket_medio', 'ticket médio', 'media', 'média']))
   const ticketAvg = ticketRaw > 0 ? ticketRaw : attended > 0 ? revenue / attended : 0
   if (revenue <= 0 && attended <= 0) return null
   return { name, revenue, attended, ticketAvg, occupancy: null }
@@ -357,7 +391,7 @@ export function normalizeP1ServiceRow(row: Record<string, unknown>): NormalizedP
   if (!name) return null
   const quantity =
     Number(pick(row, ['quantidade', 'qtd', 'vendas', 'count', 'atendimentos']) ?? 0) || 0
-  const revenue = parseMoney(pick(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
+  const revenue = parseMoney(pickRaw(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
   if (quantity <= 0 && revenue <= 0) return null
   return { name, quantity, revenue }
 }
@@ -409,7 +443,7 @@ export function normalizeP2PackageRow(row: Record<string, unknown>): NormalizedP
   if (!name) return null
   const quantity =
     Number(pick(row, ['quantidade', 'qtd', 'vendas', 'vendidos', 'ativos', 'count']) ?? 0) || 0
-  const revenue = parseMoney(pick(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
+  const revenue = parseMoney(pickRaw(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
   if (quantity <= 0 && revenue <= 0) return null
   return { name, quantity: quantity || 1, revenue }
 }
@@ -446,7 +480,7 @@ export function normalizeP2PaymentRow(row: Record<string, unknown>): NormalizedP
     'nome',
   ])
   if (!method) return null
-  const amount = parseMoney(pick(row, ['valor', 'total', 'faturamento', 'amount', 'receita']))
+  const amount = parseMoney(pickRaw(row, ['valor', 'total', 'faturamento', 'amount', 'receita']))
   if (amount <= 0) return null
   return { method, amount }
 }
@@ -614,7 +648,7 @@ export function normalizeP3CurveRow(
       if (br) day = `${br[3]}-${br[2]}-${br[1]}`
     }
   }
-  const revenue = parseMoney(pick(row, ['faturamento', 'valor', 'total', 'receita', 'amount']))
+  const revenue = parseMoney(pickRaw(row, ['faturamento', 'valor', 'total', 'receita', 'amount']))
   if (!day || revenue < 0) return null
   if (revenue === 0 && !dayRaw) return null
   return { day, revenue }

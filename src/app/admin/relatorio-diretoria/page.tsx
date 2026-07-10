@@ -126,7 +126,7 @@ export default function RelatorioDiretoriaPage() {
       const res = await apiFetch(`/api/director-report?${q}`, { cache: 'no-store' })
       const json = await res.json()
       if (!res.ok || json.error) {
-        setError(json.error ?? 'Não autorizado — entre como ADMIN-BRASIL')
+        setError(json.error ?? 'Não autorizado — entre com o login de gerência')
         setData(null)
         return
       }

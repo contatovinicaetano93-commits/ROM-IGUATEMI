@@ -1,3 +1,4 @@
+import { getBrand } from '@/lib/brand'
 import type { DirectorReport, DirectorReportStage } from './types'
 import { reactivationCsv, returnCompareCsv, revenueCompareCsv } from './csv'
 import {
@@ -29,7 +30,13 @@ function toBase64(text: string) {
   return Buffer.from(text, 'utf8').toString('base64')
 }
 
+function mockBanner(report: DirectorReport) {
+  if (report.source !== 'mock') return ''
+  return `<p style="margin:0 0 16px;padding:10px 12px;background:#fff4ce;border:1px solid #e6c200;border-radius:8px;font-size:13px;color:#5c4b00"><b>DADOS DE DEMONSTRAÇÃO (mock)</b> — não usar para decisão financeira até o mapper Avec 0011/0021 estar ativo. Fonte interna: fixture / série sintética.</p>`
+}
+
 function html0011(report: DirectorReport) {
+  const unitName = getBrand().displayName
   const rows = report.return_blocks
     .map((b) => {
       const sel = b.quarters.find((q) => q.quarter === report.period.selected_quarter)
@@ -50,7 +57,8 @@ function html0011(report: DirectorReport) {
 
   return `<!doctype html><html><body style="font-family:Georgia,serif;color:#1a1a1a;line-height:1.45">
   <p style="font-size:12px;color:#888;margin:0 0 4px">ETAPA 1 DE 2</p>
-  <h1 style="font-size:20px;margin:0 0 8px">ROM CLUB BRASIL · Relatório 0011</h1>
+  ${mockBanner(report)}
+  <h1 style="font-size:20px;margin:0 0 8px">${unitName} · Relatório 0011</h1>
   <p style="margin:0 0 4px;font-size:15px"><b>Comparativo trimestre a trimestre:</b> ${report.period.label_0011}</p>
   <p style="margin:0 0 16px;font-size:14px"><b>Data de referência:</b> ${report.period.reference_date}</p>
   <p><b>${report.summary.professionals}</b> profissionais · retorno médio <b>${formatPercent(report.summary.avg_return_rate, 1)}</b></p>
@@ -69,6 +77,7 @@ function html0011(report: DirectorReport) {
 }
 
 function html0021(report: DirectorReport) {
+  const unitName = getBrand().displayName
   const focus = report.period.selected_month
   const other = report.period.compare_month
   const compare = report.period.compare_months && Boolean(other)
@@ -96,7 +105,8 @@ function html0021(report: DirectorReport) {
 
     return `<!doctype html><html><body style="font-family:Georgia,serif;color:#1a1a1a;line-height:1.45">
   <p style="font-size:12px;color:#888;margin:0 0 4px">ETAPA 2 DE 2</p>
-  <h1 style="font-size:20px;margin:0 0 8px">ROM CLUB BRASIL · Relatório 0021</h1>
+  ${mockBanner(report)}
+  <h1 style="font-size:20px;margin:0 0 8px">${unitName} · Relatório 0021</h1>
   <p style="margin:0 0 4px;font-size:15px"><b>Mês:</b> ${labelMonth(focus)}</p>
   <p style="margin:0 0 16px;font-size:14px"><b>Data de referência:</b> ${report.period.reference_date}</p>
   <p>Fat. <b>${formatCurrency(report.summary.total_revenue_selected_month)}</b> · ticket médio <b>${formatCurrency(report.summary.avg_ticket_selected_month)}</b></p>
@@ -139,7 +149,8 @@ function html0021(report: DirectorReport) {
 
   return `<!doctype html><html><body style="font-family:Georgia,serif;color:#1a1a1a;line-height:1.45">
   <p style="font-size:12px;color:#888;margin:0 0 4px">ETAPA 2 DE 2</p>
-  <h1 style="font-size:20px;margin:0 0 8px">ROM CLUB BRASIL · Relatório 0021</h1>
+  ${mockBanner(report)}
+  <h1 style="font-size:20px;margin:0 0 8px">${unitName} · Relatório 0021</h1>
   <p style="margin:0 0 4px;font-size:15px"><b>Comparativo mês a mês:</b> ${report.period.label_0021}</p>
   <p style="margin:0 0 8px;font-size:13px;color:#666">Δ Fat = mês mais recente − mês anterior (crescimento positivo em verde)</p>
   <p style="margin:0 0 16px;font-size:14px"><b>Data de referência:</b> ${report.period.reference_date}</p>
@@ -168,7 +179,7 @@ async function sendOne(
   const from =
     process.env.DIRECTOR_REPORT_FROM?.trim() ||
     process.env.RESEND_FROM?.trim() ||
-    'ROM CLUB BRASIL <onboarding@resend.dev>'
+    `${getBrand().displayName} <onboarding@resend.dev>`
 
   if (!apiKey) return { ok: false, to, error: 'RESEND_API_KEY não configurado', stage }
   if (to.length === 0) return { ok: false, to, error: 'DIRECTOR_REPORT_EMAIL não configurado', stage }

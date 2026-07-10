@@ -39,6 +39,7 @@ import { syncP1Kpis } from '@/lib/avec/sync-p1'
 import { syncP2Kpis } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
+import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
 
 export type AvecSyncMode = 'fast' | 'full'
 
@@ -126,7 +127,7 @@ function warnIfTruncated(stats: AvecSyncStats, reportId: string, result: Awaited
 }
 
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
-  const params = { limit: 250 }
+  const params = { limit: 250, site: avecSiteParam() }
   const result = await fetchAllAvecReport('0004', params)
   warnIfTruncated(stats, '0004', result)
   await snapshotReport('0004', params, result.rows, stats, syncRunId)
@@ -152,7 +153,7 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
 
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   const range = mode === 'fast' ? periodRange(0, 0) : periodRange(1, 21)
-  const params = { ...range, site: '', profissional_id: '', limit: 250 }
+  const params = { ...range, site: avecSiteParam(), profissional_id: '', limit: 250 }
   const result = await fetchAllAvecReport('0051', params)
   warnIfTruncated(stats, '0051', result)
   await snapshotReport('0051', params, result.rows, stats, syncRunId)
@@ -212,7 +213,7 @@ function servicesCreatedRecently(service: { created_at: string }) {
 
 async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   const range = mode === 'fast' ? periodRange(0, 0) : periodRange(7, 0)
-  const params = { ...range, como_conheceu: '', limit: 250 }
+  const params = { ...range, site: avecSiteParam(), como_conheceu: '', limit: 250 }
   const result = await fetchAllAvecReport('0002', params)
   warnIfTruncated(stats, '0002', result)
   await snapshotReport('0002', params, result.rows, stats, syncRunId)
@@ -274,7 +275,7 @@ async function syncRevenue(stats: AvecSyncStats, syncRunId?: string) {
   }
 
   const { inicio, fim } = periodRange(0, 0)
-  const params = { inicio, fim, limit: 250 }
+  const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
   const result = await fetchAllAvecReport(reportId, params)
   warnIfTruncated(stats, reportId, result)
   await snapshotReport(reportId, params, result.rows, stats, syncRunId)
@@ -313,10 +314,13 @@ async function syncCancellations(
 
   let reportId = resolveReportId(def)
   if (!reportId && isAvecMock()) reportId = 'cancellations'
-  if (!reportId) return
+  if (!reportId) {
+    stats.warnings.push('AVEC_REPORT_CANCELLATIONS não configurado — cancelamentos pulados')
+    return
+  }
 
   const range = mode === 'fast' ? periodRange(0, 0) : periodRange(0, 7)
-  const params = { ...range, limit: 250 }
+  const params = { ...range, site: avecSiteParam(), limit: 250 }
   const result = await fetchAllAvecReport(reportId, params)
   warnIfTruncated(stats, reportId, result)
   await snapshotReport(reportId, params, result.rows, stats, syncRunId)
@@ -362,6 +366,12 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
     snapshots_saved: 0,
     errors: [],
     warnings: [],
+  }
+
+  if (!getAvecUnitId()) {
+    stats.warnings.push(
+      'AVEC_UNIT_ID vazio — sync sem filtro de site (risco de misturar unidades se o token for compartilhado)',
+    )
   }
 
   let syncRunId: string | undefined

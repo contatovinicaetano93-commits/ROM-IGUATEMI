@@ -37,6 +37,11 @@ function derivePreferredPro(
   return hits[0]?.professional_name ?? null
 }
 
+/** SQL NULL = nunca definido (pode auto-preencher). '' = limpo na mão (não re-derivar). */
+function isUnsetPreference(value: string | null | undefined) {
+  return value == null
+}
+
 export async function GET(_req: NextRequest, ctx: Ctx) {
   try {
     const { id } = await ctx.params
@@ -44,14 +49,15 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     if (!contact) return err('Contato não encontrado', 404)
 
     const rawServices = await listServices(id)
-    if (!contact.preferred_manicurist) {
+
+    if (isUnsetPreference(contact.preferred_manicurist)) {
       const derived = derivePreferredPro(rawServices, isNailService)
       if (derived) {
         await setPreferredManicurist(id, derived)
         contact = { ...contact, preferred_manicurist: derived }
       }
     }
-    if (!contact.preferred_hairstylist) {
+    if (isUnsetPreference(contact.preferred_hairstylist)) {
       const derived = derivePreferredPro(rawServices, isHairService)
       if (derived) {
         await setPreferredHairstylist(id, derived)
@@ -59,12 +65,19 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       }
     }
 
+    // UI trata '' como “não informada”
+    const contactOut = {
+      ...contact,
+      preferred_manicurist: contact.preferred_manicurist?.trim() || null,
+      preferred_hairstylist: contact.preferred_hairstylist?.trim() || null,
+    }
+
     const services = enrichServices(rawServices)
     const recommendations = computeRecommendations(services)
     const events = await listEvents(id)
     const last_visit = pickLastVisit(rawServices)
 
-    return ok({ contact, services, recommendations, events, last_visit })
+    return ok({ contact: contactOut, services, recommendations, events, last_visit })
   } catch (e) {
     return handleError(e)
   }
@@ -121,7 +134,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       },
     })
 
-    return ok({ ...updated, auto_completed_services: autoDone })
+    return ok({
+      ...updated,
+      preferred_manicurist: updated.preferred_manicurist?.trim() || null,
+      preferred_hairstylist: updated.preferred_hairstylist?.trim() || null,
+      auto_completed_services: autoDone,
+    })
   } catch (e) {
     return handleError(e)
   }

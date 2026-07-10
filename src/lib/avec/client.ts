@@ -5,12 +5,20 @@
 
 import { getMockReport } from '@/lib/avec/fixtures'
 import { todayIso } from '@/lib/salon/format'
+import { isProduction } from '@/lib/env'
 
 export const AVEC_DEFAULT_API_URL = 'https://api.avec.beauty'
 
 export function isAvecMock() {
   const v = process.env.AVEC_MOCK
   return v === '1' || v === 'true'
+}
+
+/** Mock nunca em produção — evita sujar o Neon real. */
+export function assertAvecMockAllowed() {
+  if (isAvecMock() && isProduction()) {
+    throw new Error('AVEC_MOCK não permitido em produção — remova da Vercel')
+  }
 }
 
 export interface AvecReportParams {
@@ -114,6 +122,7 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
 }
 
 export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
+  assertAvecMockAllowed()
   if (isAvecMock()) {
     return getMockReport(reportId, params.page ?? 1)
   }

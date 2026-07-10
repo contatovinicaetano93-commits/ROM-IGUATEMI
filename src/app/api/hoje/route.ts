@@ -3,10 +3,12 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { getSql } from '@/lib/db'
 import { getSalonMetrics, recomputeSalonMetricsFromRom } from '@/lib/salon/metrics'
+import { computeSalonIntelligence } from '@/lib/salon/intelligence'
 import { listActionItems } from '@/lib/salon/recommendations'
 import { listUpcomingSchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
+import { todayIso } from '@/lib/salon/format'
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,7 +17,7 @@ export async function GET(req: NextRequest) {
 
     await recomputeSalonMetricsFromRom().catch(() => {})
 
-    const day = new Date().toISOString().slice(0, 10)
+    const day = todayIso()
     const sql = getSql()
 
     const [salonRaw, playbook, scheduleToday, leadRows, avecLast] = await Promise.all([
@@ -53,9 +55,15 @@ export async function GET(req: NextRequest) {
           ticket_avg: null,
         }
 
+    // KPI de meta/risco depende de faturamento — mesma regra de visibilidade do staff.
+    const intelligence = auth.session.can_view_revenue
+      ? computeSalonIntelligence(salonBase)
+      : null
+
     return ok({
       day,
       salon,
+      intelligence,
       can_view_revenue: auth.session.can_view_revenue,
       role: auth.session.role,
       playbook: playbook.slice(0, 8),

@@ -1,3 +1,4 @@
+import { getBrand } from '@/lib/brand'
 import type { DirectorReport, DirectorReportStage } from './types'
 import { reactivationCsv, returnCompareCsv, revenueCompareCsv } from './csv'
 import { sendDirectorReportEmail, getDirectorReportRecipients } from './email'
@@ -14,6 +15,7 @@ export async function deliverDirectorReport(
   stage: DirectorReportStage = 'all'
 ) {
   const email = await sendDirectorReportEmail(report, stage)
+  const unitName = getBrand().displayName
 
   let telegram: { ok: boolean; error?: string; chat?: string } | null = null
   const chat = managementChatId()
@@ -21,8 +23,8 @@ export async function deliverDirectorReport(
     try {
       const lines = [
         report.source === 'mock'
-          ? `ROM Brasil · Relatório diretoria [DEMO / mock — não usar para decisão]`
-          : `ROM Brasil · Relatório diretoria`,
+          ? `${unitName} · Relatório diretoria [DEMO / mock — não usar para decisão]`
+          : `${unitName} · Relatório diretoria`,
         stage === 'all' ? 'Etapas: 0011 + 0021' : `Etapa: ${stage}`,
       ]
       if (stage === '0011' || stage === 'all') {

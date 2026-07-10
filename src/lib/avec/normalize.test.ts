@@ -24,18 +24,25 @@ describe('normalizePhone', () => {
 })
 
 describe('parseOptionalMoney', () => {
-  it('parseia valor BR', () => {
+  it('parseia valor BR (string)', () => {
     expect(parseOptionalMoney('R$ 450,00')).toBe(450)
   })
 
-  it('retorna null quando ausente', () => {
+  it('parseia number puro sem tratar o ponto como separador de milhar (API Avec)', () => {
+    expect(parseOptionalMoney(1234.56)).toBe(1234.56)
+    expect(parseOptionalMoney(120)).toBe(120)
+  })
+
+  it('retorna null quando ausente ou inválido', () => {
     expect(parseOptionalMoney(null)).toBeNull()
     expect(parseOptionalMoney('')).toBeNull()
+    expect(parseOptionalMoney(0)).toBeNull()
+    expect(parseOptionalMoney(-5)).toBeNull()
   })
 })
 
 describe('normalizeAppointmentRow price/professional', () => {
-  it('extrai profissional e preço', () => {
+  it('extrai profissional e preço (string BR)', () => {
     const row = normalizeAppointmentRow({
       cliente_id: '1',
       nome_cliente: 'Ana',
@@ -47,6 +54,19 @@ describe('normalizeAppointmentRow price/professional', () => {
     })
     expect(row?.professional).toBe('Dani')
     expect(row?.price).toBe(120)
+  })
+
+  it('extrai preço quando a API manda number puro', () => {
+    const row = normalizeAppointmentRow({
+      cliente_id: '1',
+      nome_cliente: 'Ana',
+      servico: 'Corte',
+      data: '10/03/2026',
+      hora: '14:00',
+      profissional: 'Dani',
+      valor: 120.5,
+    })
+    expect(row?.price).toBe(120.5)
   })
 })
 

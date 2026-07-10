@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { isProduction } from '@/lib/env'
 
 export const AUTH_COOKIE = 'rom_session'
 const DEFAULT_ADMIN_USER = 'admin'
@@ -119,6 +120,8 @@ export function validateAdminCredentials(username: string, password: string) {
 
 export async function getSession(req: NextRequest): Promise<AuthSession | null> {
   if (!isAuthEnabled()) {
+    // Produção sem senha = fechado (nunca abrir o painel). Dev sem senha = aberto (conveniência local).
+    if (isProduction()) return null
     return { user: getAdminUser(), role: 'admin', can_view_revenue: true }
   }
 
@@ -141,7 +144,8 @@ export async function getSession(req: NextRequest): Promise<AuthSession | null> 
 }
 
 export async function isAuthorized(req: NextRequest, { allowHeaderTokens = true }: AuthOptions = {}) {
-  if (!isAuthEnabled()) return true
+  // Produção sem senha = fechado (nunca abrir o painel). Dev sem senha = aberto (conveniência local).
+  if (!isAuthEnabled()) return !isProduction()
 
   if (await getSession(req)) return true
 
@@ -165,7 +169,7 @@ export async function requireAuth(req: NextRequest) {
 }
 
 export async function requireSession(req: NextRequest) {
-  if (!isAuthEnabled()) {
+  if (!isAuthEnabled() && !isProduction()) {
     return {
       ok: true as const,
       session: { user: getAdminUser(), role: 'admin' as const, can_view_revenue: true },

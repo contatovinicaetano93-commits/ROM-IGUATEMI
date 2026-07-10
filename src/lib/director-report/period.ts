@@ -1,3 +1,4 @@
+import { getBrand } from '@/lib/brand'
 import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
 const MONTH_PT = [
@@ -62,16 +63,23 @@ export function reportReferenceDate(report: DirectorReport): string {
   return last.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
 }
 
+function subjectPrefix(report: DirectorReport) {
+  return report.source === 'mock' ? '[DEMO] ' : ''
+}
+
 export function reportSubject0011(report: DirectorReport): string {
-  return `ROM Brasil · Etapa 1 · Relatório 0011 · ${label0011(report)} · ref. ${report.period.reference_date}`
+  const unit = getBrand().displayName
+  return `${subjectPrefix(report)}${unit} · Etapa 1 · Relatório 0011 · ${label0011(report)} · ref. ${report.period.reference_date}`
 }
 
 export function reportSubject0021(report: DirectorReport): string {
-  return `ROM Brasil · Etapa 2 · Relatório 0021 · ${label0021(report)} · ref. ${report.period.reference_date}`
+  const unit = getBrand().displayName
+  return `${subjectPrefix(report)}${unit} · Etapa 2 · Relatório 0021 · ${label0021(report)} · ref. ${report.period.reference_date}`
 }
 
 export function reportSubject(report: DirectorReport): string {
-  return `ROM Brasil · Relatório diretoria · ${reportPeriodLabel(report)} · ref. ${reportReferenceDate(report)}`
+  const unit = getBrand().displayName
+  return `${subjectPrefix(report)}${unit} · Relatório diretoria · ${reportPeriodLabel(report)} · ref. ${reportReferenceDate(report)}`
 }
 
 export function slug0011(report: DirectorReport): string {
