@@ -49,11 +49,6 @@ function LoginForm() {
       <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">{brand.displayName}</p>
       <h1 className="mt-2 text-xl font-semibold">Acesso da equipe</h1>
       <p className="mt-2 text-sm text-muted">{brand.loginSubtitle}</p>
-      <p className="mt-2 text-xs text-muted">
-        Admin: <span className="font-medium text-foreground">ADMIN-BRASIL</span>
-        {' · '}
-        Funcionário: <span className="font-medium text-foreground">FUNC-BRASIL</span>
-      </p>
       {loggedOut && (
         <p className="mt-3 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           Você saiu do sistema. Entre novamente para continuar.
@@ -69,7 +64,7 @@ function LoginForm() {
             required
             autoComplete="username"
             autoFocus
-            placeholder="ADMIN-BRASIL"
+            placeholder="Usuário"
             spellCheck={false}
             autoCapitalize="characters"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
@@ -83,20 +78,11 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
-            placeholder="Senha@brasil"
+            placeholder="Senha"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
           />
         </label>
-        {error && (
-          <p className="text-sm text-danger">
-            {error}
-            {error.toLowerCase().includes('incorret') && (
-              <span className="mt-1 block text-xs text-muted">
-                Confira maiúsculas. Admin: ADMIN-BRASIL / Senha@brasil · Func: FUNC-BRASIL / Senha@func
-              </span>
-            )}
-          </p>
-        )}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <PrimaryButton type="submit" disabled={loading}>
           {loading ? 'Entrando…' : 'Entrar'}
         </PrimaryButton>

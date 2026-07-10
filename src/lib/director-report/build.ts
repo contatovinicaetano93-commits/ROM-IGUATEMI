@@ -38,7 +38,8 @@ export async function buildDirectorReport(
     professionals = professionals.filter((p) => p.id === opts.professionalId)
   }
 
-  const useMock = opts.forceMock || !isAvecConfigured() || isAvecMock()
+  // 0011/0021 live Avec mapping ainda não wired — sempre fixture/mock.
+  const avecReady = isAvecConfigured() && !isAvecMock() && !opts.forceMock
 
   const return_blocks = buildMockReturnBlocks(professionals, selectedQuarter, compareQuarter)
   const revenue_blocks = buildMockRevenueBlocks(professionals, selectedMonth)
@@ -70,10 +71,11 @@ export async function buildDirectorReport(
       label_0021: '',
       reference_date: '',
     },
-    source: useMock ? 'mock' : 'mock',
+    source: 'mock',
     avec_reports: { return: '0011', revenue: '0021' },
-    schedule_note:
-      'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês (ou mês vs mês)',
+    schedule_note: avecReady
+      ? 'Envio em 2 etapas (terças 08:00 SP): 0011/0021 — Avec token OK; relatório ainda em fixture até mapper live'
+      : 'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês (ou mês vs mês) · dados mock',
     return_blocks,
     revenue_blocks,
     summary: {

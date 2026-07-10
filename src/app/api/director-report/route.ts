@@ -31,9 +31,85 @@ function asStage(v: string | null | undefined): DirectorReportStage {
   return 'all'
 }
 
-/** GET /api/director-report — só admin. */
+function isCronInvocation(req: NextRequest) {
+  const cron = process.env.CRON_SECRET?.trim()
+  const authHeader = req.headers.get('authorization')
+  if (cron && authHeader === `Bearer ${cron}`) return true
+  if (cron && req.headers.get('x-cron-secret') === cron) return true
+  if (req.headers.get('x-vercel-cron') === '1') return true
+  return false
+}
+
+async function runDelivery(
+  req: NextRequest,
+  opts: {
+    stage: DirectorReportStage
+    forceMock: boolean
+    isCron: boolean
+    professionalId?: string
+    month?: MonthKey
+    compareMonth?: MonthKey | null
+    compareMonths?: boolean
+    quarter?: QuarterKey
+    compare?: QuarterKey
+  }
+) {
+  const report = await buildDirectorReport({
+    forceMock: opts.forceMock,
+    selectedMonth: opts.month,
+    compareMonth: opts.compareMonth,
+    compareMonths: opts.compareMonths,
+    selectedQuarter: opts.quarter,
+    compareQuarter: opts.compare,
+    professionalId: opts.professionalId,
+  })
+  const delivery = await deliverDirectorReport(report, opts.stage)
+
+  console.info('[director-report] run', {
+    at: report.generated_at,
+    stage: opts.stage,
+    source: report.source,
+    professionals: report.summary.professionals,
+    email: delivery.email.ok,
+    telegram: delivery.telegram?.ok,
+    cron: opts.isCron,
+  })
+
+  const parts: string[] = []
+  if (delivery.email.ok) parts.push(`e-mail → ${delivery.email.to.join(', ')} (${opts.stage})`)
+  else parts.push(`e-mail falhou (${delivery.email.error})`)
+  if (delivery.telegram?.ok) parts.push('Telegram OK')
+  else if (delivery.telegram) parts.push(`Telegram falhou: ${delivery.telegram.error}`)
+
+  return ok({
+    ran: true,
+    stage: opts.stage,
+    source: report.source,
+    generated_at: report.generated_at,
+    professionals: report.summary.professionals,
+    summary: report.summary,
+    period: report.period,
+    delivery,
+    note: parts.join(' · '),
+  })
+}
+
+/** GET — admin: JSON/CSV · cron Vercel: dispara envio (terças). */
 export async function GET(req: NextRequest) {
   try {
+    const cron = isCronInvocation(req)
+
+    // Vercel Cron = GET — precisa enviar o relatório (antes só POST entregava).
+    if (cron) {
+      return await runDelivery(req, {
+        stage: 'all',
+        forceMock: false,
+        isCron: true,
+        // 0021 no cron semanal: mês atual vs anterior
+        compareMonths: true,
+      })
+    }
+
     const auth = await requireAdmin(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
@@ -93,20 +169,19 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** POST — dispara etapa(s) do relatório (cron ou admin). */
+/** POST — dispara etapa(s) do relatório (cron com body ou admin). */
 export async function POST(req: NextRequest) {
   try {
-    const cron = process.env.CRON_SECRET?.trim()
-    const authHeader = req.headers.get('authorization')
-    const isCron = Boolean(cron && authHeader === `Bearer ${cron}`)
+    const cron = isCronInvocation(req)
 
-    if (!isCron) {
+    if (!cron) {
       const auth = await requireAdmin(req)
       if (!auth.ok) return err(auth.message, auth.status)
     }
 
     const body = await req.json().catch(() => ({}))
-    const forceMock = body?.mock !== false
+    // Só força mock se pedido explicitamente; senão build usa Avec se configurada (hoje ainda mock interno).
+    const forceMock = body?.mock === true || body?.mock === 1 || body?.mock === '1'
     const stage = asStage(typeof body?.stage === 'string' ? body.stage : 'all')
 
     const professionalId =
@@ -114,9 +189,12 @@ export async function POST(req: NextRequest) {
         ? body.professional_id.trim()
         : undefined
 
-    const report = await buildDirectorReport({
+    return await runDelivery(req, {
+      stage,
       forceMock,
-      selectedMonth: asMonth(typeof body?.month === 'string' ? body.month : null),
+      isCron: cron,
+      professionalId,
+      month: asMonth(typeof body?.month === 'string' ? body.month : null),
       compareMonth: asMonth(typeof body?.compare_month === 'string' ? body.compare_month : null),
       compareMonths:
         body?.compare_months === undefined
@@ -124,36 +202,8 @@ export async function POST(req: NextRequest) {
             ? true
             : false
           : body?.compare_months !== false && body?.compare_months !== 0,
-      selectedQuarter: asQuarter(typeof body?.quarter === 'string' ? body.quarter : null),
-      compareQuarter: asQuarter(typeof body?.compare === 'string' ? body.compare : null),
-      professionalId,
-    })
-    const delivery = await deliverDirectorReport(report, stage)
-
-    console.info('[director-report] run', {
-      at: report.generated_at,
-      stage,
-      professionals: report.summary.professionals,
-      email: delivery.email.ok,
-      telegram: delivery.telegram?.ok,
-      cron: isCron,
-    })
-
-    const parts: string[] = []
-    if (delivery.email.ok) parts.push(`e-mail → ${delivery.email.to.join(', ')} (${stage})`)
-    else parts.push(`e-mail falhou (${delivery.email.error})`)
-    if (delivery.telegram?.ok) parts.push('Telegram OK')
-    else if (delivery.telegram) parts.push(`Telegram falhou: ${delivery.telegram.error}`)
-
-    return ok({
-      ran: true,
-      stage,
-      generated_at: report.generated_at,
-      professionals: report.summary.professionals,
-      summary: report.summary,
-      period: report.period,
-      delivery,
-      note: parts.join(' · '),
+      quarter: asQuarter(typeof body?.quarter === 'string' ? body.quarter : null),
+      compare: asQuarter(typeof body?.compare === 'string' ? body.compare : null),
     })
   } catch (e) {
     return handleError(e)

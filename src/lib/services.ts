@@ -116,18 +116,19 @@ export async function markServiceDone(
   return rows[0] ?? null
 }
 
+/** Agenda serviço. Não grava last_price (preço de visita feita = só markServiceDone). */
 export async function scheduleService(
   serviceId: string,
   scheduledAt: string,
   professionalName?: string | null,
-  lastPrice?: number | null
+  _quotedPrice?: number | null
 ): Promise<ClientService | null> {
+  void _quotedPrice
   const sql = getSql()
   const rows = (await sql`
     update client_services set
       scheduled_at = ${scheduledAt}::timestamptz,
-      professional_name = coalesce(${professionalName ?? null}, professional_name),
-      last_price = coalesce(${lastPrice ?? null}, last_price)
+      professional_name = coalesce(${professionalName ?? null}, professional_name)
     where id = ${serviceId}
     returning *
   `) as ClientService[]
@@ -147,16 +148,30 @@ export async function setServiceProfessional(
   return rows[0] ?? null
 }
 
-/** Atualiza profissional/preço sem alterar last_done_at nem agendamento. */
+/**
+ * Atualiza meta profissionais/preço.
+ * last_price só se already_done (há last_done_at) — evita preço de agendamento futuro
+ * aparecer como "valor da última visita".
+ */
 export async function patchServiceVisitMeta(
   serviceId: string,
-  opts: { professionalName?: string | null; lastPrice?: number | null }
+  opts: { professionalName?: string | null; lastPrice?: number | null; allowLastPrice?: boolean }
 ): Promise<ClientService | null> {
   const sql = getSql()
+  if (opts.allowLastPrice && opts.lastPrice != null) {
+    const rows = (await sql`
+      update client_services set
+        professional_name = coalesce(${opts.professionalName ?? null}, professional_name),
+        last_price = coalesce(${opts.lastPrice ?? null}, last_price)
+      where id = ${serviceId}
+        and last_done_at is not null
+      returning *
+    `) as ClientService[]
+    if (rows[0]) return rows[0]
+  }
   const rows = (await sql`
     update client_services set
-      professional_name = coalesce(${opts.professionalName ?? null}, professional_name),
-      last_price = coalesce(${opts.lastPrice ?? null}, last_price)
+      professional_name = coalesce(${opts.professionalName ?? null}, professional_name)
     where id = ${serviceId}
     returning *
   `) as ClientService[]

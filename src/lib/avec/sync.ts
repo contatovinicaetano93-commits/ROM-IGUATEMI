@@ -34,7 +34,12 @@ import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
 import { getDeploymentContext } from '@/lib/deployment'
 import { recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
+import { syncP1Kpis } from '@/lib/avec/sync-p1'
+import { syncP2Kpis } from '@/lib/avec/sync-p2'
+import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
+
+export type AvecSyncMode = 'fast' | 'full'
 
 export interface AvecSyncStats {
   panel: RomPanelId
@@ -50,6 +55,9 @@ export interface AvecSyncStats {
   snapshots_saved: number
   errors: string[]
   warnings: string[]
+  p1_rows?: number
+  p2_rows?: number
+  p3_rows?: number
 }
 
 export interface AvecSyncRun {
@@ -71,8 +79,14 @@ async function recordSyncRun(kind: string, status: AvecSyncRun['status'], stats:
   return rows[0]
 }
 
-export async function getLastAvecSync(): Promise<AvecSyncRun | null> {
+export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null> {
   const sql = getSql()
+  if (kind) {
+    const rows = (await sql`
+      select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
+    `) as AvecSyncRun[]
+    return rows[0] ?? null
+  }
   const rows = (await sql`
     select * from avec_sync_runs order by created_at desc limit 1
   `) as AvecSyncRun[]
@@ -98,8 +112,12 @@ async function snapshotReport(
   stats: AvecSyncStats,
   syncRunId?: string
 ) {
-  await saveReportSnapshot(reportId, params, rows, syncRunId)
-  stats.snapshots_saved++
+  try {
+    await saveReportSnapshot(reportId, params, rows, syncRunId)
+    stats.snapshots_saved++
+  } catch (e) {
+    stats.warnings.push(`snapshot ${reportId}: ${e instanceof Error ? e.message : String(e)}`)
+  }
 }
 
 function warnIfTruncated(stats: AvecSyncStats, reportId: string, result: Awaited<ReturnType<typeof fetchAllAvecReport>>) {
@@ -159,15 +177,11 @@ async function syncAppointments(stats: AvecSyncStats, syncRunId?: string) {
         const service = await findOrCreateService(contact.id, appt.serviceName)
         if (!had) stats.services_created++
         if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
-          await scheduleService(service.id, appt.scheduledAt, appt.professional, appt.price)
+          await scheduleService(service.id, appt.scheduledAt, appt.professional)
           stats.services_scheduled++
-        } else if (
-          (appt.professional && !service.professional_name) ||
-          (appt.price != null && service.last_price == null)
-        ) {
+        } else if (appt.professional && !service.professional_name) {
           await patchServiceVisitMeta(service.id, {
             professionalName: appt.professional,
-            lastPrice: appt.price,
           })
         }
         if (appt.professional && isNailService(appt.serviceName)) {
@@ -304,7 +318,7 @@ async function syncCancellations(stats: AvecSyncStats, syncRunId?: string) {
   }
 }
 
-export async function runAvecSync(): Promise<AvecSyncRun> {
+export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSyncRun> {
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
   }
@@ -330,11 +344,27 @@ export async function runAvecSync(): Promise<AvecSyncRun> {
   let syncRunId: string | undefined
 
   try {
-    await syncClients(stats, syncRunId)
+    // Fast: agenda/caixa do dia. Full: + catálogo + P1/P2/P3.
+    if (mode === 'full') {
+      await syncClients(stats, syncRunId)
+    }
     await syncAppointments(stats, syncRunId)
     await syncAttendances(stats, syncRunId)
     await syncRevenue(stats, syncRunId)
     await syncCancellations(stats, syncRunId)
+    if (mode === 'full') {
+      for (const [label, fn] of [
+        ['P1', () => syncP1Kpis(stats, syncRunId)],
+        ['P2', () => syncP2Kpis(stats, syncRunId)],
+        ['P3', () => syncP3Kpis(stats, syncRunId)],
+      ] as const) {
+        try {
+          await fn()
+        } catch (e) {
+          stats.errors.push(`${label}: ${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
+    }
     await recomputeSalonMetricsFromRom()
 
     const status: AvecSyncRun['status'] =
@@ -344,7 +374,7 @@ export async function runAvecSync(): Promise<AvecSyncRun> {
           ? 'partial'
           : 'ok'
 
-    const run = await recordSyncRun('full', status, stats)
+    const run = await recordSyncRun(mode, status, stats)
     syncRunId = run.id
 
     await logEvent({
@@ -352,13 +382,13 @@ export async function runAvecSync(): Promise<AvecSyncRun> {
       channel: 'avec',
       direction: 'in',
       handledBy: 'system',
-      payload: { avec_sync: stats, status },
+      payload: { avec_sync: stats, status, mode },
     })
 
     return run
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     stats.errors.push(msg)
-    return recordSyncRun('full', 'error', stats, msg)
+    return recordSyncRun(mode, 'error', stats, msg)
   }
 }

@@ -226,7 +226,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
           category: guessServiceCategory(payload.service_name),
         })
       }
-      await scheduleService(service.id, payload.scheduled_at, payload.professional_name, payload.price)
+      await scheduleService(service.id, payload.scheduled_at, payload.professional_name)
       await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
       await updateContact(contact.id, { status: 'agendado' })
     }
