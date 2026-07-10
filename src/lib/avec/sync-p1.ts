@@ -63,9 +63,16 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const { inicio, fim } = periodRange(30, 0)
   const params = { inicio, fim, limit: 250 }
 
+  // professionals é alimentado por DOIS relatórios independentes (0021 revenue +
+  // 0126 ocupação) fundidos no mesmo registro por nome. Só marca ok quando os
+  // relatórios CONFIGURADOS tiverem todos sucesso — senão um sucesso parcial
+  // grava metade do registro (ex: revenue zerado) por cima do dado bom salvo antes.
   const byPro = new Map<string, P1ProfessionalRow>()
+  let professionalsAttempted = false
+  let professionalsFailed = false
   const id0021 = resolveId('professionals_revenue')
   if (id0021) {
+    professionalsAttempted = true
     try {
       const rows = asRows(await fetchAllAvecReport(id0021, params))
       await snapshotSafe(id0021, params, rows, stats, syncRunId)
@@ -86,12 +93,14 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
         byPro.set(p.name, cur)
       }
     } catch (e) {
+      professionalsFailed = true
       stats.errors.push(`P1 0021: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   const id0126 = resolveId('professionals_occupancy')
   if (id0126) {
+    professionalsAttempted = true
     try {
       const rows = asRows(await fetchAllAvecReport(id0126, params))
       await snapshotSafe(id0126, params, rows, stats, syncRunId)
@@ -110,9 +119,12 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
         byPro.set(o.name, cur)
       }
     } catch (e) {
+      professionalsFailed = true
       stats.errors.push(`P1 0126: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
+
+  const professionalsOk = professionalsAttempted && !professionalsFailed
 
   const professionals = Array.from(byPro.values())
     .sort((a, b) => b.revenue - a.revenue)
@@ -124,6 +136,7 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
     }))
 
   const services: { name: string; quantity: number; revenue: number }[] = []
+  let servicesOk = false
   const id0032 = resolveId('top_services')
   if (id0032) {
     try {
@@ -140,12 +153,14 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
         })
       }
       services.sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
+      servicesOk = true
     } catch (e) {
       stats.errors.push(`P1 0032: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   const acquisition: { channel: string; clients: number }[] = []
+  let acquisitionOk = false
   const id0003 = resolveId('acquisition')
   if (id0003) {
     try {
@@ -158,12 +173,14 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
         acquisition.push(a)
       }
       acquisition.sort((a, b) => b.clients - a.clients)
+      acquisitionOk = true
     } catch (e) {
       stats.errors.push(`P1 0003: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   let reactivation_count = 0
+  let reactivationOk = false
   const id0107 = resolveId('reactivation')
   if (id0107) {
     try {
@@ -171,24 +188,28 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
       await snapshotSafe(id0107, { limit: 250 }, rows, stats, syncRunId)
       reactivation_count = rows.length
       stats.p1_rows = (stats.p1_rows ?? 0) + rows.length
+      reactivationOk = true
     } catch (e) {
       stats.errors.push(`P1 0107: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
-  if (
-    professionals.length > 0 ||
-    services.length > 0 ||
-    acquisition.length > 0 ||
-    reactivation_count > 0
-  ) {
+  // Só escreve os campos cujo relatório teve sucesso — evita apagar dados
+  // válidos do dia quando outro relatório falha parcialmente.
+  const patch: {
+    professionals?: P1ProfessionalRow[]
+    services?: { name: string; quantity: number; revenue: number }[]
+    acquisition?: { channel: string; clients: number }[]
+    reactivation_count?: number
+  } = {}
+  if (professionalsOk) patch.professionals = professionals
+  if (servicesOk) patch.services = services.slice(0, 10)
+  if (acquisitionOk) patch.acquisition = acquisition.slice(0, 8)
+  if (reactivationOk) patch.reactivation_count = reactivation_count
+
+  if (Object.keys(patch).length > 0) {
     try {
-      await upsertSalonP1Daily(day, {
-      professionals,
-      services: services.slice(0, 10),
-      acquisition: acquisition.slice(0, 8),
-      reactivation_count,
-    })
+      await upsertSalonP1Daily(day, patch)
     } catch (e) {
       stats.errors.push(`P1 upsert: ${e instanceof Error ? e.message : String(e)}`)
     }

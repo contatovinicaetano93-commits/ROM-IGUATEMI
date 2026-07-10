@@ -129,24 +129,6 @@ async function snapshotReport(
   }
 }
 
-async function snapshotReport(
-  reportId: string,
-  params: Record<string, unknown>,
-  rows: Record<string, unknown>[],
-  stats: AvecSyncStats,
-  syncRunId?: string
-) {
-  try {
-    await saveReportSnapshot(reportId, params, rows, syncRunId)
-    stats.snapshots_saved++
-  } catch (e) {
-    // Snapshot é auditoria — não deve derrubar o sync de clientes/agenda/receita.
-    stats.warnings.push(
-      `snapshot ${reportId}: ${e instanceof Error ? e.message : String(e)}`,
-    )
-  }
-}
-
 function warnIfTruncated(
   stats: AvecSyncStats,
   reportId: string,
@@ -215,7 +197,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         const service = await findOrCreateService(contact.id, appt.serviceName)
         if (!had) stats.services_created++
         if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
-          await scheduleService(service.id, appt.scheduledAt)
+          await scheduleService(service.id, appt.scheduledAt, appt.professional)
           stats.services_scheduled++
         }
       }
@@ -262,7 +244,11 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
       if (att.serviceName) {
         const service = await findOrCreateService(contact.id, att.serviceName)
         if (servicesCreatedRecently(service)) stats.services_created++
-        await markServiceDone(service.id)
+        await markServiceDone(service.id, {
+          doneAt: att.attendedAt,
+          professionalName: att.professional,
+          lastPrice: att.price,
+        })
         stats.services_completed++
       }
 

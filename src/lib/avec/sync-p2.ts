@@ -63,6 +63,7 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const params = { inicio, fim, limit: 250 }
 
   const booking_channels: { channel: string; count: number }[] = []
+  let bookingChannelsOk = false
   const id0056 = resolveId('booking_channels')
   if (id0056) {
     try {
@@ -75,6 +76,7 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
         booking_channels.push(c)
       }
       booking_channels.sort((a, b) => b.count - a.count)
+      bookingChannelsOk = true
     } catch (e) {
       stats.errors.push(`P2 0056: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -82,6 +84,7 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
 
   const packages: { name: string; quantity: number; revenue: number }[] = []
   let packages_sold = 0
+  let packagesOk = false
   const id0061 = resolveId('packages')
   if (id0061) {
     try {
@@ -99,6 +102,7 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
         packages_sold += p.quantity
       }
       packages.sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
+      packagesOk = true
     } catch (e) {
       stats.errors.push(`P2 0061: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -106,6 +110,7 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
 
   let ratings_avg = 0
   let ratings_count = 0
+  let ratingsOk = false
   const id0104 = resolveId('ratings')
   if (id0104) {
     try {
@@ -122,12 +127,14 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
       }
       ratings_count = n
       ratings_avg = n > 0 ? Math.round((sum / n) * 100) / 100 : 0
+      ratingsOk = true
     } catch (e) {
       stats.errors.push(`P2 0104: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   let birthday_count = 0
+  let birthdaysOk = false
   const id0001 = resolveId('birthdays')
   if (id0001) {
     try {
@@ -140,27 +147,36 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
       }
       birthday_count = counted || rows.length
       stats.p2_rows = (stats.p2_rows ?? 0) + birthday_count
+      birthdaysOk = true
     } catch (e) {
       stats.errors.push(`P2 0001: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
-  if (
-    booking_channels.length > 0 ||
-    packages.length > 0 ||
-    packages_sold > 0 ||
-    ratings_count > 0 ||
-    birthday_count > 0
-  ) {
+  // Só escreve os campos cujo relatório teve sucesso — evita apagar dados
+  // válidos do dia quando outro relatório falha parcialmente.
+  const patch: {
+    booking_channels?: { channel: string; count: number }[]
+    packages?: { name: string; quantity: number; revenue: number }[]
+    packages_sold?: number
+    ratings_avg?: number
+    ratings_count?: number
+    birthday_count?: number
+  } = {}
+  if (bookingChannelsOk) patch.booking_channels = booking_channels.slice(0, 8)
+  if (packagesOk) {
+    patch.packages = packages.slice(0, 8)
+    patch.packages_sold = packages_sold
+  }
+  if (ratingsOk) {
+    patch.ratings_avg = ratings_avg
+    patch.ratings_count = ratings_count
+  }
+  if (birthdaysOk) patch.birthday_count = birthday_count
+
+  if (Object.keys(patch).length > 0) {
     try {
-      await upsertSalonP2Daily(day, {
-      booking_channels: booking_channels.slice(0, 8),
-      packages: packages.slice(0, 8),
-      packages_sold,
-      ratings_avg,
-      ratings_count,
-      birthday_count,
-    })
+      await upsertSalonP2Daily(day, patch)
     } catch (e) {
       stats.errors.push(`P2 upsert: ${e instanceof Error ? e.message : String(e)}`)
     }

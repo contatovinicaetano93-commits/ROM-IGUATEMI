@@ -14,6 +14,8 @@ create table if not exists contacts (
   status text not null default 'novo' check (status in ('novo', 'em_atendimento', 'agendado', 'convertido', 'perdido')),
   avec_client_id text,
   notes text,
+  preferred_manicurist text,
+  preferred_hairstylist text,
   first_contact_at timestamptz not null default now(),
   last_contact_at timestamptz not null default now(),
   created_at timestamptz not null default now()
@@ -54,6 +56,8 @@ create table if not exists client_services (
   scheduled_at timestamptz,
   product text,
   notes text,
+  professional_name text,
+  last_price numeric(12, 2),
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -61,6 +65,9 @@ create table if not exists client_services (
 create index if not exists client_services_contact_idx on client_services (contact_id);
 create index if not exists client_services_active_idx on client_services (active) where active = true;
 create index if not exists client_services_scheduled_idx on client_services (scheduled_at) where scheduled_at is not null;
+create index if not exists client_services_last_done_idx
+  on client_services (contact_id, last_done_at desc nulls last)
+  where active = true and last_done_at is not null;
 
 create unique index if not exists contacts_avec_client_id_idx on contacts (avec_client_id) where avec_client_id is not null;
 

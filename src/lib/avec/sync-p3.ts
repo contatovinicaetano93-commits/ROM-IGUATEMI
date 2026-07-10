@@ -62,6 +62,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const params = { inicio, fim, limit: 250 }
 
   let return_rate = 0
+  let returnRateOk = false
   const id0007 = resolveId('return_rate')
   if (id0007) {
     try {
@@ -78,12 +79,14 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
         n++
       }
       if (n > 0) return_rate = Math.round((sum / n) * 10000) / 10000
+      returnRateOk = true
     } catch (e) {
       stats.errors.push(`P3 0007: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   let new_clients_period = 0
+  let newClientsOk = false
   const id0017 = resolveId('new_clients_period')
   if (id0017) {
     try {
@@ -100,12 +103,14 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
         new_clients_period = rows.length
         stats.p3_rows = (stats.p3_rows ?? 0) + rows.length
       }
+      newClientsOk = true
     } catch (e) {
       stats.errors.push(`P3 0017: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
   const revenue_curve: { day: string; revenue: number }[] = []
+  let revenueCurveOk = false
   const id0088 = resolveId('revenue_curve')
   if (id0088) {
     try {
@@ -122,18 +127,26 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
         revenue_curve.push({ day: d, revenue: Math.round(revenue) })
       }
       revenue_curve.sort((a, b) => a.day.localeCompare(b.day))
+      revenueCurveOk = true
     } catch (e) {
       stats.errors.push(`P3 0088: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
-  if (return_rate > 0 || new_clients_period > 0 || revenue_curve.length > 0) {
+  // Só escreve os campos cujo relatório teve sucesso — evita apagar dados
+  // válidos do dia quando outro relatório falha parcialmente.
+  const patch: {
+    return_rate?: number
+    new_clients_period?: number
+    revenue_curve?: { day: string; revenue: number }[]
+  } = {}
+  if (returnRateOk) patch.return_rate = return_rate
+  if (newClientsOk) patch.new_clients_period = new_clients_period
+  if (revenueCurveOk) patch.revenue_curve = revenue_curve.slice(-30)
+
+  if (Object.keys(patch).length > 0) {
     try {
-      await upsertSalonP3Daily(day, {
-      return_rate,
-      new_clients_period,
-      revenue_curve: revenue_curve.slice(-30),
-    })
+      await upsertSalonP3Daily(day, patch)
     } catch (e) {
       stats.errors.push(`P3 upsert: ${e instanceof Error ? e.message : String(e)}`)
     }

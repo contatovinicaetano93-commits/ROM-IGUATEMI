@@ -10,6 +10,21 @@ function pick(row: Record<string, unknown>, keys: string[]): string | null {
   return null
 }
 
+/**
+ * Como pick(), mas preserva o tipo original (sem stringificar) — usado para
+ * valores monetários, onde a API JSON da Avec manda number puro (ex: 1234.56)
+ * e uma string BR (ex: "1.234,56") tem que ser tratada de forma diferente.
+ */
+function pickRaw(row: Record<string, unknown>, keys: string[]): unknown {
+  for (const k of keys) {
+    const v = row[k]
+    if (v === null || v === undefined) continue
+    if (typeof v === 'string' && v.trim() === '') continue
+    return v
+  }
+  return null
+}
+
 function pickNested(row: Record<string, unknown>, paths: string[][]): string | null {
   for (const path of paths) {
     let cur: unknown = row
@@ -61,6 +76,8 @@ export interface NormalizedAvecAttendance {
   phone: string | null
   serviceName: string | null
   attendedAt: string | null
+  professional: string | null
+  price: number | null
 }
 
 export interface NormalizedAvecRevenue {
@@ -180,22 +197,34 @@ export function normalizeAttendanceRow(row: Record<string, unknown>): Normalized
   const datePart = pick(row, ['data', 'data_atendimento', 'data_realizacao', 'dia', 'date'])
   const timePart = pick(row, ['hora', 'horario', 'horário'])
   const attendedAt = parseAvecDateTime(datePart, timePart)
+  const professional = pick(row, ['profissional', 'profissional_nome', 'nome_profissional'])
+  const priceRaw = parseMoney(
+    pickRaw(row, ['valor', 'preco', 'preço', 'valor_servico', 'valor_serviço', 'price', 'amount', 'total']),
+  )
+  const price = priceRaw > 0 ? priceRaw : null
 
   if (!avecClientId && !clientName && !phone) return null
 
-  return { avecClientId, clientName, phone, serviceName, attendedAt }
+  return { avecClientId, clientName, phone, serviceName, attendedAt, professional, price }
 }
 
-function parseMoney(raw: string | null): number {
-  if (!raw) return 0
-  const cleaned = raw.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
+/**
+ * Aceita number puro (API JSON da Avec, ex: 1234.56) sem tratar o ponto
+ * decimal como separador de milhar, e string BR ("1.234,56") de export/planilha.
+ */
+function parseMoney(raw: unknown): number {
+  if (raw == null) return 0
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0
+  const str = String(raw).trim()
+  if (!str) return 0
+  const cleaned = str.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
   const n = Number(cleaned)
   return Number.isFinite(n) ? n : 0
 }
 
 export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAvecRevenue | null {
   const revenue = parseMoney(
-    pick(row, ['valor', 'total', 'faturamento', 'receita', 'valor_total', 'amount', 'liquido'])
+    pickRaw(row, ['valor', 'total', 'faturamento', 'receita', 'valor_total', 'amount', 'liquido'])
   )
   const attended = Number(pick(row, ['atendimentos', 'qtd', 'quantidade', 'count']) ?? 0) || 0
   const datePart = pick(row, ['data', 'dia', 'date', 'periodo'])
@@ -242,11 +271,11 @@ export function normalizeP1ProfessionalRevenueRow(
   const name = pick(row, ['profissional', 'nome', 'nome_profissional', 'colaborador', 'funcionario'])
   if (!name) return null
   const revenue = parseMoney(
-    pick(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total', 'amount']),
+    pickRaw(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total', 'amount']),
   )
   const attended =
     Number(pick(row, ['atendimentos', 'comandas', 'qtd', 'quantidade', 'clientes', 'count']) ?? 0) || 0
-  const ticketRaw = parseMoney(pick(row, ['ticket', 'ticket_medio', 'ticket médio', 'media', 'média']))
+  const ticketRaw = parseMoney(pickRaw(row, ['ticket', 'ticket_medio', 'ticket médio', 'media', 'média']))
   const ticketAvg = ticketRaw > 0 ? ticketRaw : attended > 0 ? revenue / attended : 0
   if (revenue <= 0 && attended <= 0) return null
   return { name, revenue, attended, ticketAvg, occupancy: null }
@@ -270,7 +299,7 @@ export function normalizeP1ServiceRow(row: Record<string, unknown>): NormalizedP
   if (!name) return null
   const quantity =
     Number(pick(row, ['quantidade', 'qtd', 'vendas', 'count', 'atendimentos']) ?? 0) || 0
-  const revenue = parseMoney(pick(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
+  const revenue = parseMoney(pickRaw(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
   if (quantity <= 0 && revenue <= 0) return null
   return { name, quantity, revenue }
 }
@@ -343,7 +372,7 @@ export function normalizeP2PackageRow(row: Record<string, unknown>): NormalizedP
   if (!name) return null
   const quantity =
     Number(pick(row, ['quantidade', 'qtd', 'vendas', 'vendidos', 'ativos', 'count']) ?? 0) || 0
-  const revenue = parseMoney(pick(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
+  const revenue = parseMoney(pickRaw(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
   if (quantity <= 0 && revenue <= 0) return null
   return { name, quantity: quantity || 1, revenue }
 }
@@ -380,7 +409,7 @@ export function normalizeP2PaymentRow(row: Record<string, unknown>): NormalizedP
     'nome',
   ])
   if (!method) return null
-  const amount = parseMoney(pick(row, ['valor', 'total', 'faturamento', 'amount', 'receita']))
+  const amount = parseMoney(pickRaw(row, ['valor', 'total', 'faturamento', 'amount', 'receita']))
   if (amount <= 0) return null
   return { method, amount }
 }
@@ -444,10 +473,159 @@ export function normalizeP3CurveRow(
       if (br) day = `${br[3]}-${br[2]}-${br[1]}`
     }
   }
-  const revenue = parseMoney(pick(row, ['faturamento', 'valor', 'total', 'receita', 'amount']))
+  const revenue = parseMoney(pickRaw(row, ['faturamento', 'valor', 'total', 'receita', 'amount']))
   if (!day || revenue < 0) return null
   if (revenue === 0 && !dayRaw) return null
   return { day, revenue }
+}
+
+/** Serviço de unha / manicure / pedicure — usado para preferência de manicure. */
+export function isNailService(name: string | null | undefined): boolean {
+  if (!name) return false
+  const n = name.toLowerCase()
+  return (
+    n.includes('mani') ||
+    n.includes('pedi') ||
+    n.includes('unha') ||
+    n.includes('nail') ||
+    n.includes('esmalte') ||
+    n.includes('gel') ||
+    n.includes('fibra') ||
+    n.includes('blindagem') ||
+    n.includes('spa dos pés') ||
+    n.includes('spa das mãos')
+  )
+}
+
+/** Serviço de cabelo — usado para preferência de cabeleireiro. */
+export function isHairService(name: string | null | undefined): boolean {
+  if (!name) return false
+  if (isNailService(name)) return false
+  const n = name.toLowerCase()
+  return (
+    n.includes('corte') ||
+    n.includes('cabeleir') ||
+    n.includes('color') ||
+    n.includes('mecha') ||
+    n.includes('tintura') ||
+    n.includes('luzes') ||
+    n.includes('balayage') ||
+    n.includes('escova') ||
+    n.includes('hidrat') ||
+    n.includes('nutri') ||
+    n.includes('progressiva') ||
+    n.includes('botox') ||
+    n.includes('selagem') ||
+    n.includes('penteado') ||
+    n.includes('finaliza') ||
+    n.includes('shampoo') ||
+    n.includes('barba') ||
+    n.includes('bigode')
+  )
+}
+
+/** Linha de cliente do relatório 0011 (lista de reativação / sem retorno). */
+export interface Normalized0011Client {
+  name: string
+  email: string | null
+  phone: string | null
+  mobile: string | null
+  gender: string | null
+  lastVisit: string | null // YYYY-MM-DD
+  professional: string | null
+  /** Taxa agregada se a linha for resumo (0..1). */
+  returnRate: number | null
+}
+
+function parseIsoDateOnly(raw: string | null): string | null {
+  if (!raw) return null
+  const iso = raw.match(/(\d{4}-\d{2}-\d{2})/)
+  if (iso) return iso[1]!
+  const br = raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/)
+  if (br) {
+    let y = Number(br[3])
+    if (y < 100) y += 2000
+    return `${y}-${String(br[2]).padStart(2, '0')}-${String(br[1]).padStart(2, '0')}`
+  }
+  const dt = parseAvecDateTime(raw)
+  return dt ? dt.slice(0, 10) : null
+}
+
+/** 0011 — cliente a reativar (ou linha de resumo com taxa). */
+export function normalize0011ReactivationRow(
+  row: Record<string, unknown>,
+): Normalized0011Client | null {
+  const returnRate = parsePct(
+    pick(row, [
+      'taxa_retorno',
+      'taxa de retorno',
+      'retorno',
+      'taxa',
+      'percentual',
+      'percent',
+      'rate',
+    ]),
+  )
+
+  const name = pick(row, [
+    'cliente',
+    'nome',
+    'nome_cliente',
+    'cliente_nome',
+    'name',
+  ])
+  const professional = pick(row, [
+    'profissional',
+    'profissional_nome',
+    'nome_profissional',
+    'colaborador',
+    'funcionario',
+  ])
+
+  // Linha só de taxa (sem cliente)
+  if (!name && returnRate != null) {
+    return {
+      name: professional ?? '—',
+      email: null,
+      phone: null,
+      mobile: null,
+      gender: null,
+      lastVisit: null,
+      professional,
+      returnRate,
+    }
+  }
+
+  if (!name) return null
+
+  const email = pick(row, ['email', 'e_mail', 'e-mail'])
+  const phoneRaw = pick(row, ['telefone', 'phone', 'fone', 'tel'])
+  const mobileRaw = pick(row, ['celular', 'mobile', 'cel'])
+  const gender = pick(row, ['sexo', 'genero', 'gênero', 'gender'])
+  const lastVisit = parseIsoDateOnly(
+    pick(row, [
+      'data_ultima_comanda',
+      'data ultima comanda',
+      'ultima_comanda',
+      'última comanda',
+      'ultima_visita',
+      'última visita',
+      'last_visit',
+      'data',
+      'dt_ultima',
+    ]),
+  )
+
+  return {
+    name,
+    email,
+    phone: phoneRaw,
+    mobile: mobileRaw,
+    gender,
+    lastVisit,
+    professional,
+    returnRate,
+  }
 }
 
 // Mapeia nome de serviço Avec → categoria ROM (heurística simples).

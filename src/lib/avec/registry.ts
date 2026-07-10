@@ -20,6 +20,7 @@ export type AvecMapperKind =
   | 'return_rate'
   | 'new_clients_period'
   | 'revenue_curve'
+  | 'director_return'
   | 'raw'
 
 export interface AvecReportDef {
@@ -64,6 +65,14 @@ const CORE: AvecReportDef[] = [
   { id: '0126', tier: 'B', name: 'Ocupação', mapper: 'professionals_occupancy', schedule: 'daily' },
   { id: '0032', tier: 'B', name: 'Top serviços', mapper: 'top_services', schedule: 'daily' },
   { id: '0107', tier: 'B', name: 'Sem retorno', mapper: 'reactivation', schedule: 'daily' },
+  {
+    id: '0011',
+    tier: 'B',
+    name: 'Retorno por profissional (diretoria)',
+    mapper: 'director_return',
+    schedule: 'on_demand',
+    envKey: 'AVEC_REPORT_DIRECTOR_RETURN',
+  },
   { id: '0003', tier: 'B', name: 'Como nos conheceram', mapper: 'acquisition', schedule: 'daily' },
   { id: '0007', tier: 'B', name: 'Taxa de retorno', mapper: 'return_rate', schedule: 'daily' },
   { id: '0017', tier: 'B', name: 'Novos no período', mapper: 'new_clients_period', schedule: 'daily' },
