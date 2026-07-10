@@ -1,20 +1,24 @@
 import { NextRequest } from 'next/server'
 import { ok, err } from '@/lib/api-response'
+import { timingSafeEqual } from '@/lib/auth'
 import { logEvent } from '@/lib/contacts'
+import { isProduction } from '@/lib/env'
 import { getWhatsAppAdapter } from '@/lib/whatsapp/adapter'
 import { handleWhatsAppMessage } from '@/lib/whatsapp/conversation'
 import { parseWhatsAppPayload } from '@/lib/whatsapp/parse-payload'
 
 function authorizeWebhook(req: NextRequest) {
   const secret = process.env.WHATSAPP_WEBHOOK_SECRET?.trim()
-  if (!secret) return true
+  // Produção sem secret = fechado (nunca aceitar webhook aberto).
+  if (!secret) return !isProduction()
 
   const header =
     req.headers.get('x-whatsapp-secret') ??
     req.headers.get('x-webhook-secret') ??
-    req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+    req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ??
+    ''
 
-  return header === secret
+  return timingSafeEqual(header, secret)
 }
 
 export async function POST(req: NextRequest) {

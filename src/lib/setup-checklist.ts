@@ -15,8 +15,8 @@ export const SETUP_ITEMS: SetupItem[] = [
     priority: 'agora',
     steps: [
       'Vercel → Settings → Environment Variables',
-      'ROM_ADMIN_USER = admin',
-      'ROM_ADMIN_PASSWORD = sua senha forte',
+      'ROM_ADMIN_USER = ADMIN-IGUATEMI',
+      'ROM_ADMIN_PASSWORD = senha forte da unidade',
       'Redeploy do projeto',
     ],
   },
@@ -29,7 +29,8 @@ export const SETUP_ITEMS: SetupItem[] = [
       'Gere um segredo: openssl rand -hex 32 (ou string aleatória longa)',
       'Vercel → CRON_SECRET = o valor gerado',
       'Protege sync automático: full 8h no Vercel (ROM Iguatemi)',
-      'Sync fast 5 min: use cron-job.org → POST /api/avec/sync?mode=fast (ver docs/avec-sync-rom-iguatemi.md)',
+      'Sync fast 5 min: cron-job.org → POST https://rom-iguatemi.vercel.app/api/avec/sync?mode=fast',
+      'Header: Authorization: Bearer $CRON_SECRET',
       'Redeploy',
     ],
   },
@@ -53,12 +54,13 @@ export const SETUP_ITEMS: SetupItem[] = [
     envVars: ['AVEC_API_TOKEN', 'AVEC_UNIT_ID'],
     priority: 'quando_tiver',
     steps: [
-      'Pedir token Avec da unidade Iguatemi (relatórios 0004, 0051, 0002)',
-      'Vercel → AVEC_API_TOKEN = token recebido',
+      'Pedir token Avec da unidade Iguatemi (relatórios 0004, 0051, 0002) — não reutilizar o do Brasil',
+      'Vercel → AVEC_API_TOKEN = token recebido (sem Bearer)',
       'Vercel → AVEC_UNIT_ID = ID da unidade Iguatemi no Avec',
       'Vercel → SALON_UNIT_NAME = ROM Iguatemi | SALON_UNIT_SLUG = rom-iguatemi',
       'Remova AVEC_MOCK da Vercel (se existir)',
-      'Admin → Testar conexão → Rodar sync',
+      'Redeploy → Admin → Testar conexão → Rodar sync full',
+      'Cérebro (Waltter) consolida assim que o Neon do Iguatemi tiver métricas',
     ],
     link: {
       href: 'https://documenter.getpostman.com/view/12527228/2sA2xmUWJo',
@@ -75,25 +77,25 @@ export const SETUP_ITEMS: SetupItem[] = [
       'Criar instância e conectar WhatsApp da unidade (QR code)',
       'Vercel: EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_API_INSTANCE',
       'Gere WHATSAPP_WEBHOOK_SECRET (openssl rand -hex 32)',
-      'Webhook Evolution → https://SEU-PROJETO-IGUATEMI.vercel.app/api/webhooks/whatsapp',
+      'Webhook Evolution → https://rom-iguatemi.vercel.app/api/webhooks/whatsapp',
       'Header do webhook: x-whatsapp-secret = WHATSAPP_WEBHOOK_SECRET',
-      'Opcional: TELEGRAM_STAFF_CHAT_IDS = chat IDs da equipe Iguatemi',
+      'TELEGRAM_STAFF_CHAT_IDS = chat IDs da equipe (alertas de handoff)',
     ],
   },
   {
     id: 'telegram',
     label: 'Telegram bot — Iguatemi',
-    envVars: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET'],
-    priority: 'opcional',
+    envVars: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_STAFF_CHAT_IDS'],
+    priority: 'agora',
     steps: [
       'Telegram → @BotFather → /newbot (bot dedicado Iguatemi) → copie o token',
       'Vercel → TELEGRAM_BOT_TOKEN = token do bot',
       'Gere TELEGRAM_WEBHOOK_SECRET (string aleatória)',
-      'setWebhook: https://SEU-PROJETO-IGUATEMI.vercel.app/api/webhooks/telegram + secret_token',
-      'TELEGRAM_STAFF_CHAT_IDS = IDs da equipe Iguatemi (recomendado — restrinja o bot)',
-      'Descubra seu chat ID: envie /start ao bot e veja nos logs, ou use @userinfobot',
+      'setWebhook: https://rom-iguatemi.vercel.app/api/webhooks/telegram + secret_token',
+      'TELEGRAM_STAFF_CHAT_IDS = IDs da equipe (obrigatório em produção — sem isso o bot rejeita todos)',
+      'Descubra seu chat ID: envie /start ao bot ou use @userinfobot',
     ],
-    link: { href: 'https://t.me/BotFather', label: '@BotFather' },
+    link: { href: 'https://t.me/Rom_iguatemibot', label: '@Rom_iguatemibot' },
   },
 ]
 
@@ -103,8 +105,8 @@ export function isItemConfigured(
     database: { connected: boolean }
     claude: { configured: boolean }
     avec: { token: boolean }
-    whatsapp: { configured: boolean }
-    telegram: { configured: boolean }
+    whatsapp: { configured: boolean; webhook_secret?: boolean }
+    telegram: { configured: boolean; webhook_secret?: boolean; staff_whitelist?: boolean }
     cron: { configured: boolean }
     auth: { enabled: boolean }
   }
@@ -119,9 +121,13 @@ export function isItemConfigured(
     case 'avec':
       return health.avec.token
     case 'whatsapp':
-      return health.whatsapp.configured
+      return health.whatsapp.configured && Boolean(health.whatsapp.webhook_secret)
     case 'telegram':
-      return health.telegram.configured
+      return (
+        health.telegram.configured &&
+        Boolean(health.telegram.webhook_secret) &&
+        Boolean(health.telegram.staff_whitelist)
+      )
     default:
       return false
   }

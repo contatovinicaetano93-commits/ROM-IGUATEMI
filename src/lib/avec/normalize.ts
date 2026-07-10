@@ -75,6 +75,25 @@ export interface NormalizedAvecCancellation {
   noShow: number
 }
 
+export interface NormalizedP1Professional {
+  name: string
+  revenue: number
+  attended: number
+  ticketAvg: number
+  occupancy: number | null
+}
+
+export interface NormalizedP1Service {
+  name: string
+  quantity: number
+  revenue: number
+}
+
+export interface NormalizedP1Acquisition {
+  channel: string
+  clients: number
+}
+
 // Tenta parsear data/hora em formatos comuns BR + ISO.
 export function parseAvecDateTime(datePart: string | null, timePart?: string | null): string | null {
   if (!datePart) return null
@@ -187,12 +206,248 @@ export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAve
 
 export function normalizeCancellationRow(row: Record<string, unknown>): NormalizedAvecCancellation | null {
   const status = (pick(row, ['status', 'situacao', 'situação']) ?? '').toLowerCase()
-  const datePart = pick(row, ['data', 'data_agendamento', 'dia', 'date'])
+  const datePart = pick(row, [
+    'data',
+    'data_agendamento',
+    'data_cancelamento',
+    'dia',
+    'date',
+  ])
   const day = datePart ? parseAvecDateTime(datePart)?.slice(0, 10) ?? null : null
-  const isNoShow = status.includes('falta') || status.includes('no-show') || status.includes('noshow')
-  const isCancelled = status.includes('cancel') || isNoShow
-  if (!isCancelled && !datePart) return null
+  const isNoShow =
+    status.includes('falta') || status.includes('no-show') || status.includes('noshow')
+  const isCancelled = status.includes('cancel')
+
+  // Relatório 0052: uma linha por agendamento cancelado — sem status → conta como cancelado
+  if (!status && (datePart || pick(row, ['cliente_id', 'cliente', 'nome', 'nome_cliente']))) {
+    return { day, cancelled: 1, noShow: 0 }
+  }
+
+  if (!isCancelled && !isNoShow) return null
   return { day, cancelled: isCancelled && !isNoShow ? 1 : 0, noShow: isNoShow ? 1 : 0 }
+}
+
+function parsePct(raw: string | null): number | null {
+  if (!raw) return null
+  const cleaned = raw.replace(/%/g, '').replace(',', '.').trim()
+  const n = Number(cleaned)
+  if (!Number.isFinite(n)) return null
+  return n > 1 ? n / 100 : n
+}
+
+/** 0021 — faturamento / ticket por profissional */
+export function normalizeP1ProfessionalRevenueRow(
+  row: Record<string, unknown>,
+): NormalizedP1Professional | null {
+  const name = pick(row, ['profissional', 'nome', 'nome_profissional', 'colaborador', 'funcionario'])
+  if (!name) return null
+  const revenue = parseMoney(
+    pick(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total', 'amount']),
+  )
+  const attended =
+    Number(pick(row, ['atendimentos', 'comandas', 'qtd', 'quantidade', 'clientes', 'count']) ?? 0) || 0
+  const ticketRaw = parseMoney(pick(row, ['ticket', 'ticket_medio', 'ticket médio', 'media', 'média']))
+  const ticketAvg = ticketRaw > 0 ? ticketRaw : attended > 0 ? revenue / attended : 0
+  if (revenue <= 0 && attended <= 0) return null
+  return { name, revenue, attended, ticketAvg, occupancy: null }
+}
+
+/** 0126 — ocupação / produtividade por profissional */
+export function normalizeP1OccupancyRow(
+  row: Record<string, unknown>,
+): Pick<NormalizedP1Professional, 'name' | 'occupancy'> | null {
+  const name = pick(row, ['profissional', 'nome', 'nome_profissional', 'colaborador'])
+  if (!name) return null
+  const occupancy = parsePct(
+    pick(row, ['ocupacao', 'ocupação', 'produtividade', 'taxa', 'percentual', 'percent']),
+  )
+  return { name, occupancy }
+}
+
+/** 0032 — serviços mais vendidos */
+export function normalizeP1ServiceRow(row: Record<string, unknown>): NormalizedP1Service | null {
+  const name = pick(row, ['servico', 'serviço', 'nome', 'procedimento', 'item', 'descricao'])
+  if (!name) return null
+  const quantity =
+    Number(pick(row, ['quantidade', 'qtd', 'vendas', 'count', 'atendimentos']) ?? 0) || 0
+  const revenue = parseMoney(pick(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
+  if (quantity <= 0 && revenue <= 0) return null
+  return { name, quantity, revenue }
+}
+
+/** 0003 — como nos conheceram */
+export function normalizeP1AcquisitionRow(
+  row: Record<string, unknown>,
+): NormalizedP1Acquisition | null {
+  const channel = pick(row, [
+    'como_conheceu',
+    'como conheceu',
+    'origem',
+    'canal',
+    'fonte',
+    'indicacao',
+    'indicação',
+    'descricao',
+    'nome',
+  ])
+  if (!channel) return null
+  const clients =
+    Number(pick(row, ['clientes', 'quantidade', 'qtd', 'total', 'count']) ?? 0) || 0
+  if (clients <= 0) return null
+  return { channel, clients }
+}
+
+export interface NormalizedP2Channel {
+  channel: string
+  count: number
+}
+
+export interface NormalizedP2Package {
+  name: string
+  quantity: number
+  revenue: number
+}
+
+export interface NormalizedP2Rating {
+  score: number
+  count: number
+}
+
+export interface NormalizedP2Payment {
+  method: string
+  amount: number
+}
+
+/** 0056 — agendamentos por canal */
+export function normalizeP2ChannelRow(row: Record<string, unknown>): NormalizedP2Channel | null {
+  const channel = pick(row, [
+    'canal',
+    'origem',
+    'fonte',
+    'meio',
+    'tipo',
+    'descricao',
+    'nome',
+    'channel',
+  ])
+  if (!channel) return null
+  const count =
+    Number(pick(row, ['quantidade', 'qtd', 'agendamentos', 'total', 'count', 'clientes']) ?? 0) || 0
+  if (count <= 0) return null
+  return { channel, count }
+}
+
+/** 0061 — pacotes vendidos */
+export function normalizeP2PackageRow(row: Record<string, unknown>): NormalizedP2Package | null {
+  const name = pick(row, ['pacote', 'nome', 'descricao', 'produto', 'item', 'servico', 'serviço'])
+  if (!name) return null
+  const quantity =
+    Number(pick(row, ['quantidade', 'qtd', 'vendas', 'vendidos', 'ativos', 'count']) ?? 0) || 0
+  const revenue = parseMoney(pick(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total']))
+  if (quantity <= 0 && revenue <= 0) return null
+  return { name, quantity: quantity || 1, revenue }
+}
+
+/** 0104 — avaliações */
+export function normalizeP2RatingRow(row: Record<string, unknown>): NormalizedP2Rating | null {
+  const scoreRaw = pick(row, [
+    'nota',
+    'avaliacao',
+    'avaliação',
+    'score',
+    'rating',
+    'media',
+    'média',
+    'estrelas',
+  ])
+  const score = scoreRaw ? Number(String(scoreRaw).replace(',', '.')) : NaN
+  if (!Number.isFinite(score) || score <= 0) return null
+  const count =
+    Number(pick(row, ['quantidade', 'qtd', 'total', 'count', 'avaliacoes', 'avaliações']) ?? 1) || 1
+  return { score, count }
+}
+
+/** 0081 — formas de pagamento */
+export function normalizeP2PaymentRow(row: Record<string, unknown>): NormalizedP2Payment | null {
+  const method = pick(row, [
+    'forma_pagamento',
+    'forma de pagamento',
+    'pagamento',
+    'metodo',
+    'método',
+    'tipo',
+    'descricao',
+    'nome',
+  ])
+  if (!method) return null
+  const amount = parseMoney(pick(row, ['valor', 'total', 'faturamento', 'amount', 'receita']))
+  if (amount <= 0) return null
+  return { method, amount }
+}
+
+/** 0001 — aniversariantes (conta linhas) */
+export function normalizeP2BirthdayRow(row: Record<string, unknown>): boolean {
+  return Boolean(
+    pick(row, ['cliente', 'nome', 'nome_cliente', 'cliente_id', 'id', 'telefone', 'celular']),
+  )
+}
+
+/** 0007 — taxa de retorno (0..1) */
+export function normalizeP3ReturnRateRow(row: Record<string, unknown>): number | null {
+  const raw = pick(row, [
+    'taxa_retorno',
+    'taxa de retorno',
+    'retorno',
+    'taxa',
+    'percentual',
+    'percent',
+    'rate',
+    'media',
+    'média',
+  ])
+  const pct = parsePct(raw)
+  if (pct == null || pct < 0) return null
+  return pct
+}
+
+/** 0017 — novos clientes no período (contagem por linha ou campo) */
+export function normalizeP3NewClientsRow(row: Record<string, unknown>): number | null {
+  const countRaw = pick(row, [
+    'novos',
+    'novos_clientes',
+    'quantidade',
+    'qtd',
+    'total',
+    'count',
+    'clientes',
+  ])
+  if (countRaw) {
+    const n = Number(String(countRaw).replace(/\D/g, '')) || Number(countRaw)
+    if (Number.isFinite(n) && n > 0) return n
+  }
+  // Lista: 1 cliente por linha
+  if (pick(row, ['cliente', 'nome', 'nome_cliente', 'cliente_id', 'id', 'telefone'])) return 1
+  return null
+}
+
+/** 0088 — evolução diária do faturamento */
+export function normalizeP3CurveRow(
+  row: Record<string, unknown>,
+): { day: string; revenue: number } | null {
+  const dayRaw = pick(row, ['data', 'dia', 'day', 'date', 'periodo', 'período'])
+  let day: string | null = null
+  if (dayRaw) {
+    const m = dayRaw.match(/(\d{4}-\d{2}-\d{2})/)
+    if (m) day = m[1]!
+    else {
+      const br = dayRaw.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+      if (br) day = `${br[3]}-${br[2]}-${br[1]}`
+    }
+  }
+  const revenue = parseMoney(pick(row, ['faturamento', 'valor', 'total', 'receita', 'amount']))
+  if (!day || revenue < 0) return null
+  if (revenue === 0 && !dayRaw) return null
+  return { day, revenue }
 }
 
 // Mapeia nome de serviço Avec → categoria ROM (heurística simples).

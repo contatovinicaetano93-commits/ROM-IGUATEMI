@@ -4,12 +4,21 @@
 // Auth: header Authorization = token puro (sem "Bearer").
 
 import { getMockReport } from '@/lib/avec/fixtures'
+import { isProduction } from '@/lib/env'
+import { todayIso } from '@/lib/salon/format'
 
 export const AVEC_DEFAULT_API_URL = 'https://api.avec.beauty'
 
 export function isAvecMock() {
   const v = process.env.AVEC_MOCK
   return v === '1' || v === 'true'
+}
+
+/** Mock nunca em produção — evita sujar o Neon real. */
+export function assertAvecMockAllowed() {
+  if (isAvecMock() && isProduction()) {
+    throw new Error('AVEC_MOCK não permitido em produção — remova da Vercel')
+  }
 }
 
 export interface AvecReportParams {
@@ -69,14 +78,24 @@ export function fmtAvecDate(d: Date) {
   return `${dd}/${mm}/${yyyy}`
 }
 
+function fmtBrFromYmd(isoYmd: string) {
+  const [y, m, d] = isoYmd.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function addCalendarDays(isoYmd: string, delta: number) {
+  const [y, m, d] = isoYmd.split('-').map(Number)
+  const dt = new Date(Date.UTC(y!, m! - 1, d! + delta))
+  return dt.toISOString().slice(0, 10)
+}
+
+/** Intervalo em datas de calendário America/Sao_Paulo (não UTC do servidor). */
 export function periodRange(daysBack = 0, daysForward = 14) {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  start.setDate(start.getDate() - daysBack)
-  const end = new Date()
-  end.setHours(23, 59, 59, 999)
-  end.setDate(end.getDate() + daysForward)
-  return { inicio: fmtAvecDate(start), fim: fmtAvecDate(end) }
+  const today = todayIso()
+  return {
+    inicio: fmtBrFromYmd(addCalendarDays(today, -daysBack)),
+    fim: fmtBrFromYmd(addCalendarDays(today, daysForward)),
+  }
 }
 
 // Extrai linhas do JSON de relatório — formato varia por endpoint.
@@ -103,6 +122,7 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
 }
 
 export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
+  assertAvecMockAllowed()
   if (isAvecMock()) {
     return getMockReport(reportId, params.page ?? 1)
   }
@@ -130,15 +150,66 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
   return res.json()
 }
 
+export interface AvecReportFetchResult {
+  rows: Record<string, unknown>[]
+  truncated: boolean
+  pagesFetched: number
+  maxPages: number
+  limit: number
+}
+
+export const AVEC_PAGE_LIMIT = 250
+/** Padrão: 200 páginas × 250 linhas = até 50.000 registros por relatório. */
+export const AVEC_SYNC_MAX_PAGES_DEFAULT = 200
+
+export function getAvecSyncMaxPages() {
+  const raw = process.env.AVEC_SYNC_MAX_PAGES?.trim()
+  if (!raw) return AVEC_SYNC_MAX_PAGES_DEFAULT
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 1) return AVEC_SYNC_MAX_PAGES_DEFAULT
+  return Math.min(Math.floor(n), 500)
+}
+
+export const AVEC_REPORT_LABELS: Record<string, string> = {
+  '0004': 'clientes',
+  '0051': 'agendamentos',
+  '0002': 'atendimentos',
+}
+
+export function wasPaginationTruncated(
+  rowsOnLastPage: number,
+  limit: number,
+  page: number,
+  maxPages: number,
+) {
+  return page >= maxPages && rowsOnLastPage >= limit
+}
+
+export function formatTruncationWarning(reportId: string, result: AvecReportFetchResult) {
+  const label = AVEC_REPORT_LABELS[reportId] ?? reportId
+  return `Relatório ${label} (${reportId}) atingiu o limite de ${result.maxPages} páginas (${result.rows.length} linhas, ${result.limit}/página). Pode haver dados não sincronizados — aumente AVEC_SYNC_MAX_PAGES na Vercel.`
+}
+
 // Pagina automaticamente até esgotar ou atingir maxPages.
-export async function fetchAllAvecReport(reportId: string, params: AvecReportParams = {}, maxPages = 20) {
+export async function fetchAllAvecReport(
+  reportId: string,
+  params: AvecReportParams = {},
+  maxPages = getAvecSyncMaxPages(),
+): Promise<AvecReportFetchResult> {
+  const limit = params.limit ?? AVEC_PAGE_LIMIT
   const all: Record<string, unknown>[] = []
+  let pagesFetched = 0
+  let truncated = false
+
   for (let page = 1; page <= maxPages; page++) {
-    const payload = await fetchAvecReport(reportId, { ...params, page, limit: params.limit ?? 250 })
+    const payload = await fetchAvecReport(reportId, { ...params, page, limit })
     const rows = extractRows(payload)
+    pagesFetched = page
     if (rows.length === 0) break
     all.push(...rows)
-    if (rows.length < (params.limit ?? 250)) break
+    if (rows.length < limit) break
+    if (wasPaginationTruncated(rows.length, limit, page, maxPages)) truncated = true
   }
-  return all
+
+  return { rows: all, truncated, pagesFetched, maxPages, limit }
 }

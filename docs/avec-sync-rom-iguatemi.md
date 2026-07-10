@@ -18,7 +18,7 @@ O Hobby **só permite 1 cron/dia**. O `vercel.json` roda apenas o **full** às 8
 Use [cron-job.org](https://cron-job.org) ou similar:
 
 ```
-POST https://SEU-PROJETO-IGUATEMI.vercel.app/api/avec/sync?mode=fast
+POST https://rom-iguatemi.vercel.app/api/avec/sync?mode=fast
 Header: Authorization: Bearer SEU_CRON_SECRET
 Schedule: */5 * * * *
 ```
@@ -47,6 +47,9 @@ SALON_UNIT_NAME=ROM Iguatemi
 SALON_UNIT_SLUG=rom-iguatemi
 SALON_DAILY_GOAL=5000
 AVEC_API_TOKEN=...
-AVEC_UNIT_ID=...
+AVEC_UNIT_ID=...   # obrigatório para filtrar site nos relatórios
 CRON_SECRET=...
 ```
+
+Sem `AVEC_UNIT_ID`, o sync avisa e pode misturar unidades se o token Avec for compartilhado.
+`AVEC_MOCK` é bloqueado em produção.

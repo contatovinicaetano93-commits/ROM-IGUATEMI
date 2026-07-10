@@ -2,12 +2,15 @@ import type { ContactRow } from '@/lib/contacts'
 import type { EnrichedService, Recommendation } from '@/lib/recommendations'
 import { askAI } from '@/lib/ai/client'
 import { buildContactContext, contactContextForAI } from '@/lib/salon/context-builder'
+import { unitPromptLabel } from '@/lib/salon/unit'
 
-const BRIEF_PROMPT = `Você é a inteligência de atendimento do ROM Club (salão de beleza de alto padrão).
+function briefPrompt() {
+  return `Você é a inteligência de atendimento do ${unitPromptLabel()} (salão de beleza de alto padrão).
 Gere um briefing curto e direto para o backstaff/executor, em português, no máximo 5 linhas.
 Objetivo: facilitar o front no cross-sell e up-sell. Use SOMENTE os dados fornecidos.
 Formato: 1 linha de contexto do cliente + bullets de ações recomendadas (o que oferecer e por quê).
 Seja prático e caloroso, sem inventar informação que não está nos dados.`
+}
 
 export function buildRuleBrief(
   contact: ContactRow,
@@ -34,7 +37,7 @@ export async function generateBrief(
   const context = contactContextForAI(buildContactContext(contact, services, recs))
 
   try {
-    const ai = await askAI(BRIEF_PROMPT, `Dados do cliente: ${context}`)
+    const ai = await askAI(briefPrompt(), `Dados do cliente: ${context}`)
     if (ai && ai.trim().length > 0) return { brief: ai.trim(), source: 'ai' }
   } catch {
     // IA indisponível — fallback por regras.

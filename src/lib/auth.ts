@@ -1,9 +1,11 @@
 import type { NextRequest } from 'next/server'
+import { isProduction } from '@/lib/env'
 
 export const AUTH_COOKIE = 'rom_session'
-const DEFAULT_ADMIN_USER = 'admin'
+const DEFAULT_ADMIN_USER = 'ADMIN-IGUATEMI'
 
-function timingSafeEqual(a: string, b: string) {
+/** Comparação em tempo constante (Edge-safe). */
+export function timingSafeEqual(a: string, b: string) {
   if (a.length !== b.length) return false
   let out = 0
   for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i)
@@ -48,7 +50,8 @@ export function validateAdminCredentials(username: string, password: string) {
 }
 
 export async function isAuthorized(req: NextRequest) {
-  if (!isAuthEnabled()) return true
+  // Produção sem senha = fechado (nunca abrir o painel).
+  if (!isAuthEnabled()) return !isProduction()
 
   const session = req.cookies.get(AUTH_COOKIE)?.value
   if (session) {

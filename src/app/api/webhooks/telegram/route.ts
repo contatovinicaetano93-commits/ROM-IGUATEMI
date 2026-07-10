@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
-import { ok } from '@/lib/api-response'
+import { ok, err } from '@/lib/api-response'
+import { timingSafeEqual } from '@/lib/auth'
 import { getSql } from '@/lib/db'
+import { isProduction } from '@/lib/env'
 import { sendTelegramMessage } from '@/lib/telegram/bot'
 import { askAI } from '@/lib/ai/client'
 import { isStaffChat } from '@/lib/telegram/staff'
@@ -64,8 +66,13 @@ async function handleClienteCommand(chatId: number, query: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-telegram-bot-api-secret-token')
-  if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+  const expected = process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || ''
+  if (!expected) {
+    if (isProduction()) return err('TELEGRAM_WEBHOOK_SECRET não configurado', 503)
+    return ok({ ignored: true }, undefined, 200)
+  }
+  const secret = req.headers.get('x-telegram-bot-api-secret-token') ?? ''
+  if (!timingSafeEqual(secret, expected)) {
     return ok({ ignored: true }, undefined, 200)
   }
 

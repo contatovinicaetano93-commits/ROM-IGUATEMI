@@ -144,7 +144,7 @@ export default function DashboardPage() {
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
       <div className="lg:hidden">
         <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão geral</p>
-        <h1 className="mt-1 text-xl font-semibold">Atendimento do ROM Club</h1>
+        <h1 className="mt-1 text-xl font-semibold">Atendimento · ROM Iguatemi</h1>
       </div>
 
       {error && (

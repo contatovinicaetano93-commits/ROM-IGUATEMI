@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { isAuthorized, isAuthEnabled } from '@/lib/auth'
+import { isProduction } from '@/lib/env'
 
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/webhooks']
 
@@ -25,14 +26,23 @@ function isProtectedApi(pathname: string) {
 }
 
 export async function middleware(req: NextRequest) {
-  if (!isAuthEnabled()) return NextResponse.next()
-
   const { pathname } = req.nextUrl
 
   if (pathname === '/login') return NextResponse.next()
 
   const needsAuth = isProtectedPage(pathname) || isProtectedApi(pathname)
   if (!needsAuth) return NextResponse.next()
+
+  // Produção sem ROM_ADMIN_PASSWORD: bloqueia tudo (fail-closed).
+  if (!isAuthEnabled()) {
+    if (isProduction()) {
+      return NextResponse.json(
+        { error: 'Auth não configurada (ROM_ADMIN_PASSWORD)' },
+        { status: 503 }
+      )
+    }
+    return NextResponse.next()
+  }
 
   if (await isAuthorized(req)) return NextResponse.next()
 

@@ -1,7 +1,14 @@
 import { getSql } from '@/lib/db'
 import { upsertContact, updateContact, logEvent } from '@/lib/contacts'
 import { listServices, addService, scheduleService, markServiceDone } from '@/lib/services'
-import { fetchAllAvecReport, isAvecConfigured, isAvecMock, periodRange } from '@/lib/avec/client'
+import {
+  assertAvecMockAllowed,
+  fetchAllAvecReport,
+  formatTruncationWarning,
+  isAvecConfigured,
+  isAvecMock,
+  periodRange,
+} from '@/lib/avec/client'
 import {
   normalizeClientRow,
   normalizeAppointmentRow,
@@ -14,7 +21,10 @@ import { resolveReportId, getDailyReports } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
 import { recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso } from '@/lib/salon/format'
-import { getSalonUnit, unitContextLine } from '@/lib/salon/unit'
+import { avecSiteParam, getSalonUnit, unitContextLine } from '@/lib/salon/unit'
+import { syncP1Kpis } from '@/lib/avec/sync-p1'
+import { syncP2Kpis } from '@/lib/avec/sync-p2'
+import { syncP3Kpis } from '@/lib/avec/sync-p3'
 
 export type AvecSyncMode = 'fast' | 'full'
 
@@ -30,7 +40,9 @@ export interface AvecSyncStats {
   revenue_rows: number
   cancellation_rows: number
   snapshots_saved: number
+  p1_rows: number
   errors: string[]
+  warnings: string[]
 }
 
 export interface AvecSyncRun {
@@ -55,7 +67,9 @@ function emptyStats(mode: AvecSyncMode): AvecSyncStats {
     revenue_rows: 0,
     cancellation_rows: 0,
     snapshots_saved: 0,
+    p1_rows: 0,
     errors: [],
+    warnings: [],
   }
 }
 
@@ -104,16 +118,50 @@ async function snapshotReport(
   stats: AvecSyncStats,
   syncRunId?: string
 ) {
-  await saveReportSnapshot(reportId, params, rows, syncRunId)
-  stats.snapshots_saved++
+  try {
+    await saveReportSnapshot(reportId, params, rows, syncRunId)
+    stats.snapshots_saved++
+  } catch (e) {
+    // Snapshot é auditoria — não deve derrubar o sync de clientes/agenda/receita.
+    stats.warnings.push(
+      `snapshot ${reportId}: ${e instanceof Error ? e.message : String(e)}`,
+    )
+  }
+}
+
+async function snapshotReport(
+  reportId: string,
+  params: Record<string, unknown>,
+  rows: Record<string, unknown>[],
+  stats: AvecSyncStats,
+  syncRunId?: string
+) {
+  try {
+    await saveReportSnapshot(reportId, params, rows, syncRunId)
+    stats.snapshots_saved++
+  } catch (e) {
+    // Snapshot é auditoria — não deve derrubar o sync de clientes/agenda/receita.
+    stats.warnings.push(
+      `snapshot ${reportId}: ${e instanceof Error ? e.message : String(e)}`,
+    )
+  }
+}
+
+function warnIfTruncated(
+  stats: AvecSyncStats,
+  reportId: string,
+  result: Awaited<ReturnType<typeof fetchAllAvecReport>>,
+) {
+  if (result.truncated) stats.warnings.push(formatTruncationWarning(reportId, result))
 }
 
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
-  const params = { limit: 250 }
-  const rows = await fetchAllAvecReport('0004', params)
-  await snapshotReport('0004', params, rows, stats, syncRunId)
+  const params = { limit: 250, site: avecSiteParam() }
+  const result = await fetchAllAvecReport('0004', params)
+  warnIfTruncated(stats, '0004', result)
+  await snapshotReport('0004', params, result.rows, stats, syncRunId)
 
-  for (const row of rows) {
+  for (const row of result.rows) {
     try {
       const c = normalizeClientRow(row)
       if (!c) continue
@@ -134,13 +182,14 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
 
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   const range = mode === 'fast' ? periodRange(0, 0) : periodRange(1, 21)
-  const params = { ...range, site: '', profissional_id: '', limit: 250 }
-  const rows = await fetchAllAvecReport('0051', params)
-  await snapshotReport('0051', params, rows, stats, syncRunId)
+  const params = { ...range, site: avecSiteParam(), profissional_id: '', limit: 250 }
+  const result = await fetchAllAvecReport('0051', params)
+  warnIfTruncated(stats, '0051', result)
+  await snapshotReport('0051', params, result.rows, stats, syncRunId)
 
   const today = todayIso()
 
-  for (const row of rows) {
+  for (const row of result.rows) {
     try {
       const appt = normalizeAppointmentRow(row)
       if (!appt) continue
@@ -184,13 +233,14 @@ function servicesCreatedRecently(service: { created_at: string }) {
 
 async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   const range = mode === 'fast' ? periodRange(0, 0) : periodRange(7, 0)
-  const params = { ...range, como_conheceu: '', limit: 250 }
-  const rows = await fetchAllAvecReport('0002', params)
-  await snapshotReport('0002', params, rows, stats, syncRunId)
+  const params = { ...range, site: avecSiteParam(), como_conheceu: '', limit: 250 }
+  const result = await fetchAllAvecReport('0002', params)
+  warnIfTruncated(stats, '0002', result)
+  await snapshotReport('0002', params, result.rows, stats, syncRunId)
 
   const today = todayIso()
 
-  for (const row of rows) {
+  for (const row of result.rows) {
     try {
       const att = normalizeAttendanceRow(row)
       if (!att) continue
@@ -229,25 +279,38 @@ async function syncRevenue(stats: AvecSyncStats, syncRunId?: string) {
 
   let reportId = resolveReportId(def)
   if (!reportId && isAvecMock()) reportId = 'revenue'
-  if (!reportId) return
+  if (!reportId) {
+    stats.warnings.push('AVEC_REPORT_REVENUE não configurado — faturamento pulado')
+    return
+  }
 
   const { inicio, fim } = periodRange(0, 0)
-  const params = { inicio, fim, limit: 250 }
-  const rows = await fetchAllAvecReport(reportId, params)
-  await snapshotReport(reportId, params, rows, stats, syncRunId)
+  const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
+  const result = await fetchAllAvecReport(reportId, params)
+  warnIfTruncated(stats, reportId, result)
+  await snapshotReport(reportId, params, result.rows, stats, syncRunId)
 
   const today = todayIso()
   let revenue = 0
   let attended = 0
+  let skippedNoDay = 0
 
-  for (const row of rows) {
+  for (const row of result.rows) {
     const rev = normalizeRevenueRow(row)
     if (!rev) continue
     stats.revenue_rows++
+    if (!rev.day) {
+      skippedNoDay++
+      continue
+    }
     if (rev.day === today) {
       revenue += rev.revenue
       attended += rev.attended
     }
+  }
+
+  if (skippedNoDay > 0) {
+    stats.warnings.push(`Receita: ${skippedNoDay} linhas sem data ignoradas`)
   }
 
   if (revenue > 0 || attended > 0) {
@@ -259,24 +322,32 @@ async function syncRevenue(stats: AvecSyncStats, syncRunId?: string) {
   }
 }
 
-async function syncCancellations(stats: AvecSyncStats, syncRunId?: string) {
+async function syncCancellations(
+  stats: AvecSyncStats,
+  mode: AvecSyncMode,
+  syncRunId?: string,
+) {
   const def = getDailyReports().find((r) => r.mapper === 'cancellations')
   if (!def) return
 
   let reportId = resolveReportId(def)
   if (!reportId && isAvecMock()) reportId = 'cancellations'
-  if (!reportId) return
+  if (!reportId) {
+    stats.warnings.push('AVEC_REPORT_CANCELLATIONS não configurado — cancelamentos pulados')
+    return
+  }
 
-  const { inicio, fim } = periodRange(0, 0)
-  const params = { inicio, fim, limit: 250 }
-  const rows = await fetchAllAvecReport(reportId, params)
-  await snapshotReport(reportId, params, rows, stats, syncRunId)
+  const range = mode === 'fast' ? periodRange(0, 0) : periodRange(0, 7)
+  const params = { ...range, site: avecSiteParam(), limit: 250 }
+  const result = await fetchAllAvecReport(reportId, params)
+  warnIfTruncated(stats, reportId, result)
+  await snapshotReport(reportId, params, result.rows, stats, syncRunId)
 
   const today = todayIso()
   let cancelled = 0
   let no_shows = 0
 
-  for (const row of rows) {
+  for (const row of result.rows) {
     const c = normalizeCancellationRow(row)
     if (!c) continue
     stats.cancellation_rows++
@@ -295,7 +366,7 @@ function resolveStatus(stats: AvecSyncStats): AvecSyncRun['status'] {
   if (stats.errors.length > 0 && stats.appointments_synced + stats.attendances_synced + stats.revenue_rows === 0) {
     return 'error'
   }
-  if (stats.errors.length > 0) return 'partial'
+  if (stats.errors.length > 0 || stats.warnings.length > 0) return 'partial'
   return 'ok'
 }
 
@@ -308,9 +379,15 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
   }
+  assertAvecMockAllowed()
 
   const stats = emptyStats(mode)
   const unit = getSalonUnit()
+  if (!unit.avecUnitId) {
+    stats.warnings.push(
+      'AVEC_UNIT_ID vazio — sync sem filtro de site (risco de misturar unidades se o token for compartilhado)'
+    )
+  }
 
   try {
     if (mode === 'full') {
@@ -320,7 +397,24 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
     await syncAppointments(stats, mode)
     await syncAttendances(stats, mode)
     await syncRevenue(stats)
-    await syncCancellations(stats)
+    await syncCancellations(stats, mode)
+    if (mode === 'full') {
+      try {
+        await syncP1Kpis(stats)
+      } catch (e) {
+        stats.errors.push(`P1: ${e instanceof Error ? e.message : String(e)}`)
+      }
+      try {
+        await syncP2Kpis(stats)
+      } catch (e) {
+        stats.errors.push(`P2: ${e instanceof Error ? e.message : String(e)}`)
+      }
+      try {
+        await syncP3Kpis(stats)
+      } catch (e) {
+        stats.errors.push(`P3: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
     await recomputeSalonMetricsFromRom()
 
     const status = resolveStatus(stats)

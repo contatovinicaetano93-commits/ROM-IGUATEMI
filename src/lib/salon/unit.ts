@@ -35,3 +35,13 @@ export function unitDisplayLabel(unit = getSalonUnit()) {
 export function unitContextLine(unit = getSalonUnit()) {
   return `Unidade: ${unit.name}${unit.avecUnitId ? ` (Avec ${unit.avecUnitId})` : ''}`
 }
+
+/** Nome curto para prompts: "ROM Club · unidade ROM Iguatemi" */
+export function unitPromptLabel(unit = getSalonUnit()) {
+  return `${unit.brand} · unidade ${unit.name}`
+}
+
+/** Valor do param `site` nos relatórios Avec (vazio se não configurado). */
+export function avecSiteParam(unit = getSalonUnit()) {
+  return unit.avecUnitId ?? ''
+}

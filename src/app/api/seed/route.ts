@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     }
 
     const auth = await requireAuth(req)
-    if (!auth.ok) return handleError(new Error(auth.message))
+    if (!auth.ok) return err(auth.message, auth.status)
 
     const result = await runSeed()
     return ok(result)

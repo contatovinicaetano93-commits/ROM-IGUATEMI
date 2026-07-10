@@ -8,6 +8,7 @@ import { buildContactContext, contactContextForAI } from '@/lib/salon/context-bu
 import { formatCatalogForPrompt } from '@/lib/whatsapp/catalog'
 import { detectIntent } from '@/lib/whatsapp/intents'
 import { notifyStaffHandoff } from '@/lib/whatsapp/staff-alert'
+import { unitPromptLabel } from '@/lib/salon/unit'
 
 const HANDOFF_REPLY =
   'Perfeito! Já avisei nossa equipe e em breve uma atendente continua com você aqui no WhatsApp. 🙏'
@@ -16,7 +17,7 @@ const AWAITING_HUMAN_REPLY =
   'Nossa equipe já foi avisada e em breve te atende por aqui. Se for urgente, pode mandar mais uma mensagem. 💬'
 
 function buildSystemPrompt(intent: ReturnType<typeof detectIntent>, isReturning: boolean) {
-  const base = `Você é a recepcionista virtual do ROM Club (salão de beleza).
+  const base = `Você é a recepcionista virtual do ${unitPromptLabel()} (salão de beleza).
 Seja calorosa, direta e breve (máx. 3 frases por resposta).
 ${formatCatalogForPrompt()}
 Nunca invente preços. Para valores, diga que varia conforme o serviço e ofereça ajuda para agendar ou falar com atendente.
@@ -146,7 +147,7 @@ export async function handleWhatsAppMessage(from: string, text: string): Promise
     reply =
       intent === 'agendar' || intent === 'remarcar'
         ? 'Claro! Qual serviço você gostaria e qual dia/horário prefere? Nossa equipe confirma a disponibilidade. 😊'
-        : 'Oi! Sou a recepcionista virtual do ROM Club. Posso ajudar com agendamento ou dúvidas sobre nossos serviços. Como posso te ajudar?'
+        : `Oi! Sou a recepcionista virtual do ${unitPromptLabel()}. Posso ajudar com agendamento ou dúvidas sobre nossos serviços. Como posso te ajudar?`
   }
 
   const inboundCount = historyEvents.filter((e) => e.direction === 'in').length
