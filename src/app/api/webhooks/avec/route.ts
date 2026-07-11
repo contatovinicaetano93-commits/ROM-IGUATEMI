@@ -2,11 +2,12 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { verifyAvecWebhook } from '@/lib/webhooks'
 import { ingestAvecWebhook } from '@/lib/avec/webhook-ingest'
+import { scheduleAvecWebhookSideEffects } from '@/lib/avec/sync-trigger'
 import { isAuthorized } from '@/lib/auth'
 
 /**
  * Webhook Avec — tempo real (push).
- * URL: https://rom-club.vercel.app/api/webhooks/avec
+ * URL: https://rom-iguatemi.vercel.app/api/webhooks/avec
  * Header: x-avec-secret: <AVEC_WEBHOOK_SECRET>
  * (também aceita Authorization: Bearer … ou x-webhook-secret)
  */
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const result = await ingestAvecWebhook(body)
+    scheduleAvecWebhookSideEffects(result.event)
     return ok(result)
   } catch (e) {
     return handleError(e)
@@ -61,7 +63,7 @@ export async function GET(req: NextRequest) {
         price: 180,
       },
       note:
-        'Configure este URL no painel Avec (ou Zapier/Make bridge). Cron /api/avec/sync fica como backup.',
+        'Configure este URL no painel Avec (ou Zapier/Make bridge). Cada evento dispara sync fast/full em background; cron /api/avec/sync fica como backup.',
     })
   } catch (e) {
     return handleError(e)

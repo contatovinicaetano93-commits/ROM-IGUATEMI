@@ -411,7 +411,8 @@ export default function AdminPage() {
               <p className="rounded-xl border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground/80">
                 <span className="font-semibold text-gold">Tempo real:</span> webhook{' '}
                 <code className="text-[0.7rem]">/api/webhooks/avec</code> (header{' '}
-                <code className="text-[0.7rem]">x-avec-secret</code>). Cron a cada 1 min é só backup.
+                <code className="text-[0.7rem]">x-avec-secret</code>). Cron fast 5 min + full 10 min
+                como backup; webhook dispara sync em tempo real.
               </p>
               <PrimaryButton type="button" onClick={runAvecSync} disabled={syncing || !avec.configured}>
                 {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
