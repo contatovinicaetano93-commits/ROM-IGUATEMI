@@ -66,7 +66,7 @@ export async function deliverDirectorReport(
         const s = slug0021(report)
         await sendTelegramDocument(
           chat,
-          `0021-comparativo-mes_${s}.csv`,
+          `0021-comparativo-trimestre_${s}.csv`,
           '\uFEFF' + revenueCompareCsv(report),
           `Etapa 2 · 0021 · ${report.period.label_0021}`
         )

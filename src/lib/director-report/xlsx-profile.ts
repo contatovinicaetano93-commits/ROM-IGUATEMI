@@ -3,9 +3,9 @@ import { getBrand } from '@/lib/brand'
 import { isAvecConfigured, isAvecMock } from '@/lib/avec/client'
 import { fetchProfessionalProfileMonths } from './avec-live'
 import { buildMockRevenueBlocks, defaultSelectedMonth } from './mock'
-import { aggregateQuarterRevenue, labelQuarter } from './period'
+import { aggregateQuarterRevenue, labelQuarter, monthsInQuarter, quarterOfMonth } from './period'
 import { listDirectorProfessionals } from './professionals'
-import type { MonthRevenueRow } from './types'
+import type { MonthRevenueRow, QuarterKey } from './types'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -32,6 +32,7 @@ export interface ProfessionalProfileResult {
   buffer: Buffer
   filename: string
   professionalName: string
+  source: 'mock' | 'avec'
 }
 
 /**
@@ -53,9 +54,11 @@ export async function buildProfessionalProfileWorkbook(
   const avecReady = isAvecConfigured() && !isAvecMock() && !opts.forceMock
 
   let months: MonthRevenueRow[]
+  let source: 'mock' | 'avec' = 'mock'
   if (avecReady) {
     try {
       months = await fetchProfessionalProfileMonths(professional, selectedMonth)
+      source = 'avec'
     } catch {
       months = buildMockRevenueBlocks([professional], selectedMonth)[0]!.months
     }
@@ -64,6 +67,13 @@ export async function buildProfessionalProfileWorkbook(
   }
 
   const quarters = aggregateQuarterRevenue(months)
+  const currentQuarter = quarterOfMonth(selectedMonth)
+
+  /** Fat. dos primeiros `n` meses de um trimestre — usado pra comparar o trimestre corrente (parcial) de forma justa. */
+  function truncatedQuarterRevenue(quarter: QuarterKey, n: number): number {
+    const wanted = new Set(monthsInQuarter(quarter).slice(0, n))
+    return months.filter((m) => wanted.has(m.month)).reduce((s, r) => s + r.revenue, 0)
+  }
 
   const wb = new ExcelJS.Workbook()
   wb.creator = getBrand().displayName
@@ -79,6 +89,18 @@ export async function buildProfessionalProfileWorkbook(
 
   const nameRow = ws.addRow([professional.name])
   nameRow.font = { bold: true, size: 12, color: { argb: 'FFB8860B' } }
+
+  if (source === 'mock') {
+    const warnRow = ws.addRow([
+      'DADOS DE DEMONSTRAÇÃO (mock) — não usar para decisão financeira até o mapper Avec 0021 estar ativo.',
+    ])
+    warnRow.font = { bold: true, italic: true, color: { argb: 'FF8A4B00' } }
+    warnRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF4E5' } }
+    })
+    ws.mergeCells(warnRow.number, 1, warnRow.number, 12)
+  }
+
   ws.addRow([])
 
   const header = ws.addRow(['Ano', ...MONTH_PT, 'Média'])
@@ -123,9 +145,16 @@ export async function buildProfessionalProfileWorkbook(
       const prev = quarters[i - 1]!
       const cur = quarters[i]!
       labels.push(`${labelQuarter(prev.quarter)} → ${labelQuarter(cur.quarter)}`)
+      // Trimestre corrente ainda em andamento: compara só os meses já decorridos
+      // dos dois lados, senão o trimestre parcial parece uma queda de faturamento falsa.
+      const elapsedInCur = months.filter((m) => quarterOfMonth(m.month) === cur.quarter).length
+      const prevRevenue =
+        cur.quarter === currentQuarter && elapsedInCur < 3
+          ? truncatedQuarterRevenue(prev.quarter, elapsedInCur)
+          : prev.revenue
       values.push(
-        prev.revenue > 0
-          ? Math.round(((cur.revenue - prev.revenue) / prev.revenue) * 1000) / 10
+        prevRevenue > 0
+          ? Math.round(((cur.revenue - prevRevenue) / prevRevenue) * 1000) / 10
           : ''
       )
     }
@@ -140,5 +169,6 @@ export async function buildProfessionalProfileWorkbook(
     buffer: Buffer.from(arrBuf),
     filename: `0021-perfil-${safeName}.xlsx`,
     professionalName: professional.name,
+    source,
   }
 }

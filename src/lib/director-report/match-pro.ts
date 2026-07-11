@@ -30,11 +30,14 @@ export function matchDirectorProfessional(
   const exact = professionals.find((p) => normalizeProKey(p.name) === key)
   if (exact) return exact
 
-  // "Vitor M" ↔ "Vitor", "Dani Mariniello" ↔ "Dani"
-  const partial = professionals.find((p) => {
+  // Match parcial por prefixo/substring (ex.: "Vitor M" ↔ "Vitor").
+  // Se mais de um profissional do portfólio bater com o mesmo nome parcial
+  // (ex.: dois "Lucas"), não adivinha — melhor faturamento não atribuído do
+  // que atribuído ao profissional errado silenciosamente.
+  const partialMatches = professionals.filter((p) => {
     const pk = normalizeProKey(p.name)
     if (!pk) return false
     return key === pk || key.startsWith(pk + ' ') || pk.startsWith(key + ' ') || key.includes(pk)
   })
-  return partial ?? null
+  return partialMatches.length === 1 ? partialMatches[0]! : null
 }

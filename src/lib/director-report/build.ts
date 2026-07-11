@@ -77,9 +77,16 @@ export async function buildDirectorReport(
         selectedQuarter,
         compareQuarter,
       )
-      return_blocks = live.return_blocks
-      revenue_blocks = live.revenue_blocks
-      source = 'avec'
+      // Cada etapa cai pro mock de forma independente — uma falhar não deve
+      // jogar fora o dado real da outra que funcionou.
+      if (live.return_blocks) {
+        return_blocks = live.return_blocks
+        source = 'avec'
+      }
+      if (live.revenue_blocks) {
+        revenue_blocks = live.revenue_blocks
+        source = 'avec'
+      }
       if (live.warnings.length) {
         liveNote = live.warnings.slice(0, 3).join(' · ')
       }
@@ -139,11 +146,13 @@ export async function buildDirectorReport(
     source,
     avec_reports: { return: '0011', revenue: '0021' },
     schedule_note:
-      source === 'avec'
-        ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 live Avec${liveNote ? ` · ${liveNote}` : ''}`
-        : avecReady
-          ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 · fallback fixture${liveNote ? ` · ${liveNote}` : ''}`
-          : 'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês (ou trimestre vs trimestre) · dados mock',
+      professionals.length === 0
+        ? '⚠ Nenhum profissional cadastrado no roster desta unidade — relatório sai vazio (sem envio útil).'
+        : source === 'avec'
+          ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 live Avec${liveNote ? ` · ${liveNote}` : ''}`
+          : avecReady
+            ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 · fallback fixture${liveNote ? ` · ${liveNote}` : ''}`
+            : 'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês (ou trimestre vs trimestre) · dados mock',
     return_blocks,
     revenue_blocks,
     summary: {

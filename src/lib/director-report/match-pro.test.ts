@@ -31,4 +31,16 @@ describe('matchDirectorProfessional', () => {
   it('casa Vitor M', () => {
     expect(matchDirectorProfessional('Vitor M', pros)?.id).toBe('pro-vitor-m')
   })
+
+  it('não adivinha quando dois profissionais colidem no mesmo primeiro nome', () => {
+    const withCollision: DirectorProfessional[] = [
+      ...pros,
+      { id: 'pro-lucas-kampos', name: 'Lucas Kampos', avec_pro_id: null, role: 'hairstylist', active: true },
+      { id: 'pro-lucas-sales', name: 'Lucas Sales', avec_pro_id: null, role: 'hairstylist', active: true },
+    ]
+    expect(matchDirectorProfessional('Lucas', withCollision)).toBeNull()
+    // nome completo continua funcionando normalmente, sem ambiguidade
+    expect(matchDirectorProfessional('Lucas Kampos', withCollision)?.id).toBe('pro-lucas-kampos')
+    expect(matchDirectorProfessional('Lucas Sales', withCollision)?.id).toBe('pro-lucas-sales')
+  })
 })

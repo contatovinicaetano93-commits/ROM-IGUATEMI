@@ -203,7 +203,7 @@ async function sendOne(
         ]
       : [
           {
-            filename: `0021-comparativo-mes_${slug}.csv`,
+            filename: `0021-comparativo-trimestre_${slug}.csv`,
             content: toBase64('\uFEFF' + revenueCompareCsv(report)),
           },
         ]

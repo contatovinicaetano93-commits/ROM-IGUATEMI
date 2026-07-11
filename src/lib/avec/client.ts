@@ -140,6 +140,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
   const res = await fetch(url, {
     headers: { Authorization: token, Accept: 'application/json' },
     cache: 'no-store',
+    signal: AbortSignal.timeout(30_000),
   })
 
   if (!res.ok) {

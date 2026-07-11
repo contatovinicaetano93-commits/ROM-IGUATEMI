@@ -112,12 +112,6 @@ export function validateCredentials(
   return null
 }
 
-/** @deprecated use validateCredentials — mantido para callers antigos */
-export function validateAdminCredentials(username: string, password: string) {
-  const hit = validateCredentials(username, password)
-  return hit?.role === 'admin'
-}
-
 export async function getSession(req: NextRequest): Promise<AuthSession | null> {
   if (!isAuthEnabled()) {
     // Produção sem senha = fechado (nunca abrir o painel). Dev sem senha = aberto (conveniência local).
