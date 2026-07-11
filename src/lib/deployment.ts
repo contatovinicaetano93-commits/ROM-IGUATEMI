@@ -68,3 +68,19 @@ export function deploymentLabel(): string {
   const host = ctx.host ? ` · ${ctx.host}` : ''
   return `${ctx.display_name}${host}`
 }
+
+/** Host público padrão quando headers/env Vercel não estão disponíveis. */
+export function defaultProductionHost(): string {
+  return getRomPanelId() === 'iguatemi' ? 'rom-iguatemi.vercel.app' : 'rom-club.vercel.app'
+}
+
+/** Host da requisição para montar URLs de webhook/diagnóstico. */
+export function resolveRequestHost(headers: { get(name: string): string | null }): string {
+  const fromHeader = headers.get('x-forwarded-host') ?? headers.get('host')
+  if (fromHeader) return fromHeader
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL?.replace(/^https?:\/\//, '')
+  if (prod) return prod
+  const vercel = process.env.VERCEL_URL?.trim()
+  if (vercel) return vercel
+  return defaultProductionHost()
+}

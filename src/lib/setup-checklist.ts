@@ -1,3 +1,5 @@
+import { defaultProductionHost } from '@/lib/deployment'
+
 export interface SetupItem {
   id: string
   label: string
@@ -56,7 +58,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Gere: openssl rand -hex 32',
       'Vercel → AVEC_WEBHOOK_SECRET = o valor gerado → Redeploy',
-      'URL: https://rom-club.vercel.app/api/webhooks/avec',
+      `URL: https://${defaultProductionHost()}/api/webhooks/avec`,
       'Header: x-avec-secret = mesmo valor do AVEC_WEBHOOK_SECRET',
       'Peça ao suporte Avec (ou use Zapier/Make) para POST em cada agendamento/atendimento',
       'Eventos: appointment.created, appointment.updated, service.completed, client.upsert',
