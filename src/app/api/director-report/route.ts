@@ -16,6 +16,7 @@ import {
   isDirectorEmailConfigured,
 } from '@/lib/director-report/email'
 import type { DirectorReportStage, MonthKey, QuarterKey } from '@/lib/director-report/types'
+import { buildProfessionalProfileWorkbook } from '@/lib/director-report/xlsx-profile'
 
 function asMonth(v: string | null): MonthKey | undefined {
   if (!v || !/^\d{4}-\d{2}$/.test(v)) return undefined
@@ -40,7 +41,8 @@ async function runDelivery(
     isCron: boolean
     professionalId?: string
     month?: MonthKey
-    compareMonth?: MonthKey | null
+    quarter0021?: QuarterKey
+    compareQuarter0021?: QuarterKey | null
     compareMonths?: boolean
     quarter?: QuarterKey
     compare?: QuarterKey
@@ -49,7 +51,8 @@ async function runDelivery(
   const report = await buildDirectorReport({
     forceMock: opts.forceMock,
     selectedMonth: opts.month,
-    compareMonth: opts.compareMonth,
+    selectedQuarter0021: opts.quarter0021,
+    compareQuarter0021: opts.compareQuarter0021,
     compareMonths: opts.compareMonths,
     selectedQuarter: opts.quarter,
     compareQuarter: opts.compare,
@@ -97,7 +100,7 @@ export async function GET(req: NextRequest) {
         stage: 'all',
         forceMock: false,
         isCron: true,
-        // 0021 no cron semanal: mês atual vs anterior
+        // 0021 no cron semanal: trimestre atual vs anterior
         compareMonths: true,
       })
     }
@@ -106,10 +109,28 @@ export async function GET(req: NextRequest) {
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { searchParams } = req.nextUrl
+    const format = searchParams.get('format') ?? 'json'
+
+    if (format === 'xlsx-profile') {
+      const professionalId = searchParams.get('professional_id')
+      if (!professionalId) return err('professional_id obrigatório', 400)
+      const profile = await buildProfessionalProfileWorkbook(professionalId, {
+        forceMock: searchParams.get('mock') === '1',
+      })
+      return new Response(new Uint8Array(profile.buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${profile.filename}"`,
+        },
+      })
+    }
+
     const compareMonthsParam = searchParams.get('compare_months')
     const report = await buildDirectorReport({
       selectedMonth: asMonth(searchParams.get('month')),
-      compareMonth: asMonth(searchParams.get('compare_month')),
+      selectedQuarter0021: asQuarter(searchParams.get('quarter_0021')),
+      compareQuarter0021: asQuarter(searchParams.get('compare_0021')),
       compareMonths: compareMonthsParam === null ? true : compareMonthsParam !== '0',
       selectedQuarter: asQuarter(searchParams.get('quarter')),
       compareQuarter: asQuarter(searchParams.get('compare')),
@@ -117,7 +138,6 @@ export async function GET(req: NextRequest) {
       forceMock: searchParams.get('mock') === '1',
     })
 
-    const format = searchParams.get('format') ?? 'json'
     if (format === 'json') {
       return ok({
         ...report,
@@ -135,7 +155,7 @@ export async function GET(req: NextRequest) {
       filename = '0021-faturamento-ticket-serie.csv'
     } else if (format === 'csv-revenue-compare') {
       body = revenueCompareCsv(report)
-      filename = '0021-comparativo-mes.csv'
+      filename = '0021-comparativo-trimestre.csv'
     } else if (format === 'csv-return') {
       body = returnCsv(report)
       filename = '0011-retorno-serie-trimestre.csv'
@@ -187,7 +207,10 @@ export async function POST(req: NextRequest) {
       isCron: cron,
       professionalId,
       month: asMonth(typeof body?.month === 'string' ? body.month : null),
-      compareMonth: asMonth(typeof body?.compare_month === 'string' ? body.compare_month : null),
+      quarter0021: asQuarter(typeof body?.quarter_0021 === 'string' ? body.quarter_0021 : null),
+      compareQuarter0021: asQuarter(
+        typeof body?.compare_0021 === 'string' ? body.compare_0021 : null
+      ),
       compareMonths:
         body?.compare_months === undefined
           ? stage !== '0021'

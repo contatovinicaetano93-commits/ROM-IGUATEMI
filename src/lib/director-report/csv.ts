@@ -1,5 +1,5 @@
 import type { DirectorReport, MonthKey, QuarterKey } from './types'
-import { labelMonth, labelQuarter, orderMonths } from './period'
+import { labelMonth, labelQuarter, orderQuarters } from './period'
 
 function esc(v: string | number | null | undefined) {
   const s = v == null ? '' : String(v)
@@ -31,23 +31,23 @@ export function revenueCsv(report: DirectorReport, selectedMonth?: MonthKey) {
 }
 
 /**
- * 0021 — comparativo mês a mês.
- * Colunas em ordem cronológica; Δ = mês mais recente − mês mais antigo (crescimento).
+ * 0021 — comparativo trimestre a trimestre.
+ * Colunas em ordem cronológica; Δ = trimestre mais recente − trimestre mais antigo (crescimento).
  */
 export function revenueCompareCsv(report: DirectorReport) {
-  const focus = report.period.selected_month
-  const other = report.period.compare_month
+  const focus = report.period.selected_quarter_0021
+  const other = report.period.compare_quarter_0021
   if (!report.period.compare_months || !other) {
-    return revenueCsv(report, focus)
+    return revenueCsv(report, report.period.selected_month)
   }
 
-  const [older, newer] = orderMonths(focus, other)
+  const [older, newer] = orderQuarters(focus, other)
   const header = [
     'Profissional',
-    `Fat ${labelMonth(older)}`,
-    `Ticket ${labelMonth(older)}`,
-    `Fat ${labelMonth(newer)}`,
-    `Ticket ${labelMonth(newer)}`,
+    `Fat ${labelQuarter(older)}`,
+    `Ticket ${labelQuarter(older)}`,
+    `Fat ${labelQuarter(newer)}`,
+    `Ticket ${labelQuarter(newer)}`,
     'Δ Fat (R$)',
     'Δ Fat %',
     'Δ Ticket (R$)',
@@ -55,9 +55,9 @@ export function revenueCompareCsv(report: DirectorReport) {
   const lines = [header.map(esc).join(';')]
 
   for (const block of report.revenue_blocks) {
-    const byMonth = new Map(block.months.map((m) => [m.month, m]))
-    const rowOlder = byMonth.get(older)
-    const rowNewer = byMonth.get(newer)
+    const byQuarter = new Map(block.quarters.map((q) => [q.quarter, q]))
+    const rowOlder = byQuarter.get(older)
+    const rowNewer = byQuarter.get(newer)
     const fatOlder = rowOlder?.revenue ?? 0
     const fatNewer = rowNewer?.revenue ?? 0
     const tickOlder = rowOlder?.ticket_avg ?? 0

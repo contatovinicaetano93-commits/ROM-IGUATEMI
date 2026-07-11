@@ -46,9 +46,19 @@ export interface MonthRevenueRow {
   attended: number
 }
 
+export interface QuarterRevenueRow {
+  quarter: QuarterKey
+  label: string
+  revenue: number
+  ticket_avg: number
+  attended: number
+}
+
 export interface ProfessionalRevenueBlock {
   professional: DirectorProfessional
   months: MonthRevenueRow[]
+  /** Faturamento agregado por trimestre (soma dos meses) — usado no comparativo 0021. */
+  quarters: QuarterRevenueRow[]
   selected_month: MonthKey
 }
 
@@ -56,10 +66,12 @@ export type DirectorReportStage = '0011' | '0021' | 'all'
 
 export interface DirectorReportPeriod {
   selected_month: MonthKey
-  /** null = modo só um mês (sem comparativo 0021) */
-  compare_month: MonthKey | null
-  /** true quando 0021 compara dois meses */
+  /** true quando 0021 compara dois trimestres */
   compare_months: boolean
+  /** Trimestre foco do comparativo 0021 */
+  selected_quarter_0021: QuarterKey
+  /** null = modo só um mês (sem comparativo 0021) */
+  compare_quarter_0021: QuarterKey | null
   selected_quarter: QuarterKey
   compare_quarter: QuarterKey
   /** Rótulo completo (ambas etapas) */

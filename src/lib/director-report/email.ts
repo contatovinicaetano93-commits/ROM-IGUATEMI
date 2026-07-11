@@ -3,7 +3,8 @@ import type { DirectorReport, DirectorReportStage } from './types'
 import { reactivationCsv, returnCompareCsv, revenueCompareCsv } from './csv'
 import {
   labelMonth,
-  orderMonths,
+  labelQuarter,
+  orderQuarters,
   reportSubject0011,
   reportSubject0021,
   slug0011,
@@ -79,10 +80,11 @@ function html0011(report: DirectorReport) {
 function html0021(report: DirectorReport) {
   const unitName = getBrand().displayName
   const focus = report.period.selected_month
-  const other = report.period.compare_month
-  const compare = report.period.compare_months && Boolean(other)
+  const focusQuarter = report.period.selected_quarter_0021
+  const otherQuarter = report.period.compare_quarter_0021
+  const compare = report.period.compare_months && Boolean(otherQuarter)
 
-  if (!compare || !other) {
+  if (!compare || !otherQuarter) {
     const rows = report.revenue_blocks
       .map((block) => {
         const row = block.months.find((m) => m.month === focus)
@@ -123,10 +125,10 @@ function html0021(report: DirectorReport) {
   </body></html>`
   }
 
-  const [older, newer] = orderMonths(focus, other)
+  const [older, newer] = orderQuarters(focusQuarter, otherQuarter)
   const rows = report.revenue_blocks
     .map((block) => {
-      const by = new Map(block.months.map((m) => [m.month, m]))
+      const by = new Map(block.quarters.map((q) => [q.quarter, q]))
       const ro = by.get(older)
       const rn = by.get(newer)
       return {
@@ -151,22 +153,22 @@ function html0021(report: DirectorReport) {
   <p style="font-size:12px;color:#888;margin:0 0 4px">ETAPA 2 DE 2</p>
   ${mockBanner(report)}
   <h1 style="font-size:20px;margin:0 0 8px">${unitName} · Relatório 0021</h1>
-  <p style="margin:0 0 4px;font-size:15px"><b>Comparativo mês a mês:</b> ${report.period.label_0021}</p>
-  <p style="margin:0 0 8px;font-size:13px;color:#666">Δ Fat = mês mais recente − mês anterior (crescimento positivo em verde)</p>
+  <p style="margin:0 0 4px;font-size:15px"><b>Comparativo trimestre a trimestre:</b> ${report.period.label_0021}</p>
+  <p style="margin:0 0 8px;font-size:13px;color:#666">Δ Fat = trimestre mais recente − trimestre anterior (crescimento positivo em verde)</p>
   <p style="margin:0 0 16px;font-size:14px"><b>Data de referência:</b> ${report.period.reference_date}</p>
   <p>Fat. mês foco <b>${formatCurrency(report.summary.total_revenue_selected_month)}</b> · ticket médio <b>${formatCurrency(report.summary.avg_ticket_selected_month)}</b></p>
   <table style="border-collapse:collapse;width:100%;font-size:13px;margin-top:16px">
     <thead><tr style="text-align:left;color:#666">
       <th style="padding:6px 10px">Profissional</th>
-      <th style="padding:6px 10px">Fat ${labelMonth(older)}</th>
-      <th style="padding:6px 10px">Ticket ${labelMonth(older)}</th>
-      <th style="padding:6px 10px">Fat ${labelMonth(newer)}</th>
-      <th style="padding:6px 10px">Ticket ${labelMonth(newer)}</th>
+      <th style="padding:6px 10px">Fat ${labelQuarter(older)}</th>
+      <th style="padding:6px 10px">Ticket ${labelQuarter(older)}</th>
+      <th style="padding:6px 10px">Fat ${labelQuarter(newer)}</th>
+      <th style="padding:6px 10px">Ticket ${labelQuarter(newer)}</th>
       <th style="padding:6px 10px">Δ Fat</th>
     </tr></thead>
     <tbody>${body}</tbody>
   </table>
-  <p style="margin-top:24px;font-size:12px;color:#666">Anexo: comparativo mês a mês (faturamento + ticket médio).</p>
+  <p style="margin-top:24px;font-size:12px;color:#666">Anexo: comparativo trimestre a trimestre (faturamento + ticket médio).</p>
   </body></html>`
 }
 

@@ -1,5 +1,5 @@
 import { getBrand } from '@/lib/brand'
-import type { DirectorReport, MonthKey, QuarterKey } from './types'
+import type { DirectorReport, MonthKey, MonthRevenueRow, QuarterKey, QuarterRevenueRow } from './types'
 
 const MONTH_PT = [
   'Jan',
@@ -34,18 +34,57 @@ export function orderMonths(a: MonthKey, b: MonthKey): [MonthKey, MonthKey] {
   return a <= b ? [a, b] : [b, a]
 }
 
+/** Ordena dois YYYY-Qn: [mais antigo, mais recente]. */
+export function orderQuarters(a: QuarterKey, b: QuarterKey): [QuarterKey, QuarterKey] {
+  return a <= b ? [a, b] : [b, a]
+}
+
+function quarterOfMonth(month: MonthKey): QuarterKey {
+  const [y, m] = month.split('-')
+  const q = Math.ceil(Number(m) / 3)
+  return `${y}-Q${q}` as QuarterKey
+}
+
+/** Os 3 meses (YYYY-MM) que compõem um trimestre (YYYY-Qn). */
+export function monthsInQuarter(quarter: QuarterKey): MonthKey[] {
+  const [yStr, qStr] = quarter.split('-Q')
+  const y = Number(yStr)
+  const q = Number(qStr)
+  const startMonth = (q - 1) * 3 + 1
+  return [0, 1, 2].map((i) => `${y}-${String(startMonth + i).padStart(2, '0')}` as MonthKey)
+}
+
+/** Agrega uma série mensal (0021) em linhas trimestrais — soma fat/atendidos, ticket = fat/atendidos. */
+export function aggregateQuarterRevenue(months: MonthRevenueRow[]): QuarterRevenueRow[] {
+  const byQuarter = new Map<QuarterKey, MonthRevenueRow[]>()
+  for (const m of months) {
+    const q = quarterOfMonth(m.month)
+    const arr = byQuarter.get(q) ?? []
+    arr.push(m)
+    byQuarter.set(q, arr)
+  }
+  return Array.from(byQuarter.entries())
+    .map(([quarter, rows]) => {
+      const revenue = rows.reduce((s, r) => s + r.revenue, 0)
+      const attended = rows.reduce((s, r) => s + r.attended, 0)
+      const ticket_avg = attended > 0 ? Math.round(revenue / attended) : 0
+      return { quarter, label: labelQuarter(quarter), revenue, ticket_avg, attended }
+    })
+    .sort((a, b) => a.quarter.localeCompare(b.quarter))
+}
+
 export function label0011(report: DirectorReport): string {
   const { selected_quarter, compare_quarter } = report.period
   return `Retorno ${labelQuarter(selected_quarter)} vs ${labelQuarter(compare_quarter)}`
 }
 
 export function label0021(report: DirectorReport): string {
-  const { selected_month, compare_month, compare_months } = report.period
-  if (!compare_months || !compare_month) {
+  const { selected_month, selected_quarter_0021, compare_quarter_0021, compare_months } = report.period
+  if (!compare_months || !compare_quarter_0021) {
     return `Fat ${labelMonth(selected_month)}`
   }
-  const [older, newer] = orderMonths(selected_month, compare_month)
-  return `Fat ${labelMonth(older)} → ${labelMonth(newer)}`
+  const [older, newer] = orderQuarters(selected_quarter_0021, compare_quarter_0021)
+  return `Fat ${labelQuarter(older)} → ${labelQuarter(newer)}`
 }
 
 export function reportPeriodLabel(report: DirectorReport): string {
@@ -88,21 +127,14 @@ export function slug0011(report: DirectorReport): string {
 }
 
 export function slug0021(report: DirectorReport): string {
-  const { selected_month, compare_month, compare_months } = report.period
-  if (!compare_months || !compare_month) {
+  const { selected_month, selected_quarter_0021, compare_quarter_0021, compare_months } = report.period
+  if (!compare_months || !compare_quarter_0021) {
     return `0021_${selected_month}`.replace(/[^a-zA-Z0-9_-]/g, '_')
   }
-  const [older, newer] = orderMonths(selected_month, compare_month)
+  const [older, newer] = orderQuarters(selected_quarter_0021, compare_quarter_0021)
   return `0021_${older}_para_${newer}`.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
 export function slugPeriod(report: DirectorReport): string {
   return `${slug0011(report)}_${slug0021(report)}`
-}
-
-export function previousMonth(month: MonthKey): MonthKey {
-  const [y, m] = month.split('-').map(Number)
-  if (!y || !m) return month
-  if (m === 1) return `${y - 1}-12` as MonthKey
-  return `${y}-${String(m - 1).padStart(2, '0')}` as MonthKey
 }

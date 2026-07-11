@@ -67,13 +67,6 @@ function defaultMonthKey() {
   return `${year}-${String(month).padStart(2, '0')}`
 }
 
-function previousMonthKey(key: string) {
-  const [y, m] = key.split('-').map(Number)
-  if (!y || !m) return key
-  if (m === 1) return `${y - 1}-12`
-  return `${y}-${String(m - 1).padStart(2, '0')}`
-}
-
 function defaultQuarterKey() {
   const { year, month } = spNowParts()
   return `${year}-Q${Math.ceil(month / 3)}`
@@ -100,7 +93,10 @@ export default function RelatorioDiretoriaPage() {
 
   const [proId0021, setProId0021] = useState('')
   const [month, setMonth] = useState(defaultMonthKey)
-  const [compareMonth, setCompareMonth] = useState(() => previousMonthKey(defaultMonthKey()))
+  const [quarter0021, setQuarter0021] = useState(defaultQuarterKey)
+  const [compareQuarter0021, setCompareQuarter0021] = useState(() =>
+    previousQuarterKey(defaultQuarterKey())
+  )
   const [compareMonths, setCompareMonths] = useState(false)
 
   const [data, setData] = useState<DirectorReport | null>(null)
@@ -117,7 +113,8 @@ export default function RelatorioDiretoriaPage() {
     try {
       const q = new URLSearchParams({
         month,
-        compare_month: compareMonth,
+        quarter_0021: quarter0021,
+        compare_0021: compareQuarter0021,
         compare_months: compareMonths ? '1' : '0',
         quarter,
         compare,
@@ -136,7 +133,7 @@ export default function RelatorioDiretoriaPage() {
     } finally {
       setLoading(false)
     }
-  }, [month, compareMonth, compareMonths, quarter, compare, forceDemo])
+  }, [month, quarter0021, compareQuarter0021, compareMonths, quarter, compare, forceDemo])
 
   useEffect(() => {
     load()
@@ -161,20 +158,20 @@ export default function RelatorioDiretoriaPage() {
       })
   }, [data, quarter, compare, proId0011])
 
-  const monthPair = useMemo(() => {
-    if (!compareMonths) return { older: month, newer: month }
-    return month <= compareMonth
-      ? { older: month, newer: compareMonth }
-      : { older: compareMonth, newer: month }
-  }, [month, compareMonth, compareMonths])
+  const quarterPair = useMemo(() => {
+    if (!compareMonths) return { older: quarter0021, newer: quarter0021 }
+    return quarter0021 <= compareQuarter0021
+      ? { older: quarter0021, newer: compareQuarter0021 }
+      : { older: compareQuarter0021, newer: quarter0021 }
+  }, [quarter0021, compareQuarter0021, compareMonths])
 
   const selectedRevenue = useMemo(() => {
     if (!data) return []
     return data.revenue_blocks
       .filter((b) => !proId0021 || b.professional.id === proId0021)
       .map((b) => {
-        const older = b.months.find((m) => m.month === monthPair.older)
-        const newer = b.months.find((m) => m.month === monthPair.newer)
+        const older = b.quarters.find((q) => q.quarter === quarterPair.older)
+        const newer = b.quarters.find((q) => q.quarter === quarterPair.newer)
         const focus = b.months.find((m) => m.month === month)
         return { pro: b.professional, older, newer, focus, months: b.months }
       })
@@ -182,7 +179,7 @@ export default function RelatorioDiretoriaPage() {
         if (compareMonths) return (b.newer?.revenue ?? 0) - (a.newer?.revenue ?? 0)
         return (b.focus?.revenue ?? 0) - (a.focus?.revenue ?? 0)
       })
-  }, [data, monthPair, month, compareMonths, proId0021])
+  }, [data, quarterPair, month, compareMonths, proId0021])
 
   async function download0011(format: string, filename: string) {
     const q = new URLSearchParams({
@@ -199,12 +196,21 @@ export default function RelatorioDiretoriaPage() {
     const q = new URLSearchParams({
       format,
       month,
-      compare_month: compareMonth,
+      quarter_0021: quarter0021,
+      compare_0021: compareQuarter0021,
       compare_months: compareMonths ? '1' : '0',
     })
     if (forceDemo) q.set('mock', '1')
     if (proId0021) q.set('professional_id', proId0021)
     await downloadBlob(q, filename)
+  }
+
+  async function downloadProfileXlsx() {
+    if (!proId0021) return
+    const q = new URLSearchParams({ format: 'xlsx-profile', professional_id: proId0021 })
+    if (forceDemo) q.set('mock', '1')
+    const name = pros.find((p) => p.id === proId0021)?.name ?? proId0021
+    await downloadBlob(q, `0021-perfil-${name}.xlsx`)
   }
 
   async function downloadBlob(q: URLSearchParams, filename: string) {
@@ -252,7 +258,8 @@ export default function RelatorioDiretoriaPage() {
         body: JSON.stringify({
           stage: '0021',
           month,
-          compare_month: compareMonth,
+          quarter_0021: quarter0021,
+          compare_0021: compareQuarter0021,
           compare_months: compareMonths,
           professional_id: proId0021 || undefined,
         }),
@@ -326,7 +333,7 @@ export default function RelatorioDiretoriaPage() {
           active={tab === '0021'}
           onClick={() => setTab('0021')}
           label="Etapa 2 · 0021"
-          hint="Mês (ou mês vs mês)"
+          hint="Mês (ou trimestre vs trimestre)"
         />
       </div>
 
@@ -573,7 +580,7 @@ export default function RelatorioDiretoriaPage() {
                   : 'border-border text-muted hover:text-foreground'
               }`}
             >
-              Comparar dois meses
+              Comparar dois trimestres
             </button>
           </div>
 
@@ -586,17 +593,26 @@ export default function RelatorioDiretoriaPage() {
               onChange={setProId0021}
               pros={pros}
             />
-            <FilterSelect
-              label={compareMonths ? 'Mês (qualquer um dos dois)' : 'Mês do relatório'}
-              value={month}
-              onChange={setMonth}
-              options={MONTHS}
-            />
-            {compareMonths && (
+            {compareMonths ? (
+              <>
+                <FilterSelect
+                  label="Trimestre"
+                  value={quarter0021}
+                  onChange={setQuarter0021}
+                  options={QUARTERS}
+                />
+                <FilterSelect
+                  label="Comparar com trimestre"
+                  value={compareQuarter0021}
+                  onChange={setCompareQuarter0021}
+                  options={QUARTERS}
+                />
+              </>
+            ) : (
               <FilterSelect
-                label="Outro mês (Δ = mais recente − mais antigo)"
-                value={compareMonth}
-                onChange={setCompareMonth}
+                label="Mês do relatório"
+                value={month}
+                onChange={setMonth}
                 options={MONTHS}
               />
             )}
@@ -648,14 +664,16 @@ export default function RelatorioDiretoriaPage() {
                 : ' · todos'}
               {compareMonths && (
                 <span className="ml-1 text-muted">
-                  (Δ = {monthPair.newer} − {monthPair.older})
+                  (Δ = {quarterPair.newer} − {quarterPair.older})
                 </span>
               )}
             </span>
             <span className="ml-auto flex flex-wrap gap-2">
               {compareMonths ? (
                 <ExportBtn
-                  onClick={() => download0021('csv-revenue-compare', '0021-comparativo-mes.csv')}
+                  onClick={() =>
+                    download0021('csv-revenue-compare', '0021-comparativo-trimestre.csv')
+                  }
                   label="CSV comparativo"
                 />
               ) : (
@@ -664,13 +682,16 @@ export default function RelatorioDiretoriaPage() {
                   label="CSV do mês"
                 />
               )}
+              {proId0021 && (
+                <ExportBtn onClick={downloadProfileXlsx} label="Exportar Excel (perfil)" />
+              )}
             </span>
           </div>
 
           <SectionCard
             title={
               compareMonths
-                ? '0021 · Comparativo mês a mês (faturamento + ticket)'
+                ? '0021 · Comparativo trimestre a trimestre (faturamento + ticket)'
                 : '0021 · Faturamento e ticket do mês'
             }
             badge={<CountBadge value={String(selectedRevenue.length)} tone="gold" />}
@@ -681,10 +702,10 @@ export default function RelatorioDiretoriaPage() {
                   <thead>
                     <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                       <th className="py-2 pr-3 font-medium">Profissional</th>
-                      <th className="py-2 pr-3 font-medium">Fat {monthPair.older}</th>
-                      <th className="py-2 pr-3 font-medium">Ticket {monthPair.older}</th>
-                      <th className="py-2 pr-3 font-medium">Fat {monthPair.newer}</th>
-                      <th className="py-2 pr-3 font-medium">Ticket {monthPair.newer}</th>
+                      <th className="py-2 pr-3 font-medium">Fat {quarterPair.older}</th>
+                      <th className="py-2 pr-3 font-medium">Ticket {quarterPair.older}</th>
+                      <th className="py-2 pr-3 font-medium">Fat {quarterPair.newer}</th>
+                      <th className="py-2 pr-3 font-medium">Ticket {quarterPair.newer}</th>
                       <th className="py-2 font-medium">Δ Fat</th>
                     </tr>
                   </thead>

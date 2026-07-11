@@ -3,7 +3,6 @@ import { fetchLiveDirectorBlocks } from './avec-live'
 import {
   buildMockReturnBlocks,
   buildMockRevenueBlocks,
-  defaultCompareMonth,
   defaultCompareQuarter,
   defaultSelectedMonth,
   defaultSelectedQuarter,
@@ -14,9 +13,12 @@ import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
 export interface BuildDirectorReportOptions {
   selectedMonth?: MonthKey
-  compareMonth?: MonthKey | null
-  /** false = 0021 só o mês selecionado (sem Δ) */
+  /** false = 0021 só o mês selecionado (sem comparativo) */
   compareMonths?: boolean
+  /** Trimestre foco do comparativo 0021 */
+  selectedQuarter0021?: QuarterKey
+  /** Trimestre de comparação do 0021 */
+  compareQuarter0021?: QuarterKey | null
   selectedQuarter?: QuarterKey
   compareQuarter?: QuarterKey
   professionalId?: string
@@ -28,8 +30,9 @@ export async function buildDirectorReport(
 ): Promise<DirectorReport> {
   const selectedMonth = opts.selectedMonth ?? defaultSelectedMonth()
   const compareMonths = opts.compareMonths !== false
-  const compareMonth = compareMonths
-    ? (opts.compareMonth ?? defaultCompareMonth())
+  const selectedQuarter0021 = opts.selectedQuarter0021 ?? defaultSelectedQuarter()
+  const compareQuarter0021 = compareMonths
+    ? (opts.compareQuarter0021 ?? defaultCompareQuarter())
     : null
   const selectedQuarter = opts.selectedQuarter ?? defaultSelectedQuarter()
   const compareQuarter = opts.compareQuarter ?? defaultCompareQuarter()
@@ -50,7 +53,8 @@ export async function buildDirectorReport(
       const live = await fetchLiveDirectorBlocks(
         professionals,
         selectedMonth,
-        compareMonth,
+        selectedQuarter0021,
+        compareQuarter0021,
         selectedQuarter,
         compareQuarter,
       )
@@ -84,8 +88,9 @@ export async function buildDirectorReport(
     generated_at: new Date().toISOString(),
     period: {
       selected_month: selectedMonth,
-      compare_month: compareMonth,
-      compare_months: compareMonths && Boolean(compareMonth),
+      compare_months: compareMonths && Boolean(compareQuarter0021),
+      selected_quarter_0021: selectedQuarter0021,
+      compare_quarter_0021: compareQuarter0021,
       selected_quarter: selectedQuarter,
       compare_quarter: compareQuarter,
       label: '',
@@ -100,7 +105,7 @@ export async function buildDirectorReport(
         ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 live Avec${liveNote ? ` · ${liveNote}` : ''}`
         : avecReady
           ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 · fallback fixture${liveNote ? ` · ${liveNote}` : ''}`
-          : 'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês (ou mês vs mês) · dados mock',
+          : 'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês (ou trimestre vs trimestre) · dados mock',
     return_blocks,
     revenue_blocks,
     summary: {

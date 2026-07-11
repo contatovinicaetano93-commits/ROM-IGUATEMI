@@ -1,5 +1,5 @@
 import daniFixture from './fixtures/0011-dani-mariniello.json'
-import { previousMonth } from './period'
+import { aggregateQuarterRevenue } from './period'
 import type {
   DirectorProfessional,
   MonthKey,
@@ -230,21 +230,21 @@ export function buildMockRevenueBlocks(
   professionals: DirectorProfessional[],
   selectedMonth: MonthKey
 ): ProfessionalRevenueBlock[] {
-  return professionals.map((professional) => ({
-    professional,
-    months: buildMonthsForPro(professional),
-    selected_month: selectedMonth,
-  }))
+  return professionals.map((professional) => {
+    const months = buildMonthsForPro(professional)
+    return {
+      professional,
+      months,
+      quarters: aggregateQuarterRevenue(months),
+      selected_month: selectedMonth,
+    }
+  })
 }
 
 /** Mês atual (fuso America/Sao_Paulo) — usado pelo cron e UI sem filtro. */
 export function defaultSelectedMonth(now = new Date()): MonthKey {
   const { year, month } = spParts(now)
   return `${year}-${String(month).padStart(2, '0')}` as MonthKey
-}
-
-export function defaultCompareMonth(now = new Date()): MonthKey {
-  return previousMonth(defaultSelectedMonth(now))
 }
 
 export function defaultSelectedQuarter(now = new Date()): QuarterKey {
