@@ -45,9 +45,14 @@ async function postSync(mode: 'fast' | 'full', baseUrl: string) {
  * 3. Full sync em background após atendimento/cancelamento (P1/P2/P3)
  */
 export async function runAvecWebhookSideEffects(event: string) {
+  await recomputeSalonMetricsFromRom().catch(() => {})
+
   if (!isAvecConfigured()) return
 
-  await recomputeSalonMetricsFromRom().catch(() => {})
+  if (!process.env.CRON_SECRET?.trim()) {
+    console.warn('[avec webhook] CRON_SECRET ausente — sync em background desligado')
+    return
+  }
 
   const baseUrl = internalBaseUrl()
   if (!baseUrl) return

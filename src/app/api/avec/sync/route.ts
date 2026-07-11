@@ -26,10 +26,25 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
 const FAST_MIN_GAP_MS = 45_000
 const FULL_MIN_GAP_MS = 120_000
 
-async function executeSync(req: NextRequest, opts?: { force?: boolean; defaultMode?: AvecSyncMode }) {
-  if (!isAvecConfigured()) return err('Avec não configurado (AVEC_API_TOKEN)', 503)
-
+async function executeSync(
+  req: NextRequest,
+  opts?: { force?: boolean; defaultMode?: AvecSyncMode; cron?: boolean },
+) {
   const mode = parseMode(req, opts?.defaultMode ?? 'fast')
+
+  if (!isAvecConfigured()) {
+    // Cron/webhook: skip silencioso — evita spam de erro antes do token na terça
+    if (opts?.cron) {
+      return ok({
+        skipped: true,
+        reason: 'aguardando_avec_token',
+        mode,
+        note: 'AVEC_API_TOKEN ausente — cron ignorado até terça',
+      })
+    }
+    return err('Avec não configurado (AVEC_API_TOKEN)', 503)
+  }
+
   const minGap = mode === 'full' ? FULL_MIN_GAP_MS : FAST_MIN_GAP_MS
 
   if (!opts?.force) {
@@ -65,7 +80,8 @@ async function executeSync(req: NextRequest, opts?: { force?: boolean; defaultMo
 export async function POST(req: NextRequest) {
   try {
     if (!(await authorize(req))) return err('Não autorizado', 401)
-    return await executeSync(req, { force: !isCronAuthorized(req), defaultMode: 'full' })
+    const cron = isCronAuthorized(req)
+    return await executeSync(req, { force: !cron, defaultMode: 'full', cron })
   } catch (e) {
     return handleError(e)
   }
@@ -75,8 +91,9 @@ export async function GET(req: NextRequest) {
   try {
     if (!(await authorize(req))) return err('Não autorizado', 401)
 
-    if (isCronAuthorized(req)) {
-      return await executeSync(req, { defaultMode: parseMode(req, 'fast') })
+    const cron = isCronAuthorized(req)
+    if (cron) {
+      return await executeSync(req, { defaultMode: parseMode(req, 'fast'), cron: true })
     }
 
     const test = req.nextUrl.searchParams.get('test') === '1'

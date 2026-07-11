@@ -81,6 +81,33 @@ async function recordSyncRun(kind: string, status: AvecSyncRun['status'], stats:
   return rows[0]
 }
 
+/** Abre run no início — snapshots recebem sync_run_id correto. */
+async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<AvecSyncRun> {
+  const sql = getSql()
+  const rows = (await sql`
+    insert into avec_sync_runs (kind, status, stats)
+    values (${kind}, 'partial', ${JSON.stringify(stats)}::jsonb)
+    returning *
+  `) as AvecSyncRun[]
+  return rows[0]!
+}
+
+async function finishAvecSyncRun(
+  id: string,
+  status: AvecSyncRun['status'],
+  stats: AvecSyncStats,
+  error?: string,
+): Promise<AvecSyncRun> {
+  const sql = getSql()
+  const rows = (await sql`
+    update avec_sync_runs
+    set status = ${status}, stats = ${JSON.stringify(stats)}::jsonb, error = ${error ?? null}
+    where id = ${id}::uuid
+    returning *
+  `) as AvecSyncRun[]
+  return rows[0]!
+}
+
 export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null> {
   const sql = getSql()
   if (kind) {
@@ -374,7 +401,8 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
     )
   }
 
-  let syncRunId: string | undefined
+  const run = await beginAvecSyncRun(mode, stats)
+  const syncRunId = run.id
 
   try {
     // Fast: agenda/caixa do dia. Full: + catálogo + P1/P2/P3.
@@ -407,8 +435,7 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
           ? 'partial'
           : 'ok'
 
-    const run = await recordSyncRun(mode, status, stats)
-    syncRunId = run.id
+    const finished = await finishAvecSyncRun(run.id, status, stats)
 
     await logEvent({
       contactId: null,
@@ -418,10 +445,10 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
       payload: { avec_sync: stats, status, mode },
     })
 
-    return run
+    return finished
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     stats.errors.push(msg)
-    return recordSyncRun(mode, 'error', stats, msg)
+    return finishAvecSyncRun(run.id, 'error', stats, msg)
   }
 }

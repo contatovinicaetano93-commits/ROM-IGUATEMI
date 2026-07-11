@@ -3,6 +3,7 @@ import { isAvecConfigured, isAvecMock, getAvecBaseUrl } from '@/lib/avec/client'
 import { isAuthEnabled } from '@/lib/auth'
 import { isAiConfigured } from '@/lib/ai/client'
 import { getBrand, getRomPanelId } from '@/lib/brand'
+import { getLastAvecSync } from '@/lib/avec/sync'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
 
 function envOk(name: string) {
@@ -22,6 +23,20 @@ async function probeDatabase() {
   return { connected, error }
 }
 
+async function probeKpiLayers() {
+  try {
+    const sql = getSql()
+    const rows = (await sql`
+      select 'p1' as layer, count(*)::int as n from salon_p1_daily
+      union all select 'p2', count(*)::int from salon_p2_daily
+      union all select 'p3', count(*)::int from salon_p3_daily
+    `) as { layer: string; n: number }[]
+    return Object.fromEntries(rows.map((r) => [r.layer, r.n]))
+  } catch {
+    return { p1: null, p2: null, p3: null }
+  }
+}
+
 /** Resposta mínima — segura para monitoramento externo sem login. */
 export async function getPublicHealthStatus() {
   const { connected } = await probeDatabase()
@@ -34,11 +49,24 @@ export async function getHealthStatus() {
   const brand = getBrand()
   const deployment = getDeploymentContext()
   const validation = validateDeploymentEnv()
+  const [lastFast, lastFull, kpiLayers] = await Promise.all([
+    getLastAvecSync('fast'),
+    getLastAvecSync('full'),
+    probeKpiLayers(),
+  ])
+
+  const awaitingToken = !isAvecConfigured() && !isAvecMock()
 
   return {
     ok: connected && validation.ok,
     deployment,
     validation,
+    readiness: {
+      awaiting_avec_token: awaitingToken,
+      cron_ready: envOk('CRON_SECRET'),
+      webhook_ready: envOk('AVEC_WEBHOOK_SECRET'),
+      unit_id_set: envOk('AVEC_UNIT_ID'),
+    },
     panel: {
       id: getRomPanelId(),
       display_name: brand.displayName,
@@ -56,6 +84,9 @@ export async function getHealthStatus() {
       token: envOk('AVEC_API_TOKEN'),
       webhook_secret: envOk('AVEC_WEBHOOK_SECRET'),
       webhook_url: '/api/webhooks/avec',
+      last_fast: lastFast,
+      last_full: lastFull,
+      kpi_layers: kpiLayers,
     },
     whatsapp: {
       configured: envOk('EVOLUTION_API_URL') && envOk('EVOLUTION_API_KEY') && envOk('EVOLUTION_API_INSTANCE'),
