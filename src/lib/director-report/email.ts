@@ -156,7 +156,7 @@ function html0021(report: DirectorReport) {
   <p style="margin:0 0 4px;font-size:15px"><b>Comparativo trimestre a trimestre:</b> ${report.period.label_0021}</p>
   <p style="margin:0 0 8px;font-size:13px;color:#666">Δ Fat = trimestre mais recente − trimestre anterior (crescimento positivo em verde)</p>
   <p style="margin:0 0 16px;font-size:14px"><b>Data de referência:</b> ${report.period.reference_date}</p>
-  <p>Fat. mês foco <b>${formatCurrency(report.summary.total_revenue_selected_month)}</b> · ticket médio <b>${formatCurrency(report.summary.avg_ticket_selected_month)}</b></p>
+  <p>Fat. trimestre mais recente <b>${formatCurrency(report.summary.total_revenue_selected_month)}</b> · ticket médio <b>${formatCurrency(report.summary.avg_ticket_selected_month)}</b></p>
   <table style="border-collapse:collapse;width:100%;font-size:13px;margin-top:16px">
     <thead><tr style="text-align:left;color:#666">
       <th style="padding:6px 10px">Profissional</th>

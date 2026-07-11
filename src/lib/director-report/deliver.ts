@@ -33,7 +33,8 @@ export async function deliverDirectorReport(
       }
       if (stage === '0021' || stage === 'all') {
         lines.push(`0021: ${report.period.label_0021}`)
-        lines.push(`Fat. ${formatCurrency(report.summary.total_revenue_selected_month)}`)
+        const revenueLabel = report.period.compare_months ? 'Fat. tri mais recente' : 'Fat.'
+        lines.push(`${revenueLabel} ${formatCurrency(report.summary.total_revenue_selected_month)}`)
         lines.push(`Ticket ${formatCurrency(report.summary.avg_ticket_selected_month)}`)
       }
       lines.push(`Data ref.: ${report.period.reference_date}`)

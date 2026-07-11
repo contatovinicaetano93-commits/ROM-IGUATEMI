@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Activity } from 'lucide-react'
@@ -10,6 +11,22 @@ import { getBrand } from '@/lib/brand'
 export function DesktopSidebar() {
   const pathname = usePathname()
   const brand = getBrand()
+  const [showAdminNav, setShowAdminNav] = useState(false)
+  const navItems = useMemo(
+    () =>
+      APP_NAV.filter((item) => !('adminOnly' in item) || !item.adminOnly || showAdminNav),
+    [showAdminNav]
+  )
+
+  useEffect(() => {
+    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => {
+        const session = json.data
+        setShowAdminNav(!session?.auth_enabled || Boolean(session?.can_view_revenue))
+      })
+      .catch(() => setShowAdminNav(false))
+  }, [])
 
   return (
     <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
@@ -19,7 +36,7 @@ export function DesktopSidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-4">
-        {APP_NAV.map(({ href, label, icon: Icon }) => {
+        {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`)
           return (
             <Link

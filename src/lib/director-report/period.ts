@@ -39,7 +39,7 @@ export function orderQuarters(a: QuarterKey, b: QuarterKey): [QuarterKey, Quarte
   return a <= b ? [a, b] : [b, a]
 }
 
-function quarterOfMonth(month: MonthKey): QuarterKey {
+export function quarterOfMonth(month: MonthKey): QuarterKey {
   const [y, m] = month.split('-')
   const q = Math.ceil(Number(m) / 3)
   return `${y}-Q${q}` as QuarterKey
@@ -52,6 +52,21 @@ export function monthsInQuarter(quarter: QuarterKey): MonthKey[] {
   const q = Number(qStr)
   const startMonth = (q - 1) * 3 + 1
   return [0, 1, 2].map((i) => `${y}-${String(startMonth + i).padStart(2, '0')}` as MonthKey)
+}
+
+export function monthsInComparableQuarter(
+  quarter: QuarterKey,
+  referenceMonth: MonthKey,
+  selectedQuarter: QuarterKey,
+  compareQuarter: QuarterKey
+): MonthKey[] {
+  const months = monthsInQuarter(quarter)
+  const [, newer] = orderQuarters(selectedQuarter, compareQuarter)
+  if (newer !== quarterOfMonth(referenceMonth)) return months
+
+  const elapsedMonthIndex = monthsInQuarter(newer).indexOf(referenceMonth)
+  if (elapsedMonthIndex < 0) return months
+  return months.slice(0, elapsedMonthIndex + 1)
 }
 
 /** Agrega uma série mensal (0021) em linhas trimestrais — soma fat/atendidos, ticket = fat/atendidos. */

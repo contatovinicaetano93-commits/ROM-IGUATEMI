@@ -11,6 +11,7 @@ export const APP_NAV = [
     label: 'Relatórios',
     shortLabel: 'Relatórios',
     icon: FileBarChart,
+    adminOnly: true,
   },
 ] as const
 

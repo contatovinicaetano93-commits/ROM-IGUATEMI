@@ -6,7 +6,12 @@ import {
 } from '@/lib/avec/normalize'
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
 import { matchDirectorProfessional } from './match-pro'
-import { aggregateQuarterRevenue, labelMonth, labelQuarter, monthsInQuarter } from './period'
+import {
+  aggregateQuarterRevenue,
+  labelMonth,
+  labelQuarter,
+  monthsInComparableQuarter,
+} from './period'
 import type {
   DirectorProfessional,
   MonthKey,
@@ -130,31 +135,36 @@ export async function fetchProfessionalProfileMonths(
   latestMonth: MonthKey,
 ): Promise<MonthRevenueRow[]> {
   const months = allMonthsUpTo(latestMonth)
-  return Promise.all(
-    months.map(async (m) => {
-      try {
-        const map = await fetch0021Month(m)
-        let hit: { revenue: number; attended: number; ticketAvg: number } | undefined
-        for (const [avecName, stats] of map) {
-          if (matchDirectorProfessional(avecName, [professional])) {
-            hit = stats
-            break
-          }
+  async function fetchProfessionalMonth(m: MonthKey): Promise<MonthRevenueRow> {
+    try {
+      const map = await fetch0021Month(m)
+      let hit: { revenue: number; attended: number; ticketAvg: number } | undefined
+      for (const [avecName, stats] of map) {
+        if (matchDirectorProfessional(avecName, [professional])) {
+          hit = stats
+          break
         }
-        return hit
-          ? {
-              month: m,
-              label: labelMonth(m),
-              revenue: Math.round(hit.revenue),
-              ticket_avg: Math.round(hit.ticketAvg),
-              attended: hit.attended,
-            }
-          : emptyMonthRow(m)
-      } catch {
-        return emptyMonthRow(m)
       }
-    }),
-  )
+      return hit
+        ? {
+            month: m,
+            label: labelMonth(m),
+            revenue: Math.round(hit.revenue),
+            ticket_avg: Math.round(hit.ticketAvg),
+            attended: hit.attended,
+          }
+        : emptyMonthRow(m)
+    } catch {
+      return emptyMonthRow(m)
+    }
+  }
+
+  const rows: MonthRevenueRow[] = []
+  for (let i = 0; i < months.length; i += 3) {
+    const chunk = months.slice(i, i + 3)
+    rows.push(...(await Promise.all(chunk.map(fetchProfessionalMonth))))
+  }
+  return rows
 }
 
 type QuarterAgg = {
@@ -293,9 +303,23 @@ export async function fetchLiveDirectorBlocks(
 ): Promise<LiveDirectorBlocks> {
   const warnings: string[] = []
   const monthsNeeded = new Set<MonthKey>([selectedMonth])
-  for (const m of monthsInQuarter(selectedQuarter0021)) monthsNeeded.add(m)
   if (compareQuarter0021) {
-    for (const m of monthsInQuarter(compareQuarter0021)) monthsNeeded.add(m)
+    for (const m of monthsInComparableQuarter(
+      selectedQuarter0021,
+      selectedMonth,
+      selectedQuarter0021,
+      compareQuarter0021
+    )) {
+      monthsNeeded.add(m)
+    }
+    for (const m of monthsInComparableQuarter(
+      compareQuarter0021,
+      selectedMonth,
+      selectedQuarter0021,
+      compareQuarter0021
+    )) {
+      monthsNeeded.add(m)
+    }
   }
 
   const monthMaps = new Map<

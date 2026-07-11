@@ -7,7 +7,15 @@ import {
   defaultSelectedMonth,
   defaultSelectedQuarter,
 } from './mock'
-import { label0011, label0021, reportPeriodLabel, reportReferenceDate } from './period'
+import {
+  aggregateQuarterRevenue,
+  label0011,
+  label0021,
+  monthsInComparableQuarter,
+  orderQuarters,
+  reportPeriodLabel,
+  reportReferenceDate,
+} from './period'
 import { listDirectorProfessionals } from './professionals'
 import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
@@ -25,11 +33,22 @@ export interface BuildDirectorReportOptions {
   forceMock?: boolean
 }
 
+function comparisonMonthSet(
+  selectedMonth: MonthKey,
+  selectedQuarter: QuarterKey,
+  compareQuarter: QuarterKey
+) {
+  return new Set([
+    ...monthsInComparableQuarter(selectedQuarter, selectedMonth, selectedQuarter, compareQuarter),
+    ...monthsInComparableQuarter(compareQuarter, selectedMonth, selectedQuarter, compareQuarter),
+  ])
+}
+
 export async function buildDirectorReport(
   opts: BuildDirectorReportOptions = {}
 ): Promise<DirectorReport> {
   const selectedMonth = opts.selectedMonth ?? defaultSelectedMonth()
-  const compareMonths = opts.compareMonths !== false
+  const compareMonths = opts.compareMonths === true
   const selectedQuarter0021 = opts.selectedQuarter0021 ?? defaultSelectedQuarter()
   const compareQuarter0021 = compareMonths
     ? (opts.compareQuarter0021 ?? defaultCompareQuarter())
@@ -70,10 +89,29 @@ export async function buildDirectorReport(
     }
   }
 
-  const selectedRevenue = revenue_blocks.map((b) => {
-    const row = b.months.find((m) => m.month === selectedMonth)
-    return row ?? { revenue: 0, ticket_avg: 0, attended: 0 }
-  })
+  if (compareMonths && compareQuarter0021) {
+    const quarterMonths = comparisonMonthSet(
+      selectedMonth,
+      selectedQuarter0021,
+      compareQuarter0021
+    )
+    revenue_blocks = revenue_blocks.map((block) => ({
+      ...block,
+      quarters: aggregateQuarterRevenue(block.months.filter((m) => quarterMonths.has(m.month))),
+    }))
+  }
+
+  const selectedRevenue =
+    compareMonths && compareQuarter0021
+      ? revenue_blocks.map((b) => {
+          const [, newer] = orderQuarters(selectedQuarter0021, compareQuarter0021)
+          const row = b.quarters.find((q) => q.quarter === newer)
+          return row ?? { revenue: 0, ticket_avg: 0, attended: 0 }
+        })
+      : revenue_blocks.map((b) => {
+          const row = b.months.find((m) => m.month === selectedMonth)
+          return row ?? { revenue: 0, ticket_avg: 0, attended: 0 }
+        })
   const totalRev = selectedRevenue.reduce((s, r) => s + r.revenue, 0)
   const totalAtt = selectedRevenue.reduce((s, r) => s + r.attended, 0)
 

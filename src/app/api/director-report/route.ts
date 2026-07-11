@@ -18,6 +18,8 @@ import {
 import type { DirectorReportStage, MonthKey, QuarterKey } from '@/lib/director-report/types'
 import { buildProfessionalProfileWorkbook } from '@/lib/director-report/xlsx-profile'
 
+export const maxDuration = 300
+
 function asMonth(v: string | null): MonthKey | undefined {
   if (!v || !/^\d{4}-\d{2}$/.test(v)) return undefined
   return v as MonthKey
@@ -131,7 +133,7 @@ export async function GET(req: NextRequest) {
       selectedMonth: asMonth(searchParams.get('month')),
       selectedQuarter0021: asQuarter(searchParams.get('quarter_0021')),
       compareQuarter0021: asQuarter(searchParams.get('compare_0021')),
-      compareMonths: compareMonthsParam === null ? true : compareMonthsParam !== '0',
+      compareMonths: compareMonthsParam === null ? false : compareMonthsParam !== '0',
       selectedQuarter: asQuarter(searchParams.get('quarter')),
       compareQuarter: asQuarter(searchParams.get('compare')),
       professionalId: searchParams.get('professional_id') ?? undefined,

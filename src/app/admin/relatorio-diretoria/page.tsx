@@ -621,7 +621,7 @@ export default function RelatorioDiretoriaPage() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <Kpi
               icon={<DollarSign size={16} />}
-              label="Fat. mês"
+              label={compareMonths ? 'Fat. trimestre' : 'Fat. mês'}
               value={
                 loading
                   ? '—'

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X, ChevronRight } from 'lucide-react'
@@ -10,9 +10,25 @@ import { getBrand } from '@/lib/brand'
 
 export function TopBar() {
   const [open, setOpen] = useState(false)
+  const [showAdminNav, setShowAdminNav] = useState(false)
   const pathname = usePathname()
   const title = pageTitleFromPath(pathname)
   const brand = getBrand()
+  const navItems = useMemo(
+    () =>
+      APP_NAV.filter((item) => !('adminOnly' in item) || !item.adminOnly || showAdminNav),
+    [showAdminNav]
+  )
+
+  useEffect(() => {
+    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => {
+        const session = json.data
+        setShowAdminNav(!session?.auth_enabled || Boolean(session?.can_view_revenue))
+      })
+      .catch(() => setShowAdminNav(false))
+  }, [])
 
   return (
     <>
@@ -70,7 +86,7 @@ export function TopBar() {
             </div>
 
             <nav className="flex flex-col gap-1 px-3">
-              {APP_NAV.map(({ href, label, icon: Icon }) => {
+              {navItems.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href || pathname.startsWith(`${href}/`)
                 return (
                   <Link
