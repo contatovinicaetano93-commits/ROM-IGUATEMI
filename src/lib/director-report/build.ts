@@ -81,10 +81,11 @@ export async function buildDirectorReport(
       // jogar fora o dado real da outra que funcionou.
       if (live.return_blocks) {
         return_blocks = live.return_blocks
-        source = 'avec'
       }
       if (live.revenue_blocks) {
         revenue_blocks = live.revenue_blocks
+      }
+      if (live.return_blocks && live.revenue_blocks) {
         source = 'avec'
       }
       if (live.warnings.length) {
