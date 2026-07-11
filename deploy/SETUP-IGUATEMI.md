@@ -1,17 +1,24 @@
 # ROM CLUB IGUATEMI — deploy independente
 
-Instância **100% isolada** do ROM CLUB BRASIL. Mesmo repositório GitHub, projeto Vercel e Neon próprios.
+Repositório **ROM-iguatemi** — instância isolada do ROM CLUB BRASIL.
 
-## Isolamento garantido
+## Isolamento
 
-| Recurso | Brasil | Iguatemi |
-|---------|--------|----------|
-| Repositório Git | `ROM` (compartilhado) | `ROM` (compartilhado) |
-| Projeto Vercel | `rom-club-brasil` | `rom-club-iguatemi` |
-| Projeto Neon | `rom-club-brasil` | `rom-club-iguatemi` |
-| `DATABASE_URL` | exclusivo | exclusivo |
-| `AVEC_API_TOKEN` | loja Brasil | loja Iguatemi |
-| WhatsApp / Telegram | instância/bot Brasil | instância/bot Iguatemi |
+| Recurso | Iguatemi (este repo) |
+|---------|----------------------|
+| Repositório Git | `ROM-iguatemi` |
+| Projeto Vercel | `rom-club-iguatemi` |
+| Projeto Neon | `rom-club-iguatemi` |
+| `DATABASE_URL` | exclusivo |
+| `AVEC_API_TOKEN` | loja Iguatemi |
+| WhatsApp / Telegram | instância/bot Iguatemi |
+
+## Criar repositório no GitHub (se ainda não existe)
+
+```bash
+chmod +x scripts/create-iguatemi-repo.sh
+./scripts/create-iguatemi-repo.sh
+```
 
 ## Passo 1 — Neon
 
@@ -22,7 +29,7 @@ Instância **100% isolada** do ROM CLUB BRASIL. Mesmo repositório GitHub, proje
 ## Passo 2 — Vercel
 
 1. [vercel.com](https://vercel.com) → **Add New → Project**
-2. Importar repositório `ROM`
+2. Importar repositório **`ROM-iguatemi`** (não o ROM Brasil)
 3. Nome: `rom-club-iguatemi`
 4. **Environment Variables (Production)** — usar `deploy/vercel-rom-club-iguatemi.env`
 5. Deploy
