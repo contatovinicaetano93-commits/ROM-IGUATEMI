@@ -33,6 +33,7 @@ const createSchema = z.object({
   amount: z.number().positive(),
   expenseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   notes: z.string().nullable().optional(),
+  receiptUrl: z.string().nullable().optional(),
 })
 
 export async function POST(req: NextRequest) {

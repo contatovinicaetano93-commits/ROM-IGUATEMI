@@ -15,6 +15,7 @@ export interface FinanceExpense {
   amount: number
   expense_date: string
   notes: string | null
+  receipt_url: string | null
   created_at: string
 }
 
@@ -53,6 +54,7 @@ export interface CreateExpenseInput {
   amount: number
   expenseDate: string
   notes?: string | null
+  receiptUrl?: string | null
   createdBy?: string | null
 }
 
@@ -61,7 +63,7 @@ export async function listExpenses(from: string, to: string): Promise<FinanceExp
   const rows = await sql`
     select
       id, category_id, description, amount::float as amount,
-      expense_date::text as expense_date, notes, created_at
+      expense_date::text as expense_date, notes, receipt_url, created_at
     from finance_expenses
     where expense_date >= ${from}::date and expense_date <= ${to}::date
     order by expense_date desc, created_at desc
@@ -76,14 +78,14 @@ export async function createExpense(input: CreateExpenseInput): Promise<FinanceE
   if (!(input.amount > 0)) throw new Error('Valor precisa ser maior que zero')
 
   const rows = await sql`
-    insert into finance_expenses (category_id, description, amount, expense_date, notes, created_by)
+    insert into finance_expenses (category_id, description, amount, expense_date, notes, receipt_url, created_by)
     values (
       ${input.categoryId}, ${description}, ${input.amount}, ${input.expenseDate}::date,
-      ${input.notes ?? null}, ${input.createdBy ?? null}
+      ${input.notes ?? null}, ${input.receiptUrl ?? null}, ${input.createdBy ?? null}
     )
     returning
       id, category_id, description, amount::float as amount,
-      expense_date::text as expense_date, notes, created_at
+      expense_date::text as expense_date, notes, receipt_url, created_at
   `
   return rows[0] as FinanceExpense
 }

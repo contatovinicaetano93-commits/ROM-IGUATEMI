@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, X, Trash2, Download } from 'lucide-react'
+import { Plus, X, Trash2, Download, Camera, Paperclip } from 'lucide-react'
+import { upload } from '@vercel/blob/client'
 import { PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency } from '@/lib/salon/format'
@@ -33,6 +34,7 @@ interface FinanceExpense {
   amount: number
   expense_date: string
   notes: string | null
+  receipt_url: string | null
   created_at: string
 }
 
@@ -280,6 +282,17 @@ export default function FinanceiroPage() {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-3">
+              {e.receipt_url && (
+                <a
+                  href={e.receipt_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Ver nota fiscal"
+                  className="text-muted transition-colors hover:text-gold"
+                >
+                  <Paperclip size={16} />
+                </a>
+              )}
               <span className="text-sm font-semibold tabular-nums">{formatCurrency(e.amount)}</span>
               <button
                 type="button"
@@ -328,8 +341,27 @@ function AddExpenseSheet({
   const [newCategoryName, setNewCategoryName] = useState('')
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [notes, setNotes] = useState('')
+  const [receiptUrl, setReceiptUrl] = useState('')
+  const [receiptUploading, setReceiptUploading] = useState(false)
+  const [receiptErr, setReceiptErr] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  async function handleReceipt(file: File) {
+    setReceiptUploading(true)
+    setReceiptErr(null)
+    try {
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/financeiro/upload',
+      })
+      setReceiptUrl(blob.url)
+    } catch (e) {
+      setReceiptErr(e instanceof Error ? e.message : 'Erro no upload')
+    } finally {
+      setReceiptUploading(false)
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -363,6 +395,7 @@ function AddExpenseSheet({
           amount: amountNum,
           expenseDate,
           notes: notes || null,
+          receiptUrl: receiptUrl || null,
         }),
       })
       const json = await res.json()
@@ -453,6 +486,25 @@ function AddExpenseSheet({
               {newCategoryMode ? 'Escolher categoria existente' : '+ Nova categoria'}
             </button>
           </label>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs uppercase tracking-wide text-muted">Nota fiscal / recibo (opcional)</span>
+            <label className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface px-4 py-3 text-sm text-muted transition-colors hover:border-gold hover:text-foreground">
+              <Camera size={16} />
+              {receiptUploading ? 'Enviando…' : receiptUrl ? 'Nota anexada ✓ (trocar)' : 'Tirar foto ou escolher arquivo'}
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                capture="environment"
+                disabled={receiptUploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleReceipt(file)
+                }}
+                className="hidden"
+              />
+            </label>
+            {receiptErr && <p className="text-xs text-danger">{receiptErr}</p>}
+          </div>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs uppercase tracking-wide text-muted">Observações (opcional)</span>
             <input

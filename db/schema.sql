@@ -167,6 +167,7 @@ create table if not exists finance_expenses (
   amount numeric(12, 2) not null check (amount > 0),
   expense_date date not null,
   notes text,
+  receipt_url text,
   created_by text,
   created_at timestamptz not null default now()
 );
