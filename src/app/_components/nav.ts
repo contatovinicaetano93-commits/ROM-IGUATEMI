@@ -35,5 +35,6 @@ export function pageTitleFromPath(pathname: string) {
   if (pathname.startsWith('/contatos/')) return 'Perfil do cliente'
   if (pathname.startsWith('/contatos')) return 'Contatos'
   if (pathname.startsWith('/onboarding')) return 'Onboarding'
+  if (pathname.startsWith('/financeiro')) return 'Financeiro'
   return brand.displayName
 }

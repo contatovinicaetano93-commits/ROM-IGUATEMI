@@ -7,15 +7,10 @@ import { BottomNav } from './BottomNav'
 
 const STANDALONE_PATHS = ['/login']
 
-function isStandalone(pathname: string) {
-  return STANDALONE_PATHS.includes(pathname) || pathname === '/financeiro' || pathname.startsWith('/financeiro/')
-}
-
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
-  // Financeiro tem layout próprio (painel independente) — ver src/app/financeiro/layout.tsx.
-  if (isStandalone(pathname)) {
+  if (STANDALONE_PATHS.includes(pathname)) {
     return <>{children}</>
   }
 
