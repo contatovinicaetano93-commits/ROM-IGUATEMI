@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Users,
   DollarSign,
+  GraduationCap,
 } from 'lucide-react'
 import { CountBadge } from '../_components/ui'
 import { BriefSheet } from '../_components/BriefSheet'
@@ -152,6 +153,15 @@ export default function HojePage() {
           </p>
         </div>
       )}
+
+      <Link
+        href="/onboarding"
+        className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 active:bg-surface"
+      >
+        <GraduationCap size={18} className="shrink-0 text-gold" />
+        <p className="flex-1 text-sm text-foreground/90">Central de treinamento — vídeos de onboarding</p>
+        <ChevronRight size={16} className="shrink-0 text-muted" />
+      </Link>
 
       {/* Agenda de hoje */}
       <section className="flex flex-col gap-2">

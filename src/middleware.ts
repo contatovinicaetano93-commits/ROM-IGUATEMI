@@ -16,7 +16,9 @@ function isProtectedPage(pathname: string) {
     pathname === '/contatos' ||
     pathname.startsWith('/contatos/') ||
     pathname === '/admin' ||
-    pathname.startsWith('/admin/')
+    pathname.startsWith('/admin/') ||
+    pathname === '/onboarding' ||
+    pathname.startsWith('/onboarding/')
   )
 }
 
@@ -47,5 +49,16 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/hoje', '/dashboard', '/contatos', '/contatos/:path*', '/admin', '/admin/:path*', '/api/:path*'],
+  matcher: [
+    '/',
+    '/hoje',
+    '/dashboard',
+    '/contatos',
+    '/contatos/:path*',
+    '/admin',
+    '/admin/:path*',
+    '/onboarding',
+    '/onboarding/:path*',
+    '/api/:path*',
+  ],
 }
