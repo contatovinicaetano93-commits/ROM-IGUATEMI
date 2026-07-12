@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, requireSession } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { buildDirectorReport } from '@/lib/director-report/build'
 import {
@@ -107,11 +107,18 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const auth = await requireAdmin(req)
+    const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
+    const canViewRevenue = auth.session.role === 'admin'
 
     const { searchParams } = req.nextUrl
     const format = searchParams.get('format') ?? 'json'
+
+    // Faturamento (0021) — só admin. Retorno/reativação (0011) não tem valor em R$.
+    const revenueFormats = ['xlsx-profile', 'csv-revenue', 'csv-revenue-compare']
+    if (revenueFormats.includes(format) && !canViewRevenue) {
+      return err('Acesso restrito ao admin operacional', 403)
+    }
 
     if (format === 'xlsx-profile') {
       const professionalId = searchParams.get('professional_id')
@@ -143,6 +150,17 @@ export async function GET(req: NextRequest) {
     if (format === 'json') {
       return ok({
         ...report,
+        // Staff não vê faturamento (0021) — 0011 (retorno/reativação) não tem valor em R$.
+        ...(canViewRevenue
+          ? {}
+          : {
+              revenue_blocks: [],
+              summary: {
+                ...report.summary,
+                total_revenue_selected_month: 0,
+                avg_ticket_selected_month: null,
+              },
+            }),
         delivery: {
           email_configured: isDirectorEmailConfigured(),
           recipients: getDirectorReportRecipients(),

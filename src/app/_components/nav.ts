@@ -7,13 +7,7 @@ export const APP_NAV = [
   { href: '/contatos', label: 'Contatos', shortLabel: 'Contatos', icon: Users },
   { href: '/dashboard', label: 'Visão analítica', shortLabel: 'Análise', icon: LayoutDashboard },
   { href: '/onboarding', label: 'Onboarding', shortLabel: 'Onboarding', icon: GraduationCap },
-  {
-    href: '/admin/relatorio-diretoria',
-    label: 'Relatórios',
-    shortLabel: 'Relatórios',
-    icon: FileBarChart,
-    adminOnly: true,
-  },
+  { href: '/admin/relatorio-diretoria', label: 'Relatórios', shortLabel: 'Relatórios', icon: FileBarChart },
 ] as const
 
 export const BOTTOM_NAV = APP_NAV.slice(0, 4)
