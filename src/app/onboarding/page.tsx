@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { GraduationCap, Play, Plus, X } from 'lucide-react'
+import { upload } from '@vercel/blob/client'
 import { PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 
@@ -219,6 +220,90 @@ export default function OnboardingPage() {
   )
 }
 
+function UploadOrUrlField({
+  label,
+  value,
+  onChange,
+  accept,
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (url: string) => void
+  accept: string
+  placeholder: string
+}) {
+  const [mode, setMode] = useState<'link' | 'upload'>('link')
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState<string | null>(null)
+
+  async function handleFile(file: File) {
+    setUploading(true)
+    setUploadErr(null)
+    try {
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/onboarding/upload',
+      })
+      onChange(blob.url)
+    } catch (e) {
+      setUploadErr(e instanceof Error ? e.message : 'Erro no upload')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wide text-muted">{label}</span>
+        <div className="flex gap-2 text-[0.65rem]">
+          <button
+            type="button"
+            onClick={() => setMode('link')}
+            className={mode === 'link' ? 'font-semibold text-gold' : 'text-muted'}
+          >
+            Link
+          </button>
+          <span className="text-muted">·</span>
+          <button
+            type="button"
+            onClick={() => setMode('upload')}
+            className={mode === 'upload' ? 'font-semibold text-gold' : 'text-muted'}
+          >
+            Enviar arquivo
+          </button>
+        </div>
+      </div>
+
+      {mode === 'link' ? (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
+        />
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <input
+            type="file"
+            accept={accept}
+            disabled={uploading}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleFile(file)
+            }}
+            className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-xs outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-gold/15 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-gold"
+          />
+          {uploading && <p className="text-xs text-muted">Enviando…</p>}
+          {value && !uploading && <p className="truncate text-xs text-success">Enviado ✓</p>}
+          {uploadErr && <p className="text-xs text-danger">{uploadErr}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AddVideoSheet({
   pillars,
   onClose,
@@ -238,6 +323,10 @@ function AddVideoSheet({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    if (!videoUrl.trim()) {
+      setErr('Adicione o vídeo (link ou upload)')
+      return
+    }
     setSubmitting(true)
     setErr(null)
     try {
@@ -302,25 +391,20 @@ function AddVideoSheet({
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs uppercase tracking-wide text-muted">URL do vídeo</span>
-            <input
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
-              required
-              placeholder="Link direto (.mp4) ou YouTube/Vimeo"
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs uppercase tracking-wide text-muted">Thumbnail (opcional)</span>
-            <input
-              value={thumbnailUrl}
-              onChange={(e) => setThumbnailUrl(e.target.value)}
-              placeholder="URL da imagem de capa"
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
-            />
-          </label>
+          <UploadOrUrlField
+            label="Vídeo"
+            value={videoUrl}
+            onChange={setVideoUrl}
+            accept="video/mp4,video/quicktime,video/webm"
+            placeholder="Link direto (.mp4) ou YouTube/Vimeo"
+          />
+          <UploadOrUrlField
+            label="Thumbnail (opcional)"
+            value={thumbnailUrl}
+            onChange={setThumbnailUrl}
+            accept="image/png,image/jpeg,image/webp"
+            placeholder="URL da imagem de capa"
+          />
           <label className="flex flex-col gap-1.5">
             <span className="text-xs uppercase tracking-wide text-muted">Descrição (opcional)</span>
             <input
