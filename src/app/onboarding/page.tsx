@@ -89,7 +89,7 @@ export default function OnboardingPage() {
   }, [videos])
 
   return (
-    <div className="flex flex-col gap-6">
+    <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">
       <div>
         <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Central de treinamento</p>
         <h1 className="mt-1 flex items-center gap-2 text-xl font-semibold lg:text-2xl">
@@ -215,7 +215,7 @@ export default function OnboardingPage() {
           }}
         />
       )}
-    </div>
+    </main>
   )
 }
 
