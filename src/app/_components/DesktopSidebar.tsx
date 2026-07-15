@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Activity, Wallet, GraduationCap } from 'lucide-react'
+import { Activity, Wallet, GraduationCap, Boxes, Stethoscope } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
 import { getBrand } from '@/lib/brand'
@@ -30,24 +30,39 @@ export function DesktopSidebar() {
       .catch(() => setShowAdminNav(false))
   }, [])
 
-  // Financeiro não acessa hoje/contatos/dashboard/admin — nav própria, sem links mortos.
-  if (role === 'financeiro') {
+  // Financeiro tem acesso duplo (Financeiro + Estoque); Estoque é isolado só
+  // no Estoque. Nenhum dos dois vê hoje/contatos/dashboard/admin — nav
+  // própria, sem links mortos (que o middleware ia redirecionar de qualquer jeito).
+  if (role === 'financeiro' || role === 'estoque') {
+    const links =
+      role === 'financeiro'
+        ? [
+            { href: '/financeiro', label: 'Financeiro', icon: Wallet },
+            { href: '/estoque', label: 'Estoque', icon: Boxes },
+          ]
+        : [{ href: '/estoque', label: 'Estoque', icon: Boxes }]
+
     return (
       <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
         <div className="flex items-baseline gap-1.5 border-b border-border px-6 py-6">
           <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">{brand.shortMonogram}</span>
-          <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">Financeiro</span>
+          <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">
+            {role === 'financeiro' ? 'Financeiro' : 'Estoque'}
+          </span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-4">
-          <Link
-            href="/financeiro"
-            className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-              pathname === '/financeiro' ? 'border border-gold/40 bg-gold/10 text-gold' : 'text-foreground/85 hover:bg-card hover:text-foreground'
-            }`}
-          >
-            <Wallet size={20} strokeWidth={pathname === '/financeiro' ? 2.2 : 1.8} />
-            Financeiro
-          </Link>
+          {links.map(({ href, label, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+                pathname === href ? 'border border-gold/40 bg-gold/10 text-gold' : 'text-foreground/85 hover:bg-card hover:text-foreground'
+              }`}
+            >
+              <Icon size={20} strokeWidth={pathname === href ? 2.2 : 1.8} />
+              {label}
+            </Link>
+          ))}
           <Link
             href="/onboarding"
             className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
@@ -58,6 +73,15 @@ export function DesktopSidebar() {
             Onboarding
           </Link>
         </nav>
+        <div className="flex flex-col gap-1 px-4 pb-2">
+          <Link
+            href={role === 'financeiro' ? '/financeiro/diagnostico' : '/estoque/diagnostico'}
+            className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground"
+          >
+            <Stethoscope size={16} />
+            Diagnóstico
+          </Link>
+        </div>
         <div className="border-t border-border px-4 py-4">
           <AdminSessionBar />
         </div>
@@ -95,13 +119,22 @@ export function DesktopSidebar() {
 
       <div className="flex flex-col gap-1 px-4 pb-2">
         {showAdminNav && (
-          <Link
-            href="/financeiro"
-            className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground"
-          >
-            <Wallet size={16} />
-            Financeiro
-          </Link>
+          <>
+            <Link
+              href="/financeiro"
+              className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground"
+            >
+              <Wallet size={16} />
+              Financeiro
+            </Link>
+            <Link
+              href="/estoque"
+              className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground"
+            >
+              <Boxes size={16} />
+              Estoque
+            </Link>
+          </>
         )}
         <Link
           href={ADMIN_NAV.href}

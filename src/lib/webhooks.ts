@@ -80,3 +80,33 @@ export function isTelegramChatAllowed(chatId: number): { ok: true } | { ok: fals
   }
   return { ok: true }
 }
+
+/** Bot dedicado do financeiro — webhook e allowlist próprios (dados sensíveis: faturamento + estoque). */
+export function verifyTelegramFinanceWebhook(req: NextRequest): { ok: true } | { ok: false; reason: string } {
+  const expected = process.env.TELEGRAM_FINANCE_WEBHOOK_SECRET?.trim()
+  if (!expected) {
+    if (isProduction()) return { ok: false, reason: 'TELEGRAM_FINANCE_WEBHOOK_SECRET não configurado' }
+    return { ok: true }
+  }
+
+  if (headerSecret(req, 'x-telegram-bot-api-secret-token') !== expected) {
+    return { ok: false, reason: 'Secret inválido' }
+  }
+  return { ok: true }
+}
+
+export function isTelegramFinanceChatAllowed(chatId: number): { ok: true } | { ok: false; reason: string } {
+  const raw = process.env.TELEGRAM_FINANCE_CHAT_IDS?.trim()
+  if (!raw) {
+    if (isProduction()) {
+      return { ok: false, reason: 'TELEGRAM_FINANCE_CHAT_IDS não configurado' }
+    }
+    return { ok: true }
+  }
+
+  const allowed = raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
+  if (!allowed.includes(String(chatId))) {
+    return { ok: false, reason: 'Chat não autorizado' }
+  }
+  return { ok: true }
+}

@@ -16,7 +16,6 @@ interface FinanceKpiBucket {
   expenses: number
   gross_margin: number | null
   cash_flow: number
-  payment_mix: { method: string; amount: number; share: number }[]
 }
 interface FinanceKpis {
   current: FinanceKpiBucket
@@ -137,10 +136,6 @@ export default function FinanceiroPage() {
       ['Margem bruta (%)', kpis.current.gross_margin ?? '', kpis.previous.gross_margin ?? ''].map(csvEscape).join(';'),
       ['Fluxo (receita - despesas)', kpis.current.cash_flow, kpis.previous.cash_flow].map(csvEscape).join(';'),
       '',
-      ['Formas de pagamento — ' + kpis.current.label].map(csvEscape).join(';'),
-      ['Método', 'Valor', '% do total'].map(csvEscape).join(';'),
-      ...kpis.current.payment_mix.map((p) => [p.method, p.amount, p.share].map(csvEscape).join(';')),
-      '',
       ['Despesas de ' + kpis.current.label].map(csvEscape).join(';'),
       ['Data', 'Descrição', 'Categoria', 'Valor'].map(csvEscape).join(';'),
       ...expenses.map((e) =>
@@ -255,34 +250,6 @@ export default function FinanceiroPage() {
         <p className="-mt-3 text-xs text-muted">
           Margem bruta e fluxo dependem do faturamento sincronizado pela Avec — ainda sem dado esse mês.
         </p>
-      )}
-
-      {!loading && kpis && (
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-sm font-medium">Formas de pagamento — {kpis.current.label}</h2>
-          <p className="mt-0.5 text-xs text-muted">
-            Reconciliação com o relatório de pagamentos da Avec (dinheiro, Pix, cartão etc.)
-          </p>
-          {kpis.current.payment_mix.length === 0 ? (
-            <p className="mt-3 text-xs text-muted">Sem dado de pagamento sincronizado pela Avec esse mês.</p>
-          ) : (
-            <div className="mt-3 flex flex-col gap-2.5">
-              {kpis.current.payment_mix.map((p) => (
-                <div key={p.method} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{p.method}</span>
-                    <span className="tabular-nums text-muted">
-                      {formatCurrency(p.amount)} · {p.share}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
-                    <div className="h-full rounded-full bg-gold" style={{ width: `${p.share}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       )}
 
       <div className="flex items-center justify-between">

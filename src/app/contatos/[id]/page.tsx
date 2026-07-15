@@ -248,14 +248,6 @@ export default function ContactDetailPage() {
     await mutate(`/api/contacts/${id}/anonymize`, { method: 'POST' }, 'Dados pessoais removidos.')
   }
 
-  async function resolveHandoff() {
-    await mutate(
-      `/api/contacts/${id}/resolve-handoff`,
-      { method: 'POST' },
-      'Conversa assumida — a IA volta a responder normal quando você quiser.'
-    )
-  }
-
   useEffect(() => {
     if (!id || loading || error) return
     setBriefLoading(true)
@@ -351,13 +343,6 @@ export default function ContactDetailPage() {
   }
 
   const { contact, services, recommendations, events, last_visit, client_stats } = data
-  const isAwaitingHuman = (() => {
-    for (const e of events) {
-      if (e.payload?.handoff_resolved === true) return false
-      if (e.payload?.needs_human === true) return true
-    }
-    return false
-  })()
   const clientWhatsAppText = buildClientWhatsAppMessage({
     contact,
     services,
@@ -380,22 +365,6 @@ export default function ContactDetailPage() {
           }`}
         >
           {mutationError ?? mutationOk}
-        </div>
-      )}
-
-      {isAwaitingHuman && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
-          <div className="flex items-center gap-2">
-            <MessageSquare size={16} className="shrink-0" />
-            <span>Cliente aguardando atendimento humano — a IA parou de responder.</span>
-          </div>
-          <button
-            type="button"
-            onClick={resolveHandoff}
-            className="shrink-0 rounded-full border border-warning/40 bg-warning/15 px-3 py-1.5 text-xs font-semibold text-warning active:bg-warning/25 lg:hover:bg-warning/25"
-          >
-            Assumir conversa
-          </button>
         </div>
       )}
 

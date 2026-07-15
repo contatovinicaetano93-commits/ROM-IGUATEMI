@@ -43,3 +43,9 @@ NOTES.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+ROM-IGUATEMI/
+
+# pastas locais fora do app principal
+_wip/
+academy/
+concept/

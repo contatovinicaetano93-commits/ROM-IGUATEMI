@@ -1,6 +1,5 @@
 import { getSql } from '@/lib/db'
 import { todayIso } from '@/lib/salon/format'
-import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
 
 export interface FinanceCategory {
   id: string
@@ -150,8 +149,6 @@ export interface FinanceKpiBucket {
   /** (receita - despesas) / receita, em % — null se não houver receita no período (Avec ainda não sincronizou). */
   gross_margin: number | null
   cash_flow: number
-  /** Breakdown por forma de pagamento (relatório 0081 da Avec) — reconciliação. */
-  payment_mix: P2PaymentRow[]
 }
 
 export interface FinanceKpis {
@@ -161,11 +158,7 @@ export interface FinanceKpis {
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
   const { from, to } = monthRange(monthKey)
-  const [revenue, expenses, payment_mix] = await Promise.all([
-    sumRevenue(from, to),
-    sumExpenses(from, to),
-    getPaymentMixRange(from, to),
-  ])
+  const [revenue, expenses] = await Promise.all([sumRevenue(from, to), sumExpenses(from, to)])
   const gross_margin = revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
   return {
     month: monthKey,
@@ -176,7 +169,6 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
     expenses: Math.round(expenses * 100) / 100,
     gross_margin,
     cash_flow: Math.round((revenue - expenses) * 100) / 100,
-    payment_mix,
   }
 }
 

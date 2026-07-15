@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, ChevronRight } from 'lucide-react'
+import { Menu, X, ChevronRight, Wallet, Boxes, GraduationCap, Stethoscope } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV, pageTitleFromPath } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
 import { getBrand } from '@/lib/brand'
@@ -11,6 +11,7 @@ import { getBrand } from '@/lib/brand'
 export function TopBar() {
   const [open, setOpen] = useState(false)
   const [showAdminNav, setShowAdminNav] = useState(false)
+  const [role, setRole] = useState<string | null>(null)
   const pathname = usePathname()
   const title = pageTitleFromPath(pathname)
   const brand = getBrand()
@@ -26,9 +27,28 @@ export function TopBar() {
       .then((json) => {
         const session = json.data
         setShowAdminNav(!session?.auth_enabled || Boolean(session?.can_view_revenue))
+        setRole(session?.role ?? null)
       })
       .catch(() => setShowAdminNav(false))
   }, [])
+
+  // Financeiro/estoque são isolados pelo middleware — menu próprio, sem links
+  // mortos que só levariam a um redirect de volta.
+  const isolatedLinks =
+    role === 'financeiro'
+      ? [
+          { href: '/financeiro', label: 'Financeiro', icon: Wallet },
+          { href: '/estoque', label: 'Estoque', icon: Boxes },
+          { href: '/financeiro/diagnostico', label: 'Diagnóstico', icon: Stethoscope },
+          { href: '/onboarding', label: 'Onboarding', icon: GraduationCap },
+        ]
+      : role === 'estoque'
+        ? [
+            { href: '/estoque', label: 'Estoque', icon: Boxes },
+            { href: '/estoque/diagnostico', label: 'Diagnóstico', icon: Stethoscope },
+            { href: '/onboarding', label: 'Onboarding', icon: GraduationCap },
+          ]
+        : null
 
   return (
     <>
@@ -86,7 +106,7 @@ export function TopBar() {
             </div>
 
             <nav className="flex flex-col gap-1 px-3">
-              {navItems.map(({ href, label, icon: Icon }) => {
+              {(isolatedLinks ?? navItems).map(({ href, label, icon: Icon }) => {
                 const active = pathname === href || pathname.startsWith(`${href}/`)
                 return (
                   <Link
@@ -110,13 +130,15 @@ export function TopBar() {
             </nav>
 
             <div className="mt-auto space-y-4 px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-6">
-              <Link
-                href={ADMIN_NAV.href}
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2 rounded-xl px-2 py-2 text-xs text-muted active:text-foreground"
-              >
-                {ADMIN_NAV.label}
-              </Link>
+              {!isolatedLinks && (
+                <Link
+                  href={ADMIN_NAV.href}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 rounded-xl px-2 py-2 text-xs text-muted active:text-foreground"
+                >
+                  {ADMIN_NAV.label}
+                </Link>
+              )}
               <AdminSessionBar />
               <p className="text-[0.65rem] text-muted">{brand.productName} · KPIs</p>
               <p className="text-[0.6rem] text-muted/70">v0.1.0</p>

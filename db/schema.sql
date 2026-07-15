@@ -18,7 +18,8 @@ create table if not exists contacts (
   preferred_hairstylist text,
   first_contact_at timestamptz not null default now(),
   last_contact_at timestamptz not null default now(),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  anonymized_at timestamptz
 );
 
 create index if not exists contacts_channel_idx on contacts (channel);
@@ -135,6 +136,8 @@ create table if not exists salon_daily_metrics (
   new_clients int not null default 0,
   returning_clients int not null default 0,
   ticket_avg numeric(10, 2),
+  service_duration_sum_minutes numeric(12, 2) not null default 0,
+  service_duration_count int not null default 0,
   updated_at timestamptz not null default now()
 );
 
@@ -146,6 +149,32 @@ create table if not exists contact_brief_cache (
   context_hash text not null,
   created_at timestamptz not null default now()
 );
+
+-- Financeiro (Sprint 4) — despesas de cadastro manual. Receita vem de salon_daily_metrics.
+create table if not exists finance_categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists finance_categories_name_idx
+  on finance_categories (lower(name)) where active = true;
+
+create table if not exists finance_expenses (
+  id uuid primary key default gen_random_uuid(),
+  category_id uuid references finance_categories (id) on delete set null,
+  description text not null,
+  amount numeric(12, 2) not null check (amount > 0),
+  expense_date date not null,
+  notes text,
+  receipt_url text,
+  created_by text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists finance_expenses_date_idx on finance_expenses (expense_date desc);
+create index if not exists finance_expenses_category_idx on finance_expenses (category_id);
 
 -- Onboarding (Trilha B, Sprint T2) — vídeos publicados na intranet, agrupados por pilar.
 create table if not exists onboarding_pillars (

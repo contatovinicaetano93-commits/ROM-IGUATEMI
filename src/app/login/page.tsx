@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { Eye, EyeOff } from 'lucide-react'
 import { PrimaryButton } from '../_components/ui'
 import { sanitizeRedirectPath } from '@/lib/auth-redirect'
 import { getBrand } from '@/lib/brand'
@@ -13,6 +14,7 @@ function LoginForm() {
   const loggedOut = params.get('logged_out') === '1'
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -35,8 +37,16 @@ function LoginForm() {
         setError(json.error ?? 'Usuário ou senha incorretos')
         return
       }
+      // Financeiro/estoque têm painel próprio — não faz sentido cair no playbook do dia por padrão.
+      const role = json.data?.role
+      const dest =
+        role === 'financeiro' && !next.startsWith('/financeiro')
+          ? '/financeiro'
+          : role === 'estoque' && !next.startsWith('/estoque')
+            ? '/estoque'
+            : next
       // Hard navigation garante que o cookie da sessão seja lido pelo middleware
-      window.location.assign(next)
+      window.location.assign(dest)
     } catch (err) {
       setError(String(err))
     } finally {
@@ -72,15 +82,25 @@ function LoginForm() {
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="text-xs uppercase tracking-wide text-muted">Senha</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            placeholder="Senha"
-            className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              placeholder="Senha"
+              className="w-full rounded-xl border border-border bg-surface px-4 py-3 pr-12 text-base outline-none focus:border-gold"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-muted active:text-foreground"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </label>
         {error && <p className="text-sm text-danger">{error}</p>}
         <PrimaryButton type="submit" disabled={loading}>

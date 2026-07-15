@@ -1,9 +1,10 @@
 import { getSql } from '@/lib/db'
 import { isAvecConfigured, isAvecMock, getAvecBaseUrl } from '@/lib/avec/client'
-import { isAuthEnabled } from '@/lib/auth'
+import { isAuthEnabled, isFinanceAuthConfigured, isStockAuthConfigured } from '@/lib/auth'
 import { isAiConfigured } from '@/lib/ai/client'
 import { getBrand, getRomPanelId } from '@/lib/brand'
 import { getLastAvecSync } from '@/lib/avec/sync'
+import { getLastStockSync } from '@/lib/avec/sync-stock'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
 
 function envOk(name: string) {
@@ -49,10 +50,12 @@ export async function getHealthStatus() {
   const brand = getBrand()
   const deployment = getDeploymentContext()
   const validation = validateDeploymentEnv()
-  const [lastFast, lastFull, kpiLayers] = await Promise.all([
+  const [lastFast, lastFull, kpiLayers, stockLastFast, stockLastFull] = await Promise.all([
     getLastAvecSync('fast'),
     getLastAvecSync('full'),
     probeKpiLayers(),
+    getLastStockSync('stock_fast'),
+    getLastStockSync('stock_full'),
   ])
 
   const awaitingToken = !isAvecConfigured() && !isAvecMock()
@@ -96,6 +99,9 @@ export async function getHealthStatus() {
       configured: envOk('TELEGRAM_BOT_TOKEN'),
       webhook_secret: envOk('TELEGRAM_WEBHOOK_SECRET'),
       staff_whitelist: envOk('TELEGRAM_STAFF_CHAT_IDS'),
+      finance_bot_configured: envOk('TELEGRAM_FINANCE_BOT_TOKEN'),
+      finance_bot_webhook_secret: envOk('TELEGRAM_FINANCE_WEBHOOK_SECRET'),
+      finance_bot_whitelist: envOk('TELEGRAM_FINANCE_CHAT_IDS'),
     },
     cron: { configured: envOk('CRON_SECRET') },
     auth: {
@@ -104,9 +110,15 @@ export async function getHealthStatus() {
       user: envOk('ROM_ADMIN_USER'),
       staff_user: envOk('ROM_STAFF_USER'),
       staff_password: envOk('ROM_STAFF_PASSWORD'),
+      finance_configured: isFinanceAuthConfigured(),
+      stock_configured: isStockAuthConfigured(),
     },
     webhooks: {
       avec_secret: envOk('AVEC_WEBHOOK_SECRET'),
+    },
+    stock: {
+      last_fast: stockLastFast,
+      last_full: stockLastFull,
     },
   }
 }

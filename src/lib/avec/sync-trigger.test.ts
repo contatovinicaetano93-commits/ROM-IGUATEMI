@@ -6,7 +6,7 @@ describe('scheduleAvecWebhookSideEffects', () => {
   beforeEach(() => {
     vi.stubEnv('AVEC_API_TOKEN', 'test-token')
     vi.stubEnv('CRON_SECRET', 'cron-secret')
-    vi.stubEnv('VERCEL_URL', 'rom-iguatemi.vercel.app')
+    vi.stubEnv('VERCEL_URL', 'rom-club.vercel.app')
     globalThis.fetch = vi.fn().mockResolvedValue(new Response('ok'))
   })
 

@@ -722,6 +722,166 @@ export function normalizeP3CurveRow(
   return { day, revenue }
 }
 
+// ---------------------------------------------------------------------------
+// Estoque — normalizadores para os relatórios nativos de estoque da Avec
+// (0149, 0046, 0044, 0323, 0045, 0242, 0243, 0142). Avec é fonte da verdade;
+// nomes de coluna variam por unidade/versão, então tudo aqui é defensivo
+// (mesmo padrão de pick/pickRaw usado acima para clientes/agendamentos).
+// ---------------------------------------------------------------------------
+
+export interface NormalizedStockPosition {
+  avecProductId: string
+  sku: string | null
+  name: string
+  categoryName: string | null
+  brandName: string | null
+  locationId: string | null
+  quantity: number
+  unitCost: number | null
+  unitPrice: number | null
+}
+
+/** 0149 — Posição de Estoque (saldo por produto numa data). */
+export function normalizeStockPositionRow(row: Record<string, unknown>): NormalizedStockPosition | null {
+  const avecProductId = pick(row, ['produto_id', 'id_produto', 'codigo_produto', 'codigo', 'id'])
+  const name = pick(row, ['produto', 'nome', 'nome_produto', 'descricao', 'name'])
+  if (!avecProductId || !name) return null
+
+  const sku = pick(row, ['sku', 'codigo_barras', 'referencia', 'referência'])
+  const categoryName = pick(row, ['categoria', 'linha', 'category'])
+  const brandName = pick(row, ['marca', 'brand'])
+  const locationId = pick(row, ['local_estoque_id', 'local_estoque', 'estoque_id', 'local'])
+  const quantity = Number(pick(row, ['quantidade', 'estoque', 'saldo', 'qtd', 'qtd_estoque']) ?? 0) || 0
+  const unitCost = parseOptionalMoney(pickRaw(row, ['custo_unitario', 'custo_medio', 'custo médio', 'custo']))
+  const unitPrice = parseOptionalMoney(pickRaw(row, ['preco_venda', 'preço_venda', 'valor_venda', 'preco', 'preço']))
+
+  return { avecProductId, sku, name, categoryName, brandName, locationId, quantity, unitCost, unitPrice }
+}
+
+export interface NormalizedStockAlert {
+  avecProductId: string
+  name: string
+  categoryName: string | null
+  currentQty: number
+  minimumQty: number
+  suggestedReposition: number | null
+}
+
+/** 0046 — Produtos abaixo do estoque mínimo (Avec já calcula a sugestão de reposição). */
+export function normalizeStockAlertRow(row: Record<string, unknown>): NormalizedStockAlert | null {
+  const avecProductId = pick(row, ['produto_id', 'id_produto', 'codigo_produto', 'codigo', 'id'])
+  const name = pick(row, ['produto', 'nome', 'nome_produto', 'descricao', 'name'])
+  if (!avecProductId || !name) return null
+
+  const categoryName = pick(row, ['categoria', 'linha', 'category'])
+  const currentQty =
+    Number(pick(row, ['quantidade_atual', 'estoque_atual', 'quantidade', 'estoque', 'saldo']) ?? 0) || 0
+  const minimumQty =
+    Number(pick(row, ['estoque_minimo', 'quantidade_minima', 'minimo', 'mínimo']) ?? 0) || 0
+  const suggestedRaw = pick(row, [
+    'sugestao_reposicao',
+    'sugestão de reposição',
+    'sugestao_compra',
+    'sugestão',
+    'reposicao',
+    'reposição',
+    'quantidade_sugerida',
+  ])
+  const suggestedReposition = suggestedRaw ? Number(suggestedRaw) || null : null
+
+  return { avecProductId, name, categoryName, currentQty, minimumQty, suggestedReposition }
+}
+
+export interface NormalizedStockMovement {
+  avecProductId: string
+  name: string
+  type: 'entrada' | 'saida'
+  quantity: number
+  cost: number | null
+  reason: string | null
+  occurredAt: string | null
+}
+
+const ENTRADA_HINTS = ['entrada', 'compra', 'recebimento', 'devolucao', 'devolução', 'ajuste_positivo']
+const SAIDA_HINTS = ['saida', 'saída', 'venda', 'consumo', 'perda', 'quebra', 'uso', 'ajuste_negativo']
+
+function inferMovementType(row: Record<string, unknown>): 'entrada' | 'saida' | null {
+  const explicit = (pick(row, ['tipo', 'movimento', 'entrada_saida', 'operacao', 'operação']) ?? '').toLowerCase()
+  if (explicit) {
+    if (ENTRADA_HINTS.some((h) => explicit.includes(h))) return 'entrada'
+    if (SAIDA_HINTS.some((h) => explicit.includes(h))) return 'saida'
+  }
+  // Sem coluna de tipo — infere pelo motivo (heurística, mesmo padrão de guessServiceCategory)
+  const reason = (pick(row, ['motivo', 'motivo_movimento', 'razao', 'razão']) ?? '').toLowerCase()
+  if (ENTRADA_HINTS.some((h) => reason.includes(h))) return 'entrada'
+  if (SAIDA_HINTS.some((h) => reason.includes(h))) return 'saida'
+  return null
+}
+
+/** 0044 — Entradas e saídas por motivos (fonte mestra do histórico de movimentação). */
+export function normalizeStockMovementRow(row: Record<string, unknown>): NormalizedStockMovement | null {
+  const avecProductId = pick(row, ['produto_id', 'id_produto', 'codigo_produto', 'codigo', 'id'])
+  const name = pick(row, ['produto', 'nome', 'nome_produto', 'descricao', 'name'])
+  if (!avecProductId || !name) return null
+
+  const type = inferMovementType(row)
+  if (!type) return null
+
+  const quantity = Number(pick(row, ['quantidade', 'qtd', 'quantidade_movimentada']) ?? 0) || 0
+  if (quantity <= 0) return null
+
+  // Custo: valor de compra (entrada) ou custo médio da época (saída) — a própria Avec já resolve isso.
+  const cost = parseOptionalMoney(pickRaw(row, ['custo', 'custo_unitario', 'custo_medio', 'valor', 'valor_total']))
+  const reason = pick(row, ['motivo', 'motivo_movimento', 'razao', 'razão'])
+  const datePart = pick(row, ['data', 'data_movimento', 'dia', 'date'])
+  const timePart = pick(row, ['hora', 'horario', 'horário'])
+  const occurredAt = parseAvecDateTime(datePart, timePart)
+
+  return { avecProductId, name, type, quantity, cost, reason, occurredAt }
+}
+
+export interface NormalizedStockPurchase {
+  avecProductId: string
+  name: string
+  quantity: number
+  cost: number | null
+  occurredAt: string | null
+}
+
+/** 0323 — Produtos que deram entrada por pedido de compra (enriquece a origem da entrada). */
+export function normalizeStockPurchaseRow(row: Record<string, unknown>): NormalizedStockPurchase | null {
+  const avecProductId = pick(row, ['produto_id', 'id_produto', 'codigo_produto', 'codigo', 'id'])
+  const name = pick(row, ['produto', 'nome', 'nome_produto', 'descricao', 'name'])
+  if (!avecProductId || !name) return null
+
+  const quantity = Number(pick(row, ['quantidade', 'qtd']) ?? 0) || 0
+  if (quantity <= 0) return null
+
+  const cost = parseOptionalMoney(pickRaw(row, ['custo', 'valor', 'valor_total', 'valor_unitario']))
+  const datePart = pick(row, ['data', 'data_entrada', 'data_pedido', 'dia', 'date'])
+  const occurredAt = parseAvecDateTime(datePart)
+
+  return { avecProductId, name, quantity, cost, occurredAt }
+}
+
+export interface NormalizedStockValuation {
+  key: string
+  totalCost: number
+  percentage: number | null
+}
+
+/** 0045/0242/0243/0142 — valorização agregada (custo total por produto/marca/categoria). */
+export function normalizeStockValuationRow(row: Record<string, unknown>): NormalizedStockValuation | null {
+  const key = pick(row, ['produto', 'marca', 'categoria', 'linha', 'nome', 'descricao', 'name'])
+  if (!key) return null
+  const totalCost = parseMoney(
+    pickRaw(row, ['custo_total', 'valor_total', 'custo', 'valor', 'total'])
+  )
+  if (totalCost <= 0) return null
+  const percentage = parsePct(pick(row, ['percentual', 'percent', '%']))
+  return { key, totalCost, percentage }
+}
+
 // Mapeia nome de serviço Avec → categoria ROM (heurística simples).
 export function guessServiceCategory(name: string): 'corte' | 'tratamento' | 'coloracao' | 'bem_estar' | 'outro' {
   const n = name.toLowerCase()

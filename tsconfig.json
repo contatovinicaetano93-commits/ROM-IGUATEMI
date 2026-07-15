@@ -39,6 +39,8 @@
   "exclude": [
     "ROM-IGUATEMI",
     "_wip",
+    "academy",
+    "concept",
     "node_modules"
   ]
 }

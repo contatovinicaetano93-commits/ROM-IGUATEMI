@@ -21,6 +21,14 @@ export type AvecMapperKind =
   | 'new_clients_period'
   | 'revenue_curve'
   | 'director_return'
+  | 'stock_position'
+  | 'stock_alert'
+  | 'stock_movement'
+  | 'stock_purchase'
+  | 'stock_valuation_total'
+  | 'stock_valuation_category'
+  | 'stock_valuation_brand'
+  | 'stock_valuation_category_pct'
   | 'raw'
 
 export interface AvecReportDef {
@@ -35,7 +43,7 @@ export interface AvecReportDef {
 
 /**
  * Mapa A→B→C (Cérebro: Hoje → Semana → Comercial).
- * Sem 0081, comissões, estoque, NF.
+ * Sem 0081, comissões, NF. Estoque tem registry próprio (ver STOCK abaixo).
  */
 const CORE: AvecReportDef[] = [
   // A — Hoje (cron fast)
@@ -91,6 +99,64 @@ const CORE: AvecReportDef[] = [
   { id: '0104', tier: 'C', name: 'Avaliações', mapper: 'ratings', schedule: 'daily' },
   { id: '0001', tier: 'C', name: 'Aniversariantes', mapper: 'birthdays', schedule: 'daily' },
 ]
+
+/**
+ * Estoque — API-first, Avec como fonte da verdade (sem webhook, só pull/cron).
+ * fast: saldo + alerta (o que o usuário olha o dia todo).
+ * full: movimentação + compras + valorização (muda pouco, roda no ciclo full).
+ */
+const STOCK: AvecReportDef[] = [
+  { id: '0149', tier: 'A', name: 'Posição de Estoque', mapper: 'stock_position', schedule: 'fast' },
+  { id: '0046', tier: 'A', name: 'Produtos abaixo do estoque mínimo', mapper: 'stock_alert', schedule: 'fast' },
+  { id: '0044', tier: 'A', name: 'Entradas e saídas por motivos', mapper: 'stock_movement', schedule: 'daily' },
+  {
+    id: '0323',
+    tier: 'A',
+    name: 'Entradas por pedido de compra',
+    mapper: 'stock_purchase',
+    schedule: 'daily',
+  },
+  {
+    id: '0045',
+    tier: 'A',
+    name: 'Produtos no estoque, custo total',
+    mapper: 'stock_valuation_total',
+    schedule: 'daily',
+  },
+  {
+    id: '0243',
+    tier: 'A',
+    name: 'Custo de estoque por categorias',
+    mapper: 'stock_valuation_category',
+    schedule: 'daily',
+  },
+  {
+    id: '0242',
+    tier: 'A',
+    name: 'Custo de estoque por marcas',
+    mapper: 'stock_valuation_brand',
+    schedule: 'daily',
+  },
+  {
+    id: '0142',
+    tier: 'A',
+    name: 'Categorias de produtos, custo valor/percentual',
+    mapper: 'stock_valuation_category_pct',
+    schedule: 'daily',
+  },
+]
+
+export function getStockReports(): AvecReportDef[] {
+  return STOCK
+}
+
+export function getFastStockReports(): AvecReportDef[] {
+  return STOCK.filter((r) => r.schedule === 'fast')
+}
+
+export function getFullStockReports(): AvecReportDef[] {
+  return STOCK.filter((r) => r.schedule === 'daily')
+}
 
 export function getAvecReportRegistry(): AvecReportDef[] {
   return CORE

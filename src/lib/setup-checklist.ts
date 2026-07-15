@@ -126,6 +126,21 @@ export const SETUP_ITEMS: SetupItem[] = [
     ],
     link: { href: 'https://t.me/BotFather', label: '@BotFather' },
   },
+  {
+    id: 'telegram_finance',
+    label: 'Telegram bot (financeiro)',
+    envVars: ['TELEGRAM_FINANCE_BOT_TOKEN', 'TELEGRAM_FINANCE_WEBHOOK_SECRET', 'TELEGRAM_FINANCE_CHAT_IDS'],
+    priority: 'opcional',
+    steps: [
+      'Telegram → @BotFather → /newbot → copie o token (bot dedicado, diferente do bot da equipe)',
+      'Vercel → TELEGRAM_FINANCE_BOT_TOKEN = token do bot',
+      'Gere TELEGRAM_FINANCE_WEBHOOK_SECRET (string aleatória)',
+      'setWebhook: https://seu-dominio/api/webhooks/telegram-financeiro + secret_token',
+      'TELEGRAM_FINANCE_CHAT_IDS = IDs de quem pode consultar financeiro/estoque pelo bot',
+      'Comandos: /financeiro (receita/despesas/margem) e /estoque (valor + alertas)',
+    ],
+    link: { href: 'https://t.me/BotFather', label: '@BotFather' },
+  },
 ]
 
 export function isItemConfigured(
@@ -135,7 +150,14 @@ export function isItemConfigured(
     claude: { configured: boolean }
     avec: { token: boolean; webhook_secret?: boolean }
     whatsapp: { configured: boolean; webhook_secret?: boolean }
-    telegram: { configured: boolean; webhook_secret?: boolean; staff_whitelist?: boolean }
+    telegram: {
+      configured: boolean
+      webhook_secret?: boolean
+      staff_whitelist?: boolean
+      finance_bot_configured?: boolean
+      finance_bot_webhook_secret?: boolean
+      finance_bot_whitelist?: boolean
+    }
     cron: { configured: boolean }
     auth: { enabled: boolean }
     deployment?: { panel: string }
@@ -163,6 +185,12 @@ export function isItemConfigured(
         health.telegram.configured &&
         Boolean(health.telegram.webhook_secret) &&
         Boolean(health.telegram.staff_whitelist)
+      )
+    case 'telegram_finance':
+      return (
+        Boolean(health.telegram.finance_bot_configured) &&
+        Boolean(health.telegram.finance_bot_webhook_secret) &&
+        Boolean(health.telegram.finance_bot_whitelist)
       )
     default:
       return false
