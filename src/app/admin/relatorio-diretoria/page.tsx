@@ -85,6 +85,14 @@ const MONTHS = buildMonthOptions()
 
 export default function RelatorioDiretoriaPage() {
   const [tab, setTab] = useState<StageTab>('0011')
+  const [canViewRevenue, setCanViewRevenue] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => setCanViewRevenue(Boolean(json.data?.can_view_revenue)))
+      .catch(() => setCanViewRevenue(false))
+  }, [])
 
   // Estado independente por etapa — defaults = período corrente (SP)
   const [proId0011, setProId0011] = useState('')
@@ -329,12 +337,14 @@ export default function RelatorioDiretoriaPage() {
           label="Etapa 1 · 0011"
           hint="Trimestre vs trimestre"
         />
-        <StageTabBtn
-          active={tab === '0021'}
-          onClick={() => setTab('0021')}
-          label="Etapa 2 · 0021"
-          hint="Mês (ou trimestre vs trimestre)"
-        />
+        {canViewRevenue && (
+          <StageTabBtn
+            active={tab === '0021'}
+            onClick={() => setTab('0021')}
+            label="Etapa 2 · 0021"
+            hint="Mês (ou trimestre vs trimestre)"
+          />
+        )}
       </div>
 
       {tab === '0011' && (

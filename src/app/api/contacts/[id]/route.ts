@@ -10,7 +10,7 @@ import {
   setPreferredManicurist,
   setPreferredHairstylist,
 } from '@/lib/contacts'
-import { listServices, autoCompleteServicesOnConversion, pickLastVisit } from '@/lib/services'
+import { listServices, autoCompleteServicesOnConversion, pickLastVisit, computeClientStats } from '@/lib/services'
 import { enrichServices, computeRecommendations } from '@/lib/recommendations'
 import { isNailService, isHairService } from '@/lib/avec/normalize'
 
@@ -76,8 +76,9 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     const recommendations = computeRecommendations(services)
     const events = await listEvents(id)
     const last_visit = pickLastVisit(rawServices)
+    const client_stats = computeClientStats(rawServices)
 
-    return ok({ contact: contactOut, services, recommendations, events, last_visit })
+    return ok({ contact: contactOut, services, recommendations, events, last_visit, client_stats })
   } catch (e) {
     return handleError(e)
   }

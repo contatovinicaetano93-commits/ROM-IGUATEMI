@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Activity } from 'lucide-react'
+import { Activity, Wallet, GraduationCap } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
 import { getBrand } from '@/lib/brand'
@@ -12,6 +12,7 @@ export function DesktopSidebar() {
   const pathname = usePathname()
   const brand = getBrand()
   const [showAdminNav, setShowAdminNav] = useState(false)
+  const [role, setRole] = useState<string | null>(null)
   const navItems = useMemo(
     () =>
       APP_NAV.filter((item) => !('adminOnly' in item) || !item.adminOnly || showAdminNav),
@@ -24,9 +25,45 @@ export function DesktopSidebar() {
       .then((json) => {
         const session = json.data
         setShowAdminNav(!session?.auth_enabled || Boolean(session?.can_view_revenue))
+        setRole(session?.role ?? null)
       })
       .catch(() => setShowAdminNav(false))
   }, [])
+
+  // Financeiro não acessa hoje/contatos/dashboard/admin — nav própria, sem links mortos.
+  if (role === 'financeiro') {
+    return (
+      <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
+        <div className="flex items-baseline gap-1.5 border-b border-border px-6 py-6">
+          <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">{brand.shortMonogram}</span>
+          <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">Financeiro</span>
+        </div>
+        <nav className="flex flex-1 flex-col gap-1 p-4">
+          <Link
+            href="/financeiro"
+            className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+              pathname === '/financeiro' ? 'border border-gold/40 bg-gold/10 text-gold' : 'text-foreground/85 hover:bg-card hover:text-foreground'
+            }`}
+          >
+            <Wallet size={20} strokeWidth={pathname === '/financeiro' ? 2.2 : 1.8} />
+            Financeiro
+          </Link>
+          <Link
+            href="/onboarding"
+            className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+              pathname.startsWith('/onboarding') ? 'border border-gold/40 bg-gold/10 text-gold' : 'text-foreground/85 hover:bg-card hover:text-foreground'
+            }`}
+          >
+            <GraduationCap size={20} strokeWidth={pathname.startsWith('/onboarding') ? 2.2 : 1.8} />
+            Onboarding
+          </Link>
+        </nav>
+        <div className="border-t border-border px-4 py-4">
+          <AdminSessionBar />
+        </div>
+      </aside>
+    )
+  }
 
   return (
     <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
@@ -57,6 +94,15 @@ export function DesktopSidebar() {
       </nav>
 
       <div className="flex flex-col gap-1 px-4 pb-2">
+        {showAdminNav && (
+          <Link
+            href="/financeiro"
+            className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground"
+          >
+            <Wallet size={16} />
+            Financeiro
+          </Link>
+        )}
         <Link
           href={ADMIN_NAV.href}
           className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground ${

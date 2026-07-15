@@ -49,6 +49,7 @@ interface HojeData {
     ticket_avg: number | null
     new_clients: number
   }
+  tm_today: { avg_minutes: number | null; sample_count: number }
   can_view_revenue?: boolean
   role?: 'admin' | 'staff'
   playbook: PlaybookItem[]
@@ -104,7 +105,7 @@ export default function HojePage() {
       )}
 
       {/* KPIs do salão — faturamento só para admin */}
-      <div className={`grid grid-cols-2 gap-3 ${canViewRevenue ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+      <div className={`grid grid-cols-2 gap-3 ${canViewRevenue ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
         {canViewRevenue && (
           <KpiCard
             icon={<DollarSign size={16} />}
@@ -132,7 +133,25 @@ export default function HojePage() {
           loading={loading}
           warn={(salon?.no_shows ?? 0) > 0}
         />
+        <KpiCard
+          icon={<Clock size={16} />}
+          label="TM atendimento"
+          value={
+            loading
+              ? '—'
+              : data?.tm_today.avg_minutes != null
+                ? `${data.tm_today.avg_minutes} min`
+                : '—'
+          }
+          loading={loading}
+        />
       </div>
+
+      {!loading && data && data.tm_today.avg_minutes == null && (
+        <p className="-mt-2 text-[0.7rem] text-muted">
+          TM aguardando início/fim real do atendimento pela Avec (Sprint 1 — AVEC_API_TOKEN pendente).
+        </p>
+      )}
 
       {!loading && (data?.overdue_total ?? 0) > 0 && (
         <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-4">

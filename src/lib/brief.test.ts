@@ -22,6 +22,7 @@ const contact: ContactRow = {
   first_contact_at: new Date().toISOString(),
   last_contact_at: new Date().toISOString(),
   created_at: new Date().toISOString(),
+  anonymized_at: null,
 }
 
 describe('buildRuleBrief', () => {

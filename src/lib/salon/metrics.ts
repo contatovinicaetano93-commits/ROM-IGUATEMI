@@ -11,6 +11,8 @@ export interface SalonDailyMetrics {
   new_clients: number
   returning_clients: number
   ticket_avg: number | null
+  service_duration_sum_minutes: number
+  service_duration_count: number
   updated_at: string
 }
 
@@ -23,6 +25,8 @@ export interface SalonMetricsPatch {
   new_clients?: number
   returning_clients?: number
   ticket_avg?: number | null
+  service_duration_sum_minutes?: number
+  service_duration_count?: number
 }
 
 export async function getSalonMetrics(day = todayIso()): Promise<SalonDailyMetrics | null> {
@@ -49,15 +53,20 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
       : attended > 0
         ? revenue / attended
         : existing?.ticket_avg ?? null
+  const service_duration_sum_minutes =
+    patch.service_duration_sum_minutes ?? existing?.service_duration_sum_minutes ?? 0
+  const service_duration_count = patch.service_duration_count ?? existing?.service_duration_count ?? 0
 
   await sql`
     insert into salon_daily_metrics (
       day, revenue, appointments, attended, no_shows, cancelled,
-      new_clients, returning_clients, ticket_avg, updated_at
+      new_clients, returning_clients, ticket_avg,
+      service_duration_sum_minutes, service_duration_count, updated_at
     )
     values (
       ${day}::date, ${revenue}, ${appointments}, ${attended}, ${no_shows}, ${cancelled},
-      ${new_clients}, ${returning_clients}, ${ticket_avg}, now()
+      ${new_clients}, ${returning_clients}, ${ticket_avg},
+      ${service_duration_sum_minutes}, ${service_duration_count}, now()
     )
     on conflict (day) do update set
       revenue = excluded.revenue,
@@ -68,6 +77,8 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
       new_clients = excluded.new_clients,
       returning_clients = excluded.returning_clients,
       ticket_avg = excluded.ticket_avg,
+      service_duration_sum_minutes = excluded.service_duration_sum_minutes,
+      service_duration_count = excluded.service_duration_count,
       updated_at = now()
   `
 }

@@ -22,6 +22,7 @@ import {
   Pencil,
   Hand,
   Scissors,
+  ShieldOff,
 } from 'lucide-react'
 import {
   StatusPill,
@@ -30,7 +31,7 @@ import {
   CHANNEL_LABEL,
   STATUS_LABEL,
 } from '../../_components/ui'
-import { fmtSchedule, whatsAppUrl } from '@/lib/salon/format'
+import { fmtSchedule, whatsAppUrl, formatCurrency } from '@/lib/salon/format'
 import { CATEGORY_LABEL } from '@/lib/salon/constants'
 import { apiFetch } from '@/lib/api-client'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
@@ -66,6 +67,7 @@ interface Contact {
   notes: string | null
   preferred_manicurist: string | null
   preferred_hairstylist: string | null
+  anonymized_at: string | null
 }
 interface ContactEvent {
   id: string
@@ -76,12 +78,19 @@ interface ContactEvent {
   error: string | null
   created_at: string
 }
+interface ClientStats {
+  ticket_avg: number | null
+  cadence_avg_days: number | null
+  completed_services_count: number
+  ltv_projection: number | null
+}
 interface Profile {
   contact: Contact
   services: Service[]
   recommendations: Recommendation[]
   events: ContactEvent[]
   last_visit: LastVisitData | null
+  client_stats: ClientStats
 }
 
 const STATUS_FLOW = ['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']
@@ -181,6 +190,7 @@ export default function ContactDetailPage() {
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [mutationOk, setMutationOk] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const load = useCallback(async () => {
     const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store' })
@@ -221,7 +231,30 @@ export default function ContactDetailPage() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false))
+
+    apiFetch('/api/auth/session', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => setIsAdmin(Boolean(json.data?.can_view_revenue)))
+      .catch(() => setIsAdmin(false))
   }, [id])
+
+  async function anonymize() {
+    if (
+      !confirm(
+        'Excluir os dados pessoais deste contato (LGPD)? Nome, telefone, e-mail e observações são apagados de forma permanente. Não pode ser desfeito.'
+      )
+    )
+      return
+    await mutate(`/api/contacts/${id}/anonymize`, { method: 'POST' }, 'Dados pessoais removidos.')
+  }
+
+  async function resolveHandoff() {
+    await mutate(
+      `/api/contacts/${id}/resolve-handoff`,
+      { method: 'POST' },
+      'Conversa assumida — a IA volta a responder normal quando você quiser.'
+    )
+  }
 
   useEffect(() => {
     if (!id || loading || error) return
@@ -317,7 +350,14 @@ export default function ContactDetailPage() {
     )
   }
 
-  const { contact, services, recommendations, events, last_visit } = data
+  const { contact, services, recommendations, events, last_visit, client_stats } = data
+  const isAwaitingHuman = (() => {
+    for (const e of events) {
+      if (e.payload?.handoff_resolved === true) return false
+      if (e.payload?.needs_human === true) return true
+    }
+    return false
+  })()
   const clientWhatsAppText = buildClientWhatsAppMessage({
     contact,
     services,
@@ -343,24 +383,55 @@ export default function ContactDetailPage() {
         </div>
       )}
 
+      {isAwaitingHuman && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <div className="flex items-center gap-2">
+            <MessageSquare size={16} className="shrink-0" />
+            <span>Cliente aguardando atendimento humano — a IA parou de responder.</span>
+          </div>
+          <button
+            type="button"
+            onClick={resolveHandoff}
+            className="shrink-0 rounded-full border border-warning/40 bg-warning/15 px-3 py-1.5 text-xs font-semibold text-warning active:bg-warning/25 lg:hover:bg-warning/25"
+          >
+            Assumir conversa
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-8">
         <div className="flex flex-col gap-5 lg:col-span-5 lg:gap-6">
       {/* Perfil */}
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold">{contact.name ?? 'Sem nome'}</h1>
+            <h1 className="truncate text-xl font-semibold">
+              {contact.anonymized_at ? 'Cliente anônimo (LGPD)' : contact.name ?? 'Sem nome'}
+            </h1>
             <p className="mt-0.5 text-xs text-muted">{CHANNEL_LABEL[contact.channel] ?? contact.channel}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="rounded-full border border-border p-2 text-muted active:bg-surface lg:hover:text-foreground"
-              aria-label="Editar contato"
-            >
-              <Pencil size={15} />
-            </button>
+            {!contact.anonymized_at && (
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                className="rounded-full border border-border p-2 text-muted active:bg-surface lg:hover:text-foreground"
+                aria-label="Editar contato"
+              >
+                <Pencil size={15} />
+              </button>
+            )}
+            {isAdmin && !contact.anonymized_at && (
+              <button
+                type="button"
+                onClick={anonymize}
+                className="rounded-full border border-danger/40 p-2 text-danger active:bg-danger/10 lg:hover:bg-danger/10"
+                aria-label="Excluir dados pessoais (LGPD)"
+                title="Excluir dados pessoais (LGPD)"
+              >
+                <ShieldOff size={15} />
+              </button>
+            )}
             <StatusPill status={contact.status} />
           </div>
         </div>
@@ -396,6 +467,43 @@ export default function ContactDetailPage() {
       </div>
 
       <LastVisitCard visit={last_visit} />
+
+      {/* Ficha do cliente (Sprint 3) */}
+      {(client_stats.ticket_avg != null ||
+        client_stats.cadence_avg_days != null ||
+        client_stats.completed_services_count > 0) && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+            <p className="text-[0.65rem] uppercase tracking-wide text-muted">Ticket médio</p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">
+              {client_stats.ticket_avg != null ? formatCurrency(client_stats.ticket_avg) : '—'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+            <p className="text-[0.65rem] uppercase tracking-wide text-muted">Cadência esperada</p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">
+              {client_stats.cadence_avg_days != null ? `${client_stats.cadence_avg_days}d` : '—'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+            <p className="text-[0.65rem] uppercase tracking-wide text-muted">Serviços realizados</p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">{client_stats.completed_services_count}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+            <p className="text-[0.65rem] uppercase tracking-wide text-muted">
+              LTV projetado (2a)
+            </p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">
+              {client_stats.ltv_projection != null ? formatCurrency(client_stats.ltv_projection) : '—'}
+            </p>
+          </div>
+        </div>
+      )}
+      {client_stats.ltv_projection != null && (
+        <p className="-mt-3 text-[0.65rem] text-muted">
+          LTV é projeção (ticket médio × frequência × 2 anos), não histórico real de gasto.
+        </p>
+      )}
 
       {/* Status guiado */}
       <SectionCard title="Status do atendimento">

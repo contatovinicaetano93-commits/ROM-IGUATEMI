@@ -16,7 +16,8 @@ export function verifyWhatsAppWebhook(req: NextRequest): { ok: true } | { ok: fa
     headerSecret(req, 'x-whatsapp-secret') ||
     headerSecret(req, 'x-webhook-secret') ||
     headerSecret(req, 'x-evolution-secret') ||
-    headerSecret(req, 'authorization').replace(/^Bearer\s+/i, '')
+    headerSecret(req, 'authorization').replace(/^Bearer\s+/i, '') ||
+    (req.nextUrl.searchParams.get('secret')?.trim() ?? '')
 
   if (got !== expected) return { ok: false, reason: 'Secret inválido' }
   return { ok: true }
@@ -42,6 +43,19 @@ export function verifyTelegramWebhook(req: NextRequest): { ok: true } | { ok: fa
   const expected = process.env.TELEGRAM_WEBHOOK_SECRET?.trim()
   if (!expected) {
     if (isProduction()) return { ok: false, reason: 'TELEGRAM_WEBHOOK_SECRET não configurado' }
+    return { ok: true }
+  }
+
+  if (headerSecret(req, 'x-telegram-bot-api-secret-token') !== expected) {
+    return { ok: false, reason: 'Secret inválido' }
+  }
+  return { ok: true }
+}
+
+export function verifyTelegramStaffWebhook(req: NextRequest): { ok: true } | { ok: false; reason: string } {
+  const expected = process.env.TELEGRAM_STAFF_WEBHOOK_SECRET?.trim()
+  if (!expected) {
+    if (isProduction()) return { ok: false, reason: 'TELEGRAM_STAFF_WEBHOOK_SECRET não configurado' }
     return { ok: true }
   }
 

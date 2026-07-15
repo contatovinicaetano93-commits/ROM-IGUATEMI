@@ -26,13 +26,16 @@ export class EvolutionApiAdapter implements WhatsAppAdapter {
   }
 
   async sendMessage(to: string, text: string): Promise<void> {
+    // Evolution API espera só dígitos (ex: 5511999998888) — número com "+" é aceito
+    // sem erro pela API mas a mensagem não é entregue de verdade.
+    const number = to.replace(/\D/g, '')
     const res = await fetch(`${this.baseUrl}/message/sendText/${this.instance}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: this.apiKey,
       },
-      body: JSON.stringify({ number: to, text }),
+      body: JSON.stringify({ number, text }),
     })
 
     if (!res.ok) {

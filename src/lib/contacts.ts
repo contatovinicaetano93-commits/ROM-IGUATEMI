@@ -52,6 +52,7 @@ export interface ContactRow {
   first_contact_at: string
   last_contact_at: string
   created_at: string
+  anonymized_at: string | null
 }
 
 // Fluxo guiado: todo contato novo entra como "novo", sobe pro mesmo registro
@@ -140,6 +141,36 @@ export async function getContactById(id: string): Promise<ContactRow | null> {
   const sql = getSql()
   const rows = (await sql`select * from contacts where id = ${id} limit 1`) as ContactRow[]
   return rows[0] ?? null
+}
+
+/**
+ * LGPD (direito ao esquecimento / retenção automática) — remove PII do contato.
+ * Zera phone/avec_client_id de propósito: são as chaves que o upsertContact usa
+ * pra casar um sync novo com essa linha, então zerá-las já impede re-identificação
+ * futura sem precisar de guarda extra no upsert.
+ */
+export async function anonymizeContact(id: string): Promise<ContactRow | null> {
+  const sql = getSql()
+  const rows = (await sql`
+    update contacts
+    set name = null,
+        phone = null,
+        email = null,
+        notes = null,
+        avec_client_id = null,
+        preferred_manicurist = null,
+        preferred_hairstylist = null,
+        anonymized_at = now()
+    where id = ${id} and anonymized_at is null
+    returning *
+  `) as ContactRow[]
+  if (!rows[0]) return null
+
+  await sql`delete from contact_brief_cache where contact_id = ${id}`
+  await sql`delete from contact_events where contact_id = ${id}`
+  await sql`update client_services set notes = null, product = null where contact_id = ${id}`
+
+  return rows[0]
 }
 
 export interface ContactEventRow {

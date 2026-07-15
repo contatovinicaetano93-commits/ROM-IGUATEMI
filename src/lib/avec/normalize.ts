@@ -100,6 +100,28 @@ export interface NormalizedAvecAttendance {
   attendedAt: string | null
   professional: string | null
   price: number | null
+  /** Início/fim reais do atendimento — só preenchido se a Avec mandar os dois (Sprint 1 TM). */
+  startedAt: string | null
+  endedAt: string | null
+  /** null quando não dá pra calcular (falta início/fim, ou intervalo fora do razoável). */
+  durationMinutes: number | null
+}
+
+/**
+ * Duração só é aceita entre 1 min e 8h — fora disso é mais provável erro de
+ * dado (ex: fim sem data, cruzando meia-noite mal parseado) do que atendimento real.
+ */
+const MIN_DURATION_MINUTES = 1
+const MAX_DURATION_MINUTES = 8 * 60
+
+function computeDurationMinutes(startedAt: string | null, endedAt: string | null): number | null {
+  if (!startedAt || !endedAt) return null
+  const start = new Date(startedAt).getTime()
+  const end = new Date(endedAt).getTime()
+  if (Number.isNaN(start) || Number.isNaN(end)) return null
+  const minutes = (end - start) / 60000
+  if (minutes < MIN_DURATION_MINUTES || minutes > MAX_DURATION_MINUTES) return null
+  return Math.round(minutes)
 }
 
 export interface NormalizedAvecRevenue {
@@ -208,9 +230,55 @@ export function normalizeAttendanceRow(row: Record<string, unknown>): Normalized
     pickRaw(row, ['valor', 'preco', 'preço', 'valor_servico', 'valor_serviço', 'price', 'amount', 'total'])
   )
 
+  // Nomes especulativos — a Avec pode não mandar nenhum destes hoje (é exatamente
+  // a dúvida do Sprint 1). Se não vier, startedAt/endedAt ficam null e durationMinutes
+  // também — sem inventar dado.
+  const startTimePart = pick(row, [
+    'hora_inicio',
+    'horario_inicio',
+    'horário_inicio',
+    'inicio',
+    'início',
+    'check_in',
+    'checkin',
+    'hora_entrada',
+    'hora_chegada',
+    'entrada',
+  ])
+  const endTimePart = pick(row, [
+    'hora_fim',
+    'horario_fim',
+    'horário_fim',
+    'fim',
+    'termino',
+    'término',
+    'check_out',
+    'checkout',
+    'hora_saida',
+    'hora_saída',
+    'saida',
+    'saída',
+    'hora_conclusao',
+    'hora_conclusão',
+  ])
+  const startedAt = startTimePart ? parseAvecDateTime(datePart, startTimePart) : null
+  const endedAt = endTimePart ? parseAvecDateTime(datePart, endTimePart) : null
+  const durationMinutes = computeDurationMinutes(startedAt, endedAt)
+
   if (!avecClientId && !clientName && !phone) return null
 
-  return { avecClientId, clientName, phone, serviceName, attendedAt, professional, price }
+  return {
+    avecClientId,
+    clientName,
+    phone,
+    serviceName,
+    attendedAt,
+    professional,
+    price,
+    startedAt,
+    endedAt,
+    durationMinutes,
+  }
 }
 
 function parseMoney(raw: unknown): number {

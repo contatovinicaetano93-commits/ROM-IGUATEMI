@@ -44,8 +44,16 @@ export async function GET(req: NextRequest) {
       new_clients: leads.novos,
       returning_clients: 0,
       ticket_avg: null,
+      service_duration_sum_minutes: 0,
+      service_duration_count: 0,
       updated_at: new Date().toISOString(),
     }
+
+    // TM (Sprint 1) — null enquanto a Avec não mandar início/fim reais do atendimento.
+    const tmTodayMinutes =
+      salonBase.service_duration_count > 0
+        ? Math.round((salonBase.service_duration_sum_minutes / salonBase.service_duration_count) * 10) / 10
+        : null
 
     const salon = auth.session.can_view_revenue
       ? salonBase
@@ -63,6 +71,7 @@ export async function GET(req: NextRequest) {
     return ok({
       day,
       salon,
+      tm_today: { avg_minutes: tmTodayMinutes, sample_count: salonBase.service_duration_count },
       intelligence,
       can_view_revenue: auth.session.can_view_revenue,
       role: auth.session.role,

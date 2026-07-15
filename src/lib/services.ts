@@ -62,6 +62,49 @@ export async function getLastVisit(contactId: string): Promise<LastVisit | null>
   return pickLastVisit(await listServices(contactId))
 }
 
+/** Horizonte da projeção de LTV, em anos — acordado com o Vini (Sprint 3). */
+export const LTV_HORIZON_YEARS = 2
+
+export interface ClientStats {
+  /** Média de last_price entre os serviços com preço registrado — null se nenhum tiver preço. */
+  ticket_avg: number | null
+  /** Média de cadence_days definida pelo salão nos serviços ativos — não é frequência real medida
+   *  (client_services guarda só a última ocorrência de cada serviço, não um log de visitas). */
+  cadence_avg_days: number | null
+  /** Serviços distintos com pelo menos uma execução registrada (não é contagem de visitas). */
+  completed_services_count: number
+  /**
+   * Projeção, não histórico real: ticket_avg × (365 / cadence_avg_days) × LTV_HORIZON_YEARS.
+   * Não existe log de receita por cliente hoje (client_services só guarda o último preço de
+   * cada serviço) — quando isso existir, dá pra trocar por LTV medido de verdade.
+   */
+  ltv_projection: number | null
+}
+
+/** Ficha do cliente (Sprint 3). LTV é projeção — ver ClientStats.ltv_projection. */
+export function computeClientStats(services: ClientService[]): ClientStats {
+  const priced = services.filter((s) => s.last_price != null && Number(s.last_price) > 0)
+  const ticket_avg =
+    priced.length > 0
+      ? Math.round((priced.reduce((sum, s) => sum + Number(s.last_price), 0) / priced.length) * 100) / 100
+      : null
+
+  const withCadence = services.filter((s) => s.active && s.cadence_days != null && s.cadence_days > 0)
+  const cadence_avg_days =
+    withCadence.length > 0
+      ? Math.round(withCadence.reduce((sum, s) => sum + (s.cadence_days ?? 0), 0) / withCadence.length)
+      : null
+
+  const completed_services_count = services.filter((s) => s.last_done_at).length
+
+  const ltv_projection =
+    ticket_avg != null && cadence_avg_days != null && cadence_avg_days > 0
+      ? Math.round(ticket_avg * (365 / cadence_avg_days) * LTV_HORIZON_YEARS)
+      : null
+
+  return { ticket_avg, cadence_avg_days, completed_services_count, ltv_projection }
+}
+
 interface AddServiceInput {
   name: string
   category: ServiceCategory
@@ -217,6 +260,22 @@ export async function autoCompleteServicesOnConversion(contactId: string): Promi
     marked.push(s.name)
   }
   return marked
+}
+
+/** Agenda do dia de um profissional específico — usado pelo bot Telegram de funcionários. */
+export async function listTodayScheduleForProfessional(professionalName: string): Promise<ScheduledServiceRow[]> {
+  const sql = getSql()
+  return (await sql`
+    select cs.*, c.name as contact_name
+    from client_services cs
+    join contacts c on c.id = cs.contact_id
+    where cs.active = true
+      and cs.scheduled_at is not null
+      and lower(cs.professional_name) = lower(${professionalName})
+      and cs.scheduled_at >= date_trunc('day', now())
+      and cs.scheduled_at < date_trunc('day', now()) + interval '1 day'
+    order by cs.scheduled_at asc
+  `) as ScheduledServiceRow[]
 }
 
 // Próximos agendamentos globais — painel e lembretes visuais.

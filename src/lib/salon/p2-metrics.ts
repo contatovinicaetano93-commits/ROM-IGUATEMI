@@ -29,6 +29,31 @@ export interface SalonP2Daily {
   updated_at: string
 }
 
+/** Agrega payment_mix (relatório 0081 da Avec) por método de pagamento num período — para reconciliação no Financeiro. */
+export async function getPaymentMixRange(from: string, to: string): Promise<P2PaymentRow[]> {
+  const sql = getSql()
+  const rows = (await sql`
+    select payment_mix from salon_p2_daily
+    where day >= ${from}::date and day <= ${to}::date
+  `) as { payment_mix: P2PaymentRow[] }[]
+
+  const totals = new Map<string, number>()
+  for (const row of rows) {
+    for (const p of row.payment_mix ?? []) {
+      totals.set(p.method, (totals.get(p.method) ?? 0) + Number(p.amount))
+    }
+  }
+
+  const total = [...totals.values()].reduce((a, b) => a + b, 0)
+  return [...totals.entries()]
+    .map(([method, amount]) => ({
+      method,
+      amount: Math.round(amount * 100) / 100,
+      share: total > 0 ? Math.round((amount / total) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+}
+
 export async function ensureSalonP2Table() {
   const sql = getSql()
   await sql`

@@ -246,6 +246,8 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   await snapshotReport('0002', params, result.rows, stats, syncRunId)
 
   const today = todayIso()
+  let durationSumMinutes = 0
+  let durationCount = 0
 
   for (const row of result.rows) {
     try {
@@ -254,6 +256,12 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
 
       if (mode === 'fast' && att.attendedAt) {
         if (toSalonDateIso(att.attendedAt) !== today) continue
+      }
+
+      // TM (Sprint 1) — só soma se a Avec mandou início+fim reais e o atendimento foi hoje.
+      if (att.durationMinutes != null && att.attendedAt && toSalonDateIso(att.attendedAt) === today) {
+        durationSumMinutes += att.durationMinutes
+        durationCount++
       }
 
       const contact = await upsertContact({
@@ -287,6 +295,13 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     } catch (e) {
       stats.errors.push(`atendimento: ${e instanceof Error ? e.message : String(e)}`)
     }
+  }
+
+  if (durationCount > 0) {
+    await upsertSalonMetrics(today, {
+      service_duration_sum_minutes: durationSumMinutes,
+      service_duration_count: durationCount,
+    })
   }
 }
 

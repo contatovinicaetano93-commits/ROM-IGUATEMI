@@ -4,7 +4,7 @@ import { isProduction } from '@/lib/env'
 export const AUTH_COOKIE = 'rom_session'
 const DEFAULT_ADMIN_USER = 'admin'
 
-export type AuthRole = 'admin' | 'staff'
+export type AuthRole = 'admin' | 'staff' | 'financeiro'
 
 export interface AuthSession {
   user: string
@@ -53,6 +53,14 @@ export function getStaffPassword() {
   return (process.env.ROM_STAFF_PASSWORD ?? '').trim()
 }
 
+export function getFinanceUser() {
+  return (process.env.ROM_FINANCE_USER ?? '').trim()
+}
+
+export function getFinancePassword() {
+  return (process.env.ROM_FINANCE_PASSWORD ?? '').trim()
+}
+
 function listAccounts(): Account[] {
   const accounts: Account[] = []
   const adminPass = getAdminPassword()
@@ -64,6 +72,11 @@ function listAccounts(): Account[] {
   if (staffUser && staffPass) {
     accounts.push({ user: staffUser, password: staffPass, role: 'staff' })
   }
+  const financeUser = getFinanceUser()
+  const financePass = getFinancePassword()
+  if (financeUser && financePass) {
+    accounts.push({ user: financeUser, password: financePass, role: 'financeiro' })
+  }
   return accounts
 }
 
@@ -73,6 +86,10 @@ export function isAuthEnabled() {
 
 export function isStaffAuthConfigured() {
   return Boolean(getStaffUser() && getStaffPassword())
+}
+
+export function isFinanceAuthConfigured() {
+  return Boolean(getFinanceUser() && getFinancePassword())
 }
 
 export function canViewRevenue(role: AuthRole | null | undefined) {
@@ -182,6 +199,16 @@ export async function requireAdmin(req: NextRequest) {
   if (!auth.ok) return auth
   if (auth.session.role !== 'admin') {
     return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao admin operacional' }
+  }
+  return auth
+}
+
+/** Painel Financeiro (Sprint 4) — admin ou financeiro. Staff nunca acessa. */
+export async function requireFinance(req: NextRequest) {
+  const auth = await requireSession(req)
+  if (!auth.ok) return auth
+  if (auth.session.role !== 'admin' && auth.session.role !== 'financeiro') {
+    return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao financeiro' }
   }
   return auth
 }

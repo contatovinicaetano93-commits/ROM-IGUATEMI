@@ -1,5 +1,5 @@
-export async function sendTelegramMessage(chatId: number | string, text: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN
+export async function sendTelegramMessage(chatId: number | string, text: string, botToken?: string) {
+  const token = botToken ?? process.env.TELEGRAM_BOT_TOKEN
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN não configurado')
 
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {

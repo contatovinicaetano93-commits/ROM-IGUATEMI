@@ -105,3 +105,52 @@ export async function getSalonP1Daily(day: string): Promise<SalonP1Daily | null>
     return null
   }
 }
+
+/**
+ * syncP1Kpis grava um snapshot por dia, mas cada snapshot já é uma janela
+ * rolante de 30 dias (não um delta diário) — então "comparação de período"
+ * aqui é o snapshot mais recente vs o snapshot disponível mais próximo de N
+ * dias atrás, não meses de calendário como no TM.
+ */
+export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Daily | null> {
+  const sql = getSql()
+  try {
+    const rows = (await sql`
+      select
+        day::text as day,
+        professionals,
+        services,
+        acquisition,
+        reactivation_count,
+        updated_at
+      from salon_p1_daily
+      where day <= ${targetDay}::date
+      order by day desc
+      limit 1
+    `) as SalonP1Daily[]
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
+
+export async function getLatestSalonP1Daily(): Promise<SalonP1Daily | null> {
+  const sql = getSql()
+  try {
+    const rows = (await sql`
+      select
+        day::text as day,
+        professionals,
+        services,
+        acquisition,
+        reactivation_count,
+        updated_at
+      from salon_p1_daily
+      order by day desc
+      limit 1
+    `) as SalonP1Daily[]
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
