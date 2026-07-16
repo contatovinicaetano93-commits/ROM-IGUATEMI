@@ -6,6 +6,7 @@ import { getBrand, getRomPanelId } from '@/lib/brand'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
+import { calculateSyncStatus, formatSyncAge, type SyncStatus } from '@/lib/health-utils'
 
 function envOk(name: string) {
   return Boolean(process.env[name]?.trim())
@@ -87,8 +88,8 @@ export async function getHealthStatus() {
       token: envOk('AVEC_API_TOKEN'),
       webhook_secret: envOk('AVEC_WEBHOOK_SECRET'),
       webhook_url: '/api/webhooks/avec',
-      last_fast: lastFast,
-      last_full: lastFull,
+      sync_fast: calculateSyncStatus(lastFast?.last_sync_at ?? null, lastFast?.error ?? null),
+      sync_full: calculateSyncStatus(lastFull?.last_sync_at ?? null, lastFull?.error ?? null),
       kpi_layers: kpiLayers,
     },
     whatsapp: {
@@ -117,8 +118,8 @@ export async function getHealthStatus() {
       avec_secret: envOk('AVEC_WEBHOOK_SECRET'),
     },
     stock: {
-      last_fast: stockLastFast,
-      last_full: stockLastFull,
+      sync_fast: calculateSyncStatus(stockLastFast?.last_sync_at ?? null, stockLastFast?.error ?? null),
+      sync_full: calculateSyncStatus(stockLastFull?.last_sync_at ?? null, stockLastFull?.error ?? null),
     },
   }
 }
