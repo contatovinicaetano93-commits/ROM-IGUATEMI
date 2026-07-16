@@ -4,7 +4,7 @@ import { isProduction } from '@/lib/env'
 export const AUTH_COOKIE = 'rom_session'
 const DEFAULT_ADMIN_USER = 'admin'
 
-export type AuthRole = 'admin' | 'staff' | 'financeiro'
+export type AuthRole = 'admin' | 'staff' | 'financeiro' | 'estoque'
 
 export interface AuthSession {
   user: string
@@ -61,6 +61,14 @@ export function getFinancePassword() {
   return (process.env.ROM_FINANCE_PASSWORD ?? '').trim()
 }
 
+export function getStockUser() {
+  return (process.env.ROM_STOCK_USER ?? '').trim()
+}
+
+export function getStockPassword() {
+  return (process.env.ROM_STOCK_PASSWORD ?? '').trim()
+}
+
 function listAccounts(): Account[] {
   const accounts: Account[] = []
   const adminPass = getAdminPassword()
@@ -77,6 +85,11 @@ function listAccounts(): Account[] {
   if (financeUser && financePass) {
     accounts.push({ user: financeUser, password: financePass, role: 'financeiro' })
   }
+  const stockUser = getStockUser()
+  const stockPass = getStockPassword()
+  if (stockUser && stockPass) {
+    accounts.push({ user: stockUser, password: stockPass, role: 'estoque' })
+  }
   return accounts
 }
 
@@ -90,6 +103,10 @@ export function isStaffAuthConfigured() {
 
 export function isFinanceAuthConfigured() {
   return Boolean(getFinanceUser() && getFinancePassword())
+}
+
+export function isStockAuthConfigured() {
+  return Boolean(getStockUser() && getStockPassword())
 }
 
 export function canViewRevenue(role: AuthRole | null | undefined) {
@@ -209,6 +226,16 @@ export async function requireFinance(req: NextRequest) {
   if (!auth.ok) return auth
   if (auth.session.role !== 'admin' && auth.session.role !== 'financeiro') {
     return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao financeiro' }
+  }
+  return auth
+}
+
+/** Painel Estoque — admin, financeiro (acesso duplo) ou estoque. Staff nunca acessa. */
+export async function requireStock(req: NextRequest) {
+  const auth = await requireSession(req)
+  if (!auth.ok) return auth
+  if (auth.session.role !== 'admin' && auth.session.role !== 'financeiro' && auth.session.role !== 'estoque') {
+    return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao estoque' }
   }
   return auth
 }
