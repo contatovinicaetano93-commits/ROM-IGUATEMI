@@ -210,32 +210,32 @@ export async function requireSession(req: NextRequest) {
   return { ok: true as const, session }
 }
 
+/** Factory para criar validadores de role. */
+function createRoleValidator(
+  allowedRoles: AuthRole[],
+  restrictionMessage: string,
+) {
+  return async (req: NextRequest) => {
+    const auth = await requireSession(req)
+    if (!auth.ok) return auth
+    if (!allowedRoles.includes(auth.session.role)) {
+      return { ok: false as const, status: 403 as const, message: restrictionMessage }
+    }
+    return auth
+  }
+}
+
 /** Relatórios financeiros / diretoria — só admin. */
 export async function requireAdmin(req: NextRequest) {
-  const auth = await requireSession(req)
-  if (!auth.ok) return auth
-  if (auth.session.role !== 'admin') {
-    return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao admin operacional' }
-  }
-  return auth
+  return createRoleValidator(['admin'], 'Acesso restrito ao admin operacional')(req)
 }
 
 /** Painel Financeiro (Sprint 4) — admin ou financeiro. Staff nunca acessa. */
 export async function requireFinance(req: NextRequest) {
-  const auth = await requireSession(req)
-  if (!auth.ok) return auth
-  if (auth.session.role !== 'admin' && auth.session.role !== 'financeiro') {
-    return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao financeiro' }
-  }
-  return auth
+  return createRoleValidator(['admin', 'financeiro'], 'Acesso restrito ao financeiro')(req)
 }
 
 /** Painel Estoque — admin, financeiro (acesso duplo) ou estoque. Staff nunca acessa. */
 export async function requireStock(req: NextRequest) {
-  const auth = await requireSession(req)
-  if (!auth.ok) return auth
-  if (auth.session.role !== 'admin' && auth.session.role !== 'financeiro' && auth.session.role !== 'estoque') {
-    return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao estoque' }
-  }
-  return auth
+  return createRoleValidator(['admin', 'financeiro', 'estoque'], 'Acesso restrito ao estoque')(req)
 }
