@@ -43,7 +43,7 @@ export class AuditLogger {
     const sql = getSql()
 
     try {
-      return await sql`select * from audit_logs where user = ${user} order by created_at desc limit ${limit}`
+      return (await sql`select * from audit_logs where user = ${user} order by created_at desc limit ${limit}`) as AuditLog[]
     } catch {
       return []
     }
@@ -53,7 +53,7 @@ export class AuditLogger {
     const sql = getSql()
 
     try {
-      return await sql`select * from audit_logs where action = ${action} order by created_at desc limit ${limit}`
+      return (await sql`select * from audit_logs where action = ${action} order by created_at desc limit ${limit}`) as AuditLog[]
     } catch {
       return []
     }
@@ -64,11 +64,11 @@ export class AuditLogger {
     const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString()
 
     try {
-      return await sql`
+      return (await sql`
         select * from audit_logs
         where status = 'error' and created_at > ${since}
         order by created_at desc
-      `
+      `) as AuditLog[]
     } catch {
       return []
     }

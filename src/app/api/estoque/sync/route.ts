@@ -4,6 +4,7 @@ import { requireStock } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { runStockSync, type StockSyncMode } from '@/lib/avec/sync-stock'
+import { CircuitBreaker } from '@/lib/circuit-breaker'
 
 /** Sync de estoque pode demorar (vários relatórios paginados). */
 export const maxDuration = 300
@@ -21,8 +22,19 @@ async function execute(req: NextRequest, cron: boolean) {
   }
 
   const mode = parseMode(req)
-  const run = await runStockSync(mode)
-  return ok({ ...run, mode })
+  const jobKey = `stock_sync_${mode}`
+
+  try {
+    const run = await CircuitBreaker.execute(jobKey, () => runStockSync(mode), {
+      timeoutMs: 5 * 60 * 1000, // 5 minutes max
+    })
+    return ok({ ...run, mode })
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('already running')) {
+      return err(e.message, 429)
+    }
+    throw e
+  }
 }
 
 /** Vercel Cron dispara via GET com Authorization: Bearer CRON_SECRET (mesmo padrão de /api/avec/sync). */

@@ -53,15 +53,8 @@ export type HealthQuery = z.infer<typeof HealthQuerySchema>
 // Cron Webhook Schemas
 export const CronWebhookSchema = z.object({
   secret: z.string(),
-  job: z.enum(['sync_fast', 'sync_full', 'sync_stock_fast', 'sync_stock_full']).optional(),
 })
 export type CronWebhook = z.infer<typeof CronWebhookSchema>
-
-export const AvecWebhookSchema = z.object({
-  signature: z.string().optional(),
-  body: z.record(z.any()),
-})
-export type AvecWebhook = z.infer<typeof AvecWebhookSchema>
 
 // Validation Helpers
 export function parseRequestBody<T extends z.ZodTypeAny>(schema: T, body: unknown): z.infer<T> {
@@ -80,7 +73,7 @@ export function validateRequest<T extends z.ZodTypeAny>(
     return { valid: true, data: schema.parse(data) }
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return { valid: false, error: e.errors[0]?.message || 'Validation error' }
+      return { valid: false, error: e.issues[0]?.message || 'Validation error' }
     }
     return { valid: false, error: 'Unknown validation error' }
   }

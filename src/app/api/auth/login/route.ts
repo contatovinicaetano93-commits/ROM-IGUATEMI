@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
   const validation = LoginRequestSchema.safeParse(body)
   if (!validation.success) {
-    return err(validation.error.errors[0]?.message || 'Dados inválidos', 400)
+    return err(validation.error.issues[0]?.message || 'Dados inválidos', 400)
   }
 
   const { user: username, password } = validation.data
