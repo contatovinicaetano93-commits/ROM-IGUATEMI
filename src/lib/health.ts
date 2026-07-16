@@ -6,7 +6,6 @@ import { getBrand, getRomPanelId } from '@/lib/brand'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
-import { calculateSyncStatus, formatSyncAge, type SyncStatus } from '@/lib/health-utils'
 
 function envOk(name: string) {
   return Boolean(process.env[name]?.trim())

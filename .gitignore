@@ -45,6 +45,9 @@ NOTES.md
 next-env.d.ts
 ROM-IGUATEMI/
 
+# graphify (artefato local de análise)
+graphify-out/
+
 # pastas locais fora do app principal
 _wip/
 academy/
