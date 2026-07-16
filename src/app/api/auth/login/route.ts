@@ -7,13 +7,19 @@ import {
   isAuthEnabled,
   validateCredentials,
 } from '@/lib/auth'
+import { LoginRequestSchema } from '@/lib/schemas'
 
 export async function POST(req: NextRequest) {
   if (!isAuthEnabled()) return ok({ auth: 'disabled', role: 'admin', can_view_revenue: true })
 
   const body = await req.json().catch(() => null)
-  const username = typeof body?.username === 'string' ? body.username : ''
-  const password = typeof body?.password === 'string' ? body.password : ''
+
+  const validation = LoginRequestSchema.safeParse(body)
+  if (!validation.success) {
+    return err(validation.error.errors[0]?.message || 'Dados inválidos', 400)
+  }
+
+  const { user: username, password } = validation.data
   const legacyToken = typeof body?.token === 'string' ? body.token : ''
 
   const user = username || getAdminUser()
