@@ -12,14 +12,20 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null)
   const parsed = parseWhatsAppPayload(body)
-  if (!parsed) return err('Payload inválido', 422)
+  if (!parsed) {
+    console.error('[whatsapp webhook] payload não reconhecido:', JSON.stringify(body))
+    return err('Payload inválido', 422)
+  }
 
   const { from, text } = parsed
+  console.log('[whatsapp webhook] inbound:', JSON.stringify({ from, text }))
 
   try {
     const { contactId, reply, intent, handoff } = await handleWhatsAppMessage(from, text)
+    console.log('[whatsapp webhook] resposta gerada:', JSON.stringify({ from, intent, handoff, reply }))
 
     await getWhatsAppAdapter().sendMessage(from, reply)
+    console.log('[whatsapp webhook] enviado via Evolution API para', from)
 
     await logEvent({
       contactId,
@@ -32,6 +38,7 @@ export async function POST(req: NextRequest) {
     return ok({ replied: true, intent, handoff })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'erro desconhecido'
+    console.error('[whatsapp webhook] falhou:', message)
     await logEvent({
       contactId: null,
       channel: 'whatsapp',

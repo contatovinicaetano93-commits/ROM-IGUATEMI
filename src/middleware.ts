@@ -99,20 +99,17 @@ export async function middleware(req: NextRequest) {
     !stockPath &&
     !onboardingPath
   ) {
-    if (isProtectedApi(pathname)) {
-      return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
-    }
     return NextResponse.redirect(new URL('/estoque', req.url))
-  }
-  if (stockPath && role !== 'admin' && role !== 'financeiro' && role !== 'estoque') {
-    if (isProtectedApi(pathname)) {
-      return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
-    }
-    return NextResponse.redirect(new URL('/hoje', req.url))
   }
   if (financePath && role !== 'admin' && role !== 'financeiro') {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
+    }
+    return NextResponse.redirect(new URL('/hoje', req.url))
+  }
+  if (stockPath && role !== 'admin' && role !== 'financeiro' && role !== 'estoque') {
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
     }
     return NextResponse.redirect(new URL('/hoje', req.url))
   }
@@ -131,6 +128,8 @@ export const config = {
     '/admin/:path*',
     '/financeiro',
     '/financeiro/:path*',
+    '/estoque',
+    '/estoque/:path*',
     '/onboarding',
     '/onboarding/:path*',
     '/api/:path*',

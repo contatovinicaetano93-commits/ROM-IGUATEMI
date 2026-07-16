@@ -42,7 +42,7 @@ export class AlertManager {
       `
     } catch {
       // Table may not exist in all environments — log locally instead
-      console.warn(`[ALERT] ${type}: ${title} - ${message}`)
+      console.warn(`[ALERT] ${type}: ${title}`)
     }
 
     return alert
