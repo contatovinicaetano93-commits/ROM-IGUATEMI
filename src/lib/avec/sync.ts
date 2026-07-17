@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 import {
   upsertContact,
   updateContact,
@@ -388,6 +389,14 @@ async function syncCancellations(
 }
 
 export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSyncRun> {
+  // Fast e full compartilham o mesmo lease — evita overlap no Neon entre cron/webhook.
+  return withSyncLock(SYNC_LOCK_KEYS.avec, () => runAvecSyncUnlocked(mode), {
+    ttlMs: 6 * 60 * 1000,
+    owner: `avec-${mode}`,
+  })
+}
+
+async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
   }
