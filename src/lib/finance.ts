@@ -1,5 +1,9 @@
 import { getSql } from '@/lib/db'
-import { getFiscalSplitSummary, type FiscalSplitSummary } from '@/lib/fiscal-split'
+import {
+  ensureFiscalSplitTable,
+  getFiscalSplitSummary,
+  type FiscalSplitSummary,
+} from '@/lib/fiscal-split'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
 
@@ -164,6 +168,8 @@ export interface FinanceKpis {
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
   const { from, to } = monthRange(monthKey)
+  // Garante a tabela de split fiscal (idempotente) — cobre Neon sem migrate manual.
+  await ensureFiscalSplitTable().catch(() => undefined)
   const [revenue, expenses, payment_mix, fiscal_split] = await Promise.all([
     sumRevenue(from, to),
     sumExpenses(from, to),
