@@ -1,8 +1,21 @@
+import { todayIso } from '@/lib/salon/format'
 import type { FiscalSplitRawPayload, FiscalSplitStatus, NormalizedFiscalSplit } from './types'
 
-function asNumber(value: unknown): number {
+/** Aceita number, "1250.50", "1250,50" e "1.250,50" (BR). */
+export function asNumber(value: unknown): number {
   if (value == null || value === '') return 0
-  const n = typeof value === 'number' ? value : Number(String(value).replace(',', '.'))
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.round(value * 100) / 100 : 0
+  }
+  let s = String(value).trim().replace(/\s/g, '')
+  if (!s) return 0
+  if (s.includes(',') && s.includes('.')) {
+    // Formato BR com milhar: 1.250,50
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.')
+  }
+  const n = Number(s)
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0
 }
 
@@ -42,7 +55,6 @@ function resolveStatus(payload: FiscalSplitRawPayload, cbs: number, ibs: number,
   }
   const retained = cbs + ibs
   if (paid <= 0 && retained <= 0) return 'pending'
-  if (retained > 0 && retained < paid) return 'settled'
   if (retained > 0) return 'settled'
   return 'partial'
 }
@@ -69,7 +81,8 @@ export function normalizeSplitSettlement(payload: FiscalSplitRawPayload): Normal
     ibsAmount,
     netAmount,
     status: resolveStatus(payload, cbsAmount, ibsAmount, paidAmount),
-    settledAt: pickDate(payload),
+    // Sem data no payload → usa hoje (evita settlement invisível no KPI).
+    settledAt: pickDate(payload) ?? todayIso(),
     rawPayload: { ...payload },
   }
 }
