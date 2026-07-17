@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, X, PackagePlus, PackageMinus, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { Plus, X, PackagePlus, PackageMinus, RefreshCw, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 import { SectionCard, PrimaryButton, InfoBanner, CountBadge } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency } from '@/lib/salon/format'
@@ -89,12 +89,48 @@ function SyncBadge({ status }: { status: SyncStatus | null }) {
   return <CountBadge value={`Sincronizado ${timeAgo(run.created_at)}`} tone={run.status === 'partial' ? 'gold' : 'success'} />
 }
 
-function StockKpiCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'warning' }) {
+function StockKpiCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'warning' | 'success' }) {
+  const subTone = tone === 'warning' ? 'text-warning' : tone === 'success' ? 'text-success' : 'text-muted'
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <p className="text-[0.65rem] uppercase tracking-wide text-muted">{label}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
-      {sub && <p className={`mt-1 text-xs font-medium ${tone === 'warning' ? 'text-warning' : 'text-muted'}`}>{sub}</p>}
+      {sub && <p className={`mt-1 text-xs font-medium ${subTone}`}>{sub}</p>}
+    </div>
+  )
+}
+
+/** Total oficial da Avec (0045) + drift vs. valor computado localmente. */
+function valueCardSub(kpis: StockKpis | null): { sub?: string; tone?: 'warning' | 'success' } {
+  if (!kpis || kpis.avec_official_total == null) return {}
+  const officialLabel = `Avec: ${formatCurrency(kpis.avec_official_total)}`
+  if (kpis.drift != null && Math.abs(kpis.drift) > 50) {
+    return { sub: `${officialLabel} · diferença de ${formatCurrency(Math.abs(kpis.drift))}`, tone: 'warning' }
+  }
+  return { sub: `Confere com a Avec (${officialLabel})`, tone: 'success' }
+}
+
+/** Barras de valorização (categoria/marca) — usa a % oficial da Avec quando existe, senão a fração do total. */
+function ValuationBars({ buckets }: { buckets: StockValuationBucket[] }) {
+  const total = buckets.reduce((sum, b) => sum + b.totalCost, 0)
+  return (
+    <div className="flex flex-col gap-2.5">
+      {buckets.map((b) => {
+        const pct = b.percentage ?? (total > 0 ? (b.totalCost / total) * 100 : 0)
+        return (
+          <div key={b.key} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium">{b.key}</span>
+              <span className="tabular-nums text-muted">
+                {formatCurrency(b.totalCost)} · {pct.toFixed(1)}%
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
+              <div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(pct, 100)}%` }} />
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -108,6 +144,7 @@ export default function EstoquePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [showBrands, setShowBrands] = useState(false)
   const [syncing, setSyncing] = useState(false)
 
   const load = useCallback(async () => {
@@ -209,12 +246,7 @@ export default function EstoquePage() {
         <StockKpiCard
           label="Valor em estoque"
           value={loading || !kpis ? '—' : formatCurrency(kpis.total_value)}
-          sub={
-            kpis?.drift != null && Math.abs(kpis.drift) > 50
-              ? `Diferença de ${formatCurrency(Math.abs(kpis.drift))} vs. total oficial da Avec`
-              : undefined
-          }
-          tone={kpis?.drift != null && Math.abs(kpis.drift) > 50 ? 'warning' : undefined}
+          {...(loading ? {} : valueCardSub(kpis))}
         />
         <StockKpiCard label="Alertas ativos" value={loading || !kpis ? '—' : String(kpis.active_alerts)} />
         <StockKpiCard
@@ -254,22 +286,21 @@ export default function EstoquePage() {
 
       {!loading && kpis && kpis.by_category.length > 0 && (
         <SectionCard title="Valor por categoria">
-          <div className="flex flex-col gap-2.5">
-            {kpis.by_category.map((c) => {
-              const max = Math.max(...kpis.by_category.map((b) => b.totalCost), 1)
-              return (
-                <div key={c.key} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{c.key}</span>
-                    <span className="tabular-nums text-muted">{formatCurrency(c.totalCost)}</span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
-                    <div className="h-full rounded-full bg-gold" style={{ width: `${(c.totalCost / max) * 100}%` }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <ValuationBars buckets={kpis.by_category} />
+        </SectionCard>
+      )}
+
+      {!loading && kpis && kpis.by_brand.length > 0 && (
+        <SectionCard title="Valor por marca">
+          <button
+            type="button"
+            onClick={() => setShowBrands((v) => !v)}
+            className="mb-1 flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
+          >
+            {showBrands ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            {showBrands ? 'Ocultar' : `Ver ${kpis.by_brand.length} marcas`}
+          </button>
+          {showBrands && <ValuationBars buckets={kpis.by_brand} />}
         </SectionCard>
       )}
 
