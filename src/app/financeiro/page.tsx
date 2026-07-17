@@ -7,6 +7,15 @@ import { PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency, todayIso } from '@/lib/salon/format'
 
+interface FiscalSplitSummary {
+  gross_paid: number
+  cbs_retained: number
+  ibs_retained: number
+  net_received: number
+  pending_count: number
+  settled_count: number
+  configured: boolean
+}
 interface FinanceKpiBucket {
   month: string
   label: string
@@ -17,6 +26,7 @@ interface FinanceKpiBucket {
   gross_margin: number | null
   cash_flow: number
   payment_mix: { method: string; amount: number; share: number }[]
+  fiscal_split: FiscalSplitSummary
 }
 interface FinanceKpis {
   current: FinanceKpiBucket
@@ -281,6 +291,55 @@ export default function FinanceiroPage() {
         <p className="-mt-3 text-xs text-muted">
           Margem bruta e fluxo dependem do faturamento sincronizado pela Avec — ainda sem dado esse mês.
         </p>
+      )}
+
+      {!loading && kpis && (
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <h2 className="text-sm font-medium">Split fiscal — {kpis.current.label}</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            CBS/IBS retidos na liquidação (Plataforma Pública / export do PSP). O ROM só reconcilia — não processa pagamento.
+          </p>
+          {kpis.current.fiscal_split.settled_count === 0 && kpis.current.fiscal_split.pending_count === 0 ? (
+            <p className="mt-3 text-xs text-muted">
+              {kpis.current.fiscal_split.configured
+                ? 'Sem settlements fiscais importados nesse mês.'
+                : 'Pendente de conciliação fiscal — configure FISCAL_SPLIT_API_URL ou importe settlements.'}
+            </p>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div>
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">Bruto liquidado</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">
+                  {formatCurrency(kpis.current.fiscal_split.gross_paid)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">CBS retida</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">
+                  {formatCurrency(kpis.current.fiscal_split.cbs_retained)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">IBS retido</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">
+                  {formatCurrency(kpis.current.fiscal_split.ibs_retained)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">Líquido estimado</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">
+                  {formatCurrency(kpis.current.fiscal_split.net_received)}
+                </p>
+                {kpis.current.fiscal_split.pending_count > 0 && (
+                  <p className="mt-1 text-xs text-warning">
+                    {kpis.current.fiscal_split.pending_count} pendente
+                    {kpis.current.fiscal_split.pending_count > 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {!loading && kpis && (

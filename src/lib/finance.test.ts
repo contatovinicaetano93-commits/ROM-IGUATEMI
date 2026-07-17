@@ -6,6 +6,18 @@ vi.mock('@/lib/db', () => ({
   getSql: () => sqlMock,
 }))
 
+vi.mock('@/lib/fiscal-split', () => ({
+  getFiscalSplitSummary: vi.fn().mockResolvedValue({
+    gross_paid: 0,
+    cbs_retained: 0,
+    ibs_retained: 0,
+    net_received: 0,
+    pending_count: 0,
+    settled_count: 0,
+    configured: false,
+  }),
+}))
+
 describe('finance', () => {
   beforeEach(() => {
     sqlMock.mockReset()
