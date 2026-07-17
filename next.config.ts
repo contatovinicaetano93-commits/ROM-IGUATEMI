@@ -2,7 +2,11 @@ import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Garante db/*.sql + migrations.json no bundle serverless (Vercel).
+  outputFileTracingIncludes: {
+    '/*': ['./db/**/*'],
+    '/api/**/*': ['./db/**/*'],
+  },
 }
 
 export default withSentryConfig(nextConfig, {

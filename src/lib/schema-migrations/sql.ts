@@ -1,5 +1,19 @@
 import { readFileSync } from 'fs'
-import { join } from 'path'
+import { basename, join } from 'path'
+
+/** Garante que o nome venha só de `db/<arquivo>.sql` (sem path traversal). */
+export function assertSafeDbFileName(fileName: string): string {
+  const base = basename(fileName)
+  if (
+    !base ||
+    base !== fileName ||
+    base.includes('..') ||
+    !/^[\w.-]+\.sql$/i.test(base)
+  ) {
+    throw new Error(`Nome de migration SQL inválido: ${fileName}`)
+  }
+  return base
+}
 
 /** Remove comentários de linha SQL e parte o arquivo em statements. */
 export function splitSqlStatements(sql: string): string[] {
@@ -25,6 +39,7 @@ export function splitSqlStatements(sql: string): string[] {
 }
 
 export function readDbSqlFile(fileName: string, cwd = process.cwd()): string {
-  const path = join(cwd, 'db', fileName)
+  const safe = assertSafeDbFileName(fileName)
+  const path = join(cwd, 'db', safe)
   return readFileSync(path, 'utf8')
 }

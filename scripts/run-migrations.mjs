@@ -6,9 +6,17 @@
  *   DATABASE_URL=... ROM_PANEL=iguatemi npm run db:migrate
  */
 import { existsSync, readFileSync } from 'fs'
-import { join, dirname } from 'path'
+import { basename, join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { neon } from '@neondatabase/serverless'
+
+function assertSafeDbFileName(fileName) {
+  const base = basename(fileName)
+  if (!base || base !== fileName || base.includes('..') || !/^[\w.-]+\.sql$/i.test(base)) {
+    throw new Error(`Nome de migration SQL inválido: ${fileName}`)
+  }
+  return base
+}
 
 const cwd = join(dirname(fileURLToPath(import.meta.url)), '..')
 const panel = (process.env.ROM_PANEL || process.env.NEXT_PUBLIC_ROM_PANEL || 'brasil')
@@ -43,9 +51,14 @@ function splitSqlStatements(sql) {
 }
 
 const manifest = JSON.parse(readFileSync(join(cwd, 'db', 'migrations.json'), 'utf8'))
-const migrations = manifest.migrations.filter(
-  (m) => m.panels.includes(panel) && existsSync(join(cwd, 'db', m.file)),
-)
+const migrations = manifest.migrations.filter((m) => m.panels.includes(panel))
+const missing = migrations
+  .map((m) => assertSafeDbFileName(m.file))
+  .filter((file) => !existsSync(join(cwd, 'db', file)))
+if (missing.length > 0) {
+  console.error(`Migrations sem arquivo em db/: ${missing.join(', ')}`)
+  process.exit(1)
+}
 
 const sql = neon(databaseUrl)
 
@@ -65,8 +78,13 @@ for (const migration of migrations) {
     console.log(`skip  ${migration.id}`)
     continue
   }
-  const body = readFileSync(join(cwd, 'db', migration.file), 'utf8')
+  const file = assertSafeDbFileName(migration.file)
+  const body = readFileSync(join(cwd, 'db', file), 'utf8')
   const statements = splitSqlStatements(body)
+  if (statements.length === 0) {
+    console.error(`Arquivo SQL vazio: ${file}`)
+    process.exit(1)
+  }
   console.log(`apply ${migration.id} (${statements.length} statements)`)
   for (const statement of statements) {
     await sql.query(statement)
