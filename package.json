@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "db:migrate": "node scripts/run-migrations.mjs",
     "verify:deploy": "bash scripts/post-deploy-verification.sh"
   },
   "dependencies": {
