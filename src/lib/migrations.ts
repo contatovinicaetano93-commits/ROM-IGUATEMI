@@ -1,110 +1,192 @@
+import { neon } from '@neondatabase/serverless'
+import { getRomPanelId, type RomPanelId } from '@/lib/brand'
 import { getSql } from '@/lib/db'
+import { isSyncLockBusyError, withSyncLock } from '@/lib/sync-lock'
+import { listMigrationsForPanel, type SchemaMigrationDef } from '@/lib/schema-migrations/registry'
+import { readDbSqlFile, splitSqlStatements } from '@/lib/schema-migrations/sql'
 
+export interface MigrationResult {
+  id: string
+  status: 'applied' | 'skipped' | 'failed'
+  statements?: number
+  error?: string
+}
+
+export interface MigrationRunSummary {
+  panel: RomPanelId
+  applied: string[]
+  skipped: string[]
+  failed: MigrationResult | null
+  results: MigrationResult[]
+}
+
+type SqlQueryFn = {
+  query: (query: string, params?: unknown[]) => Promise<unknown>
+}
+
+function getQuerySql(databaseUrl?: string): SqlQueryFn {
+  const url = databaseUrl ?? process.env.DATABASE_URL
+  if (!url) throw new Error('DATABASE_URL não configurada')
+  return neon(url) as unknown as SqlQueryFn
+}
+
+async function ensureSchemaMigrationsTable(sql: SqlQueryFn): Promise<void> {
+  await sql.query(`
+    create table if not exists schema_migrations (
+      id text primary key,
+      applied_at timestamptz not null default now()
+    )
+  `)
+}
+
+async function listAppliedIds(sql: SqlQueryFn): Promise<Set<string>> {
+  const rows = (await sql.query(`select id from schema_migrations`)) as { id: string }[]
+  return new Set((rows ?? []).map((r) => r.id))
+}
+
+async function executeSqlFile(sql: SqlQueryFn, fileName: string, cwd?: string): Promise<number> {
+  const body = readDbSqlFile(fileName, cwd)
+  const statements = splitSqlStatements(body)
+  for (const statement of statements) {
+    await sql.query(statement)
+  }
+  return statements.length
+}
+
+async function runPendingUnlocked(
+  panel: RomPanelId,
+  opts?: { databaseUrl?: string; cwd?: string },
+): Promise<MigrationRunSummary> {
+  const sql = getQuerySql(opts?.databaseUrl)
+  const cwd = opts?.cwd ?? process.cwd()
+  await ensureSchemaMigrationsTable(sql)
+
+  const appliedIds = await listAppliedIds(sql)
+  const pending = listMigrationsForPanel(panel, cwd)
+  const results: MigrationResult[] = []
+  const applied: string[] = []
+  const skipped: string[] = []
+
+  for (const migration of pending) {
+    if (appliedIds.has(migration.id)) {
+      skipped.push(migration.id)
+      results.push({ id: migration.id, status: 'skipped' })
+      continue
+    }
+
+    try {
+      const statements = await executeSqlFile(sql, migration.file, cwd)
+      await sql.query(`insert into schema_migrations (id) values ($1) on conflict (id) do nothing`, [
+        migration.id,
+      ])
+      applied.push(migration.id)
+      results.push({ id: migration.id, status: 'applied', statements })
+      console.log(`[migrations] applied ${migration.id} (${statements} statements)`)
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      console.error(`[migrations] failed ${migration.id}:`, error)
+      const failed: MigrationResult = { id: migration.id, status: 'failed', error }
+      results.push(failed)
+      return { panel, applied, skipped, failed, results }
+    }
+  }
+
+  return { panel, applied, skipped, failed: null, results }
+}
+
+/**
+ * Aplica migrations pendentes de `db/migrations.json` + arquivos SQL.
+ * Usa lock distribuído para evitar corrida entre instâncias.
+ */
+export async function runPendingMigrations(opts?: {
+  panel?: RomPanelId
+  databaseUrl?: string
+  cwd?: string
+  useLock?: boolean
+}): Promise<MigrationRunSummary> {
+  const panel = opts?.panel ?? getRomPanelId()
+  const useLock = opts?.useLock !== false
+
+  const run = () => runPendingUnlocked(panel, opts)
+
+  if (!useLock) return run()
+
+  try {
+    return await withSyncLock('schema_migrate', run, {
+      ttlMs: 10 * 60 * 1000,
+      owner: `migrate-${panel}`,
+    })
+  } catch (e) {
+    if (isSyncLockBusyError(e)) {
+      return {
+        panel,
+        applied: [],
+        skipped: [],
+        failed: {
+          id: 'schema_migrate_lock',
+          status: 'failed',
+          error: e.message,
+        },
+        results: [],
+      }
+    }
+    throw e
+  }
+}
+
+export async function getMigrationStatus(opts?: {
+  panel?: RomPanelId
+  cwd?: string
+}): Promise<{
+  panel: RomPanelId
+  applied: string[]
+  pending: SchemaMigrationDef[]
+  registered: SchemaMigrationDef[]
+}> {
+  const panel = opts?.panel ?? getRomPanelId()
+  const cwd = opts?.cwd ?? process.cwd()
+  const registered = listMigrationsForPanel(panel, cwd)
+  const sql = getSql()
+
+  try {
+    await sql`
+      create table if not exists schema_migrations (
+        id text primary key,
+        applied_at timestamptz not null default now()
+      )
+    `
+    const rows = (await sql`select id from schema_migrations order by id`) as { id: string }[]
+    const appliedSet = new Set(rows.map((r) => r.id))
+    return {
+      panel,
+      applied: registered.filter((m) => appliedSet.has(m.id)).map((m) => m.id),
+      pending: registered.filter((m) => !appliedSet.has(m.id)),
+      registered,
+    }
+  } catch {
+    return {
+      panel,
+      applied: [],
+      pending: registered,
+      registered,
+    }
+  }
+}
+
+/** @deprecated Use runPendingMigrations — mantido só por compatibilidade de imports. */
 export interface Migration {
   name: string
-  up: (sql: any) => Promise<void>
-  down?: (sql: any) => Promise<void>
+  up: (sql: ReturnType<typeof getSql>) => Promise<void>
+  down?: (sql: ReturnType<typeof getSql>) => Promise<void>
 }
 
+/** @deprecated */
 export class MigrationRunner {
   static async runPending(migrations: Migration[]): Promise<void> {
-    const sql = getSql()
-
-    // Create migrations table if not exists
-    try {
-      await sql`
-        create table if not exists _migrations (
-          id serial primary key,
-          name text unique not null,
-          executed_at timestamp default now()
-        )
-      `
-    } catch (e) {
-      console.warn('Could not create migrations table:', e)
-      return
-    }
-
-    // Get executed migrations
-    let executed: { name: string }[] = []
-    try {
-      executed = (await sql`select name from _migrations`) as { name: string }[]
-    } catch {
-      executed = []
-    }
-
-    const executedNames = new Set(executed.map((m) => m.name))
-
-    // Run pending migrations
-    for (const migration of migrations) {
-      if (executedNames.has(migration.name)) {
-        console.log(`✓ Migration already executed: ${migration.name}`)
-        continue
-      }
-
-      try {
-        console.log(`Running migration: ${migration.name}`)
-        await migration.up(sql)
-        await sql`insert into _migrations (name) values (${migration.name})`
-        console.log(`✓ Completed: ${migration.name}`)
-      } catch (e) {
-        console.error(`✗ Failed migration: ${migration.name}`, e)
-        throw e
-      }
-    }
-  }
-
-  static async rollback(migration: Migration): Promise<void> {
-    if (!migration.down) {
-      throw new Error(`Migration ${migration.name} does not support rollback`)
-    }
-
-    const sql = getSql()
-    await migration.down(sql)
-    await sql`delete from _migrations where name = ${migration.name}`
-    console.log(`✓ Rolled back: ${migration.name}`)
+    void migrations
+    await runPendingMigrations()
   }
 }
 
-export const coreMigrations: Migration[] = [
-  {
-    name: '001_create_audit_logs',
-    up: async (sql) => {
-      await sql`
-        create table if not exists audit_logs (
-          id uuid primary key,
-          user text not null,
-          role text not null,
-          action text not null,
-          resource text not null,
-          changes jsonb,
-          ip_address text,
-          status text,
-          error_message text,
-          created_at timestamp default now()
-        );
-        create index if not exists idx_audit_logs_user on audit_logs(user);
-        create index if not exists idx_audit_logs_action on audit_logs(action);
-        create index if not exists idx_audit_logs_created_at on audit_logs(created_at);
-      `
-    },
-  },
-  {
-    name: '002_create_alerts',
-    up: async (sql) => {
-      await sql`
-        create table if not exists alerts (
-          id uuid primary key,
-          type text not null,
-          severity text not null,
-          title text not null,
-          message text not null,
-          context jsonb,
-          created_at timestamp default now(),
-          resolved_at timestamp
-        );
-        create index if not exists idx_alerts_type on alerts(type);
-        create index if not exists idx_alerts_resolved_at on alerts(resolved_at);
-      `
-    },
-  },
-]
+/** @deprecated stubs — schema real está em db/delta-audit-alerts.sql */
+export const coreMigrations: Migration[] = []

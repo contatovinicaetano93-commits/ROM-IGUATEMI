@@ -1,0 +1,23 @@
+{
+  "migrations": [
+    { "id": "001_base_schema", "file": "schema.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "002_salon_layer", "file": "delta-salon-layer.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "003_last_visit", "file": "delta-last-visit.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "004_preferred_hairstylist", "file": "delta-preferred-hairstylist.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "005_preferred_manicurist", "file": "delta-preferred-manicurist.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "006_service_duration", "file": "delta-service-duration.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "007_finance", "file": "delta-finance.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "008_finance_receipt", "file": "delta-finance-receipt.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "009_lgpd", "file": "delta-lgpd.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "010_onboarding", "file": "delta-onboarding.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "011_estoque", "file": "delta-estoque.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "012_p1_kpis", "file": "delta-p1-kpis.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "013_p2_kpis", "file": "delta-p2-kpis.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "014_p3_kpis", "file": "delta-p3-kpis.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "015_fiscal_split", "file": "delta-fiscal-split.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "016_sync_locks", "file": "delta-sync-locks.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "017_telegram_staff_links", "file": "delta-telegram-staff-links.sql", "panels": ["brasil"] },
+    { "id": "017_parity_brasil", "file": "delta-parity-brasil.sql", "panels": ["iguatemi"] },
+    { "id": "018_audit_alerts", "file": "delta-audit-alerts.sql", "panels": ["brasil", "iguatemi"] }
+  ]
+}

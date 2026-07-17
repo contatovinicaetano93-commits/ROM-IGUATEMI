@@ -2,7 +2,7 @@ import { getSql } from '@/lib/db'
 
 export interface AuditLog {
   id: string
-  user: string
+  username: string
   role: string
   action: string
   resource: string
@@ -30,7 +30,7 @@ export class AuditLogger {
 
     try {
       await sql`
-        insert into audit_logs (id, user, role, action, resource, changes, ip_address, status, error_message, created_at)
+        insert into audit_logs (id, username, role, action, resource, changes, ip_address, status, error_message, created_at)
         values (${id}, ${user}, ${role}, ${action}, ${resource}, ${JSON.stringify(changes || {})}, ${ipAddress || 'unknown'}, ${status}, ${errorMessage || null}, ${now})
       `
     } catch (e) {
@@ -43,7 +43,7 @@ export class AuditLogger {
     const sql = getSql()
 
     try {
-      return (await sql`select * from audit_logs where user = ${user} order by created_at desc limit ${limit}`) as AuditLog[]
+      return (await sql`select * from audit_logs where username = ${user} order by created_at desc limit ${limit}`) as AuditLog[]
     } catch {
       return []
     }
