@@ -7,6 +7,7 @@ vi.mock('@/lib/db', () => ({
 }))
 
 vi.mock('@/lib/fiscal-split', () => ({
+  ensureFiscalSplitTable: vi.fn().mockResolvedValue(undefined),
   getFiscalSplitSummary: vi.fn().mockResolvedValue({
     gross_paid: 0,
     cbs_retained: 0,
