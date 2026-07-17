@@ -5,7 +5,7 @@ import { Plus, X, Trash2, Download, Camera, Paperclip } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
-import { formatCurrency } from '@/lib/salon/format'
+import { formatCurrency, todayIso } from '@/lib/salon/format'
 
 interface FinanceKpiBucket {
   month: string
@@ -84,7 +84,33 @@ function FinanceKpiCard({
 }
 
 function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7)
+  return todayIso().slice(0, 7)
+}
+
+/** YYYY-MM-DD → N dias atrás (calendário, sem fuso UTC). */
+function shiftIsoDate(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y!, m! - 1, d! + days)
+  const yy = dt.getFullYear()
+  const mm = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
+function formatExpenseDateLabel(iso: string): string {
+  const today = todayIso()
+  if (iso === today) return 'Hoje'
+  if (iso === shiftIsoDate(today, -1)) return 'Ontem'
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y!, m! - 1, d!)
+  const weekday = dt.toLocaleDateString('pt-BR', { weekday: 'short' })
+  const day = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  return `${weekday} ${day}`
+}
+
+function recentExpenseDates(count = 30): string[] {
+  const today = todayIso()
+  return Array.from({ length: count }, (_, i) => shiftIsoDate(today, -i))
 }
 
 function csvEscape(v: string | number | null | undefined) {
@@ -372,8 +398,11 @@ function AddExpenseSheet({
   const [categoryId, setCategoryId] = useState('')
   const [newCategoryMode, setNewCategoryMode] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
-  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [expenseDate, setExpenseDate] = useState(todayIso)
+  const [customDateMode, setCustomDateMode] = useState(false)
   const [notes, setNotes] = useState('')
+  const recentDates = recentExpenseDates(30)
+  const dateInRecent = recentDates.includes(expenseDate)
   const [receiptUrl, setReceiptUrl] = useState('')
   const [receiptUploading, setReceiptUploading] = useState(false)
   const [receiptErr, setReceiptErr] = useState<string | null>(null)
@@ -478,16 +507,75 @@ function AddExpenseSheet({
               className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
             />
           </label>
-          <label className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
             <span className="text-xs uppercase tracking-wide text-muted">Data</span>
-            <input
-              type="date"
-              value={expenseDate}
-              onChange={(e) => setExpenseDate(e.target.value)}
-              required
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
-            />
-          </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: 'Hoje', value: todayIso() },
+                { label: 'Ontem', value: shiftIsoDate(todayIso(), -1) },
+              ].map((opt) => {
+                const active = !customDateMode && expenseDate === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setCustomDateMode(false)
+                      setExpenseDate(opt.value)
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? 'border-gold/50 bg-gold/15 text-gold'
+                        : 'border-border text-foreground/80 hover:bg-surface'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+            {!customDateMode ? (
+              <select
+                value={dateInRecent ? expenseDate : '__other__'}
+                onChange={(e) => {
+                  if (e.target.value === '__other__') {
+                    setCustomDateMode(true)
+                    return
+                  }
+                  setExpenseDate(e.target.value)
+                }}
+                required
+                className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
+              >
+                {recentDates.map((iso) => (
+                  <option key={iso} value={iso}>
+                    {formatExpenseDateLabel(iso)}
+                  </option>
+                ))}
+                <option value="__other__">Outra data…</option>
+              </select>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <input
+                  type="date"
+                  value={expenseDate}
+                  onChange={(e) => setExpenseDate(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomDateMode(false)
+                    if (!dateInRecent) setExpenseDate(todayIso())
+                  }}
+                  className="self-start text-xs text-gold"
+                >
+                  Voltar às datas recentes
+                </button>
+              </div>
+            )}
+          </div>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs uppercase tracking-wide text-muted">Categoria</span>
             {!newCategoryMode ? (
