@@ -2,7 +2,9 @@ import { getSql } from '@/lib/db'
 import type { FiscalSplitRecord, FiscalSplitSummary, NormalizedFiscalSplit } from './types'
 import { isFiscalSplitConfigured } from './client'
 
-export async function ensureFiscalSplitTable(): Promise<void> {
+let ensureTablePromise: Promise<void> | null = null
+
+async function createFiscalSplitTable(): Promise<void> {
   const sql = getSql()
   await sql`
     create table if not exists finance_fiscal_splits (
@@ -32,6 +34,17 @@ export async function ensureFiscalSplitTable(): Promise<void> {
     create index if not exists finance_fiscal_splits_status_idx
       on finance_fiscal_splits (status)
   `
+}
+
+/** Idempotente e memoizado por processo — evita DDL duplo no load do Financeiro. */
+export async function ensureFiscalSplitTable(): Promise<void> {
+  if (!ensureTablePromise) {
+    ensureTablePromise = createFiscalSplitTable().catch((e) => {
+      ensureTablePromise = null
+      throw e
+    })
+  }
+  return ensureTablePromise
 }
 
 /**
@@ -101,13 +114,13 @@ export async function listFiscalSplits(from: string, to: string): Promise<Fiscal
       ibs_amount::float as ibs_amount,
       net_amount::float as net_amount,
       status, source,
-      settled_at::text as settled_at,
+      coalesce(settled_at, (imported_at at time zone 'America/Sao_Paulo')::date)::text as settled_at,
       imported_at, updated_at
     from finance_fiscal_splits
-    where settled_at is not null
-      and settled_at >= ${from}::date
-      and settled_at <= ${to}::date
-    order by settled_at desc, imported_at desc
+    where coalesce(settled_at, (imported_at at time zone 'America/Sao_Paulo')::date) >= ${from}::date
+      and coalesce(settled_at, (imported_at at time zone 'America/Sao_Paulo')::date) <= ${to}::date
+    order by coalesce(settled_at, (imported_at at time zone 'America/Sao_Paulo')::date) desc,
+             imported_at desc
   `) as FiscalSplitRecord[]
 }
 
@@ -123,9 +136,8 @@ export async function getFiscalSplitSummary(from: string, to: string): Promise<F
         count(*) filter (where status = 'pending')::int as pending_count,
         count(*) filter (where status in ('settled', 'partial'))::int as settled_count
       from finance_fiscal_splits
-      where settled_at is not null
-        and settled_at >= ${from}::date
-        and settled_at <= ${to}::date
+      where coalesce(settled_at, (imported_at at time zone 'America/Sao_Paulo')::date) >= ${from}::date
+        and coalesce(settled_at, (imported_at at time zone 'America/Sao_Paulo')::date) <= ${to}::date
     `) as {
       gross_paid: number
       cbs_retained: number

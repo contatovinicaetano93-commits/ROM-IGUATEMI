@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { maskFiscalPayloadForLog, normalizeSplitSettlement, normalizeSplitSettlementBatch } from './normalize'
+import { todayIso } from '@/lib/salon/format'
+import {
+  asNumber,
+  maskFiscalPayloadForLog,
+  normalizeSplitSettlement,
+  normalizeSplitSettlementBatch,
+} from './normalize'
+
+describe('asNumber', () => {
+  it('parseia decimal API e formatos BR', () => {
+    expect(asNumber('250.00')).toBe(250)
+    expect(asNumber('1250,50')).toBe(1250.5)
+    expect(asNumber('1.250,50')).toBe(1250.5)
+    expect(asNumber(12.5)).toBe(12.5)
+  })
+})
 
 describe('normalizeSplitSettlement', () => {
   it('normaliza informe de segregação com campos oficiais RFB/CGIBS', () => {
@@ -27,7 +42,7 @@ describe('normalizeSplitSettlement', () => {
     })
   })
 
-  it('usa e2eId quando idRepasse ausente', () => {
+  it('usa e2eId quando idRepasse ausente e fallback de data para hoje', () => {
     const result = normalizeSplitSettlement({
       e2eId: 'E2E999',
       vlPago: 100,
@@ -38,6 +53,23 @@ describe('normalizeSplitSettlement', () => {
     expect(result?.cbsAmount).toBe(5)
     expect(result?.ibsAmount).toBe(3)
     expect(result?.netAmount).toBe(92)
+    expect(result?.settledAt).toBe(todayIso())
+  })
+
+  it('parseia valores monetários em formato BR', () => {
+    const result = normalizeSplitSettlement({
+      e2eId: 'E2E-BR',
+      vlPago: '1.250,50',
+      vlCbsSegr: '62,50',
+      vlIbsSegr: '37,50',
+      settled_at: '2026-07-01',
+    })
+    expect(result).toMatchObject({
+      paidAmount: 1250.5,
+      cbsAmount: 62.5,
+      ibsAmount: 37.5,
+      netAmount: 1150.5,
+    })
   })
 
   it('retorna null sem identificador de operação', () => {

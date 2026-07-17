@@ -168,8 +168,6 @@ export interface FinanceKpis {
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
   const { from, to } = monthRange(monthKey)
-  // Garante a tabela de split fiscal (idempotente) — cobre Neon sem migrate manual.
-  await ensureFiscalSplitTable().catch(() => undefined)
   const [revenue, expenses, payment_mix, fiscal_split] = await Promise.all([
     sumRevenue(from, to),
     sumExpenses(from, to),
@@ -193,6 +191,8 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
 
 /** KPIs do Financeiro (Sprint 4). Receita vem de salon_daily_metrics (Avec); despesas são cadastro manual. */
 export async function computeFinanceKpis(opts?: { month?: string; compareMonth?: string }): Promise<FinanceKpis> {
+  // Uma vez por request (memoizado no módulo) — evita DDL paralelo nos dois buckets.
+  await ensureFiscalSplitTable().catch(() => undefined)
   const current = opts?.month ?? currentMonthKey(todayIso())
   const compare = opts?.compareMonth ?? previousMonthKey(current)
   const [currentBucket, previousBucket] = await Promise.all([buildBucket(current), buildBucket(compare)])
