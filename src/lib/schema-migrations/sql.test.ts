@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { splitSqlStatements } from './sql'
-import { listMigrationsForPanel, loadMigrationsManifest } from './registry'
+import type { RomPanelId } from '@/lib/brand'
+import { assertSafeDbFileName, splitSqlStatements } from './sql'
+import {
+  listMigrationsForPanel,
+  loadMigrationsManifest,
+  MissingMigrationFileError,
+} from './registry'
+
+function panelOfThisRepo(): RomPanelId {
+  const db = join(process.cwd(), 'db')
+  if (existsSync(join(db, 'delta-telegram-staff-links.sql'))) return 'brasil'
+  if (existsSync(join(db, 'delta-parity-brasil.sql'))) return 'iguatemi'
+  return 'brasil'
+}
 
 describe('splitSqlStatements', () => {
   it('remove comentários e parte por ponto-e-vírgula', () => {
@@ -24,6 +36,18 @@ create index if not exists foo_idx on foo (id);
   })
 })
 
+describe('assertSafeDbFileName', () => {
+  it('aceita nome simples .sql', () => {
+    expect(assertSafeDbFileName('delta-finance.sql')).toBe('delta-finance.sql')
+  })
+
+  it('rejeita path traversal', () => {
+    expect(() => assertSafeDbFileName('../schema.sql')).toThrow(/inválido/)
+    expect(() => assertSafeDbFileName('db/schema.sql')).toThrow(/inválido/)
+    expect(() => assertSafeDbFileName('schema.txt')).toThrow(/inválido/)
+  })
+})
+
 describe('migrations registry', () => {
   it('carrega manifest e ids únicos', () => {
     const { migrations } = loadMigrationsManifest()
@@ -32,32 +56,22 @@ describe('migrations registry', () => {
     expect(migrations[0]?.id).toBe('001_base_schema')
   })
 
-  it('só lista migrations com arquivo presente no painel', () => {
-    for (const panel of ['brasil', 'iguatemi'] as const) {
-      const list = listMigrationsForPanel(panel)
-      expect(list.length).toBeGreaterThan(0)
-      for (const m of list) {
-        expect(existsSync(join(process.cwd(), 'db', m.file))).toBe(true)
-        expect(m.panels).toContain(panel)
-      }
+  it('painel deste repo tem todos os arquivos presentes', () => {
+    const panel = panelOfThisRepo()
+    const list = listMigrationsForPanel(panel)
+    expect(list.length).toBeGreaterThan(0)
+    for (const m of list) {
+      expect(existsSync(join(process.cwd(), 'db', m.file))).toBe(true)
+      expect(m.panels).toContain(panel)
     }
   })
 
-  it('site-specific: telegram (brasil) vs parity (iguatemi)', () => {
-    const telegram = join(process.cwd(), 'db', 'delta-telegram-staff-links.sql')
-    const parity = join(process.cwd(), 'db', 'delta-parity-brasil.sql')
-
-    const brasilIds = listMigrationsForPanel('brasil').map((m) => m.id)
-    const iguatemiIds = listMigrationsForPanel('iguatemi').map((m) => m.id)
-
-    if (existsSync(telegram)) {
-      expect(brasilIds).toContain('017_telegram_staff_links')
-    }
-    if (existsSync(parity)) {
-      expect(iguatemiIds).toContain('017_parity_brasil')
-    }
-
-    expect(brasilIds).not.toContain('017_parity_brasil')
-    expect(iguatemiIds).not.toContain('017_telegram_staff_links')
+  it('falha se arquivo do outro painel estiver ausente neste repo', () => {
+    const panel = panelOfThisRepo()
+    const other: RomPanelId = panel === 'brasil' ? 'iguatemi' : 'brasil'
+    const otherFile =
+      other === 'iguatemi' ? 'delta-parity-brasil.sql' : 'delta-telegram-staff-links.sql'
+    if (existsSync(join(process.cwd(), 'db', otherFile))) return
+    expect(() => listMigrationsForPanel(other)).toThrow(MissingMigrationFileError)
   })
 })

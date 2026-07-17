@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { neon } from '@neondatabase/serverless'
 import { getRomPanelId, type RomPanelId } from '@/lib/brand'
 import { getSql } from '@/lib/db'
@@ -18,6 +19,7 @@ export interface MigrationRunSummary {
   skipped: string[]
   failed: MigrationResult | null
   results: MigrationResult[]
+  lockBusy?: boolean
 }
 
 type SqlQueryFn = {
@@ -47,6 +49,9 @@ async function listAppliedIds(sql: SqlQueryFn): Promise<Set<string>> {
 async function executeSqlFile(sql: SqlQueryFn, fileName: string, cwd?: string): Promise<number> {
   const body = readDbSqlFile(fileName, cwd)
   const statements = splitSqlStatements(body)
+  if (statements.length === 0) {
+    throw new Error(`Arquivo SQL vazio ou só comentários: ${fileName}`)
+  }
   for (const statement of statements) {
     await sql.query(statement)
   }
@@ -114,7 +119,7 @@ export async function runPendingMigrations(opts?: {
   try {
     return await withSyncLock('schema_migrate', run, {
       ttlMs: 10 * 60 * 1000,
-      owner: `migrate-${panel}`,
+      owner: `migrate-${panel}-${randomUUID().slice(0, 8)}`,
     })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
@@ -128,6 +133,7 @@ export async function runPendingMigrations(opts?: {
           error: e.message,
         },
         results: [],
+        lockBusy: true,
       }
     }
     throw e
