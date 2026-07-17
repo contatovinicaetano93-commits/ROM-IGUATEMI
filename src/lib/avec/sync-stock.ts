@@ -2,6 +2,7 @@
 // fast: 0149 (saldo) + 0046 (alerta, já com sugestão de reposição da Avec).
 // full: fast + 0044 (movimentos) + 0323 (enriquece origem) + valorização (0045/0242/0243/0142).
 import { getSql } from '@/lib/db'
+import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 import {
   fetchAllAvecReport,
   formatTruncationWarning,
@@ -240,6 +241,13 @@ function emptyStats(): StockSyncStats {
  * de saldo desatualizado entre os dois modos.
  */
 export async function runStockSync(mode: StockSyncMode = 'fast'): Promise<StockSyncRun> {
+  return withSyncLock(SYNC_LOCK_KEYS.stock, () => runStockSyncUnlocked(mode), {
+    ttlMs: 6 * 60 * 1000,
+    owner: `stock-${mode}`,
+  })
+}
+
+async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> {
   const kind = mode === 'full' ? 'stock_full' : 'stock_fast'
   const stats = emptyStats()
   const run = await beginRun(kind, stats)
