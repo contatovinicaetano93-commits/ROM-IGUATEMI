@@ -64,6 +64,8 @@ export interface StockAlert {
   current_qty: number
   minimum_qty: number
   suggested_reposition: number | null
+  /** Custo unitário do produto (0149) — para estimar custo de reposição localmente. */
+  unit_cost: number | null
   status: 'ativo' | 'reconhecido'
   created_at: string
   acknowledged_at: string | null
@@ -327,6 +329,7 @@ export async function listAlerts(status?: 'ativo' | 'reconhecido'): Promise<Stoc
       sa.id, sa.product_id, sp.name as product_name, sc.name as category_name,
       sa.current_qty::float as current_qty, sa.minimum_qty::float as minimum_qty,
       sa.suggested_reposition::float as suggested_reposition,
+      sp.unit_cost::float as unit_cost,
       sa.status, sa.created_at, sa.acknowledged_at, sa.acknowledged_by
     from stock_alerts sa
     join stock_products sp on sp.id = sa.product_id
@@ -497,10 +500,20 @@ async function getStockValuationSnapshot(reportId: string): Promise<StockValuati
   return out
 }
 
+export interface StockMovementSummary {
+  entradas: number
+  saidas: number
+}
+
 export interface StockKpis {
   total_products: number
   total_value: number
   active_alerts: number
+  /** Produtos com saldo 0 — filtro local sobre posição Avec (0149). */
+  zero_products: number
+  /** Agregação local das movimentações Avec (0044), fuso America/Sao_Paulo. */
+  movements_today: StockMovementSummary
+  movements_week: StockMovementSummary
   by_category: StockValuationBucket[]
   by_brand: StockValuationBucket[]
   avec_official_total: number | null
@@ -514,14 +527,51 @@ export async function computeStockKpis(): Promise<StockKpis> {
   const totals = (await sql`
     select
       count(*)::int as total_products,
+      count(*) filter (where current_qty <= 0)::int as zero_products,
       coalesce(sum(current_qty * coalesce(unit_cost, 0)), 0)::float as total_value,
       max(last_synced_at) as last_synced_at
     from stock_products
-  `) as { total_products: number; total_value: number; last_synced_at: string | null }[]
+  `) as {
+    total_products: number
+    zero_products: number
+    total_value: number
+    last_synced_at: string | null
+  }[]
 
   const alerts = (await sql`
     select count(*)::int as active_alerts from stock_alerts where status = 'ativo'
   `) as { active_alerts: number }[]
+
+  const movementBuckets = (await sql`
+    select
+      coalesce(sum(quantity) filter (
+        where type = 'entrada'
+          and (occurred_at at time zone 'America/Sao_Paulo')::date
+            = (now() at time zone 'America/Sao_Paulo')::date
+      ), 0)::float as today_in,
+      coalesce(sum(quantity) filter (
+        where type = 'saida'
+          and (occurred_at at time zone 'America/Sao_Paulo')::date
+            = (now() at time zone 'America/Sao_Paulo')::date
+      ), 0)::float as today_out,
+      coalesce(sum(quantity) filter (
+        where type = 'entrada'
+          and (occurred_at at time zone 'America/Sao_Paulo')::date
+            >= ((now() at time zone 'America/Sao_Paulo')::date - 6)
+      ), 0)::float as week_in,
+      coalesce(sum(quantity) filter (
+        where type = 'saida'
+          and (occurred_at at time zone 'America/Sao_Paulo')::date
+            >= ((now() at time zone 'America/Sao_Paulo')::date - 6)
+      ), 0)::float as week_out
+    from stock_movements
+    where source = 'avec_0044'
+  `) as {
+    today_in: number
+    today_out: number
+    week_in: number
+    week_out: number
+  }[]
 
   const [byCategory, byBrand, officialTotalBuckets] = await Promise.all([
     getStockValuationSnapshot('0243'),
@@ -535,11 +585,21 @@ export async function computeStockKpis(): Promise<StockKpis> {
 
   const localTotal = totals[0]?.total_value ?? 0
   const drift = officialTotal != null ? Math.round((localTotal - officialTotal) * 100) / 100 : null
+  const mov = movementBuckets[0]
 
   return {
     total_products: totals[0]?.total_products ?? 0,
     total_value: Math.round(localTotal * 100) / 100,
     active_alerts: alerts[0]?.active_alerts ?? 0,
+    zero_products: totals[0]?.zero_products ?? 0,
+    movements_today: {
+      entradas: mov?.today_in ?? 0,
+      saidas: mov?.today_out ?? 0,
+    },
+    movements_week: {
+      entradas: mov?.week_in ?? 0,
+      saidas: mov?.week_out ?? 0,
+    },
     by_category: byCategory,
     by_brand: byBrand,
     avec_official_total: officialTotal != null ? Math.round(officialTotal * 100) / 100 : null,

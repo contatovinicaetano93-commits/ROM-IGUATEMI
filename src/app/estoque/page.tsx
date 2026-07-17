@@ -36,7 +36,12 @@ interface StockAlert {
   current_qty: number
   minimum_qty: number
   suggested_reposition: number | null
+  unit_cost: number | null
   status: 'ativo' | 'reconhecido'
+}
+interface StockMovementSummary {
+  entradas: number
+  saidas: number
 }
 interface StockValuationBucket {
   key: string
@@ -47,6 +52,9 @@ interface StockKpis {
   total_products: number
   total_value: number
   active_alerts: number
+  zero_products: number
+  movements_today: StockMovementSummary
+  movements_week: StockMovementSummary
   by_category: StockValuationBucket[]
   by_brand: StockValuationBucket[]
   avec_official_total: number | null
@@ -133,6 +141,17 @@ function ValuationBars({ buckets }: { buckets: StockValuationBucket[] }) {
       })}
     </div>
   )
+}
+
+/** Custo estimado de reposição: sugestão Avec (0046) × custo unitário (0149). */
+function repositionCost(alert: StockAlert): number | null {
+  if (alert.suggested_reposition == null || alert.unit_cost == null) return null
+  if (!(alert.suggested_reposition > 0) || !(alert.unit_cost > 0)) return null
+  return Math.round(alert.suggested_reposition * alert.unit_cost * 100) / 100
+}
+
+function formatQty(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
 }
 
 export default function EstoquePage() {
@@ -250,10 +269,25 @@ export default function EstoquePage() {
         />
         <StockKpiCard label="Alertas ativos" value={loading || !kpis ? '—' : String(kpis.active_alerts)} />
         <StockKpiCard
-          label="Última sincronização"
-          value={loading ? '—' : timeAgo(syncStatus?.last_fast?.created_at ?? null)}
+          label="Zerados"
+          value={loading || !kpis ? '—' : String(kpis.zero_products)}
+          sub={kpis && kpis.zero_products > 0 ? 'Sem saldo (posição Avec)' : undefined}
+          tone={kpis && kpis.zero_products > 0 ? 'warning' : undefined}
         />
       </div>
+
+      {!loading && kpis && (
+        <p className="text-xs text-muted">
+          Movimentação Avec · hoje{' '}
+          <span className="tabular-nums text-success">+{formatQty(kpis.movements_today.entradas)}</span>
+          {' / '}
+          <span className="tabular-nums text-danger">−{formatQty(kpis.movements_today.saidas)}</span>
+          {' · semana '}
+          <span className="tabular-nums text-success">+{formatQty(kpis.movements_week.entradas)}</span>
+          {' / '}
+          <span className="tabular-nums text-danger">−{formatQty(kpis.movements_week.saidas)}</span>
+        </p>
+      )}
 
       <SectionCard title="Alertas de reposição" badge={<CountBadge value={String(alerts.length)} tone={alerts.length > 0 ? 'danger' : 'success'} />}>
         {loading && <div className="h-16 animate-pulse rounded-2xl bg-surface" />}
@@ -262,24 +296,28 @@ export default function EstoquePage() {
         )}
         {!loading && alerts.length > 0 && (
           <div className="flex flex-col gap-2.5">
-            {alerts.map((a) => (
-              <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{a.product_name}</p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {a.category_name ?? 'Sem categoria'} · atual {a.current_qty} / mín. {a.minimum_qty}
-                    {a.suggested_reposition != null && ` · repor ${a.suggested_reposition} (sugestão Avec)`}
-                  </p>
+            {alerts.map((a) => {
+              const cost = repositionCost(a)
+              return (
+                <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{a.product_name}</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {a.category_name ?? 'Sem categoria'} · atual {a.current_qty} / mín. {a.minimum_qty}
+                      {a.suggested_reposition != null && ` · repor ${a.suggested_reposition} (sugestão Avec)`}
+                      {cost != null && ` · ≈ ${formatCurrency(cost)}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => acknowledge(a.id)}
+                    className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-foreground/90 hover:bg-card"
+                  >
+                    <CheckCircle2 size={14} /> Reconhecer
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => acknowledge(a.id)}
-                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-foreground/90 hover:bg-card"
-                >
-                  <CheckCircle2 size={14} /> Reconhecer
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </SectionCard>
