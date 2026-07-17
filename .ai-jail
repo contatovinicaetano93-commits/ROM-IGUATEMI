@@ -1,0 +1,13 @@
+# Sandbox policy for AI coding agents (ai-jail).
+# Run: ai-jail claude | ai-jail codex | ai-jail bash
+# .env.example stays readable so agents can see required vars.
+
+deny_paths = [
+  ".env",
+  ".env.local",
+  ".env.preview",
+  ".env.production",
+  ".env.development",
+  "deploy/*.env",
+  "**/*.pem",
+]
