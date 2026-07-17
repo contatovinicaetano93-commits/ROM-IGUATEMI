@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { getFiscalSplitSummary, type FiscalSplitSummary } from '@/lib/fiscal-split'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
 
@@ -152,6 +153,8 @@ export interface FinanceKpiBucket {
   cash_flow: number
   /** Breakdown por forma de pagamento (relatório 0081 da Avec) — reconciliação. */
   payment_mix: P2PaymentRow[]
+  /** Conciliação CBS/IBS retidos no split fiscal (Plataforma Pública / export PSP). */
+  fiscal_split: FiscalSplitSummary
 }
 
 export interface FinanceKpis {
@@ -161,10 +164,11 @@ export interface FinanceKpis {
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
   const { from, to } = monthRange(monthKey)
-  const [revenue, expenses, payment_mix] = await Promise.all([
+  const [revenue, expenses, payment_mix, fiscal_split] = await Promise.all([
     sumRevenue(from, to),
     sumExpenses(from, to),
     getPaymentMixRange(from, to),
+    getFiscalSplitSummary(from, to),
   ])
   const gross_margin = revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
   return {
@@ -177,6 +181,7 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
     gross_margin,
     cash_flow: Math.round((revenue - expenses) * 100) / 100,
     payment_mix,
+    fiscal_split,
   }
 }
 
