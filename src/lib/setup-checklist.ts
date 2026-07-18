@@ -32,7 +32,7 @@ export const SETUP_ITEMS: SetupItem[] = [
       'Vercel → Settings → Environment Variables',
       'Admin: ROM_ADMIN_USER + ROM_ADMIN_PASSWORD (vê faturamento)',
       'Funcionário: ROM_STAFF_USER + ROM_STAFF_PASSWORD (painel sem faturamento)',
-      'Brasil seed: ADMIN-BRASIL / FUNC-BRASIL',
+      'Iguatemi seed: admin / FUNC-IGUATEMI (ou os users definidos nas envs)',
       'Protege hoje, dashboard, contatos e APIs internas',
       'Redeploy do projeto',
     ],

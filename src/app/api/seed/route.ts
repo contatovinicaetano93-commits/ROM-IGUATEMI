@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireAuth, isAuthEnabled } from '@/lib/auth'
+import { requireAdmin, isAuthEnabled } from '@/lib/auth'
 import { runSeed, resolveSeedPresetFromBody } from '@/lib/seed'
 
 export async function POST(req: NextRequest) {
@@ -9,8 +9,8 @@ export async function POST(req: NextRequest) {
       return err('Configure ROM_ADMIN_PASSWORD para usar seed em produção', 503)
     }
 
-    const auth = await requireAuth(req)
-    if (!auth.ok) return handleError(new Error(auth.message))
+    const auth = await requireAdmin(req)
+    if (!auth.ok) return err(auth.message, auth.status)
 
     let preset: ReturnType<typeof resolveSeedPresetFromBody>
     try {
