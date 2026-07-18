@@ -26,14 +26,14 @@ describe('scheduleAvecWebhookSideEffects', () => {
     )
   })
 
-  it('dispara fast e full em service.completed', async () => {
+  it('dispara fast e depois full em service.completed (sequencial)', async () => {
     const { runAvecWebhookSideEffects } = await import('@/lib/avec/sync-trigger')
     await runAvecWebhookSideEffects('service.completed')
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(2)
     const urls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]))
-    expect(urls.some((u) => u.includes('mode=fast'))).toBe(true)
-    expect(urls.some((u) => u.includes('mode=full'))).toBe(true)
+    expect(urls[0]).toContain('mode=fast')
+    expect(urls[1]).toContain('mode=full')
   })
 
   it('não dispara sync em client.upsert', async () => {
