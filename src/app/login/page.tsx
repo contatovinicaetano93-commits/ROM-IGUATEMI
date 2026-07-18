@@ -27,7 +27,7 @@ function LoginForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: username.trim(),
+          user: username.trim(),
           password: password.trim(),
         }),
         credentials: 'include',

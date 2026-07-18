@@ -19,11 +19,10 @@ export async function POST(req: NextRequest) {
     return err(validation.error.issues[0]?.message || 'Dados inválidos', 400)
   }
 
-  const { user: username, password } = validation.data
-  const legacyToken = typeof body?.token === 'string' ? body.token : ''
+  const { user: parsedUser, password, token: legacyToken } = validation.data
 
-  const user = username || getAdminUser()
-  const pass = password || legacyToken
+  const user = parsedUser || getAdminUser()
+  const pass = password || legacyToken || ''
   const hit = pass ? validateCredentials(user, pass) : null
 
   if (!hit) {
