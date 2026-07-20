@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
+import { requireAuth } from '@/lib/auth'
 import { logEvent } from '@/lib/contacts'
 import {
   markServiceDone,
@@ -21,6 +22,9 @@ const schema = z.discriminatedUnion('action', [
 // PATCH /api/services/[id] — fluxo guiado de recorrência e agendamento.
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   try {
+    const auth = await requireAuth(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+
     const { id } = await ctx.params
     const body = schema.parse(await req.json())
 

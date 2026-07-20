@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { Logger } from '@/lib/logger'
 import { isAvecConfigured, isAvecMock, getAvecBaseUrl } from '@/lib/avec/client'
 import { isAuthEnabled, isFinanceAuthConfigured, isStockAuthConfigured } from '@/lib/auth'
 import { isAiConfigured } from '@/lib/ai/client'
@@ -6,6 +7,8 @@ import { getBrand, getRomPanelId } from '@/lib/brand'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
+
+const logger = new Logger('Health')
 
 function envOk(name: string) {
   return Boolean(process.env[name]?.trim())
@@ -33,7 +36,8 @@ async function probeKpiLayers() {
       union all select 'p3', count(*)::int from salon_p3_daily
     `) as { layer: string; n: number }[]
     return Object.fromEntries(rows.map((r) => [r.layer, r.n]))
-  } catch {
+  } catch (e) {
+    logger.warn('Failed to probe KPI layers', { error: e instanceof Error ? e.message : String(e) })
     return { p1: null, p2: null, p3: null }
   }
 }

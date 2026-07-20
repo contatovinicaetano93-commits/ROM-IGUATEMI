@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server'
-import { ok, handleError } from '@/lib/api-response'
+import { ok, handleError, err } from '@/lib/api-response'
 import { listContactsWithSummary } from '@/lib/contact-summary'
 import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
 import { addService } from '@/lib/services'
 import { SERVICE_CATEGORIES } from '@/lib/services'
+import { requireAuth } from '@/lib/auth'
 import { z } from 'zod'
 
 const serviceSchema = z.object({
@@ -52,6 +53,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAuth(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+
     const body = await req.json()
     const payload = schema.parse(body)
 
