@@ -62,70 +62,64 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
   const sql = getSql()
   const phone = input.phone ? normalizePhone(input.phone) ?? input.phone.trim() : null
 
+  // Optimized UPSERT: use avec_client_id when available (primary upsert key)
+  // Falls back to phone-based lookup only if no avec_client_id
+  // Single query reduces from 3-4 queries down to 1 query per row
   if (input.avecClientId) {
-    const byAvec = (await sql`
-      select id from contacts where avec_client_id = ${input.avecClientId} limit 1
-    `) as { id: string }[]
-
-    if (byAvec.length > 0) {
-      const current = (await sql`
-        select status from contacts where id = ${byAvec[0].id} limit 1
-      `) as { status: string }[]
-      const status = resolveStatus(current[0]?.status, input.status)
-
-      const rows = (await sql`
-        update contacts
-        set last_contact_at = now(),
-            name = coalesce(${input.name ?? null}, name),
-            email = coalesce(${input.email ?? null}, email),
-            phone = coalesce(${phone ?? null}, phone),
-            status = coalesce(${status}, status)
-        where id = ${byAvec[0].id}
-        returning *
-      `) as ContactRow[]
-      return rows[0]
-    }
+    const rows = (await sql`
+      insert into contacts (name, phone, email, channel, source, avec_client_id, status)
+      values (
+        ${input.name ?? null},
+        ${phone},
+        ${input.email ?? null},
+        ${input.channel},
+        ${input.source},
+        ${input.avecClientId},
+        ${input.status ?? 'novo'}
+      )
+      on conflict (avec_client_id) do update set
+        last_contact_at = now(),
+        name = coalesce(excluded.name, contacts.name),
+        email = coalesce(excluded.email, contacts.email),
+        phone = coalesce(excluded.phone, contacts.phone),
+        status = case
+          when contacts.status in ('novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
+          when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
+          when contacts.status = 'convertido' then 'convertido'
+          when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
+          else contacts.status
+        end
+      returning *
+    `) as ContactRow[]
+    return rows[0]
   }
 
-  if (phone) {
-    const existing = (await sql`
-      select id from contacts where phone = ${phone} limit 1
-    `) as { id: string }[]
-
-    if (existing.length > 0) {
-      const current = (await sql`
-        select status from contacts where id = ${existing[0].id} limit 1
-      `) as { status: string }[]
-      const status = resolveStatus(current[0]?.status, input.status)
-
-      const rows = (await sql`
-        update contacts
-        set last_contact_at = now(),
-            name = coalesce(${input.name ?? null}, name),
-            email = coalesce(${input.email ?? null}, email),
-            avec_client_id = coalesce(${input.avecClientId ?? null}, avec_client_id),
-            status = coalesce(${status}, status)
-        where id = ${existing[0].id}
-        returning *
-      `) as ContactRow[]
-      return rows[0]
-    }
-  }
-
+  // Fallback: phone-based upsert if no avec_client_id
   const rows = (await sql`
-    insert into contacts (name, phone, email, channel, source, avec_client_id, status)
+    insert into contacts (name, phone, email, channel, source, status)
     values (
       ${input.name ?? null},
-      ${phone ?? null},
+      ${phone},
       ${input.email ?? null},
       ${input.channel},
       ${input.source},
-      ${input.avecClientId ?? null},
       ${input.status ?? 'novo'}
     )
+    on conflict (phone) do update set
+      last_contact_at = now(),
+      name = coalesce(excluded.name, contacts.name),
+      email = coalesce(excluded.email, contacts.email),
+      avec_client_id = coalesce(excluded.avec_client_id, contacts.avec_client_id),
+      status = case
+        when contacts.status in ('novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
+        when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
+        when contacts.status = 'convertido' then 'convertido'
+        when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
+        else contacts.status
+      end
+    where contacts.phone is not null
     returning *
   `) as ContactRow[]
-
   return rows[0]
 }
 
@@ -205,6 +199,9 @@ interface UpdateContactInput {
 }
 
 // Atualização parcial e guiada: só mexe nos campos enviados (coalesce mantém o resto).
+// NOTE: Potential race condition if two concurrent updates happen within milliseconds.
+// Status merge logic is computed in-app, not in SQL. Trade-off: small race window for simpler code.
+// TODO: Consider optimistic locking with version field for high-concurrency scenarios.
 export async function updateContact(id: string, patch: UpdateContactInput): Promise<ContactRow | null> {
   const sql = getSql()
   const phone = patch.phone ? normalizePhone(patch.phone) ?? patch.phone.trim() : undefined
@@ -212,7 +209,9 @@ export async function updateContact(id: string, patch: UpdateContactInput): Prom
   let status: ContactStatus | null = patch.status ?? null
   if (patch.status) {
     const current = await getContactById(id)
-    if (current) status = mergeContactStatus(current.status as ContactStatus, patch.status)
+    if (current) {
+      status = mergeContactStatus(current.status as ContactStatus, patch.status)
+    }
   }
 
   // null no PATCH = limpeza explícita → grava '' (≠ SQL NULL = nunca definido).
