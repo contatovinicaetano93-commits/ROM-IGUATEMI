@@ -1,7 +1,7 @@
 import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
 import { listServices } from '@/lib/services'
-import { urgencyForServices } from '@/lib/salon/urgency'
+import { compareByOverdueThenName, urgencyForServices } from '@/lib/salon/urgency'
 
 interface JoinedService extends ClientService {
   contact_name: string | null
@@ -14,6 +14,7 @@ export interface ActionItem {
   contact_status: string
   contact_phone: string | null
   overdue: number
+  max_overdue_days: number
   due_soon: number
   scheduled_soon: number
   scheduled_today: number
@@ -52,6 +53,7 @@ export async function listActionItems(): Promise<ActionItem[]> {
         contact_status: services[0].contact_status,
         contact_phone: services[0].contact_phone,
         overdue: u.overdue,
+        max_overdue_days: u.max_overdue_days,
         due_soon: u.due_soon,
         scheduled_soon: u.scheduled_soon,
         scheduled_today: u.scheduled_today,
@@ -60,11 +62,10 @@ export async function listActionItems(): Promise<ActionItem[]> {
       }
     })
     .filter((i) => i.recommendations.length > 0)
-    .sort(
-      (a, b) =>
-        b.urgency_score - a.urgency_score ||
-        b.overdue - a.overdue ||
-        b.due_soon - a.due_soon ||
-        b.scheduled_today - a.scheduled_today
+    .sort((a, b) =>
+      compareByOverdueThenName(
+        { max_overdue_days: a.max_overdue_days, name: a.contact_name },
+        { max_overdue_days: b.max_overdue_days, name: b.contact_name },
+      ),
     )
 }
