@@ -5,14 +5,17 @@ import Link from 'next/link'
 import { X, Sparkles, Copy, Check, ChevronRight, Hand, Scissors } from 'lucide-react'
 import { apiFetch } from '@/lib/api-client'
 import { LastVisitCard, type LastVisitData } from './LastVisitCard'
+import { contactHref } from '@/lib/auth-redirect'
 
 interface BriefSheetProps {
   contactId: string
   contactName: string | null
   onClose: () => void
+  /** Path de origem para o botão voltar no detalhe do contato (ex.: /hoje). */
+  returnTo?: string
 }
 
-export function BriefSheet({ contactId, contactName, onClose }: BriefSheetProps) {
+export function BriefSheet({ contactId, contactName, onClose, returnTo }: BriefSheetProps) {
   const [brief, setBrief] = useState<{ text: string; source: string } | null>(null)
   const [lastVisit, setLastVisit] = useState<LastVisitData | null>(null)
   const [manicurist, setManicurist] = useState<string | null>(null)
@@ -154,7 +157,7 @@ export function BriefSheet({ contactId, contactName, onClose }: BriefSheetProps)
               {loading ? 'Gerando…' : 'Atualizar'}
             </button>
             <Link
-              href={`/contatos/${contactId}`}
+              href={contactHref(contactId, returnTo)}
               onClick={onClose}
               className="flex items-center justify-center gap-1 rounded-2xl border border-border bg-card py-3 text-sm font-semibold text-foreground"
             >

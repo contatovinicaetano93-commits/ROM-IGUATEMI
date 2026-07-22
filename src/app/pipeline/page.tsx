@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Columns3, RefreshCw } from 'lucide-react'
 import { apiFetch } from '@/lib/api-client'
 import { fmtScheduleParts } from '@/lib/salon/format'
+import { contactHref } from '@/lib/auth-redirect'
 import { CountBadge } from '../_components/ui'
 
 interface PipelineCard {
@@ -55,7 +56,7 @@ function PipelineColumn({
             return (
               <Link
                 key={item.id}
-                href={`/contatos/${item.contact_id}`}
+                href={contactHref(item.contact_id, '/pipeline')}
                 className="block rounded-xl border border-border bg-surface px-3 py-3 transition-colors hover:border-gold/40 hover:bg-background"
               >
                 <div className="flex items-start justify-between gap-3">
