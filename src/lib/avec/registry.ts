@@ -17,6 +17,7 @@ export type AvecMapperKind =
   | 'packages'
   | 'ratings'
   | 'birthdays'
+  | 'payment_mix'
   | 'return_rate'
   | 'new_clients_period'
   | 'revenue_curve'
@@ -43,7 +44,7 @@ export interface AvecReportDef {
 
 /**
  * Mapa A→B→C (Cérebro: Hoje → Semana → Comercial).
- * Sem 0081, comissões, NF. Estoque tem registry próprio (ver STOCK abaixo).
+ * Comissões e NF ficam de fora. Estoque tem registry próprio (ver STOCK abaixo).
  */
 const CORE: AvecReportDef[] = [
   // A — Hoje (cron fast)
@@ -98,6 +99,7 @@ const CORE: AvecReportDef[] = [
   { id: '0061', tier: 'C', name: 'Pacotes', mapper: 'packages', schedule: 'daily' },
   { id: '0104', tier: 'C', name: 'Avaliações', mapper: 'ratings', schedule: 'daily' },
   { id: '0001', tier: 'C', name: 'Aniversariantes', mapper: 'birthdays', schedule: 'daily' },
+  { id: '0081', tier: 'C', name: 'Formas de pagamento', mapper: 'payment_mix', schedule: 'daily' },
 ]
 
 /**

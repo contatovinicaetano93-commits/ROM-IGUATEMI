@@ -145,6 +145,33 @@ async function sumExpenses(from: string, to: string): Promise<number> {
   return Number(rows[0]?.total ?? 0) || 0
 }
 
+export interface PaymentReconciliation {
+  revenue: number
+  payments_total: number
+  delta: number
+  /** Tolerância: máx(R$ 1, 1% da receita). */
+  tolerance: number
+  status: 'aligned' | 'divergent' | 'missing_payments' | 'missing_revenue'
+}
+
+export function reconcileRevenueToPayments(
+  revenue: number,
+  payment_mix: P2PaymentRow[],
+): PaymentReconciliation {
+  const payments_total =
+    Math.round(payment_mix.reduce((s, p) => s + Number(p.amount || 0), 0) * 100) / 100
+  const delta = Math.round((payments_total - revenue) * 100) / 100
+  const tolerance = Math.max(1, Math.round(revenue * 0.01 * 100) / 100)
+
+  let status: PaymentReconciliation['status']
+  if (payments_total <= 0 && revenue > 0) status = 'missing_payments'
+  else if (revenue <= 0 && payments_total > 0) status = 'missing_revenue'
+  else if (Math.abs(delta) > tolerance) status = 'divergent'
+  else status = 'aligned'
+
+  return { revenue, payments_total, delta, tolerance, status }
+}
+
 export interface FinanceKpiBucket {
   month: string
   label: string
@@ -157,6 +184,8 @@ export interface FinanceKpiBucket {
   cash_flow: number
   /** Breakdown por forma de pagamento (relatório 0081 da Avec) — reconciliação. */
   payment_mix: P2PaymentRow[]
+  /** Receita (métricas) vs soma das formas de pagamento (0081). */
+  payment_reconciliation: PaymentReconciliation
   /** Conciliação CBS/IBS retidos no split fiscal (Plataforma Pública / export PSP). */
   fiscal_split: FiscalSplitSummary
 }
@@ -174,17 +203,19 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
     getPaymentMixRange(from, to),
     getFiscalSplitSummary(from, to),
   ])
+  const revenueRounded = Math.round(revenue * 100) / 100
   const gross_margin = revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
   return {
     month: monthKey,
     label: labelMonthPt(monthKey),
     from,
     to,
-    revenue: Math.round(revenue * 100) / 100,
+    revenue: revenueRounded,
     expenses: Math.round(expenses * 100) / 100,
     gross_margin,
     cash_flow: Math.round((revenue - expenses) * 100) / 100,
     payment_mix,
+    payment_reconciliation: reconcileRevenueToPayments(revenueRounded, payment_mix),
     fiscal_split,
   }
 }

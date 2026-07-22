@@ -36,7 +36,7 @@ import { getDeploymentContext } from '@/lib/deployment'
 import { recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
-import { syncP2Kpis } from '@/lib/avec/sync-p2'
+import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
 import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
@@ -428,6 +428,14 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
     await syncAttendances(stats, mode, syncRunId)
     await syncRevenue(stats, syncRunId)
     await syncCancellations(stats, mode, syncRunId)
+    // 0081 do dia no fast — Financeiro atualiza formas de pagamento sem esperar o full.
+    if (mode === 'fast') {
+      try {
+        await syncPaymentMixRecent(stats, syncRunId, 0)
+      } catch (e) {
+        stats.errors.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
     if (mode === 'full') {
       for (const [label, fn] of [
         ['P1', () => syncP1Kpis(stats, syncRunId)],

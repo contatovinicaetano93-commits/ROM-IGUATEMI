@@ -3,11 +3,13 @@ import {
   normalizeP2BirthdayRow,
   normalizeP2ChannelRow,
   normalizeP2PackageRow,
+  normalizeP2PaymentRow,
   normalizeP2RatingRow,
 } from '@/lib/avec/normalize'
 import { resolveReportId, getDailyReports } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
-import { upsertSalonP2Daily } from '@/lib/salon/p2-metrics'
+import { upsertSalonP2Daily, type P2PaymentRow } from '@/lib/salon/p2-metrics'
+import { avecSiteParam } from '@/lib/brand'
 
 type SyncStatsLike = {
   snapshots_saved: number
@@ -23,6 +25,27 @@ function todayIsoLocal() {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date())
+}
+
+function addCalendarDays(isoYmd: string, delta: number) {
+  const [y, m, d] = isoYmd.split('-').map(Number)
+  const dt = new Date(Date.UTC(y!, m! - 1, d! + delta))
+  return dt.toISOString().slice(0, 10)
+}
+
+function isoToBr(isoYmd: string) {
+  const [y, m, d] = isoYmd.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function listDaysInclusive(fromIso: string, toIso: string): string[] {
+  const out: string[] = []
+  let cur = fromIso
+  while (cur <= toIso) {
+    out.push(cur)
+    cur = addCalendarDays(cur, 1)
+  }
+  return out
 }
 
 function asRows(result: unknown): Record<string, unknown>[] {
@@ -60,8 +83,58 @@ function resolveId(mapper: string): string | null {
   return resolveReportId(def)
 }
 
+function aggregatePaymentMix(rows: Record<string, unknown>[]): P2PaymentRow[] {
+  const totals = new Map<string, number>()
+  for (const row of rows) {
+    const p = normalizeP2PaymentRow(row)
+    if (!p) continue
+    totals.set(p.method, (totals.get(p.method) ?? 0) + p.amount)
+  }
+  const total = [...totals.values()].reduce((a, b) => a + b, 0)
+  return [...totals.entries()]
+    .map(([method, amount]) => ({
+      method,
+      amount: Math.round(amount * 100) / 100,
+      share: total > 0 ? Math.round((amount / total) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+}
+
 /**
- * C — sync full: 0056, 0061, 0104, 0001 → salon_p2_daily (sem 0081)
+ * Sync 0081 (formas de pagamento) dia a dia.
+ * Fast: só hoje. Full (via syncP2): últimos `daysBack` dias + hoje.
+ */
+export async function syncPaymentMixRecent(
+  stats: SyncStatsLike,
+  syncRunId?: string,
+  daysBack = 0,
+) {
+  const id0081 = resolveId('payment_mix') ?? '0081'
+  const today = todayIsoLocal()
+  const from = addCalendarDays(today, -Math.max(0, daysBack))
+  const days = listDaysInclusive(from, today)
+
+  for (const day of days) {
+    const params = {
+      inicio: isoToBr(day),
+      fim: isoToBr(day),
+      site: avecSiteParam(),
+      limit: 250,
+    }
+    try {
+      const rows = asRows(await fetchAllAvecReport(id0081, params))
+      await snapshotSafe(id0081, params, rows, stats, syncRunId)
+      const payment_mix = aggregatePaymentMix(rows)
+      stats.p2_rows = (stats.p2_rows ?? 0) + payment_mix.length
+      await upsertSalonP2Daily(day, { payment_mix })
+    } catch (e) {
+      stats.errors.push(`P2 0081 ${day}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+}
+
+/**
+ * C — sync full: 0056, 0061, 0104, 0001, 0081 → salon_p2_daily
  */
 export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const day = todayIsoLocal()
@@ -187,4 +260,7 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
       stats.errors.push(`P2 upsert: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
+
+  // 0081: últimos 7 dias (full) — dia a dia para o Financeiro somar o mês sem double-count.
+  await syncPaymentMixRecent(stats, syncRunId, 7)
 }

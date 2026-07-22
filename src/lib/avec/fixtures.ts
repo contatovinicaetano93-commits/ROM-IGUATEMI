@@ -87,12 +87,21 @@ export function mockCancellations() {
   ]
 }
 
+export function mockPayments() {
+  return [
+    { forma_pagamento: 'Pix', valor: '1.200,00' },
+    { forma_pagamento: 'Cartão', valor: '2.500,00' },
+    { forma_pagamento: 'Dinheiro', valor: '580,00' },
+  ]
+}
+
 export function getMockReport(reportId: string, page = 1) {
   if (page > 1) return { data: [] }
 
   if (reportId === '0004') return { data: MOCK_CLIENTS }
   if (reportId === '0051') return { data: mockAppointments() }
   if (reportId === '0002') return { data: mockAttendances() }
+  if (reportId === '0081') return { data: mockPayments() }
   if (reportId === 'revenue' || reportId === process.env.AVEC_REPORT_REVENUE) return { data: mockRevenue() }
   if (reportId === 'cancellations' || reportId === process.env.AVEC_REPORT_CANCELLATIONS)
     return { data: mockCancellations() }

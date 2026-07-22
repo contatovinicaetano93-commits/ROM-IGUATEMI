@@ -17,6 +17,13 @@ interface FiscalSplitSummary {
   settled_count: number
   configured: boolean
 }
+interface PaymentReconciliation {
+  revenue: number
+  payments_total: number
+  delta: number
+  tolerance: number
+  status: 'aligned' | 'divergent' | 'missing_payments' | 'missing_revenue'
+}
 interface FinanceKpiBucket {
   month: string
   label: string
@@ -27,6 +34,7 @@ interface FinanceKpiBucket {
   gross_margin: number | null
   cash_flow: number
   payment_mix: { method: string; amount: number; share: number }[]
+  payment_reconciliation: PaymentReconciliation
   fiscal_split: FiscalSplitSummary
 }
 interface FinanceKpis {
@@ -142,11 +150,55 @@ const EMPTY_FISCAL_SPLIT: FiscalSplitSummary = {
   configured: false,
 }
 
+const EMPTY_RECONCILIATION: PaymentReconciliation = {
+  revenue: 0,
+  payments_total: 0,
+  delta: 0,
+  tolerance: 1,
+  status: 'missing_payments',
+}
+
 function normalizeKpiBucket(bucket: FinanceKpiBucket): FinanceKpiBucket {
   return {
     ...bucket,
     payment_mix: bucket.payment_mix ?? [],
+    payment_reconciliation: bucket.payment_reconciliation ?? EMPTY_RECONCILIATION,
     fiscal_split: bucket.fiscal_split ?? EMPTY_FISCAL_SPLIT,
+  }
+}
+
+function paymentReconciliationMessage(
+  rec: PaymentReconciliation,
+  hasMix: boolean,
+): { tone: 'success' | 'muted' | 'warning'; text: string } | null {
+  switch (rec.status) {
+    case 'aligned':
+      if (!hasMix) return null
+      return {
+        tone: 'success',
+        text: `Conciliado: pagamentos ${formatCurrency(rec.payments_total)} ≈ receita ${formatCurrency(rec.revenue)}`,
+      }
+    case 'missing_payments':
+      return {
+        tone: 'muted',
+        text: `Receita ${formatCurrency(rec.revenue)} sem formas de pagamento sincronizadas (0081) nesse mês — rode o sync Avec ou aguarde o cron.`,
+      }
+    case 'missing_revenue':
+      return {
+        tone: 'warning',
+        text: `Pagamentos ${formatCurrency(rec.payments_total)} sem receita em métricas — conferir relatório de faturamento.`,
+      }
+    case 'divergent': {
+      const sign = rec.delta > 0 ? '+' : ''
+      return {
+        tone: 'warning',
+        text: `Divergência ${sign}${formatCurrency(rec.delta)}: pagamentos ${formatCurrency(rec.payments_total)} vs receita ${formatCurrency(rec.revenue)} (tolerância ${formatCurrency(rec.tolerance)}).`,
+      }
+    }
+    default: {
+      const _exhaustive: never = rec.status
+      return _exhaustive
+    }
   }
 }
 
@@ -371,8 +423,18 @@ export default function FinanceiroPage() {
         <div className="rounded-2xl border border-border bg-card p-4">
           <h2 className="text-sm font-medium">Formas de pagamento — {kpis.current.label}</h2>
           <p className="mt-0.5 text-xs text-muted">
-            Reconciliação com o relatório de pagamentos da Avec (dinheiro, Pix, cartão etc.)
+            Relatório 0081 da Avec (dinheiro, Pix, cartão etc.), reconciliado com a receita do mês.
           </p>
+          {(() => {
+            const msg = paymentReconciliationMessage(
+              kpis.current.payment_reconciliation,
+              kpis.current.payment_mix.length > 0,
+            )
+            if (!msg) return null
+            const toneClass =
+              msg.tone === 'success' ? 'text-success' : msg.tone === 'warning' ? 'text-warning' : 'text-muted'
+            return <p className={`mt-2 text-xs ${toneClass}`}>{msg.text}</p>
+          })()}
           {kpis.current.payment_mix.length === 0 ? (
             <p className="mt-3 text-xs text-muted">Sem dado de pagamento sincronizado pela Avec esse mês.</p>
           ) : (
