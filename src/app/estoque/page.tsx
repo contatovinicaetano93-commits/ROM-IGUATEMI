@@ -20,6 +20,16 @@ import {
   sortPurchaseQueue,
   purchaseQueueTotalCost,
 } from '@/lib/stock-purchase-queue'
+import {
+  OUTFLOW_REASON_LABEL,
+  classifyOutflowReason,
+  isPurchaseEntry,
+  listPurchaseEntries,
+  summarizeOutflowsByReason,
+  todayIsoDaySp,
+  addIsoDays,
+  type OutflowReasonBucket,
+} from '@/lib/stock-movement-insights'
 
 interface StockProduct {
   id: string
@@ -187,6 +197,7 @@ export default function EstoquePage() {
   const [catalogCategoryId, setCatalogCategoryId] = useState('')
   const [catalogBrandId, setCatalogBrandId] = useState('')
   const [catalogStockFilter, setCatalogStockFilter] = useState<CatalogStockFilter>('all')
+  const [outflowWindow, setOutflowWindow] = useState<'hoje' | 'semana'>('semana')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -252,6 +263,19 @@ export default function EstoquePage() {
       return hay.includes(q)
     })
   }, [products, catalogQuery, catalogCategoryId, catalogBrandId, catalogStockFilter])
+
+  const outflowRange = useMemo(() => {
+    const today = todayIsoDaySp()
+    if (outflowWindow === 'hoje') return { from: today, to: today }
+    return { from: addIsoDays(today, -6), to: today }
+  }, [outflowWindow])
+
+  const outflowSummary = useMemo(
+    () => summarizeOutflowsByReason(movements, outflowRange.from, outflowRange.to),
+    [movements, outflowRange],
+  )
+
+  const purchaseEntries = useMemo(() => listPurchaseEntries(movements, 15), [movements])
 
   async function acknowledge(id: string) {
     await apiFetch(`/api/estoque/alertas/${id}`, { method: 'PATCH' })
@@ -550,6 +574,92 @@ export default function EstoquePage() {
         </SectionCard>
       )}
 
+      <SectionCard title="Saídas por motivo">
+        <p className="mb-3 text-xs text-muted">
+          Avec 0044 · classifica consumo, perda, venda e outros no período.
+        </p>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {(
+            [
+              ['hoje', 'Hoje'],
+              ['semana', '7 dias'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setOutflowWindow(value)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                outflowWindow === value
+                  ? 'border-gold/40 bg-gold/10 text-gold'
+                  : 'border-border text-muted hover:text-foreground'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {loading ? (
+          <div className="h-16 animate-pulse rounded-2xl bg-surface" />
+        ) : (
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {outflowSummary.map((row) => (
+              <div
+                key={row.bucket}
+                className={`rounded-xl border p-3 ${
+                  row.bucket === 'perda' && row.count > 0
+                    ? 'border-danger/30 bg-danger/5'
+                    : 'border-border bg-surface'
+                }`}
+              >
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">{row.label}</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums">{formatQty(row.quantity)}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {row.count} mov. · {row.cost > 0 ? formatCurrency(row.cost) : 'sem custo'}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Entradas por pedido"
+        badge={<CountBadge value={String(purchaseEntries.length)} />}
+      >
+        <p className="mb-3 text-xs text-muted">
+          Avec 0323 · entradas enriquecidas como pedido de compra.
+        </p>
+        {loading && <div className="h-16 animate-pulse rounded-2xl bg-surface" />}
+        {!loading && purchaseEntries.length === 0 && (
+          <p className="text-xs text-muted">
+            Nenhuma entrada marcada como pedido ainda. Rode o sync full para enriquecer com 0323.
+          </p>
+        )}
+        {!loading && purchaseEntries.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {purchaseEntries.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{m.product_name}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {m.reason ?? 'Pedido de compra'} ·{' '}
+                    {new Date(m.occurred_at).toLocaleDateString('pt-BR')}
+                    {m.cost != null && ` · ${formatCurrency(m.cost)}`}
+                  </p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-success">
+                  +{formatQty(m.quantity)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
+
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium">Movimentações recentes</h2>
         <button
@@ -562,7 +672,9 @@ export default function EstoquePage() {
       </div>
 
       {loading &&
-        Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 animate-pulse rounded-2xl bg-card" />)}
+        Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="h-14 animate-pulse rounded-2xl bg-card" />
+        ))}
 
       {!loading && movements.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
@@ -571,29 +683,53 @@ export default function EstoquePage() {
       )}
 
       {!loading &&
-        movements.map((m) => (
-          <div key={m.id} className="flex items-center justify-between rounded-2xl border border-border bg-card p-4">
-            <div className="flex min-w-0 items-center gap-3">
-              {m.type === 'saida' ? (
-                <PackageMinus size={18} className="shrink-0 text-danger" />
-              ) : (
-                <PackagePlus size={18} className="shrink-0 text-success" />
-              )}
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{m.product_name}</p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {m.reason ?? (m.source === 'manual' ? 'Ajuste manual' : 'Avec')} ·{' '}
-                  {new Date(m.occurred_at).toLocaleDateString('pt-BR')}
-                  {m.source === 'manual' && ' · correção local'}
-                </p>
+        movements.map((m) => {
+          const outflowBucket: OutflowReasonBucket | null =
+            m.type === 'saida' ? classifyOutflowReason(m.reason) : null
+          const purchase = isPurchaseEntry(m)
+          return (
+            <div
+              key={m.id}
+              className="flex items-center justify-between rounded-2xl border border-border bg-card p-4"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                {m.type === 'saida' ? (
+                  <PackageMinus size={18} className="shrink-0 text-danger" />
+                ) : (
+                  <PackagePlus size={18} className="shrink-0 text-success" />
+                )}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {m.product_name}
+                    {purchase && (
+                      <span className="ml-2 rounded-full bg-success/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-success">
+                        Pedido
+                      </span>
+                    )}
+                    {outflowBucket && (
+                      <span className="ml-2 rounded-full bg-surface px-1.5 py-0.5 text-[0.6rem] font-semibold text-muted">
+                        {OUTFLOW_REASON_LABEL[outflowBucket]}
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {m.reason ?? (m.source === 'manual' ? 'Ajuste manual' : 'Avec')} ·{' '}
+                    {new Date(m.occurred_at).toLocaleDateString('pt-BR')}
+                    {m.source === 'manual' && ' · correção local'}
+                  </p>
+                </div>
               </div>
+              <span
+                className={`shrink-0 text-sm font-semibold tabular-nums ${
+                  m.type === 'saida' ? 'text-danger' : 'text-success'
+                }`}
+              >
+                {m.type === 'saida' ? '−' : '+'}
+                {m.quantity}
+              </span>
             </div>
-            <span className={`shrink-0 text-sm font-semibold tabular-nums ${m.type === 'saida' ? 'text-danger' : 'text-success'}`}>
-              {m.type === 'saida' ? '−' : '+'}
-              {m.quantity}
-            </span>
-          </div>
-        ))}
+          )
+        })}
 
       {showAdd && (
         <AddMovementSheet
