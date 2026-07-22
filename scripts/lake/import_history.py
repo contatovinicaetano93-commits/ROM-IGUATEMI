@@ -92,7 +92,9 @@ def norm_phone(raw: str | None) -> str | None:
         return f"+{digits}"
     if len(digits) in (10, 11):
         return f"+55{digits}"
-    return f"+{digits}"
+    if len(digits) >= 12:
+        return f"+{digits}"
+    return None
 
 
 def phone_key(raw: str | None) -> str | None:
@@ -230,7 +232,6 @@ def import_history(unit: str, database_url: str, days_back: int = 180) -> dict[s
         with conn.cursor() as cur:
             cur.execute("delete from client_services where notes like 'lake:comanda_item:%%'")
             deleted = cur.rowcount
-        conn.commit()
         print(f"cleared previous lake history={deleted}")
 
         batch: list[tuple] = []

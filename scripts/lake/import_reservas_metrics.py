@@ -224,7 +224,7 @@ def ensure_contact(
     telefone: str | None,
     salao_cliente_id: str | None,
     *,
-    status: str = "importado",
+    status: str = "novo",
     partial_phone_unique: bool = False,
 ) -> str | None:
     k = phone_key(telefone)
@@ -324,7 +324,7 @@ def import_unit(
     days_fwd: int = 45,
     days_back_hist: int = 7,
     days_metrics: int = 30,
-    contact_status: str = "importado",
+    contact_status: str = "novo",
 ) -> dict[str, Any]:
     salao_id = SALONS[unit]
     print(f"\n==== {unit} salao_id={salao_id} ====")
@@ -373,7 +373,6 @@ def import_unit(
                 (days_back_hist, days_fwd),
             )
             deleted = cur.rowcount
-        conn.commit()
         print(f"cleared previous lake services={deleted}")
 
         batch: list[tuple] = []
@@ -451,12 +450,14 @@ def import_unit(
                 cur.execute(
                     """
                     select count(*)::int from client_services
-                    where scheduled_at is not null
+                    where active = true
+                      and notes like 'lake:reserva:%%'
+                      and scheduled_at is not null
                       and (scheduled_at at time zone 'America/Sao_Paulo')::date = %s::date
                     """,
                     (day,),
                 )
-                appointments = cur.fetchone()[0] or attended
+                appointments = cur.fetchone()[0]
                 cur.execute(
                     """
                     insert into salon_daily_metrics as m (
@@ -497,9 +498,9 @@ def main():
     results = []
 
     if os.environ.get("DATABASE_URL_BRASIL") and (not only or only == "brasil"):
-        results.append(import_unit("brasil", os.environ["DATABASE_URL_BRASIL"], contact_status="importado"))
+        results.append(import_unit("brasil", os.environ["DATABASE_URL_BRASIL"], contact_status="novo"))
     if os.environ.get("DATABASE_URL_IGUATEMI") and (not only or only == "iguatemi"):
-        results.append(import_unit("iguatemi", os.environ["DATABASE_URL_IGUATEMI"], contact_status="importado"))
+        results.append(import_unit("iguatemi", os.environ["DATABASE_URL_IGUATEMI"], contact_status="novo"))
     if os.environ.get("DATABASE_URL_ROMSALES") and (not only or only == "romsales"):
         print("\n==== romsales (mirror brasil) ====")
         results.append(
