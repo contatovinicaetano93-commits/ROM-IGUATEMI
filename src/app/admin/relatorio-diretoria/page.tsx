@@ -528,6 +528,18 @@ export default function RelatorioDiretoriaPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 title="Abrir WhatsApp Web com mensagem de recall"
+                                onClick={() => {
+                                  void apiFetch('/api/reactivation/outreach', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      phone: phone,
+                                      name: c.name,
+                                      surface: 'director_0011',
+                                      lastDoneAtAtSend: c.last_visit ?? null,
+                                    }),
+                                  }).catch(() => {})
+                                }}
                                 className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-success/40 bg-success/10 px-2.5 py-1.5 text-[0.7rem] font-semibold text-success hover:bg-success/20"
                               >
                                 <MessageCircle size={13} />

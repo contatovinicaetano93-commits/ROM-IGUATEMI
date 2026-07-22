@@ -9,7 +9,8 @@ import { listUpcomingSchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { todayIso } from '@/lib/salon/format'
-import { compareScheduleByNameThenTime } from '@/lib/salon/sort'
+import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
+import { getReactivationKpis } from '@/lib/salon/reactivation-kpi'
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,11 +22,11 @@ export async function GET(req: NextRequest) {
     const day = todayIso()
     const sql = getSql()
 
-    const [salonRaw, playbook, scheduleRaw, leadRows, avecLast] = await Promise.all([
+    const [salonRaw, playbook, scheduleRaw, leadRows, avecLast, reactivation] = await Promise.all([
       getSalonMetrics(day),
       listActionItems(),
-      // Busca folgada e reordena A–Z (limite 15 por horário distorcia a ordem alfabética).
-      listUpcomingSchedules(1, 100),
+      // Hoje + próximos dias, ordenados por data/hora (mais próximo primeiro).
+      listUpcomingSchedules(7, 150),
       sql`
         select
           count(*) filter (where status = 'novo')::int as novos,
@@ -33,9 +34,15 @@ export async function GET(req: NextRequest) {
         from contacts
       ` as unknown as Promise<{ novos: number; whatsapp_novos: number }[]>,
       getLastAvecSync(),
+      getReactivationKpis().catch(() => ({
+        window_days: 21,
+        contacted: 0,
+        reactivated: 0,
+        rate: null as number | null,
+      })),
     ])
 
-    const scheduleToday = [...scheduleRaw].sort(compareScheduleByNameThenTime)
+    const scheduleToday = [...scheduleRaw].sort(compareScheduleByTimeThenName)
     const leads = leadRows[0]
     const salonBase = salonRaw ?? {
       day,
@@ -85,6 +92,7 @@ export async function GET(req: NextRequest) {
         whatsapp_sem_resposta: leads.whatsapp_novos,
       },
       overdue_total: playbook.reduce((s, a) => s + a.overdue, 0),
+      reactivation,
       avec: {
         configured: isAvecConfigured(),
         last: avecLast,
