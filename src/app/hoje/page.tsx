@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   Sun,
   ChevronRight,
+  ChevronDown,
   AlertTriangle,
   Clock,
   Calendar,
@@ -22,6 +23,10 @@ import { fmtScheduleParts, formatCurrency } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { contactHref } from '@/lib/auth-redirect'
+import { usePersistedBool } from '@/lib/use-persisted-bool'
+
+const HOJE_OPEN_SCHEDULE_KEY = 'hoje.section.agendamentos.open'
+const HOJE_OPEN_PLAYBOOK_KEY = 'hoje.section.playbook.open'
 
 interface PlaybookItem {
   contact_id: string
@@ -73,6 +78,8 @@ export default function HojePage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [briefFor, setBriefFor] = useState<{ id: string; name: string | null } | null>(null)
+  const [scheduleOpen, setScheduleOpen] = usePersistedBool(HOJE_OPEN_SCHEDULE_KEY, false)
+  const [playbookOpen, setPlaybookOpen] = usePersistedBool(HOJE_OPEN_PLAYBOOK_KEY, false)
 
   useEffect(() => {
     apiFetch('/api/hoje', { cache: 'no-store' })
@@ -218,125 +225,158 @@ export default function HojePage() {
 
       {/* Agenda — hoje e próximos, por data/hora */}
       <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setScheduleOpen((v) => !v)}
+          aria-expanded={scheduleOpen}
+          className="flex w-full items-center justify-between gap-3 rounded-xl py-0.5 text-left active:opacity-90"
+        >
           <h2 className="flex items-center gap-1.5 text-sm font-medium">
             <Calendar size={15} className="text-sky-300" /> Agendamentos
           </h2>
-          <CountBadge value={loading ? '—' : String(data?.scheduleToday.length ?? 0)} tone="gold" />
-        </div>
-        <p className="text-[0.65rem] text-muted/70">
-          1 linha por serviço · horário em destaque · ordem cronológica
-        </p>
+          <span className="flex items-center gap-2">
+            <CountBadge value={loading ? '—' : String(data?.scheduleToday.length ?? 0)} tone="gold" />
+            <ChevronDown
+              size={16}
+              className={`shrink-0 text-muted transition-transform ${scheduleOpen ? 'rotate-180' : ''}`}
+            />
+          </span>
+        </button>
 
-        {loading &&
-          Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse rounded-2xl bg-card" />
-          ))}
+        {scheduleOpen && (
+          <>
+            <p className="text-[0.65rem] text-muted/70">
+              1 linha por serviço · horário em destaque · ordem cronológica
+            </p>
 
-        {!loading && data?.scheduleToday.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-            Nenhum agendamento próximo.
-          </div>
+            {loading &&
+              Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="h-16 animate-pulse rounded-2xl bg-card" />
+              ))}
+
+            {!loading && data?.scheduleToday.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
+                Nenhum agendamento próximo.
+              </div>
+            )}
+
+            {!loading &&
+              data?.scheduleToday.map((s) => {
+                const when = fmtScheduleParts(s.scheduled_at)
+                return (
+                  <Link
+                    key={s.id}
+                    href={contactHref(s.contact_id, '/hoje')}
+                    className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-3.5 active:bg-surface sm:p-4"
+                  >
+                    <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-sky-500/10 px-1.5 py-2 text-center">
+                      <span className="text-sm font-semibold tabular-nums leading-none text-sky-200">
+                        {when.time}
+                      </span>
+                      <span className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted">
+                        {when.day}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
+                      <p className="mt-0.5 truncate text-xs text-sky-300/90">{s.name}</p>
+                    </div>
+                    <ChevronRight size={16} className="shrink-0 text-muted" />
+                  </Link>
+                )
+              })}
+          </>
         )}
-
-        {!loading &&
-          data?.scheduleToday.map((s) => {
-            const when = fmtScheduleParts(s.scheduled_at)
-            return (
-              <Link
-                key={s.id}
-                href={contactHref(s.contact_id, '/hoje')}
-                className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-3.5 active:bg-surface sm:p-4"
-              >
-                <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-sky-500/10 px-1.5 py-2 text-center">
-                  <span className="text-sm font-semibold tabular-nums leading-none text-sky-200">
-                    {when.time}
-                  </span>
-                  <span className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted">
-                    {when.day}
-                  </span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
-                  <p className="mt-0.5 truncate text-xs text-sky-300/90">{s.name}</p>
-                </div>
-                <ChevronRight size={16} className="shrink-0 text-muted" />
-              </Link>
-            )
-          })}
       </section>
 
       {/* Playbook — ações prioritárias */}
       <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setPlaybookOpen((v) => !v)}
+          aria-expanded={playbookOpen}
+          className="flex w-full items-center justify-between gap-3 rounded-xl py-0.5 text-left active:opacity-90"
+        >
           <h2 className="flex items-center gap-1.5 text-sm font-medium">
             <Sparkles size={15} className="text-gold" /> O que fazer agora
           </h2>
-          <CountBadge value={loading ? '—' : String(data?.playbook.length ?? 0)} />
-        </div>
-        {!loading && (data?.playbook.length ?? 0) > 0 && (
-          <UrgencyBadgeLegend showScheduled={false} />
-        )}
+          <span className="flex items-center gap-2">
+            <CountBadge value={loading ? '—' : String(data?.playbook.length ?? 0)} />
+            <ChevronDown
+              size={16}
+              className={`shrink-0 text-muted transition-transform ${playbookOpen ? 'rotate-180' : ''}`}
+            />
+          </span>
+        </button>
 
-        {loading &&
-          Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse rounded-2xl bg-card" />
-          ))}
+        {playbookOpen && (
+          <>
+            {!loading && (data?.playbook.length ?? 0) > 0 && (
+              <UrgencyBadgeLegend showScheduled={false} />
+            )}
 
-        {!loading && data?.playbook.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-            <p className="font-medium text-foreground/90">Tudo em dia 🎉</p>
-            <p className="mt-1 text-xs">Sem ações urgentes. Confira os contatos novos ou a visão analítica.</p>
-          </div>
-        )}
+            {loading &&
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-16 animate-pulse rounded-2xl bg-card" />
+              ))}
 
-        {!loading &&
-          data?.playbook.map((a) => (
-            <div
-              key={a.contact_id}
-              className="flex items-center gap-2 rounded-2xl border border-border bg-card p-4"
-            >
-              <Link
-                href={contactHref(a.contact_id, '/hoje')}
-                className="flex min-w-0 flex-1 items-center gap-3 active:opacity-80"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-medium">{a.contact_name ?? 'Sem nome'}</p>
-                    {a.max_overdue_days > 0 && (
-                      <span
-                        title={`${a.max_overdue_days} dia(s) sem retorno · ${a.overdue} serviço(s) atrasado(s)`}
-                        className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger"
-                      >
-                        <AlertTriangle size={10} />
-                        {a.max_overdue_days}
-                      </span>
-                    )}
-                    {a.due_soon > 0 && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning">
-                        <Clock size={10} />
-                        {a.due_soon}
-                      </span>
-                    )}
-                  </div>
-                  {a.recommendations[0] && (
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      <span className="text-gold">{a.recommendations[0].title}</span> · {a.recommendations[0].detail}
-                    </p>
-                  )}
+            {!loading && data?.playbook.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
+                <p className="font-medium text-foreground/90">Tudo em dia 🎉</p>
+                <p className="mt-1 text-xs">Sem ações urgentes. Confira os contatos novos ou a visão analítica.</p>
+              </div>
+            )}
+
+            {!loading &&
+              data?.playbook.map((a) => (
+                <div
+                  key={a.contact_id}
+                  className="flex items-center gap-2 rounded-2xl border border-border bg-card p-4"
+                >
+                  <Link
+                    href={contactHref(a.contact_id, '/hoje')}
+                    className="flex min-w-0 flex-1 items-center gap-3 active:opacity-80"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-medium">{a.contact_name ?? 'Sem nome'}</p>
+                        {a.max_overdue_days > 0 && (
+                          <span
+                            title={`${a.max_overdue_days} dia(s) sem retorno · ${a.overdue} serviço(s) atrasado(s)`}
+                            className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger"
+                          >
+                            <AlertTriangle size={10} />
+                            {a.max_overdue_days}
+                          </span>
+                        )}
+                        {a.due_soon > 0 && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning">
+                            <Clock size={10} />
+                            {a.due_soon}
+                          </span>
+                        )}
+                      </div>
+                      {a.recommendations[0] && (
+                        <p className="mt-0.5 truncate text-xs text-muted">
+                          <span className="text-gold">{a.recommendations[0].title}</span> ·{' '}
+                          {a.recommendations[0].detail}
+                        </p>
+                      )}
+                    </div>
+                    <ChevronRight size={16} className="shrink-0 text-muted" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setBriefFor({ id: a.contact_id, name: a.contact_name })}
+                    aria-label={`Gerar briefing de ${a.contact_name ?? 'cliente'}`}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gold/40 bg-gold/10 text-gold active:scale-95"
+                  >
+                    <Sparkles size={16} />
+                  </button>
                 </div>
-                <ChevronRight size={16} className="shrink-0 text-muted" />
-              </Link>
-              <button
-                type="button"
-                onClick={() => setBriefFor({ id: a.contact_id, name: a.contact_name })}
-                aria-label={`Gerar briefing de ${a.contact_name ?? 'cliente'}`}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gold/40 bg-gold/10 text-gold active:scale-95"
-              >
-                <Sparkles size={16} />
-              </button>
-            </div>
-          ))}
+              ))}
+          </>
+        )}
       </section>
 
       {briefFor && (
