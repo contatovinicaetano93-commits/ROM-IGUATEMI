@@ -31,6 +31,11 @@ interface FinanceKpiBucket {
   to: string
   revenue: number
   expenses: number
+  attended: number
+  ticket_avg: number | null
+  daily: { day: string; revenue: number; attended: number; ticket_avg: number | null }[]
+  top_professionals: { name: string; revenue: number; attended: number; ticket_avg: number }[]
+  top_services: { name: string; quantity: number; revenue: number }[]
   gross_margin: number | null
   cash_flow: number
   payment_mix: { method: string; amount: number; share: number }[]
@@ -161,6 +166,11 @@ const EMPTY_RECONCILIATION: PaymentReconciliation = {
 function normalizeKpiBucket(bucket: FinanceKpiBucket): FinanceKpiBucket {
   return {
     ...bucket,
+    attended: bucket.attended ?? 0,
+    ticket_avg: bucket.ticket_avg ?? null,
+    daily: bucket.daily ?? [],
+    top_professionals: bucket.top_professionals ?? [],
+    top_services: bucket.top_services ?? [],
     payment_mix: bucket.payment_mix ?? [],
     payment_reconciliation: bucket.payment_reconciliation ?? EMPTY_RECONCILIATION,
     fiscal_split: bucket.fiscal_split ?? EMPTY_FISCAL_SPLIT,
@@ -211,6 +221,8 @@ export default function FinanceiroPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [fiscalImporting, setFiscalImporting] = useState(false)
+  const [fiscalImportMsg, setFiscalImportMsg] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -276,6 +288,31 @@ export default function FinanceiroPage() {
     load()
   }
 
+  async function importFiscalSettlements() {
+    setFiscalImporting(true)
+    setFiscalImportMsg(null)
+    try {
+      const res = await apiFetch('/api/financeiro/fiscal-split', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month }),
+      })
+      const json = await res.json()
+      if (json.error) throw new Error(json.error)
+      const imported = json.data?.imported ?? 0
+      setFiscalImportMsg(
+        imported > 0
+          ? `Importados ${imported} settlement(s).`
+          : json.data?.error ?? 'Nenhum settlement novo (verifique FISCAL_SPLIT_API_URL).',
+      )
+      await load()
+    } catch (e) {
+      setFiscalImportMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setFiscalImporting(false)
+    }
+  }
+
   function categoryName(id: string | null) {
     return categories.find((c) => c.id === id)?.name ?? 'Sem categoria'
   }
@@ -321,13 +358,51 @@ export default function FinanceiroPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <FinanceKpiCard
           label="Receita"
           value={loading || !kpis ? '—' : formatCurrency(kpis.current.revenue)}
           delta={kpis ? fmtDelta(kpis.current.revenue, kpis.previous.revenue) : null}
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.revenue >= kpis.previous.revenue : null}
+          loading={loading}
+        />
+        <FinanceKpiCard
+          label="Atendidos"
+          value={loading || !kpis ? '—' : String(kpis.current.attended ?? 0)}
+          delta={
+            kpis
+              ? (() => {
+                  const diff = (kpis.current.attended ?? 0) - (kpis.previous.attended ?? 0)
+                  if (diff === 0) return null
+                  return `${diff > 0 ? '+' : ''}${diff}`
+                })()
+              : null
+          }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={kpis ? (kpis.current.attended ?? 0) >= (kpis.previous.attended ?? 0) : null}
+          loading={loading}
+        />
+        <FinanceKpiCard
+          label="Ticket médio"
+          value={
+            loading || !kpis
+              ? '—'
+              : kpis.current.ticket_avg != null
+                ? formatCurrency(kpis.current.ticket_avg)
+                : '—'
+          }
+          delta={
+            kpis && kpis.current.ticket_avg != null && kpis.previous.ticket_avg != null
+              ? fmtDelta(kpis.current.ticket_avg, kpis.previous.ticket_avg)
+              : null
+          }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={
+            kpis && kpis.current.ticket_avg != null && kpis.previous.ticket_avg != null
+              ? kpis.current.ticket_avg >= kpis.previous.ticket_avg
+              : null
+          }
           loading={loading}
         />
         <FinanceKpiCard
@@ -364,6 +439,90 @@ export default function FinanceiroPage() {
         />
       </div>
 
+      {!loading && kpis && (kpis.current.daily?.length ?? 0) > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <h2 className="text-sm font-medium">Receita diária — {kpis.current.label}</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Fonte: salon_daily_metrics (sync Avec + histórico Lake).
+          </p>
+          <div className="mt-3 max-h-64 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-card text-[0.65rem] uppercase tracking-wide text-muted">
+                <tr>
+                  <th className="py-1.5 font-medium">Dia</th>
+                  <th className="py-1.5 font-medium">Receita</th>
+                  <th className="py-1.5 font-medium">Atendidos</th>
+                  <th className="py-1.5 font-medium">Ticket</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...kpis.current.daily].reverse().map((d) => (
+                  <tr key={d.day} className="border-t border-border/60">
+                    <td className="py-1.5 tabular-nums">{d.day.slice(8)}/{d.day.slice(5, 7)}</td>
+                    <td className="py-1.5 tabular-nums">{formatCurrency(d.revenue)}</td>
+                    <td className="py-1.5 tabular-nums">{d.attended}</td>
+                    <td className="py-1.5 tabular-nums">
+                      {d.ticket_avg != null ? formatCurrency(d.ticket_avg) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {!loading && kpis && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-medium">Top profissionais</h2>
+                <p className="mt-0.5 text-xs text-muted">Snapshot 0021 (janela ~30 dias).</p>
+              </div>
+              <a
+                href="/admin/relatorio-diretoria"
+                className="shrink-0 text-xs text-gold hover:underline"
+              >
+                Relatório 0021
+              </a>
+            </div>
+            {(kpis.current.top_professionals?.length ?? 0) === 0 ? (
+              <p className="mt-3 text-xs text-muted">Sem ranking sincronizado — aguarde o sync full.</p>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-2">
+                {kpis.current.top_professionals.map((p) => (
+                  <li key={p.name} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{p.name}</span>
+                    <span className="shrink-0 tabular-nums text-muted">
+                      {formatCurrency(p.revenue)} · {p.attended} at.
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <h2 className="text-sm font-medium">Top serviços</h2>
+            <p className="mt-0.5 text-xs text-muted">Snapshot 0032 (janela ~30 dias).</p>
+            {(kpis.current.top_services?.length ?? 0) === 0 ? (
+              <p className="mt-3 text-xs text-muted">Sem ranking sincronizado — aguarde o sync full.</p>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-2">
+                {kpis.current.top_services.map((s) => (
+                  <li key={s.name} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{s.name}</span>
+                    <span className="shrink-0 tabular-nums text-muted">
+                      {formatCurrency(s.revenue)} · {s.quantity}×
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {!loading && noRevenueYet && (
         <p className="-mt-3 text-xs text-muted">
           Margem bruta e fluxo dependem do faturamento sincronizado pela Avec — ainda sem dado esse mês.
@@ -372,10 +531,24 @@ export default function FinanceiroPage() {
 
       {!loading && kpis && (
         <div className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-sm font-medium">Split fiscal — {kpis.current.label}</h2>
-          <p className="mt-0.5 text-xs text-muted">
-            CBS/IBS retidos na liquidação (Plataforma Pública / export do PSP). O ROM só reconcilia — não processa pagamento.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-medium">Split fiscal — {kpis.current.label}</h2>
+              <p className="mt-0.5 text-xs text-muted">
+                CBS/IBS retidos na liquidação (Plataforma Pública / export do PSP). O ROM só reconcilia — não
+                processa pagamento.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={importFiscalSettlements}
+              disabled={fiscalImporting}
+              className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-foreground/90 transition-colors hover:bg-surface disabled:opacity-50"
+            >
+              {fiscalImporting ? 'Importando…' : 'Importar settlements'}
+            </button>
+          </div>
+          {fiscalImportMsg && <p className="mt-2 text-xs text-muted">{fiscalImportMsg}</p>}
           {kpis.current.fiscal_split.settled_count === 0 && kpis.current.fiscal_split.pending_count === 0 ? (
             <p className="mt-3 text-xs text-muted">
               {kpis.current.fiscal_split.configured
