@@ -1,6 +1,7 @@
 import type { ClientService } from '@/lib/services'
 import { enrichServices, computeRecommendations } from '@/lib/recommendations'
 import { DAY_MS } from '@/lib/salon/constants'
+import { compareByNamePtBr } from '@/lib/salon/sort'
 
 export interface UrgencySummary {
   overdue: number
@@ -22,7 +23,7 @@ export function compareByOverdueThenName(
 ): number {
   const byDays = b.max_overdue_days - a.max_overdue_days
   if (byDays !== 0) return byDays
-  return (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' })
+  return compareByNamePtBr(a.name, b.name)
 }
 
 export function urgencyForServices(services: ClientService[]): UrgencySummary {

@@ -310,7 +310,13 @@ export default function DashboardPage() {
 
             <SectionCard title="Status dos contatos" badge={<CountBadge value={`${statusTotal}`} />}>
               <div className="flex flex-col gap-2.5">
-                {(data?.byStatus ?? []).map((row) => (
+                {[...(data?.byStatus ?? [])]
+                  .sort(
+                    (a, b) =>
+                      b.contacts_count - a.contacts_count ||
+                      a.status.localeCompare(b.status, 'pt-BR'),
+                  )
+                  .map((row) => (
                   <div key={row.status} className="flex items-center justify-between">
                     <StatusPill status={row.status} />
                     <span className="text-sm font-semibold tabular-nums text-foreground/90">{row.contacts_count}</span>
