@@ -15,6 +15,7 @@ import {
 import { fmtSchedule, formatCurrency, formatPercent } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
+import { contactHref } from '@/lib/auth-redirect'
 import { BriefSheet } from '../_components/BriefSheet'
 import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
 
@@ -350,7 +351,7 @@ export default function DashboardPage() {
               {schedule.slice(0, 5).map((s) => (
                 <Link
                   key={s.id}
-                  href={`/contatos/${s.contact_id}`}
+                  href={contactHref(s.contact_id, '/dashboard')}
                   className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-4 active:bg-surface lg:hover:bg-sky-500/10"
                 >
                   <div className="min-w-0 flex-1">
@@ -389,7 +390,7 @@ export default function DashboardPage() {
                   className="flex items-center gap-2 rounded-2xl border border-border bg-card p-4"
                 >
                   <Link
-                    href={`/contatos/${a.contact_id}`}
+                    href={contactHref(a.contact_id, '/dashboard')}
                     className="flex min-w-0 flex-1 items-center gap-3 active:opacity-80 lg:hover:opacity-90"
                   >
                     <div className="min-w-0 flex-1">
@@ -541,6 +542,7 @@ export default function DashboardPage() {
         <BriefSheet
           contactId={briefFor.id}
           contactName={briefFor.name}
+          returnTo="/dashboard"
           onClose={() => setBriefFor(null)}
         />
       )}

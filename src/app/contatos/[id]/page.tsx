@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
   ChevronLeft,
   Phone,
@@ -36,6 +36,7 @@ import { CATEGORY_LABEL } from '@/lib/salon/constants'
 import { apiFetch } from '@/lib/api-client'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
 import { LastVisitCard, type LastVisitData } from '../../_components/LastVisitCard'
+import { contactReturnLabel, sanitizeContactReturnTo } from '@/lib/auth-redirect'
 
 interface Service {
   id: string
@@ -177,6 +178,10 @@ function eventMeta(e: ContactEvent): { icon: React.ReactNode; title: string; det
 export default function ContactDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = sanitizeContactReturnTo(searchParams.get('returnTo'), '/contatos')
+  const backLabel = contactReturnLabel(returnTo)
+  const goBack = () => router.push(returnTo)
   const [data, setData] = useState<Profile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -340,8 +345,8 @@ export default function ContactDetailPage() {
   if (error || !data) {
     return (
       <main className="flex flex-1 flex-col gap-4 px-5 py-6">
-        <button onClick={() => router.push('/contatos')} className="flex items-center gap-1 text-sm text-muted">
-          <ChevronLeft size={18} /> Contatos
+        <button onClick={goBack} className="flex items-center gap-1 text-sm text-muted">
+          <ChevronLeft size={18} /> {backLabel}
         </button>
         <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted">
           {error ?? 'Contato não encontrado.'}
@@ -369,8 +374,8 @@ export default function ContactDetailPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
-      <button onClick={() => router.push('/contatos')} className="flex items-center gap-1 text-sm text-muted active:text-foreground lg:hover:text-foreground">
-        <ChevronLeft size={18} /> Contatos
+      <button onClick={goBack} className="flex items-center gap-1 text-sm text-muted active:text-foreground lg:hover:text-foreground">
+        <ChevronLeft size={18} /> {backLabel}
       </button>
 
       {(mutationError || mutationOk) && (

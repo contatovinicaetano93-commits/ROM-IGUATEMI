@@ -21,6 +21,7 @@ import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
 import { fmtScheduleParts, formatCurrency } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
+import { contactHref } from '@/lib/auth-redirect'
 
 interface PlaybookItem {
   contact_id: string
@@ -244,7 +245,7 @@ export default function HojePage() {
             return (
               <Link
                 key={s.id}
-                href={`/contatos/${s.contact_id}`}
+                href={contactHref(s.contact_id, '/hoje')}
                 className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-3.5 active:bg-surface sm:p-4"
               >
                 <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-sky-500/10 px-1.5 py-2 text-center">
@@ -296,7 +297,7 @@ export default function HojePage() {
               className="flex items-center gap-2 rounded-2xl border border-border bg-card p-4"
             >
               <Link
-                href={`/contatos/${a.contact_id}`}
+                href={contactHref(a.contact_id, '/hoje')}
                 className="flex min-w-0 flex-1 items-center gap-3 active:opacity-80"
               >
                 <div className="min-w-0 flex-1">
@@ -342,6 +343,7 @@ export default function HojePage() {
         <BriefSheet
           contactId={briefFor.id}
           contactName={briefFor.name}
+          returnTo="/hoje"
           onClose={() => setBriefFor(null)}
         />
       )}
