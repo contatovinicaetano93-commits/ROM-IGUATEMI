@@ -8,24 +8,29 @@ afterEach(() => {
 })
 
 describe('listDirectorProfessionals — roster por unidade', () => {
-  it('ROM_PANEL=brasil retorna o roster real do Brasil', () => {
+  it('ROM_PANEL=brasil retorna o roster ATIVO do Lake (salao 40613)', () => {
     process.env.ROM_PANEL = 'brasil'
     const pros = listDirectorProfessionals()
-    expect(pros.length).toBeGreaterThan(0)
-    expect(pros.some((p) => p.name === 'Vitor M')).toBe(true)
+    expect(pros.length).toBeGreaterThan(300)
+    expect(pros.every((p) => p.active)).toBe(true)
+    expect(pros.some((p) => p.name.includes('Vitor Moreira'))).toBe(true)
+    expect(pros.some((p) => p.avec_pro_id === '830330')).toBe(true)
   })
 
-  it('ROM_PANEL=iguatemi retorna vazio (roster ainda não preenchido) sem quebrar', () => {
+  it('ROM_PANEL=iguatemi retorna o roster ATIVO do Lake (salao 99801)', () => {
     process.env.ROM_PANEL = 'iguatemi'
-    expect(listDirectorProfessionals()).toEqual([])
+    const pros = listDirectorProfessionals()
+    expect(pros.length).toBeGreaterThan(200)
+    expect(pros.every((p) => p.active)).toBe(true)
+    expect(pros.some((p) => p.name.includes('Beto Fortes'))).toBe(true)
   })
 
-  it('nunca mistura os dois rosters', () => {
+  it('cada painel devolve só o próprio roster (ids não se misturam)', () => {
     process.env.ROM_PANEL = 'iguatemi'
-    const iguatemiNames = listDirectorProfessionals(false).map((p) => p.name)
+    const iguatemiIds = new Set(listDirectorProfessionals(false).map((p) => p.id))
     process.env.ROM_PANEL = 'brasil'
-    const brasilNames = listDirectorProfessionals(false).map((p) => p.name)
-    const overlap = brasilNames.filter((n) => iguatemiNames.includes(n))
+    const brasilIds = new Set(listDirectorProfessionals(false).map((p) => p.id))
+    const overlap = [...brasilIds].filter((id) => iguatemiIds.has(id))
     expect(overlap).toEqual([])
   })
 })
