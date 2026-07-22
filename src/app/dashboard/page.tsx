@@ -3,39 +3,22 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Area, AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { ShieldCheck, RefreshCw, Layers, TrendingUp, Users, Sparkles, ChevronRight, AlertTriangle, Clock, Calendar, Trophy } from 'lucide-react'
 import {
-  SectionCard,
-  CountBadge,
-  InfoBanner,
-  HealthItem,
-  StatusPill,
-  CHANNEL_LABEL,
-} from '../_components/ui'
-import { fmtSchedule, formatCurrency, formatPercent } from '@/lib/salon/format'
+  Layers,
+  TrendingUp,
+  Users,
+  Sparkles,
+  Clock,
+  Trophy,
+  Percent,
+  Package,
+  AlertTriangle,
+} from 'lucide-react'
+import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL } from '../_components/ui'
+import { formatCurrency, formatPercent, formatPercentPoints } from '@/lib/salon/format'
+
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
-import { contactHref } from '@/lib/auth-redirect'
-import { BriefSheet } from '../_components/BriefSheet'
-import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
-
-interface ScheduleItem {
-  id: string
-  contact_id: string
-  contact_name: string | null
-  name: string
-  scheduled_at: string
-  category: string
-}
-
-interface ActionItem {
-  contact_id: string
-  contact_name: string | null
-  overdue: number
-  max_overdue_days: number
-  due_soon: number
-  recommendations: { type: string; title: string; detail: string }[]
-}
 
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
@@ -58,16 +41,6 @@ function aggregateByChannel(rows: KpiData['byDay']) {
   const map = new Map<string, number>()
   for (const row of rows) map.set(row.channel, (map.get(row.channel) ?? 0) + row.contacts_count)
   return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
-}
-
-interface AvecStatus {
-  configured: boolean
-  last: {
-    status: string
-    created_at: string
-    stats: { clients_upserted?: number; appointments_synced?: number; attendances_synced?: number; warnings?: string[] }
-    error: string | null
-  } | null
 }
 
 interface TmBucket {
@@ -97,18 +70,34 @@ interface PerformanceData {
   professionals: ProfessionalRanking[]
 }
 
+interface PeriodAnalytics {
+  month: string
+  label: string
+  snapshot_day: string | null
+  occupancy_avg: number | null
+  cancelled: number
+  no_shows: number
+  ticket_avg: number | null
+  lost_revenue: number
+  packages: { name: string; quantity: number; revenue: number }[]
+  packages_sold: number
+  packages_revenue: number
+  booking_channels: { channel: string; count: number }[]
+  acquisition: { channel: string; clients: number }[]
+  return_rate: number | null
+  new_clients_period: number
+  top_services: { name: string; quantity: number; revenue: number }[]
+}
+
 export default function DashboardPage() {
   const brand = getBrand()
   const [data, setData] = useState<KpiData | null>(null)
-  const [actions, setActions] = useState<ActionItem[]>([])
-  const [schedule, setSchedule] = useState<ScheduleItem[]>([])
-  const [avec, setAvec] = useState<AvecStatus | null>(null)
   const [tm, setTm] = useState<TmComparison | null>(null)
   const [performance, setPerformance] = useState<PerformanceData | null>(null)
+  const [period, setPeriod] = useState<PeriodAnalytics | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [briefFor, setBriefFor] = useState<{ id: string; name: string | null } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -121,58 +110,35 @@ export default function DashboardPage() {
         if (kpisJson.error) setError(kpisJson.error)
         else setData(kpisJson.data)
 
-        const [recRes, schedRes, avecRes, tmRes, perfRes] = await Promise.all([
-          apiFetch('/api/recommendations', { cache: 'no-store' }),
-          apiFetch('/api/schedule', { cache: 'no-store' }),
-          apiFetch('/api/avec/sync', { cache: 'no-store' }),
+        const [tmRes, perfRes, periodRes] = await Promise.all([
           apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
           apiFetch('/api/kpis/performance', { cache: 'no-store' }),
+          apiFetch('/api/kpis/periodo', { cache: 'no-store' }),
         ])
         if (cancelled) return
 
         const warnings: string[] = []
 
         try {
-          const recJson = await recRes.json()
-          if (recJson.error) warnings.push(`Recomendações: ${recJson.error}`)
-          else if (recJson.data) setActions(recJson.data)
-        } catch {
-          warnings.push('Recomendações indisponíveis')
-        }
-
-        try {
-          const schedJson = await schedRes.json()
-          if (schedJson.error) warnings.push(`Agenda: ${schedJson.error}`)
-          else if (schedJson.data) setSchedule(schedJson.data)
-        } catch {
-          warnings.push('Agenda indisponível')
-        }
-
-        try {
-          const avecJson = await avecRes.json()
-          if (avecJson.data) {
-            setAvec(avecJson.data)
-            const syncWarnings = avecJson.data?.last?.stats?.warnings
-            if (Array.isArray(syncWarnings) && syncWarnings.length > 0) {
-              warnings.push(`Avec: ${syncWarnings[0]}`)
-            }
-          }
-        } catch {
-          // opcional
-        }
-
-        try {
           const tmJson = await tmRes.json()
           if (tmJson.data) setTm(tmJson.data)
         } catch {
-          // opcional — TM ainda depende do AVEC_API_TOKEN
+          // opcional
         }
 
         try {
           const perfJson = await perfRes.json()
           if (perfJson.data) setPerformance(perfJson.data)
         } catch {
-          // opcional — ranking ainda depende do AVEC_API_TOKEN
+          // opcional
+        }
+
+        try {
+          const periodJson = await periodRes.json()
+          if (periodJson.error) warnings.push(`Período: ${periodJson.error}`)
+          else if (periodJson.data) setPeriod(periodJson.data)
+        } catch {
+          warnings.push('Analytics de período indisponível')
         }
 
         if (warnings.length) setWarn(warnings.join(' · '))
@@ -201,9 +167,12 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
-      <div className="lg:hidden">
-        <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão geral</p>
-        <h1 className="mt-1 text-xl font-semibold">{brand.dashboardTitle}</h1>
+      <div>
+        <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
+        <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
+        <p className="mt-1 text-xs text-muted">
+          Comercial e performance do período. Operação do dia fica em Hoje · dinheiro em Financeiro.
+        </p>
       </div>
 
       {error && (
@@ -217,6 +186,56 @@ export default function DashboardPage() {
           {warn}
         </div>
       )}
+
+      {/* Pulso comercial do período (Avec + métricas) */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+        <MiniStat
+          icon={<Percent size={15} />}
+          label={`Ocupação · ${period?.label ?? '—'}`}
+          value={
+            loading || !period
+              ? '—'
+              : period.occupancy_avg != null
+                ? formatPercentPoints(period.occupancy_avg * 100)
+                : '—'
+          }
+        />
+        <MiniStat
+          icon={<AlertTriangle size={15} />}
+          label="Receita perdida"
+          value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
+        />
+        <MiniStat
+          icon={<Users size={15} />}
+          label="Cancel. + no-show"
+          value={
+            loading || !period
+              ? '—'
+              : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
+          }
+        />
+        <MiniStat
+          icon={<Package size={15} />}
+          label="Pacotes (receita)"
+          value={loading || !period ? '—' : formatCurrency(period.packages_revenue)}
+        />
+        <MiniStat
+          icon={<Sparkles size={15} />}
+          label="Novos no período"
+          value={loading || !period ? '—' : String(period.new_clients_period)}
+        />
+        <MiniStat
+          icon={<TrendingUp size={15} />}
+          label="Taxa de retorno"
+          value={
+            loading || !period
+              ? '—'
+              : period.return_rate != null
+                ? formatPercentPoints(period.return_rate * 100, 0)
+                : '—'
+          }
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
         <div className="flex flex-col gap-6 lg:col-span-8 lg:gap-8">
@@ -237,7 +256,11 @@ export default function DashboardPage() {
               </div>
             </div>
             <MiniStat icon={<Users size={15} />} label="Novos aguardando" value={loading ? '—' : String(novos)} />
-            <MiniStat icon={<Layers size={15} />} label="Canais ativos" value={loading ? '—' : String(activeChannels)} />
+            <MiniStat
+              icon={<Layers size={15} />}
+              label="Canais ativos (CRM)"
+              value={loading ? '—' : String(activeChannels)}
+            />
           </div>
 
           <SectionCard title="Contatos por dia">
@@ -252,7 +275,14 @@ export default function DashboardPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="day" stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="var(--muted)" fontSize={11} allowDecimals={false} tickLine={false} axisLine={false} width={28} />
+                  <YAxis
+                    stroke="var(--muted)"
+                    fontSize={11}
+                    allowDecimals={false}
+                    tickLine={false}
+                    axisLine={false}
+                    width={28}
+                  />
                   <Tooltip
                     contentStyle={{
                       background: 'var(--card-elevated)',
@@ -279,8 +309,7 @@ export default function DashboardPage() {
             )}
             {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
               <p className="mt-4 text-xs text-muted">
-                Sem dado ainda — TM depende da Avec mandar início/fim real do atendimento (Sprint 1,
-                aguardando <code className="text-foreground/80">AVEC_API_TOKEN</code>).
+                Sem dado ainda — TM depende da Avec mandar início/fim real do atendimento.
               </p>
             )}
           </SectionCard>
@@ -289,14 +318,16 @@ export default function DashboardPage() {
             <div className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
               <Sparkles size={17} className="mt-0.5 shrink-0 text-gold" />
               <p className="text-sm leading-relaxed text-foreground/90">
-                <span className="font-semibold text-gold">{CHANNEL_LABEL[topChannel[0]] ?? topChannel[0]}</span> é o canal
-                que mais traz contatos ({topChannel[1]} de {channelTotal}). Priorize a agilidade por lá.
+                <span className="font-semibold text-gold">
+                  {CHANNEL_LABEL[topChannel[0]] ?? topChannel[0]}
+                </span>{' '}
+                é o canal CRM que mais traz contatos ({topChannel[1]} de {channelTotal}).
               </p>
             </div>
           )}
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <SectionCard title="Contatos por canal" badge={<CountBadge value={`${channelTotal}`} />}>
+            <SectionCard title="Contatos por canal (CRM)" badge={<CountBadge value={`${channelTotal}`} />}>
               <div className="divide-y divide-border">
                 {channelData.map(([channel, count]) => (
                   <div key={channel} className="flex items-center justify-between py-3 text-sm">
@@ -319,11 +350,13 @@ export default function DashboardPage() {
                       a.status.localeCompare(b.status, 'pt-BR'),
                   )
                   .map((row) => (
-                  <div key={row.status} className="flex items-center justify-between">
-                    <StatusPill status={row.status} />
-                    <span className="text-sm font-semibold tabular-nums text-foreground/90">{row.contacts_count}</span>
-                  </div>
-                ))}
+                    <div key={row.status} className="flex items-center justify-between">
+                      <StatusPill status={row.status} />
+                      <span className="text-sm font-semibold tabular-nums text-foreground/90">
+                        {row.contacts_count}
+                      </span>
+                    </div>
+                  ))}
                 {data && data.byStatus.length === 0 && (
                   <p className="py-6 text-center text-sm text-muted">Nenhum contato registrado ainda.</p>
                 )}
@@ -332,165 +365,104 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 lg:col-span-4 lg:gap-6">
-          {!loading && schedule.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-              <p className="font-medium text-foreground/90">Nenhum agendamento próximo</p>
-              <p className="mt-1 text-xs">Abra um contato e use &quot;Agendar&quot; em um serviço para aparecer aqui.</p>
-            </div>
-          )}
-
-          {schedule.length > 0 && (
-            <section className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <h2 className="flex items-center gap-1.5 text-sm font-medium">
-                  <Calendar size={15} className="text-sky-300" /> Próximos agendamentos
-                </h2>
-                <CountBadge value={`${schedule.length}`} tone="gold" />
-              </div>
-              {schedule.slice(0, 5).map((s) => (
-                <Link
-                  key={s.id}
-                  href={contactHref(s.contact_id, '/dashboard')}
-                  className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-4 active:bg-surface lg:hover:bg-sky-500/10"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      <span className="text-sky-300">{s.name}</span> · {fmtSchedule(s.scheduled_at)}
-                    </p>
-                  </div>
-                  <ChevronRight size={16} className="shrink-0 text-muted" />
-                </Link>
-              ))}
-            </section>
-          )}
-
-          {!loading && actions.length === 0 && !error && (
-            <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-              <p className="font-medium text-foreground/90">Sem ações pendentes</p>
-              <p className="mt-1 text-xs">
-                Cadastre serviços com cadência nos contatos — recomendações de retorno e cross-sell aparecem aqui.
-              </p>
-            </div>
-          )}
-
-          {actions.length > 0 && (
-            <section className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <h2 className="flex items-center gap-1.5 text-sm font-medium">
-                  <Sparkles size={15} className="text-gold" /> Ações recomendadas
-                </h2>
-                <CountBadge value={`${actions.length}`} />
-              </div>
-              <UrgencyBadgeLegend showScheduled={false} />
-              {actions.slice(0, 6).map((a) => (
-                <div
-                  key={a.contact_id}
-                  className="flex items-center gap-2 rounded-2xl border border-border bg-card p-4"
-                >
-                  <Link
-                    href={contactHref(a.contact_id, '/dashboard')}
-                    className="flex min-w-0 flex-1 items-center gap-3 active:opacity-80 lg:hover:opacity-90"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-medium">{a.contact_name ?? 'Sem nome'}</p>
-                        {a.max_overdue_days > 0 && (
-                          <span
-                            title={`${a.max_overdue_days} dia(s) sem retorno · ${a.overdue} serviço(s) atrasado(s)`}
-                            className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger"
-                          >
-                            <AlertTriangle size={10} />
-                            {a.max_overdue_days}
-                          </span>
-                        )}
-                        {a.due_soon > 0 && (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning">
-                            <Clock size={10} />
-                            {a.due_soon}
-                          </span>
-                        )}
-                      </div>
-                      {a.recommendations[0] && (
-                        <p className="mt-0.5 truncate text-xs text-muted">
-                          <span className="text-gold">{a.recommendations[0].title}</span> · {a.recommendations[0].detail}
-                        </p>
-                      )}
-                    </div>
-                    <ChevronRight size={16} className="shrink-0 text-muted" />
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => setBriefFor({ id: a.contact_id, name: a.contact_name })}
-                    aria-label={`Gerar briefing de ${a.contact_name ?? 'cliente'}`}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gold/40 bg-gold/10 text-gold active:scale-95 lg:hover:bg-gold/15"
-                  >
-                    <Sparkles size={16} />
-                  </button>
-                </div>
-              ))}
-            </section>
-          )}
-
-          <SectionCard title="Saúde do sistema">
-            <div className="divide-y divide-border">
-              <HealthItem
-                icon={<ShieldCheck size={17} />}
-                label="Dados protegidos"
-                value="Tudo registrado em contact_events"
-                tone="success"
-              />
-              <HealthItem
-                icon={<RefreshCw size={17} />}
-                label="Banco de dados"
-                value={loading ? 'Carregando…' : error ? 'Sem conexão com o banco' : 'Conectado'}
-                tone={error ? 'warning' : 'gold'}
-              />
-              <HealthItem
-                icon={<RefreshCw size={17} />}
-                label="Sync Avec"
-                value={
-                  !avec
-                    ? 'Carregando…'
-                    : !avec.configured
-                      ? 'Configure AVEC_API_TOKEN'
-                      : avec.last
-                        ? `${avec.last.status === 'ok' ? 'OK' : avec.last.status} · ${new Date(avec.last.created_at).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
-                        : 'Nunca sincronizado — aguardando cron'
-                }
-                tone={
-                  avec?.last?.status === 'error' || avec?.last?.status === 'partial'
-                    ? 'warning'
-                    : avec?.configured
-                      ? 'success'
-                      : 'warning'
-                }
-              />
-              <HealthItem
-                icon={<ShieldCheck size={17} />}
-                label="Resiliência"
-                value="Eventos rastreáveis e reprocessáveis"
-                tone="success"
-              />
-            </div>
+        <div className="flex flex-col gap-6 lg:col-span-4">
+          <SectionCard title={`Canais de agenda · ${period?.label ?? '—'}`}>
+            <p className="mb-2 text-xs text-muted">Avec 0056 (snapshot ~30 dias).</p>
+            {(period?.booking_channels.length ?? 0) === 0 ? (
+              <p className="text-xs text-muted">Sem canais sincronizados.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {period!.booking_channels.map((c) => (
+                  <li key={c.channel} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{c.channel}</span>
+                    <span className="shrink-0 tabular-nums text-muted">{c.count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </SectionCard>
 
-          <InfoBanner
-            title="Mantenha o atendimento em dia"
-            text="Responda os contatos novos rápido — a IA faz o primeiro atendimento, mas a conversão sobe quando a equipe assume na sequência."
-          />
+          <SectionCard title="Como nos conheceram">
+            <p className="mb-2 text-xs text-muted">Avec 0003 (aquisição).</p>
+            {(period?.acquisition.length ?? 0) === 0 ? (
+              <p className="text-xs text-muted">Sem dados de aquisição.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {period!.acquisition.map((a) => (
+                  <li key={a.channel} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{a.channel}</span>
+                    <span className="shrink-0 tabular-nums text-muted">{a.clients}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+
+          <SectionCard title={`Pacotes · ${period?.label ?? '—'}`}>
+            <p className="mb-2 text-xs text-muted">
+              Avec 0061 · {period?.packages_sold ?? 0} vendidos ·{' '}
+              {period ? formatCurrency(period.packages_revenue) : '—'}
+            </p>
+            {(period?.packages.length ?? 0) === 0 ? (
+              <p className="text-xs text-muted">Sem pacotes no snapshot.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {period!.packages.map((p) => (
+                  <li key={p.name} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{p.name}</span>
+                    <span className="shrink-0 tabular-nums text-muted">
+                      {formatCurrency(p.revenue)} · {p.quantity}×
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Top serviços">
+            <p className="mb-2 text-xs text-muted">Avec 0032 (resumo). Detalhe em Relatórios.</p>
+            {(period?.top_services.length ?? 0) === 0 ? (
+              <p className="text-xs text-muted">Sem ranking sincronizado.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {period!.top_services.map((s) => (
+                  <li key={s.name} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{s.name}</span>
+                    <span className="shrink-0 tabular-nums text-muted">
+                      {formatCurrency(s.revenue)} · {s.quantity}×
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+
+          <p className="text-xs text-muted">
+            Operação do dia:{' '}
+            <Link href="/hoje" className="text-gold hover:underline">
+              Hoje
+            </Link>
+            {' · '}
+            Caixa:{' '}
+            <Link href="/financeiro" className="text-gold hover:underline">
+              Financeiro
+            </Link>
+            {' · '}
+            Ranking completo:{' '}
+            <Link href="/admin/relatorio-diretoria" className="text-gold hover:underline">
+              Relatórios
+            </Link>
+          </p>
         </div>
       </div>
 
       <SectionCard
-        title="Ranking de profissionais (Sprint 2)"
+        title="Ranking de profissionais"
         badge={<Trophy size={15} className="text-muted" />}
       >
         {!performance || performance.professionals.length === 0 ? (
           <p className="text-xs text-muted">
-            Sem dado ainda — depende da Avec (0021 faturamento por profissional + 0126 ocupação),
-            aguardando <code className="text-foreground/80">AVEC_API_TOKEN</code>.
+            Sem dado ainda — depende da Avec (0021 + 0126). Detalhe em Relatórios.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -506,7 +478,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {performance.professionals.map((p, i) => (
+                {performance.professionals.slice(0, 10).map((p, i) => (
                   <tr key={p.name}>
                     <td className="py-2 tabular-nums text-muted">{i + 1}</td>
                     <td className="py-2 font-medium text-foreground/90">{p.name}</td>
@@ -531,21 +503,13 @@ export default function DashboardPage() {
             </table>
             {performance.compare_day && (
               <p className="mt-3 text-[0.65rem] text-muted">
-                Comparação: janela de 30 dias até {performance.reference_day} vs até {performance.compare_day}
+                Comparação: janela de 30 dias até {performance.reference_day} vs até{' '}
+                {performance.compare_day}
               </p>
             )}
           </div>
         )}
       </SectionCard>
-
-      {briefFor && (
-        <BriefSheet
-          contactId={briefFor.id}
-          contactName={briefFor.name}
-          returnTo="/dashboard"
-          onClose={() => setBriefFor(null)}
-        />
-      )}
     </main>
   )
 }
@@ -562,19 +526,37 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
   )
 }
 
-function DeltaTag({ value, suffix, isCurrency }: { value: number; suffix: string; isCurrency?: boolean }) {
+function DeltaTag({
+  value,
+  suffix,
+  isCurrency,
+}: {
+  value: number
+  suffix: string
+  isCurrency?: boolean
+}) {
   if (value === 0) return null
   const positive = value > 0
   const formatted = isCurrency ? formatCurrency(Math.abs(value)) : `${Math.abs(value)}${suffix}`
   return (
-    <span className={`ml-1.5 text-[0.65rem] font-semibold ${positive ? 'text-success' : 'text-warning'}`}>
+    <span
+      className={`ml-1.5 text-[0.65rem] font-semibold ${positive ? 'text-success' : 'text-warning'}`}
+    >
       {positive ? '+' : '-'}
       {formatted}
     </span>
   )
 }
 
-function TmCompareCol({ title, current, previous }: { title: string; current: TmBucket; previous: TmBucket }) {
+function TmCompareCol({
+  title,
+  current,
+  previous,
+}: {
+  title: string
+  current: TmBucket
+  previous: TmBucket
+}) {
   const delta =
     current.avgMinutes != null && previous.avgMinutes != null
       ? Math.round((current.avgMinutes - previous.avgMinutes) * 10) / 10
