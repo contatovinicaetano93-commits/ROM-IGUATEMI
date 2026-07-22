@@ -6,7 +6,13 @@ import { upload } from '@vercel/blob/client'
 import { PrimaryButton } from '../_components/ui'
 import { MonthYearField } from '../_components/MonthYearField'
 import { apiFetch } from '@/lib/api-client'
-import { formatCurrency, todayIso } from '@/lib/salon/format'
+import {
+  formatCurrency,
+  formatDateBr,
+  formatNumberBr,
+  formatPercentPoints,
+  todayIso,
+} from '@/lib/salon/format'
 
 interface FiscalSplitSummary {
   gross_paid: number
@@ -145,6 +151,75 @@ function csvEscape(v: string | number | null | undefined) {
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
+function csvRow(...cells: Array<string | number | null | undefined>) {
+  return cells.map(csvEscape).join(';')
+}
+
+function csvMoney(v: number | null | undefined) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—'
+  return formatCurrency(v)
+}
+
+function csvPercentPoints(v: number | null | undefined) {
+  return formatPercentPoints(v, 1)
+}
+
+function reconciliationStatusLabel(status: PaymentReconciliation['status']) {
+  switch (status) {
+    case 'aligned':
+      return 'Conciliado'
+    case 'divergent':
+      return 'Divergente'
+    case 'missing_payments':
+      return 'Sem formas de pagamento'
+    case 'missing_revenue':
+      return 'Sem receita'
+    default: {
+      const _exhaustive: never = status
+      return _exhaustive
+    }
+  }
+}
+
+const FINANCE_LEGEND: { term: string; meaning: string }[] = [
+  {
+    term: 'Receita',
+    meaning: 'Faturamento do período (sync Avec / métricas diárias do salão).',
+  },
+  {
+    term: 'Atendidos',
+    meaning: 'Quantidade de atendimentos concluídos no mês.',
+  },
+  {
+    term: 'Ticket médio',
+    meaning: 'Receita ÷ atendidos (quanto cada atendimento gerou em média).',
+  },
+  {
+    term: 'Despesas',
+    meaning: 'Gastos lançados manualmente no ROM neste mês (não vêm da Avec).',
+  },
+  {
+    term: 'Margem bruta (%)',
+    meaning: '((Receita − Despesas) ÷ Receita) × 100. Sem CMV de estoque ainda.',
+  },
+  {
+    term: 'Fluxo',
+    meaning: 'Receita − Despesas do período (caixa operacional simplificado).',
+  },
+  {
+    term: 'Formas de pagamento',
+    meaning: 'Relatório Avec 0081 — cartão, Pix, dinheiro etc., para conciliação.',
+  },
+  {
+    term: 'Conciliação',
+    meaning: 'Compara soma dos pagamentos (0081) com a receita das métricas.',
+  },
+  {
+    term: 'Split fiscal',
+    meaning: 'Bruto pago vs CBS/IBS retidos e líquido (quando settlements importados).',
+  },
+]
+
 const EMPTY_FISCAL_SPLIT: FiscalSplitSummary = {
   gross_paid: 0,
   cbs_retained: 0,
@@ -256,28 +331,147 @@ export default function FinanceiroPage() {
 
   function downloadReport() {
     if (!kpis) return
-    const lines = [
-      ['Métrica', kpis.current.label, kpis.previous.label].map(csvEscape).join(';'),
-      ['Receita', kpis.current.revenue, kpis.previous.revenue].map(csvEscape).join(';'),
-      ['Despesas', kpis.current.expenses, kpis.previous.expenses].map(csvEscape).join(';'),
-      ['Margem bruta (%)', kpis.current.gross_margin ?? '', kpis.previous.gross_margin ?? ''].map(csvEscape).join(';'),
-      ['Fluxo (receita - despesas)', kpis.current.cash_flow, kpis.previous.cash_flow].map(csvEscape).join(';'),
+    const cur = kpis.current
+    const prev = kpis.previous
+    const rec = cur.payment_reconciliation
+    const fiscal = cur.fiscal_split
+
+    const lines: string[] = [
+      csvRow('Relatório financeiro ROM'),
+      csvRow('Gerado em', new Date().toLocaleString('pt-BR')),
+      csvRow('Período', cur.label, 'vs', prev.label),
+      csvRow('Valores em Real (R$) — formato brasileiro: milhar com ponto, decimal com vírgula'),
       '',
-      ['Formas de pagamento — ' + kpis.current.label].map(csvEscape).join(';'),
-      ['Método', 'Valor', '% do total'].map(csvEscape).join(';'),
-      ...kpis.current.payment_mix.map((p) => [p.method, p.amount, p.share].map(csvEscape).join(';')),
+      csvRow('=== RESUMO ==='),
+      csvRow('Métrica', cur.label, prev.label, 'Variação'),
+      csvRow(
+        'Receita',
+        csvMoney(cur.revenue),
+        csvMoney(prev.revenue),
+        csvMoney(cur.revenue - prev.revenue),
+      ),
+      csvRow(
+        'Atendidos',
+        formatNumberBr(cur.attended, 0),
+        formatNumberBr(prev.attended, 0),
+        formatNumberBr(cur.attended - prev.attended, 0),
+      ),
+      csvRow(
+        'Ticket médio',
+        csvMoney(cur.ticket_avg),
+        csvMoney(prev.ticket_avg),
+        cur.ticket_avg != null && prev.ticket_avg != null
+          ? csvMoney(cur.ticket_avg - prev.ticket_avg)
+          : '—',
+      ),
+      csvRow(
+        'Despesas',
+        csvMoney(cur.expenses),
+        csvMoney(prev.expenses),
+        csvMoney(cur.expenses - prev.expenses),
+      ),
+      csvRow(
+        'Margem bruta (%)',
+        csvPercentPoints(cur.gross_margin),
+        csvPercentPoints(prev.gross_margin),
+        cur.gross_margin != null && prev.gross_margin != null
+          ? csvPercentPoints(cur.gross_margin - prev.gross_margin)
+          : '—',
+      ),
+      csvRow(
+        'Fluxo (receita − despesas)',
+        csvMoney(cur.cash_flow),
+        csvMoney(prev.cash_flow),
+        csvMoney(cur.cash_flow - prev.cash_flow),
+      ),
       '',
-      ['Despesas de ' + kpis.current.label].map(csvEscape).join(';'),
-      ['Data', 'Descrição', 'Categoria', 'Valor'].map(csvEscape).join(';'),
-      ...expenses.map((e) =>
-        [e.expense_date, e.description, categoryName(e.category_id), e.amount].map(csvEscape).join(';')
+      csvRow('=== CONCILIAÇÃO DE PAGAMENTOS (Avec 0081) ==='),
+      csvRow('Status', reconciliationStatusLabel(rec.status)),
+      csvRow('Receita (métricas)', csvMoney(rec.revenue)),
+      csvRow('Soma formas de pagamento', csvMoney(rec.payments_total)),
+      csvRow('Diferença (pagamentos − receita)', csvMoney(rec.delta)),
+      csvRow('Tolerância', csvMoney(rec.tolerance)),
+      '',
+      csvRow(`=== FORMAS DE PAGAMENTO — ${cur.label} ===`),
+      csvRow('Método', 'Valor', '% do total'),
+      ...(cur.payment_mix.length > 0
+        ? cur.payment_mix.map((p) =>
+            csvRow(p.method, csvMoney(p.amount), csvPercentPoints(p.share)),
+          )
+        : [csvRow('(sem dados 0081 neste mês)')]),
+      '',
+      csvRow(`=== SPLIT FISCAL — ${cur.label} ===`),
+      csvRow('Bruto pago', csvMoney(fiscal.gross_paid)),
+      csvRow('CBS retido', csvMoney(fiscal.cbs_retained)),
+      csvRow('IBS retido', csvMoney(fiscal.ibs_retained)),
+      csvRow('Líquido recebido', csvMoney(fiscal.net_received)),
+      csvRow('Settlements', `${fiscal.settled_count} liquidados / ${fiscal.pending_count} pendentes`),
+      '',
+      csvRow(`=== RECEITA DIÁRIA — ${cur.label} ===`),
+      csvRow('Data', 'Receita', 'Atendidos', 'Ticket médio'),
+      ...(cur.daily.length > 0
+        ? cur.daily.map((d) =>
+            csvRow(
+              formatDateBr(d.day),
+              csvMoney(d.revenue),
+              formatNumberBr(d.attended, 0),
+              csvMoney(d.ticket_avg),
+            ),
+          )
+        : [csvRow('(sem receita diária)')]),
+      '',
+      csvRow(`=== TOP PROFISSIONAIS — ${cur.label} ===`),
+      csvRow('Profissional', 'Receita', 'Atendidos', 'Ticket médio'),
+      ...(cur.top_professionals.length > 0
+        ? cur.top_professionals.map((p) =>
+            csvRow(
+              p.name,
+              csvMoney(p.revenue),
+              formatNumberBr(p.attended, 0),
+              csvMoney(p.ticket_avg),
+            ),
+          )
+        : [csvRow('(sem ranking 0021)')]),
+      '',
+      csvRow(`=== TOP SERVIÇOS — ${cur.label} ===`),
+      csvRow('Serviço', 'Qtd', 'Receita'),
+      ...(cur.top_services.length > 0
+        ? cur.top_services.map((s) =>
+            csvRow(s.name, formatNumberBr(s.quantity, 0), csvMoney(s.revenue)),
+          )
+        : [csvRow('(sem ranking 0032)')]),
+      '',
+      csvRow(`=== DESPESAS — ${cur.label} ===`),
+      csvRow('Data', 'Descrição', 'Categoria', 'Valor'),
+      ...(expenses.length > 0
+        ? expenses.map((e) =>
+            csvRow(
+              formatDateBr(e.expense_date),
+              e.description,
+              categoryName(e.category_id),
+              csvMoney(e.amount),
+            ),
+          )
+        : [csvRow('(nenhuma despesa lançada)')]),
+      '',
+      csvRow('=== LEGENDA ==='),
+      csvRow('Termo', 'Significado'),
+      ...FINANCE_LEGEND.map((item) => csvRow(item.term, item.meaning)),
+      '',
+      csvRow(
+        'Observação',
+        'Despesas são manuais no ROM. Receita, atendidos, ticket, formas de pagamento e rankings vêm da Avec (quando o sync estiver ativo).',
       ),
     ]
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+
+    // BOM UTF-8: Excel/Numbers reconhecem acentos e formato BR.
+    const blob = new Blob(['\uFEFF' + lines.join('\n')], {
+      type: 'text/csv;charset=utf-8',
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `financeiro_${kpis.current.month}_vs_${kpis.previous.month}.csv`
+    a.download = `financeiro_${cur.month}_vs_${prev.month}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }

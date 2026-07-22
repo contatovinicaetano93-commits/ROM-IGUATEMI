@@ -79,6 +79,32 @@ export function formatCurrency(value: number | null | undefined) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+/** Número pt-BR com casas decimais (ex.: 2.111.249,31). */
+export function formatNumberBr(value: number | null | undefined, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
+}
+
+/** Percentual pt-BR (ex.: 45,2%). Valor já em pontos percentuais (0–100), não fração. */
+export function formatPercentPoints(value: number | null | undefined, digits = 1) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  return `${value.toLocaleString('pt-BR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}%`
+}
+
+/** YYYY-MM-DD → DD/MM/YYYY para relatórios. */
+export function formatDateBr(iso: string | null | undefined) {
+  if (!iso) return '—'
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!m) return iso
+  return `${m[3]}/${m[2]}/${m[1]}`
+}
+
 export function formatVisitDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', {
     day: '2-digit',
