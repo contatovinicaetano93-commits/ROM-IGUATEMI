@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { isAuthorized, isAuthEnabled, getSession } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
+import { isProduction } from '@/lib/env'
 
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/webhooks']
 
@@ -46,13 +47,23 @@ function isProtectedApi(pathname: string) {
 }
 
 export async function middleware(req: NextRequest) {
-  if (!isAuthEnabled()) return NextResponse.next()
-
   const { pathname } = req.nextUrl
   if (pathname === '/login') return NextResponse.next()
 
   const needsAuth = isProtectedPage(pathname) || isProtectedApi(pathname)
   if (!needsAuth) return NextResponse.next()
+
+  // Produção sem senha = fechado (alinha middleware com getSession/isAuthorized).
+  if (!isAuthEnabled()) {
+    if (isProduction()) {
+      const msg = 'Auth não configurado — defina ROM_ADMIN_PASSWORD'
+      if (isProtectedApi(pathname)) {
+        return NextResponse.json({ error: msg }, { status: 503 })
+      }
+      return new NextResponse(msg, { status: 503 })
+    }
+    return NextResponse.next()
+  }
 
   const allowHeaderTokens =
     pathname === '/api/avec/sync' ||
@@ -60,7 +71,8 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/director-report' ||
     pathname === '/api/lgpd/purge' ||
     pathname === '/api/reminders/financeiro' ||
-    pathname === '/api/reminders/aftercare'
+    pathname === '/api/reminders/aftercare' ||
+    pathname === '/api/admin/migrations'
   if (!(await isAuthorized(req, { allowHeaderTokens }))) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
