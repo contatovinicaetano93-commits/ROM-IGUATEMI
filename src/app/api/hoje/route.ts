@@ -9,6 +9,7 @@ import { listUpcomingSchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { todayIso } from '@/lib/salon/format'
+import { compareScheduleByNameThenTime } from '@/lib/salon/sort'
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,10 +21,11 @@ export async function GET(req: NextRequest) {
     const day = todayIso()
     const sql = getSql()
 
-    const [salonRaw, playbook, scheduleToday, leadRows, avecLast] = await Promise.all([
+    const [salonRaw, playbook, scheduleRaw, leadRows, avecLast] = await Promise.all([
       getSalonMetrics(day),
       listActionItems(),
-      listUpcomingSchedules(1, 15),
+      // Busca folgada e reordena A–Z (limite 15 por horário distorcia a ordem alfabética).
+      listUpcomingSchedules(1, 100),
       sql`
         select
           count(*) filter (where status = 'novo')::int as novos,
@@ -33,6 +35,7 @@ export async function GET(req: NextRequest) {
       getLastAvecSync(),
     ])
 
+    const scheduleToday = [...scheduleRaw].sort(compareScheduleByNameThenTime)
     const leads = leadRows[0]
     const salonBase = salonRaw ?? {
       day,

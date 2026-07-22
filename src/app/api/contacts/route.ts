@@ -4,6 +4,7 @@ import { listContactsWithSummary } from '@/lib/contact-summary'
 import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
 import { addService } from '@/lib/services'
 import { SERVICE_CATEGORIES } from '@/lib/services'
+import { compareByOverdueThenName } from '@/lib/salon/urgency'
 import { requireAuth } from '@/lib/auth'
 import { z } from 'zod'
 
@@ -38,11 +39,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (sort === 'urgency') {
-      items.sort((a, b) => {
-        const byScore = b.urgency_score - a.urgency_score
-        if (byScore !== 0) return byScore
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      })
+      // Mais tempo sem retorno (dias) primeiro; empate em ordem alfabética.
+      items.sort(compareByOverdueThenName)
     }
 
     return ok(items)

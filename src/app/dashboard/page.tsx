@@ -30,6 +30,7 @@ interface ActionItem {
   contact_id: string
   contact_name: string | null
   overdue: number
+  max_overdue_days: number
   due_soon: number
   recommendations: { type: string; title: string; detail: string }[]
 }
@@ -309,7 +310,13 @@ export default function DashboardPage() {
 
             <SectionCard title="Status dos contatos" badge={<CountBadge value={`${statusTotal}`} />}>
               <div className="flex flex-col gap-2.5">
-                {(data?.byStatus ?? []).map((row) => (
+                {[...(data?.byStatus ?? [])]
+                  .sort(
+                    (a, b) =>
+                      b.contacts_count - a.contacts_count ||
+                      a.status.localeCompare(b.status, 'pt-BR'),
+                  )
+                  .map((row) => (
                   <div key={row.status} className="flex items-center justify-between">
                     <StatusPill status={row.status} />
                     <span className="text-sm font-semibold tabular-nums text-foreground/90">{row.contacts_count}</span>
@@ -386,10 +393,13 @@ export default function DashboardPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="truncate text-sm font-medium">{a.contact_name ?? 'Sem nome'}</p>
-                        {a.overdue > 0 && (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger">
+                        {a.max_overdue_days > 0 && (
+                          <span
+                            title={`${a.max_overdue_days} dia(s) sem retorno · ${a.overdue} serviço(s) atrasado(s)`}
+                            className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger"
+                          >
                             <AlertTriangle size={10} />
-                            {a.overdue}
+                            {a.max_overdue_days}
                           </span>
                         )}
                         {a.due_soon > 0 && (

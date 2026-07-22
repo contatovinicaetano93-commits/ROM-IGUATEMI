@@ -22,6 +22,7 @@ interface Contact {
   status: string
   created_at: string
   overdue: number
+  max_overdue_days: number
   due_soon: number
   scheduled_soon: number
   pending_actions: number
@@ -214,12 +215,15 @@ export default function ContatosPage() {
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
-                {(c.overdue > 0 || c.due_soon > 0 || c.scheduled_soon > 0) && (
+                {(c.max_overdue_days > 0 || c.due_soon > 0 || c.scheduled_soon > 0) && (
                   <div className="flex items-center gap-1">
-                    {c.overdue > 0 && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger">
+                    {c.max_overdue_days > 0 && (
+                      <span
+                        title={`${c.max_overdue_days} dia(s) sem retorno · ${c.overdue} serviço(s) atrasado(s)`}
+                        className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger"
+                      >
                         <AlertTriangle size={10} />
-                        {c.overdue}
+                        {c.max_overdue_days}
                       </span>
                     )}
                     {c.due_soon > 0 && (

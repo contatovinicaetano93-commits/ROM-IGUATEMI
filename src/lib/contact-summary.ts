@@ -5,6 +5,7 @@ import { urgencyForServices } from '@/lib/salon/urgency'
 
 export interface ContactListItem extends ContactRow {
   overdue: number
+  max_overdue_days: number
   due_soon: number
   scheduled_soon: number
   pending_actions: number
@@ -36,6 +37,7 @@ export async function listContactsWithSummary(limit = 500): Promise<ContactListI
     return {
       ...c,
       overdue: u.overdue,
+      max_overdue_days: u.max_overdue_days,
       due_soon: u.due_soon,
       scheduled_soon: u.scheduled_soon,
       pending_actions: u.pending_actions,

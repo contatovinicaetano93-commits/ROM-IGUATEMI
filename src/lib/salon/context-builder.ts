@@ -5,6 +5,7 @@ import { fetchContactKpis } from '@/lib/salon/kpis'
 import { getSalonMetrics } from '@/lib/salon/metrics'
 import { listActionItems } from '@/lib/salon/recommendations'
 import { listUpcomingSchedules, pickLastVisit, type LastVisit } from '@/lib/services'
+import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 
 function fmtService(s: EnrichedService) {
   const parts = [s.name]
@@ -72,11 +73,11 @@ export function buildContactContext(
 
 export async function buildSalonContext(): Promise<SalonContext> {
   const day = new Date().toISOString().slice(0, 10)
-  const [salon, kpis_contato, playbook_top5, agendamentos_proximos] = await Promise.all([
+  const [salon, kpis_contato, playbook_top5, agendamentosRaw] = await Promise.all([
     getSalonMetrics(day),
     fetchContactKpis(7),
     listActionItems(),
-    listUpcomingSchedules(1, 10),
+    listUpcomingSchedules(1, 20),
   ])
 
   return {
@@ -84,7 +85,7 @@ export async function buildSalonContext(): Promise<SalonContext> {
     salon,
     kpis_contato,
     playbook_top5: playbook_top5.slice(0, 5),
-    agendamentos_proximos,
+    agendamentos_proximos: [...agendamentosRaw].sort(compareScheduleByTimeThenName).slice(0, 10),
   }
 }
 
