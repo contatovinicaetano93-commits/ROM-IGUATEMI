@@ -5,8 +5,17 @@ import { Plus, X, Trash2, Download, Camera, Paperclip } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
-import { formatCurrency } from '@/lib/salon/format'
+import { formatCurrency, todayIso } from '@/lib/salon/format'
 
+interface FiscalSplitSummary {
+  gross_paid: number
+  cbs_retained: number
+  ibs_retained: number
+  net_received: number
+  pending_count: number
+  settled_count: number
+  configured: boolean
+}
 interface FinanceKpiBucket {
   month: string
   label: string
@@ -16,6 +25,8 @@ interface FinanceKpiBucket {
   expenses: number
   gross_margin: number | null
   cash_flow: number
+  payment_mix: { method: string; amount: number; share: number }[]
+  fiscal_split: FiscalSplitSummary
 }
 interface FinanceKpis {
   current: FinanceKpiBucket
@@ -50,12 +61,15 @@ function FinanceKpiCard({
   label,
   value,
   delta,
+  compareLabel,
   positive,
   loading,
 }: {
   label: string
   value: string
   delta: string | null
+  /** Ex.: "Mai/2026" — mês escolhido em Comparar com (não necessariamente o anterior). */
+  compareLabel: string
   positive: boolean | null
   loading: boolean
 }) {
@@ -73,7 +87,7 @@ function FinanceKpiCard({
                 positive == null ? 'text-muted' : positive ? 'text-success' : 'text-warning'
               }`}
             >
-              {delta} vs. mês anterior
+              {delta} vs. {compareLabel}
             </p>
           )}
         </>
@@ -83,7 +97,33 @@ function FinanceKpiCard({
 }
 
 function currentMonthKey() {
-  return new Date().toISOString().slice(0, 7)
+  return todayIso().slice(0, 7)
+}
+
+/** YYYY-MM-DD → N dias atrás (calendário, sem fuso UTC). */
+function shiftIsoDate(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y!, m! - 1, d! + days)
+  const yy = dt.getFullYear()
+  const mm = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
+function formatExpenseDateLabel(iso: string): string {
+  const today = todayIso()
+  if (iso === today) return 'Hoje'
+  if (iso === shiftIsoDate(today, -1)) return 'Ontem'
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y!, m! - 1, d!)
+  const weekday = dt.toLocaleDateString('pt-BR', { weekday: 'short' })
+  const day = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  return `${weekday} ${day}`
+}
+
+function recentExpenseDates(count = 30): string[] {
+  const today = todayIso()
+  return Array.from({ length: count }, (_, i) => shiftIsoDate(today, -i))
 }
 
 function csvEscape(v: string | number | null | undefined) {
@@ -135,6 +175,10 @@ export default function FinanceiroPage() {
       ['Despesas', kpis.current.expenses, kpis.previous.expenses].map(csvEscape).join(';'),
       ['Margem bruta (%)', kpis.current.gross_margin ?? '', kpis.previous.gross_margin ?? ''].map(csvEscape).join(';'),
       ['Fluxo (receita - despesas)', kpis.current.cash_flow, kpis.previous.cash_flow].map(csvEscape).join(';'),
+      '',
+      ['Formas de pagamento — ' + kpis.current.label].map(csvEscape).join(';'),
+      ['Método', 'Valor', '% do total'].map(csvEscape).join(';'),
+      ...kpis.current.payment_mix.map((p) => [p.method, p.amount, p.share].map(csvEscape).join(';')),
       '',
       ['Despesas de ' + kpis.current.label].map(csvEscape).join(';'),
       ['Data', 'Descrição', 'Categoria', 'Valor'].map(csvEscape).join(';'),
@@ -212,6 +256,7 @@ export default function FinanceiroPage() {
           label="Receita"
           value={loading || !kpis ? '—' : formatCurrency(kpis.current.revenue)}
           delta={kpis ? fmtDelta(kpis.current.revenue, kpis.previous.revenue) : null}
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.revenue >= kpis.previous.revenue : null}
           loading={loading}
         />
@@ -219,6 +264,7 @@ export default function FinanceiroPage() {
           label="Despesas"
           value={loading || !kpis ? '—' : formatCurrency(kpis.current.expenses)}
           delta={kpis ? fmtDelta(kpis.current.expenses, kpis.previous.expenses) : null}
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.expenses <= kpis.previous.expenses : null}
           loading={loading}
         />
@@ -230,6 +276,7 @@ export default function FinanceiroPage() {
               ? fmtDelta(kpis.current.gross_margin, kpis.previous.gross_margin, 'pp')
               : null
           }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={
             kpis && kpis.current.gross_margin != null && kpis.previous.gross_margin != null
               ? kpis.current.gross_margin >= kpis.previous.gross_margin
@@ -241,6 +288,7 @@ export default function FinanceiroPage() {
           label="Fluxo (receita − despesas)"
           value={loading || !kpis ? '—' : formatCurrency(kpis.current.cash_flow)}
           delta={kpis ? fmtDelta(kpis.current.cash_flow, kpis.previous.cash_flow) : null}
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.cash_flow >= kpis.previous.cash_flow : null}
           loading={loading}
         />
@@ -250,6 +298,83 @@ export default function FinanceiroPage() {
         <p className="-mt-3 text-xs text-muted">
           Margem bruta e fluxo dependem do faturamento sincronizado pela Avec — ainda sem dado esse mês.
         </p>
+      )}
+
+      {!loading && kpis && (
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <h2 className="text-sm font-medium">Split fiscal — {kpis.current.label}</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            CBS/IBS retidos na liquidação (Plataforma Pública / export do PSP). O ROM só reconcilia — não processa pagamento.
+          </p>
+          {kpis.current.fiscal_split.settled_count === 0 && kpis.current.fiscal_split.pending_count === 0 ? (
+            <p className="mt-3 text-xs text-muted">
+              {kpis.current.fiscal_split.configured
+                ? 'Sem settlements fiscais importados nesse mês.'
+                : 'Pendente de conciliação fiscal — configure FISCAL_SPLIT_API_URL ou importe settlements.'}
+            </p>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div>
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">Bruto liquidado</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">
+                  {formatCurrency(kpis.current.fiscal_split.gross_paid)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">CBS retida</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">
+                  {formatCurrency(kpis.current.fiscal_split.cbs_retained)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">IBS retido</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">
+                  {formatCurrency(kpis.current.fiscal_split.ibs_retained)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.65rem] uppercase tracking-wide text-muted">Líquido estimado</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">
+                  {formatCurrency(kpis.current.fiscal_split.net_received)}
+                </p>
+                {kpis.current.fiscal_split.pending_count > 0 && (
+                  <p className="mt-1 text-xs text-warning">
+                    {kpis.current.fiscal_split.pending_count} pendente
+                    {kpis.current.fiscal_split.pending_count > 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!loading && kpis && (
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <h2 className="text-sm font-medium">Formas de pagamento — {kpis.current.label}</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Reconciliação com o relatório de pagamentos da Avec (dinheiro, Pix, cartão etc.)
+          </p>
+          {kpis.current.payment_mix.length === 0 ? (
+            <p className="mt-3 text-xs text-muted">Sem dado de pagamento sincronizado pela Avec esse mês.</p>
+          ) : (
+            <div className="mt-3 flex flex-col gap-2.5">
+              {kpis.current.payment_mix.map((p) => (
+                <div key={p.method} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">{p.method}</span>
+                    <span className="tabular-nums text-muted">
+                      {formatCurrency(p.amount)} · {p.share}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
+                    <div className="h-full rounded-full bg-gold" style={{ width: `${p.share}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       <div className="flex items-center justify-between">
@@ -339,8 +464,11 @@ function AddExpenseSheet({
   const [categoryId, setCategoryId] = useState('')
   const [newCategoryMode, setNewCategoryMode] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
-  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [expenseDate, setExpenseDate] = useState(todayIso)
+  const [customDateMode, setCustomDateMode] = useState(false)
   const [notes, setNotes] = useState('')
+  const recentDates = recentExpenseDates(30)
+  const dateInRecent = recentDates.includes(expenseDate)
   const [receiptUrl, setReceiptUrl] = useState('')
   const [receiptUploading, setReceiptUploading] = useState(false)
   const [receiptErr, setReceiptErr] = useState<string | null>(null)
@@ -445,16 +573,75 @@ function AddExpenseSheet({
               className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
             />
           </label>
-          <label className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
             <span className="text-xs uppercase tracking-wide text-muted">Data</span>
-            <input
-              type="date"
-              value={expenseDate}
-              onChange={(e) => setExpenseDate(e.target.value)}
-              required
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
-            />
-          </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: 'Hoje', value: todayIso() },
+                { label: 'Ontem', value: shiftIsoDate(todayIso(), -1) },
+              ].map((opt) => {
+                const active = !customDateMode && expenseDate === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setCustomDateMode(false)
+                      setExpenseDate(opt.value)
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? 'border-gold/50 bg-gold/15 text-gold'
+                        : 'border-border text-foreground/80 hover:bg-surface'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+            {!customDateMode ? (
+              <select
+                value={dateInRecent ? expenseDate : '__other__'}
+                onChange={(e) => {
+                  if (e.target.value === '__other__') {
+                    setCustomDateMode(true)
+                    return
+                  }
+                  setExpenseDate(e.target.value)
+                }}
+                required
+                className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
+              >
+                {recentDates.map((iso) => (
+                  <option key={iso} value={iso}>
+                    {formatExpenseDateLabel(iso)}
+                  </option>
+                ))}
+                <option value="__other__">Outra data…</option>
+              </select>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <input
+                  type="date"
+                  value={expenseDate}
+                  onChange={(e) => setExpenseDate(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-gold"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomDateMode(false)
+                    if (!dateInRecent) setExpenseDate(todayIso())
+                  }}
+                  className="self-start text-xs text-gold"
+                >
+                  Voltar às datas recentes
+                </button>
+              </div>
+            )}
+          </div>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs uppercase tracking-wide text-muted">Categoria</span>
             {!newCategoryMode ? (
