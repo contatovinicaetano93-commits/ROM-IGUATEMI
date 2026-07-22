@@ -375,6 +375,7 @@ export default function DashboardPage() {
                 </h2>
                 <CountBadge value={`${actions.length}`} />
               </div>
+              <UrgencyBadgeLegend showScheduled={false} />
               {actions.slice(0, 6).map((a) => (
                 <div
                   key={a.contact_id}

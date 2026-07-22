@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { CountBadge } from '../_components/ui'
 import { BriefSheet } from '../_components/BriefSheet'
+import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
 import { fmtSchedule, formatCurrency } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
@@ -228,6 +229,9 @@ export default function HojePage() {
           </h2>
           <CountBadge value={loading ? '—' : String(data?.playbook.length ?? 0)} />
         </div>
+        {!loading && (data?.playbook.length ?? 0) > 0 && (
+          <UrgencyBadgeLegend showScheduled={false} />
+        )}
 
         {loading &&
           Array.from({ length: 3 }).map((_, i) => (
