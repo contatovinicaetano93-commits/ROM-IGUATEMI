@@ -16,6 +16,7 @@ import { fmtSchedule, formatCurrency, formatPercent } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { BriefSheet } from '../_components/BriefSheet'
+import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
 
 interface ScheduleItem {
   id: string
@@ -381,6 +382,7 @@ export default function DashboardPage() {
                 </h2>
                 <CountBadge value={`${actions.length}`} />
               </div>
+              <UrgencyBadgeLegend showScheduled={false} />
               {actions.slice(0, 6).map((a) => (
                 <div
                   key={a.contact_id}

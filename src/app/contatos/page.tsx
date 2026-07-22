@@ -10,6 +10,7 @@ import {
   CHANNEL_LABEL,
   STATUS_LABEL,
 } from '../_components/ui'
+import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
 import { apiFetch } from '@/lib/api-client'
 import { timeAgo } from '@/lib/salon/format'
 import { CATEGORY_LABEL } from '@/lib/salon/constants'
@@ -111,6 +112,7 @@ export default function ContatosPage() {
             <AlertTriangle size={15} />
             {pendingOnly ? 'Mostrando só pendentes' : 'Só ações pendentes'}
           </button>
+          <UrgencyBadgeLegend />
         </div>
       )}
 
