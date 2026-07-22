@@ -41,6 +41,27 @@ export function fmtSchedule(iso: string) {
   })
 }
 
+/** Partes do horário pra cards de agenda (hora em destaque). */
+export function fmtScheduleParts(iso: string, timeZone = SALON_TIMEZONE) {
+  const d = new Date(iso)
+  const time = d.toLocaleTimeString('pt-BR', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  const dayIso = toSalonDateIso(d, timeZone)
+  const isToday = dayIso === todayIso(timeZone)
+  const day = isToday
+    ? 'Hoje'
+    : d.toLocaleDateString('pt-BR', {
+        timeZone,
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+      })
+  return { time, day, isToday }
+}
+
 export function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime()
   const min = Math.floor(diff / 60000)

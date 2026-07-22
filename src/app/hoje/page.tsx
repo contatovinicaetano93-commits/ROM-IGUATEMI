@@ -18,7 +18,7 @@ import {
 import { CountBadge } from '../_components/ui'
 import { BriefSheet } from '../_components/BriefSheet'
 import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
-import { fmtSchedule, formatCurrency } from '@/lib/salon/format'
+import { fmtScheduleParts, formatCurrency } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 
@@ -223,7 +223,9 @@ export default function HojePage() {
           </h2>
           <CountBadge value={loading ? '—' : String(data?.scheduleToday.length ?? 0)} tone="gold" />
         </div>
-        <p className="text-[0.65rem] text-muted/70">Hoje primeiro, depois os próximos · ordem de data e horário</p>
+        <p className="text-[0.65rem] text-muted/70">
+          1 linha por serviço · horário em destaque · ordem cronológica
+        </p>
 
         {loading &&
           Array.from({ length: 2 }).map((_, i) => (
@@ -237,21 +239,30 @@ export default function HojePage() {
         )}
 
         {!loading &&
-          data?.scheduleToday.map((s) => (
-            <Link
-              key={s.id}
-              href={`/contatos/${s.contact_id}`}
-              className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-4 active:bg-surface"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
-                <p className="mt-0.5 truncate text-xs text-muted">
-                  <span className="text-sky-300">{s.name}</span> · {fmtSchedule(s.scheduled_at)}
-                </p>
-              </div>
-              <ChevronRight size={16} className="shrink-0 text-muted" />
-            </Link>
-          ))}
+          data?.scheduleToday.map((s) => {
+            const when = fmtScheduleParts(s.scheduled_at)
+            return (
+              <Link
+                key={s.id}
+                href={`/contatos/${s.contact_id}`}
+                className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-3.5 active:bg-surface sm:p-4"
+              >
+                <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-sky-500/10 px-1.5 py-2 text-center">
+                  <span className="text-sm font-semibold tabular-nums leading-none text-sky-200">
+                    {when.time}
+                  </span>
+                  <span className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted">
+                    {when.day}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
+                  <p className="mt-0.5 truncate text-xs text-sky-300/90">{s.name}</p>
+                </div>
+                <ChevronRight size={16} className="shrink-0 text-muted" />
+              </Link>
+            )
+          })}
       </section>
 
       {/* Playbook — ações prioritárias */}
