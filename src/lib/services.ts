@@ -277,3 +277,35 @@ export async function listUpcomingSchedules(days = 7, limit = 20): Promise<Sched
     limit ${limit}
   `) as ScheduledServiceRow[]
 }
+
+/** Pipeline do dia: agendados ainda abertos + concluídos (last_done_at no dia). */
+export async function listTodayPipeline(day: string): Promise<{
+  scheduled: ScheduledServiceRow[]
+  completed: ScheduledServiceRow[]
+}> {
+  const sql = getSql()
+  const [scheduled, completed] = await Promise.all([
+    sql`
+      select cs.*, c.name as contact_name
+      from client_services cs
+      join contacts c on c.id = cs.contact_id
+      where cs.active = true
+        and cs.scheduled_at is not null
+        and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      order by cs.scheduled_at asc
+    `,
+    sql`
+      select cs.*, c.name as contact_name
+      from client_services cs
+      join contacts c on c.id = cs.contact_id
+      where cs.active = true
+        and cs.last_done_at is not null
+        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      order by cs.last_done_at asc
+    `,
+  ])
+  return {
+    scheduled: scheduled as ScheduledServiceRow[],
+    completed: completed as ScheduledServiceRow[],
+  }
+}

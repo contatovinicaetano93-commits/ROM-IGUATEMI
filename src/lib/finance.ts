@@ -1,5 +1,11 @@
 import { getSql } from '@/lib/db'
+import {
+  ensureFiscalSplitTable,
+  getFiscalSplitSummary,
+  type FiscalSplitSummary,
+} from '@/lib/fiscal-split'
 import { todayIso } from '@/lib/salon/format'
+import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
 
 export interface FinanceCategory {
   id: string
@@ -149,6 +155,10 @@ export interface FinanceKpiBucket {
   /** (receita - despesas) / receita, em % — null se não houver receita no período (Avec ainda não sincronizou). */
   gross_margin: number | null
   cash_flow: number
+  /** Breakdown por forma de pagamento (relatório 0081 da Avec) — reconciliação. */
+  payment_mix: P2PaymentRow[]
+  /** Conciliação CBS/IBS retidos no split fiscal (Plataforma Pública / export PSP). */
+  fiscal_split: FiscalSplitSummary
 }
 
 export interface FinanceKpis {
@@ -158,7 +168,12 @@ export interface FinanceKpis {
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
   const { from, to } = monthRange(monthKey)
-  const [revenue, expenses] = await Promise.all([sumRevenue(from, to), sumExpenses(from, to)])
+  const [revenue, expenses, payment_mix, fiscal_split] = await Promise.all([
+    sumRevenue(from, to),
+    sumExpenses(from, to),
+    getPaymentMixRange(from, to),
+    getFiscalSplitSummary(from, to),
+  ])
   const gross_margin = revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
   return {
     month: monthKey,
@@ -169,11 +184,15 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
     expenses: Math.round(expenses * 100) / 100,
     gross_margin,
     cash_flow: Math.round((revenue - expenses) * 100) / 100,
+    payment_mix,
+    fiscal_split,
   }
 }
 
 /** KPIs do Financeiro (Sprint 4). Receita vem de salon_daily_metrics (Avec); despesas são cadastro manual. */
 export async function computeFinanceKpis(opts?: { month?: string; compareMonth?: string }): Promise<FinanceKpis> {
+  // Uma vez por request (memoizado no módulo) — evita DDL paralelo nos dois buckets.
+  await ensureFiscalSplitTable().catch(() => undefined)
   const current = opts?.month ?? currentMonthKey(todayIso())
   const compare = opts?.compareMonth ?? previousMonthKey(current)
   const [currentBucket, previousBucket] = await Promise.all([buildBucket(current), buildBucket(compare)])
