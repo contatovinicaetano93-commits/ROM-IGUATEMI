@@ -471,6 +471,7 @@ export default function RelatorioDiretoriaPage() {
 
           <SectionCard
             title="0011 · Comparativo trimestre a trimestre"
+            storageKey="relatorios.section.0011-comparativo.open"
             badge={<CountBadge value={String(selectedReturn.length)} tone="gold" />}
           >
             <div className="overflow-x-auto">
@@ -523,7 +524,18 @@ export default function RelatorioDiretoriaPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="0011 · Lista de clientes (formato Avec)">
+          <SectionCard
+            title="0011 · Lista de clientes (formato Avec)"
+            storageKey="relatorios.section.0011-lista-clientes.open"
+            badge={
+              <CountBadge
+                value={String(
+                  selectedReturn.reduce((s, b) => s + b.reactivation.length, 0),
+                )}
+                tone="gold"
+              />
+            }
+          >
             <div className="mb-4 space-y-2 rounded-xl border border-border bg-surface/60 px-4 py-3 text-xs leading-relaxed text-muted">
               <p>
                 <span className="font-semibold text-foreground/85">O que é esta lista:</span> clientes
@@ -768,6 +780,7 @@ export default function RelatorioDiretoriaPage() {
                 ? '0021 · Comparativo trimestre a trimestre (faturamento + ticket)'
                 : '0021 · Faturamento e ticket do mês'
             }
+            storageKey="relatorios.section.0021-faturamento.open"
             badge={<CountBadge value={String(selectedRevenue.length)} tone="gold" />}
           >
             <div className="overflow-x-auto">
@@ -928,7 +941,19 @@ export default function RelatorioDiretoriaPage() {
             </div>
           )}
 
-          <SectionCard title="Custo por categoria (0142 / 0243)">
+          <SectionCard
+            title="Custo por categoria (0142 / 0243)"
+            storageKey="relatorios.section.estoque-categorias.open"
+            badge={
+              <CountBadge
+                value={String(
+                  (stockKpis?.by_category_period?.length ?? 0) > 0
+                    ? stockKpis!.by_category_period!.length
+                    : (stockKpis?.by_category.length ?? 0),
+                )}
+              />
+            }
+          >
             <p className="mb-3 text-xs text-muted">
               Preferência: % oficial 0142 (~30 dias). Fallback: snapshot 0243.
             </p>
@@ -945,7 +970,11 @@ export default function RelatorioDiretoriaPage() {
             )}
           </SectionCard>
 
-          <SectionCard title="Custo por marca (0242)">
+          <SectionCard
+            title="Custo por marca (0242)"
+            storageKey="relatorios.section.estoque-marcas.open"
+            badge={<CountBadge value={String(stockKpis?.by_brand.length ?? 0)} />}
+          >
             {stockLoading ? (
               <div className="h-16 animate-pulse rounded-2xl bg-card" />
             ) : (
