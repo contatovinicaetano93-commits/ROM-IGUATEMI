@@ -58,6 +58,12 @@ interface HojeData {
   scheduleToday: ScheduleItem[]
   leads: { novos: number; whatsapp_sem_resposta: number }
   overdue_total: number
+  reactivation?: {
+    window_days: number
+    contacted: number
+    reactivated: number
+    rate: number | null
+  }
 }
 
 export default function HojePage() {
@@ -155,6 +161,31 @@ export default function HojePage() {
         </p>
       )}
 
+      {!loading && data?.reactivation && (
+        <div className="flex items-start gap-3 rounded-2xl border border-success/25 bg-success/5 p-4">
+          <MessageCircle size={18} className="mt-0.5 shrink-0 text-success" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground/90">
+              Reativação via WhatsApp
+              <span className="ml-1.5 text-xs font-normal text-muted">
+                · {data.reactivation.window_days} dias
+              </span>
+            </p>
+            <p className="mt-0.5 text-xs text-muted">
+              <span className="font-semibold text-success tabular-nums">
+                {data.reactivation.reactivated}
+              </span>{' '}
+              reativados de{' '}
+              <span className="tabular-nums">{data.reactivation.contacted}</span> contatados
+              {data.reactivation.rate != null ? ` · ${data.reactivation.rate}%` : ''}
+              {data.reactivation.contacted === 0
+                ? ' — use o botão WhatsApp no contato ou no relatório 0011 para começar a medir'
+                : ''}
+            </p>
+          </div>
+        </div>
+      )}
+
       {!loading && (data?.overdue_total ?? 0) > 0 && (
         <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-4">
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-danger" />
@@ -184,14 +215,15 @@ export default function HojePage() {
         <ChevronRight size={16} className="shrink-0 text-muted" />
       </Link>
 
-      {/* Agenda de hoje */}
+      {/* Agenda — hoje e próximos, por data/hora */}
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-1.5 text-sm font-medium">
-            <Calendar size={15} className="text-sky-300" /> Agendamentos hoje
+            <Calendar size={15} className="text-sky-300" /> Agendamentos
           </h2>
           <CountBadge value={loading ? '—' : String(data?.scheduleToday.length ?? 0)} tone="gold" />
         </div>
+        <p className="text-[0.65rem] text-muted/70">Hoje primeiro, depois os próximos · ordem de data e horário</p>
 
         {loading &&
           Array.from({ length: 2 }).map((_, i) => (
@@ -200,7 +232,7 @@ export default function HojePage() {
 
         {!loading && data?.scheduleToday.length === 0 && (
           <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-            Nenhum agendamento para hoje.
+            Nenhum agendamento próximo.
           </div>
         )}
 
