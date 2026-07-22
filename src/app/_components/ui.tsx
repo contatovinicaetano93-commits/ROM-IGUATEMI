@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Info, X } from 'lucide-react'
+import { CollapsibleBody, SectionToggleHeader, useSectionOpen } from './CollapsibleSection'
 
 export const STATUS_LABEL: Record<string, string> = {
   novo: 'Novo',
@@ -54,19 +55,78 @@ export function SectionCard({
   badge,
   children,
   className = '',
+  storageKey,
+  defaultOpen = false,
+  aside,
 }: {
   title: string
   badge?: React.ReactNode
   children: React.ReactNode
   className?: string
+  /** When set, section can open/collapse; preference in localStorage. */
+  storageKey?: string
+  defaultOpen?: boolean
+  aside?: React.ReactNode
 }) {
+  if (storageKey) {
+    return (
+      <CollapsibleSectionCard
+        title={title}
+        badge={badge}
+        className={className}
+        storageKey={storageKey}
+        defaultOpen={defaultOpen}
+        aside={aside}
+      >
+        {children}
+      </CollapsibleSectionCard>
+    )
+  }
+
   return (
     <section className={`rounded-2xl border border-border bg-card p-4 ${className}`}>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium">{title}</h2>
-        {badge}
+        <span className="flex shrink-0 items-center gap-2">
+          {badge}
+          {aside}
+        </span>
       </div>
       {children}
+    </section>
+  )
+}
+
+function CollapsibleSectionCard({
+  title,
+  badge,
+  children,
+  className = '',
+  storageKey,
+  defaultOpen,
+  aside,
+}: {
+  title: string
+  badge?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+  storageKey: string
+  defaultOpen: boolean
+  aside?: React.ReactNode
+}) {
+  const [open, setOpen] = useSectionOpen(storageKey, defaultOpen)
+  return (
+    <section className={`rounded-2xl border border-border bg-card p-4 ${className}`}>
+      <SectionToggleHeader
+        title={title}
+        badge={badge}
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        aside={aside}
+      />
+      <CollapsibleBody open={open} className="mt-3">
+        {children}
+      </CollapsibleBody>
     </section>
   )
 }

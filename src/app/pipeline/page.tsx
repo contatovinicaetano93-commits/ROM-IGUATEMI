@@ -7,6 +7,11 @@ import { apiFetch } from '@/lib/api-client'
 import { fmtScheduleParts } from '@/lib/salon/format'
 import { contactHref } from '@/lib/auth-redirect'
 import { CountBadge } from '../_components/ui'
+import {
+  CollapsibleBody,
+  SectionToggleHeader,
+  useSectionOpen,
+} from '../_components/CollapsibleSection'
 
 interface PipelineCard {
   id: string
@@ -32,6 +37,7 @@ function PipelineColumn({
   items,
   timeFrom,
   emptyLabel,
+  storageKey,
 }: {
   title: string
   count: number
@@ -39,14 +45,24 @@ function PipelineColumn({
   items: PipelineCard[]
   timeFrom: (item: PipelineCard) => string | null
   emptyLabel: string
+  storageKey: string
 }) {
+  const [open, setOpen] = useSectionOpen(storageKey, false)
   return (
-    <section className="flex min-h-[24rem] min-w-0 flex-1 flex-col rounded-2xl border border-border bg-card">
-      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-medium">{title}</h2>
-        <CountBadge value={String(count)} tone={tone} />
+    <section
+      className={`flex min-w-0 flex-1 flex-col rounded-2xl border border-border bg-card ${
+        open ? 'min-h-[24rem]' : ''
+      }`}
+    >
+      <header className="border-b border-border px-4 py-3">
+        <SectionToggleHeader
+          title={title}
+          badge={<CountBadge value={String(count)} tone={tone} />}
+          open={open}
+          onToggle={() => setOpen((v) => !v)}
+        />
       </header>
-      <div className="flex flex-1 flex-col gap-2 p-3">
+      <CollapsibleBody open={open} className="flex flex-1 flex-col gap-2 p-3">
         {items.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-muted">{emptyLabel}</p>
         ) : (
@@ -80,7 +96,7 @@ function PipelineColumn({
             )
           })
         )}
-      </div>
+      </CollapsibleBody>
     </section>
   )
 }
@@ -148,9 +164,10 @@ export default function PipelinePage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <PipelineColumn
           title="Agendados"
+          storageKey="pipeline.section.agendados.open"
           count={loading ? 0 : (data?.counts.scheduled ?? 0)}
           tone="gold"
           items={loading ? [] : (data?.scheduled ?? [])}
@@ -159,6 +176,7 @@ export default function PipelinePage() {
         />
         <PipelineColumn
           title="Concluídos"
+          storageKey="pipeline.section.concluidos.open"
           count={loading ? 0 : (data?.counts.completed ?? 0)}
           tone="success"
           items={loading ? [] : (data?.completed ?? [])}

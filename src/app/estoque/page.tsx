@@ -13,6 +13,11 @@ import {
   Search,
 } from 'lucide-react'
 import { SectionCard, PrimaryButton, InfoBanner, CountBadge } from '../_components/ui'
+import {
+  CollapsibleBody,
+  SectionToggleHeader,
+  useSectionOpen,
+} from '../_components/CollapsibleSection'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency } from '@/lib/salon/format'
 import {
@@ -198,6 +203,7 @@ export default function EstoquePage() {
   const [catalogBrandId, setCatalogBrandId] = useState('')
   const [catalogStockFilter, setCatalogStockFilter] = useState<CatalogStockFilter>('all')
   const [outflowWindow, setOutflowWindow] = useState<'hoje' | 'semana'>('semana')
+  const [movementsOpen, setMovementsOpen] = useSectionOpen('estoque.section.movimentos.open', false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -378,6 +384,7 @@ export default function EstoquePage() {
 
       <SectionCard
         title="Fila de compra"
+        storageKey="estoque.section.fila-compra.open"
         badge={
           <CountBadge
             value={String(purchaseQueue.length)}
@@ -440,6 +447,7 @@ export default function EstoquePage() {
 
       <SectionCard
         title="Catálogo"
+        storageKey="estoque.section.catalogo.open"
         badge={<CountBadge value={`${catalogProducts.length}/${products.length}`} />}
       >
         <p className="mb-3 text-xs text-muted">Posição Avec 0149 — busca e filtros locais.</p>
@@ -660,76 +668,85 @@ export default function EstoquePage() {
         )}
       </SectionCard>
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium">Movimentações recentes</h2>
-        <button
-          type="button"
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold"
-        >
-          <Plus size={14} /> Ajuste manual
-        </button>
-      </div>
-
-      {loading &&
-        Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-14 animate-pulse rounded-2xl bg-card" />
-        ))}
-
-      {!loading && movements.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-          Nenhuma movimentação sincronizada ainda.
-        </div>
-      )}
-
-      {!loading &&
-        movements.map((m) => {
-          const outflowBucket: OutflowReasonBucket | null =
-            m.type === 'saida' ? classifyOutflowReason(m.reason) : null
-          const purchase = isPurchaseEntry(m)
-          return (
-            <div
-              key={m.id}
-              className="flex items-center justify-between rounded-2xl border border-border bg-card p-4"
+      <div className="flex flex-col gap-2">
+        <SectionToggleHeader
+          title="Movimentações recentes"
+          badge={<CountBadge value={loading ? '—' : String(movements.length)} />}
+          open={movementsOpen}
+          onToggle={() => setMovementsOpen((v) => !v)}
+          aside={
+            <button
+              type="button"
+              onClick={() => setShowAdd(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold"
             >
-              <div className="flex min-w-0 items-center gap-3">
-                {m.type === 'saida' ? (
-                  <PackageMinus size={18} className="shrink-0 text-danger" />
-                ) : (
-                  <PackagePlus size={18} className="shrink-0 text-success" />
-                )}
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {m.product_name}
-                    {purchase && (
-                      <span className="ml-2 rounded-full bg-success/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-success">
-                        Pedido
-                      </span>
-                    )}
-                    {outflowBucket && (
-                      <span className="ml-2 rounded-full bg-surface px-1.5 py-0.5 text-[0.6rem] font-semibold text-muted">
-                        {OUTFLOW_REASON_LABEL[outflowBucket]}
-                      </span>
-                    )}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {m.reason ?? (m.source === 'manual' ? 'Ajuste manual' : 'Avec')} ·{' '}
-                    {new Date(m.occurred_at).toLocaleDateString('pt-BR')}
-                    {m.source === 'manual' && ' · correção local'}
-                  </p>
-                </div>
-              </div>
-              <span
-                className={`shrink-0 text-sm font-semibold tabular-nums ${
-                  m.type === 'saida' ? 'text-danger' : 'text-success'
-                }`}
-              >
-                {m.type === 'saida' ? '−' : '+'}
-                {m.quantity}
-              </span>
+              <Plus size={14} /> Ajuste manual
+            </button>
+          }
+        />
+
+        <CollapsibleBody open={movementsOpen} className="flex flex-col gap-2">
+          {loading &&
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-14 animate-pulse rounded-2xl bg-card" />
+            ))}
+
+          {!loading && movements.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
+              Nenhuma movimentação sincronizada ainda.
             </div>
-          )
-        })}
+          )}
+
+          {!loading &&
+            movements.map((m) => {
+              const outflowBucket: OutflowReasonBucket | null =
+                m.type === 'saida' ? classifyOutflowReason(m.reason) : null
+              const purchase = isPurchaseEntry(m)
+              return (
+                <div
+                  key={m.id}
+                  className="flex items-center justify-between rounded-2xl border border-border bg-card p-4"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    {m.type === 'saida' ? (
+                      <PackageMinus size={18} className="shrink-0 text-danger" />
+                    ) : (
+                      <PackagePlus size={18} className="shrink-0 text-success" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {m.product_name}
+                        {purchase && (
+                          <span className="ml-2 rounded-full bg-success/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-success">
+                            Pedido
+                          </span>
+                        )}
+                        {outflowBucket && (
+                          <span className="ml-2 rounded-full bg-surface px-1.5 py-0.5 text-[0.6rem] font-semibold text-muted">
+                            {OUTFLOW_REASON_LABEL[outflowBucket]}
+                          </span>
+                        )}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {m.reason ?? (m.source === 'manual' ? 'Ajuste manual' : 'Avec')} ·{' '}
+                        {new Date(m.occurred_at).toLocaleDateString('pt-BR')}
+                        {m.source === 'manual' && ' · correção local'}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 text-sm font-semibold tabular-nums ${
+                      m.type === 'saida' ? 'text-danger' : 'text-success'
+                    }`}
+                  >
+                    {m.type === 'saida' ? '−' : '+'}
+                    {m.quantity}
+                  </span>
+                </div>
+              )
+            })}
+        </CollapsibleBody>
+      </div>
 
       {showAdd && (
         <AddMovementSheet
