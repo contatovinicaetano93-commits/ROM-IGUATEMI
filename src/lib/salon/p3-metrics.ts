@@ -64,3 +64,28 @@ export async function upsertSalonP3Daily(
       updated_at = now()
   `
 }
+
+/**
+ * Snapshot P3 mais recente ≤ targetDay.
+ * return_rate / new_clients_period vêm da Avec (0007 / 0017) em janela rolante.
+ */
+export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Daily | null> {
+  const sql = getSql()
+  try {
+    const rows = (await sql`
+      select
+        day::text as day,
+        return_rate::float as return_rate,
+        new_clients_period,
+        revenue_curve,
+        updated_at
+      from salon_p3_daily
+      where day <= ${targetDay}::date
+      order by day desc
+      limit 1
+    `) as SalonP3Daily[]
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}

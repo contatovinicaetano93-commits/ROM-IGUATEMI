@@ -40,8 +40,27 @@ interface FinanceKpiBucket {
   attended: number
   ticket_avg: number | null
   daily: { day: string; revenue: number; attended: number; ticket_avg: number | null }[]
-  top_professionals: { name: string; revenue: number; attended: number; ticket_avg: number }[]
+  top_professionals: {
+    name: string
+    revenue: number
+    attended: number
+    ticket_avg: number
+    occupancy?: number
+  }[]
   top_services: { name: string; quantity: number; revenue: number }[]
+  occupancy_avg: number | null
+  cancelled: number
+  no_shows: number
+  lost_revenue: number
+  cmv: number
+  margin_after_cmv: number | null
+  packages: { name: string; quantity: number; revenue: number }[]
+  packages_sold: number
+  packages_revenue: number
+  booking_channels: { channel: string; count: number }[]
+  acquisition: { channel: string; clients: number }[]
+  return_rate: number | null
+  new_clients_period: number
   gross_margin: number | null
   cash_flow: number
   payment_mix: { method: string; amount: number; share: number }[]
@@ -200,11 +219,39 @@ const FINANCE_LEGEND: { term: string; meaning: string }[] = [
   },
   {
     term: 'Margem bruta (%)',
-    meaning: '((Receita − Despesas) ÷ Receita) × 100. Sem CMV de estoque ainda.',
+    meaning: '((Receita − Despesas) ÷ Receita) × 100.',
+  },
+  {
+    term: 'Margem após CMV',
+    meaning: '((Receita − Despesas − CMV) ÷ Receita) × 100. CMV = custo das saídas de estoque.',
   },
   {
     term: 'Fluxo',
     meaning: 'Receita − Despesas do período (caixa operacional simplificado).',
+  },
+  {
+    term: 'Ocupação',
+    meaning: 'Média da agenda preenchida por profissional (Avec 0126, janela ~30 dias).',
+  },
+  {
+    term: 'Receita perdida',
+    meaning: '(Cancelados + no-shows) × ticket médio — estimativa Avec 0052.',
+  },
+  {
+    term: 'CMV',
+    meaning: 'Custo das saídas de estoque no mês (proxy de produtos consumidos/vendidos).',
+  },
+  {
+    term: 'Pacotes',
+    meaning: 'Pacotes vendidos e receita (Avec 0061, snapshot ~30 dias).',
+  },
+  {
+    term: 'Canais de agenda',
+    meaning: 'De onde vieram os agendamentos (Avec 0056).',
+  },
+  {
+    term: 'Novos / retorno',
+    meaning: 'Novos no período (0017) e taxa de retorno (0007) — snapshot Avec.',
   },
   {
     term: 'Formas de pagamento',
@@ -246,6 +293,19 @@ function normalizeKpiBucket(bucket: FinanceKpiBucket): FinanceKpiBucket {
     daily: bucket.daily ?? [],
     top_professionals: bucket.top_professionals ?? [],
     top_services: bucket.top_services ?? [],
+    occupancy_avg: bucket.occupancy_avg ?? null,
+    cancelled: bucket.cancelled ?? 0,
+    no_shows: bucket.no_shows ?? 0,
+    lost_revenue: bucket.lost_revenue ?? 0,
+    cmv: bucket.cmv ?? 0,
+    margin_after_cmv: bucket.margin_after_cmv ?? null,
+    packages: bucket.packages ?? [],
+    packages_sold: bucket.packages_sold ?? 0,
+    packages_revenue: bucket.packages_revenue ?? 0,
+    booking_channels: bucket.booking_channels ?? [],
+    acquisition: bucket.acquisition ?? [],
+    return_rate: bucket.return_rate ?? null,
+    new_clients_period: bucket.new_clients_period ?? 0,
     payment_mix: bucket.payment_mix ?? [],
     payment_reconciliation: bucket.payment_reconciliation ?? EMPTY_RECONCILIATION,
     fiscal_split: bucket.fiscal_split ?? EMPTY_FISCAL_SPLIT,
@@ -384,6 +444,62 @@ export default function FinanceiroPage() {
         csvMoney(prev.cash_flow),
         csvMoney(cur.cash_flow - prev.cash_flow),
       ),
+      csvRow(
+        'Ocupação média (%)',
+        cur.occupancy_avg != null ? csvPercentPoints(cur.occupancy_avg * 100) : '—',
+        prev.occupancy_avg != null ? csvPercentPoints(prev.occupancy_avg * 100) : '—',
+        '—',
+      ),
+      csvRow(
+        'Cancelados',
+        formatNumberBr(cur.cancelled, 0),
+        formatNumberBr(prev.cancelled, 0),
+        formatNumberBr(cur.cancelled - prev.cancelled, 0),
+      ),
+      csvRow(
+        'No-shows',
+        formatNumberBr(cur.no_shows, 0),
+        formatNumberBr(prev.no_shows, 0),
+        formatNumberBr(cur.no_shows - prev.no_shows, 0),
+      ),
+      csvRow(
+        'Receita perdida (estimativa)',
+        csvMoney(cur.lost_revenue),
+        csvMoney(prev.lost_revenue),
+        csvMoney(cur.lost_revenue - prev.lost_revenue),
+      ),
+      csvRow(
+        'CMV (saídas de estoque)',
+        csvMoney(cur.cmv),
+        csvMoney(prev.cmv),
+        csvMoney(cur.cmv - prev.cmv),
+      ),
+      csvRow(
+        'Margem após CMV (%)',
+        csvPercentPoints(cur.margin_after_cmv),
+        csvPercentPoints(prev.margin_after_cmv),
+        cur.margin_after_cmv != null && prev.margin_after_cmv != null
+          ? csvPercentPoints(cur.margin_after_cmv - prev.margin_after_cmv)
+          : '—',
+      ),
+      csvRow(
+        'Novos clientes (0017)',
+        formatNumberBr(cur.new_clients_period, 0),
+        formatNumberBr(prev.new_clients_period, 0),
+        formatNumberBr(cur.new_clients_period - prev.new_clients_period, 0),
+      ),
+      csvRow(
+        'Taxa de retorno (0007)',
+        cur.return_rate != null ? csvPercentPoints(cur.return_rate * 100) : '—',
+        prev.return_rate != null ? csvPercentPoints(prev.return_rate * 100) : '—',
+        '—',
+      ),
+      csvRow(
+        'Pacotes — receita (0061)',
+        csvMoney(cur.packages_revenue),
+        csvMoney(prev.packages_revenue),
+        csvMoney(cur.packages_revenue - prev.packages_revenue),
+      ),
       '',
       csvRow('=== CONCILIAÇÃO DE PAGAMENTOS (Avec 0081) ==='),
       csvRow('Status', reconciliationStatusLabel(rec.status)),
@@ -440,6 +556,28 @@ export default function FinanceiroPage() {
             csvRow(s.name, formatNumberBr(s.quantity, 0), csvMoney(s.revenue)),
           )
         : [csvRow('(sem ranking 0032)')]),
+      '',
+      csvRow(`=== PACOTES (Avec 0061) — ${cur.label} ===`),
+      csvRow('Pacote', 'Qtd', 'Receita'),
+      ...(cur.packages.length > 0
+        ? cur.packages.map((p) =>
+            csvRow(p.name, formatNumberBr(p.quantity, 0), csvMoney(p.revenue)),
+          )
+        : [csvRow('(sem pacotes sincronizados)')]),
+      csvRow('Total vendidos', formatNumberBr(cur.packages_sold, 0)),
+      csvRow('Receita pacotes', csvMoney(cur.packages_revenue)),
+      '',
+      csvRow(`=== CANAIS DE AGENDA (Avec 0056) — ${cur.label} ===`),
+      csvRow('Canal', 'Agendamentos'),
+      ...(cur.booking_channels.length > 0
+        ? cur.booking_channels.map((c) => csvRow(c.channel, formatNumberBr(c.count, 0)))
+        : [csvRow('(sem canais sincronizados)')]),
+      '',
+      csvRow(`=== AQUISIÇÃO (Avec 0003) — ${cur.label} ===`),
+      csvRow('Canal', 'Clientes'),
+      ...(cur.acquisition.length > 0
+        ? cur.acquisition.map((a) => csvRow(a.channel, formatNumberBr(a.clients, 0)))
+        : [csvRow('(sem aquisição sincronizada)')]),
       '',
       csvRow(`=== DESPESAS — ${cur.label} ===`),
       csvRow('Data', 'Descrição', 'Categoria', 'Valor'),
@@ -633,6 +771,140 @@ export default function FinanceiroPage() {
         />
       </div>
 
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+        <FinanceKpiCard
+          label="Ocupação (0126)"
+          value={
+            loading || !kpis
+              ? '—'
+              : kpis.current.occupancy_avg != null
+                ? formatPercentPoints(kpis.current.occupancy_avg * 100)
+                : '—'
+          }
+          delta={
+            kpis && kpis.current.occupancy_avg != null && kpis.previous.occupancy_avg != null
+              ? fmtDelta(kpis.current.occupancy_avg * 100, kpis.previous.occupancy_avg * 100, 'pp')
+              : null
+          }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={
+            kpis && kpis.current.occupancy_avg != null && kpis.previous.occupancy_avg != null
+              ? kpis.current.occupancy_avg >= kpis.previous.occupancy_avg
+              : null
+          }
+          loading={loading}
+        />
+        <FinanceKpiCard
+          label="Receita perdida"
+          value={loading || !kpis ? '—' : formatCurrency(kpis.current.lost_revenue)}
+          delta={kpis ? fmtDelta(kpis.current.lost_revenue, kpis.previous.lost_revenue) : null}
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={kpis ? kpis.current.lost_revenue <= kpis.previous.lost_revenue : null}
+          loading={loading}
+        />
+        <FinanceKpiCard
+          label="Cancel. + no-show"
+          value={
+            loading || !kpis
+              ? '—'
+              : String((kpis.current.cancelled ?? 0) + (kpis.current.no_shows ?? 0))
+          }
+          delta={
+            kpis
+              ? (() => {
+                  const cur = (kpis.current.cancelled ?? 0) + (kpis.current.no_shows ?? 0)
+                  const prev = (kpis.previous.cancelled ?? 0) + (kpis.previous.no_shows ?? 0)
+                  const diff = cur - prev
+                  if (diff === 0) return null
+                  return `${diff > 0 ? '+' : ''}${diff}`
+                })()
+              : null
+          }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={
+            kpis
+              ? (kpis.current.cancelled ?? 0) + (kpis.current.no_shows ?? 0) <=
+                (kpis.previous.cancelled ?? 0) + (kpis.previous.no_shows ?? 0)
+              : null
+          }
+          loading={loading}
+        />
+        <FinanceKpiCard
+          label="CMV (estoque)"
+          value={loading || !kpis ? '—' : formatCurrency(kpis.current.cmv)}
+          delta={kpis ? fmtDelta(kpis.current.cmv, kpis.previous.cmv) : null}
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={kpis ? kpis.current.cmv <= kpis.previous.cmv : null}
+          loading={loading}
+        />
+        <FinanceKpiCard
+          label="Margem após CMV"
+          value={
+            loading || !kpis
+              ? '—'
+              : kpis.current.margin_after_cmv != null
+                ? formatPercentPoints(kpis.current.margin_after_cmv)
+                : '—'
+          }
+          delta={
+            kpis && kpis.current.margin_after_cmv != null && kpis.previous.margin_after_cmv != null
+              ? fmtDelta(kpis.current.margin_after_cmv, kpis.previous.margin_after_cmv, 'pp')
+              : null
+          }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={
+            kpis && kpis.current.margin_after_cmv != null && kpis.previous.margin_after_cmv != null
+              ? kpis.current.margin_after_cmv >= kpis.previous.margin_after_cmv
+              : null
+          }
+          loading={loading}
+        />
+        <FinanceKpiCard
+          label="Novos / retorno"
+          value={
+            loading || !kpis
+              ? '—'
+              : `${kpis.current.new_clients_period}${
+                  kpis.current.return_rate != null
+                    ? ` · ${formatPercentPoints(kpis.current.return_rate * 100, 0)}`
+                    : ''
+                }`
+          }
+          delta={
+            kpis
+              ? (() => {
+                  const diff = kpis.current.new_clients_period - kpis.previous.new_clients_period
+                  if (diff === 0) return null
+                  return `${diff > 0 ? '+' : ''}${diff} novos`
+                })()
+              : null
+          }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={
+            kpis ? kpis.current.new_clients_period >= kpis.previous.new_clients_period : null
+          }
+          loading={loading}
+        />
+      </div>
+
+      <details className="rounded-2xl border border-border bg-card/60 px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium text-foreground/90">
+          Legenda das métricas
+        </summary>
+        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+          {FINANCE_LEGEND.map((item) => (
+            <div key={item.term} className="rounded-xl bg-surface/60 px-3 py-2">
+              <dt className="font-medium text-gold">{item.term}</dt>
+              <dd className="mt-0.5 text-xs leading-relaxed text-muted">{item.meaning}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-3 text-xs text-muted">
+          O CSV exportado usa formato brasileiro (R$ 1.234,56) e inclui esta legenda no final do
+          arquivo.
+        </p>
+      </details>
+
       {!loading && kpis && (kpis.current.daily?.length ?? 0) > 0 && (
         <div className="rounded-2xl border border-border bg-card p-4">
           <h2 className="text-sm font-medium">Receita diária — {kpis.current.label}</h2>
@@ -690,6 +962,9 @@ export default function FinanceiroPage() {
                     <span className="truncate font-medium">{p.name}</span>
                     <span className="shrink-0 tabular-nums text-muted">
                       {formatCurrency(p.revenue)} · {p.attended} at.
+                      {p.occupancy != null && p.occupancy > 0
+                        ? ` · ${formatPercentPoints(p.occupancy * 100, 0)}`
+                        : ''}
                     </span>
                   </li>
                 ))}
@@ -709,6 +984,64 @@ export default function FinanceiroPage() {
                     <span className="shrink-0 tabular-nums text-muted">
                       {formatCurrency(s.revenue)} · {s.quantity}×
                     </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!loading && kpis && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <h2 className="text-sm font-medium">Pacotes — {kpis.current.label}</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              Avec 0061 · {kpis.current.packages_sold} vendidos ·{' '}
+              {formatCurrency(kpis.current.packages_revenue)}
+            </p>
+            {(kpis.current.packages?.length ?? 0) === 0 ? (
+              <p className="mt-3 text-xs text-muted">Sem pacotes no snapshot — aguarde o sync full.</p>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-2">
+                {kpis.current.packages.map((p) => (
+                  <li key={p.name} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{p.name}</span>
+                    <span className="shrink-0 tabular-nums text-muted">
+                      {formatCurrency(p.revenue)} · {p.quantity}×
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <h2 className="text-sm font-medium">Canais de agenda</h2>
+            <p className="mt-0.5 text-xs text-muted">Avec 0056 (snapshot ~30 dias).</p>
+            {(kpis.current.booking_channels?.length ?? 0) === 0 ? (
+              <p className="mt-3 text-xs text-muted">Sem canais sincronizados.</p>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-2">
+                {kpis.current.booking_channels.map((c) => (
+                  <li key={c.channel} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{c.channel}</span>
+                    <span className="shrink-0 tabular-nums text-muted">{c.count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <h2 className="text-sm font-medium">Como nos conheceram</h2>
+            <p className="mt-0.5 text-xs text-muted">Avec 0003 (aquisição).</p>
+            {(kpis.current.acquisition?.length ?? 0) === 0 ? (
+              <p className="mt-3 text-xs text-muted">Sem dados de aquisição.</p>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-2">
+                {kpis.current.acquisition.map((a) => (
+                  <li key={a.channel} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{a.channel}</span>
+                    <span className="shrink-0 tabular-nums text-muted">{a.clients}</span>
                   </li>
                 ))}
               </ul>
@@ -811,7 +1144,7 @@ export default function FinanceiroPage() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium">{p.method}</span>
                     <span className="tabular-nums text-muted">
-                      {formatCurrency(p.amount)} · {p.share}%
+                      {formatCurrency(p.amount)} · {formatPercentPoints(p.share)}
                     </span>
                   </div>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
