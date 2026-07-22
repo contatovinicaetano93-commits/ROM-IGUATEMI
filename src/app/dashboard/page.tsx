@@ -16,6 +16,7 @@ import { fmtSchedule, formatCurrency, formatPercent } from '@/lib/salon/format'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { BriefSheet } from '../_components/BriefSheet'
+import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
 
 interface ScheduleItem {
   id: string
