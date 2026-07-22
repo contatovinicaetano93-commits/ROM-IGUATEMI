@@ -11,6 +11,8 @@ import {
   DollarSign,
   CalendarClock,
   MessageCircle,
+  Package,
+  AlertTriangle,
 } from 'lucide-react'
 import { SectionCard, CountBadge, PrimaryButton } from '../../_components/ui'
 import { apiFetch } from '@/lib/api-client'
@@ -18,7 +20,24 @@ import { formatCurrency, formatPercent, whatsAppWebUrl } from '@/lib/salon/forma
 import type { DirectorReport } from '@/lib/director-report/types'
 import { buildRecallWhatsAppMessage } from '@/lib/director-report/recall-message'
 
-type StageTab = '0011' | '0021'
+type StageTab = '0011' | '0021' | 'estoque'
+
+interface StockValuationBucket {
+  key: string
+  totalCost: number
+  percentage: number | null
+}
+interface StockKpisPayload {
+  total_value: number
+  active_alerts: number
+  zero_products: number
+  by_category: StockValuationBucket[]
+  by_brand: StockValuationBucket[]
+  by_category_period?: StockValuationBucket[]
+  avec_official_total: number | null
+  drift: number | null
+  last_synced_at: string | null
+}
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -113,6 +132,9 @@ export default function RelatorioDiretoriaPage() {
   const [sending, setSending] = useState(false)
   /** true = força fixture/demo; false = Avec live quando token OK */
   const [forceDemo, setForceDemo] = useState(false)
+  const [stockKpis, setStockKpis] = useState<StockKpisPayload | null>(null)
+  const [stockLoading, setStockLoading] = useState(false)
+  const [stockError, setStockError] = useState<string | null>(null)
 
   /** Carrega base completa — filtros de profissional são só na UI/envio de cada etapa. */
   const load = useCallback(async () => {
@@ -146,6 +168,30 @@ export default function RelatorioDiretoriaPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  const loadStock = useCallback(async () => {
+    setStockLoading(true)
+    setStockError(null)
+    try {
+      const res = await apiFetch('/api/estoque/kpis', { cache: 'no-store' })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        setStockError(json.error ?? 'Não foi possível carregar estoque')
+        setStockKpis(null)
+        return
+      }
+      setStockKpis(json.data)
+    } catch (e) {
+      setStockError(String(e))
+      setStockKpis(null)
+    } finally {
+      setStockLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === 'estoque') loadStock()
+  }, [tab, loadStock])
 
   const pros = useMemo(() => {
     const fromReturn = data?.return_blocks.map((b) => b.professional) ?? []
@@ -345,6 +391,12 @@ export default function RelatorioDiretoriaPage() {
             hint="Mês (ou trimestre vs trimestre)"
           />
         )}
+        <StageTabBtn
+          active={tab === 'estoque'}
+          onClick={() => setTab('estoque')}
+          label="Etapa Estoque"
+          hint="Drift · categorias · marcas"
+        />
       </div>
 
       {tab === '0011' && (
@@ -814,6 +866,112 @@ export default function RelatorioDiretoriaPage() {
         </>
       )}
 
+      {tab === 'estoque' && (
+        <>
+          <p className="text-xs text-muted">
+            Profundidade de inventário (Avec 0045 / 0243 / 0242 / 0142). Operação do dia a dia
+            continua em{' '}
+            <Link href="/estoque" className="text-gold hover:underline">
+              Estoque
+            </Link>
+            .
+          </p>
+
+          {stockError && (
+            <div className="rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
+              {stockError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Kpi
+              icon={<DollarSign size={16} />}
+              label="Valor local (0149)"
+              value={stockLoading || !stockKpis ? '—' : formatCurrency(stockKpis.total_value)}
+            />
+            <Kpi
+              icon={<Package size={16} />}
+              label="Total Avec (0045)"
+              value={
+                stockLoading || !stockKpis
+                  ? '—'
+                  : stockKpis.avec_official_total != null
+                    ? formatCurrency(stockKpis.avec_official_total)
+                    : '—'
+              }
+            />
+            <Kpi
+              icon={<AlertTriangle size={16} />}
+              label="Drift (local − Avec)"
+              value={
+                stockLoading || !stockKpis
+                  ? '—'
+                  : stockKpis.drift != null
+                    ? formatCurrency(stockKpis.drift)
+                    : '—'
+              }
+            />
+            <Kpi
+              icon={<Users size={16} />}
+              label="Alertas / zerados"
+              value={
+                stockLoading || !stockKpis
+                  ? '—'
+                  : `${stockKpis.active_alerts} / ${stockKpis.zero_products}`
+              }
+            />
+          </div>
+
+          {stockKpis?.drift != null && Math.abs(stockKpis.drift) > 50 && (
+            <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+              Drift acima de R$ 50 — conferir sync da posição (0149) vs valorização oficial (0045).
+            </div>
+          )}
+
+          <SectionCard title="Custo por categoria (0142 / 0243)">
+            <p className="mb-3 text-xs text-muted">
+              Preferência: % oficial 0142 (~30 dias). Fallback: snapshot 0243.
+            </p>
+            {stockLoading ? (
+              <div className="h-16 animate-pulse rounded-2xl bg-card" />
+            ) : (
+              <StockValuationBars
+                buckets={
+                  (stockKpis?.by_category_period?.length ?? 0) > 0
+                    ? stockKpis!.by_category_period!
+                    : (stockKpis?.by_category ?? [])
+                }
+              />
+            )}
+          </SectionCard>
+
+          <SectionCard title="Custo por marca (0242)">
+            {stockLoading ? (
+              <div className="h-16 animate-pulse rounded-2xl bg-card" />
+            ) : (
+              <StockValuationBars buckets={stockKpis?.by_brand ?? []} />
+            )}
+          </SectionCard>
+
+          <p className="text-xs text-muted">
+            Último sync posição:{' '}
+            {stockKpis?.last_synced_at
+              ? new Date(stockKpis.last_synced_at).toLocaleString('pt-BR')
+              : '—'}
+          </p>
+
+          <button
+            type="button"
+            onClick={loadStock}
+            disabled={stockLoading}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-2.5 text-sm font-semibold text-gold disabled:opacity-60"
+          >
+            <RefreshCw size={16} className={stockLoading ? 'animate-spin' : ''} />
+            Atualizar estoque
+          </button>
+        </>
+      )}
+
       <p className="text-xs text-muted">
         Destino: contato.vinicaetano93@gmail.com · cada botão envia só a etapa aberta
       </p>
@@ -923,6 +1081,33 @@ function Kpi({
         {label}
       </div>
       <p className="mt-1 text-lg font-semibold tabular-nums leading-snug">{value}</p>
+    </div>
+  )
+}
+
+function StockValuationBars({ buckets }: { buckets: StockValuationBucket[] }) {
+  if (buckets.length === 0) {
+    return <p className="text-xs text-muted">Sem snapshot sincronizado ainda.</p>
+  }
+  const total = buckets.reduce((sum, b) => sum + b.totalCost, 0)
+  return (
+    <div className="flex flex-col gap-2.5">
+      {buckets.map((b) => {
+        const pct = b.percentage ?? (total > 0 ? (b.totalCost / total) * 100 : 0)
+        return (
+          <div key={b.key} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium">{b.key}</span>
+              <span className="tabular-nums text-muted">
+                {formatCurrency(b.totalCost)} · {pct.toFixed(1)}%
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
+              <div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(pct, 100)}%` }} />
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
