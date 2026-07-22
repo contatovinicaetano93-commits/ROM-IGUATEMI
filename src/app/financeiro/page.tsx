@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Plus, X, Trash2, Download, Camera, Paperclip } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
-import { PrimaryButton } from '../_components/ui'
+import { CountBadge, PrimaryButton } from '../_components/ui'
+import {
+  CollapsibleBody,
+  SectionToggleHeader,
+  useSectionOpen,
+} from '../_components/CollapsibleSection'
 import { MonthYearField } from '../_components/MonthYearField'
 import { apiFetch } from '@/lib/api-client'
 import {
@@ -306,6 +311,8 @@ export default function FinanceiroPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [fiscalImporting, setFiscalImporting] = useState(false)
   const [fiscalImportMsg, setFiscalImportMsg] = useState<string | null>(null)
+  const [dailyOpen, setDailyOpen] = useSectionOpen('financeiro.section.receita-diaria.open', false)
+  const [expensesOpen, setExpensesOpen] = useSectionOpen('financeiro.section.despesas.open', false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -687,34 +694,41 @@ export default function FinanceiroPage() {
 
       {!loading && kpis && (kpis.current.daily?.length ?? 0) > 0 && (
         <div className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-sm font-medium">Receita diária — {kpis.current.label}</h2>
-          <p className="mt-0.5 text-xs text-muted">
-            Fonte: salon_daily_metrics (sync Avec + histórico Lake).
-          </p>
-          <div className="mt-3 max-h-64 overflow-y-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-card text-[0.65rem] uppercase tracking-wide text-muted">
-                <tr>
-                  <th className="py-1.5 font-medium">Dia</th>
-                  <th className="py-1.5 font-medium">Receita</th>
-                  <th className="py-1.5 font-medium">Atendidos</th>
-                  <th className="py-1.5 font-medium">Ticket</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...kpis.current.daily].reverse().map((d) => (
-                  <tr key={d.day} className="border-t border-border/60">
-                    <td className="py-1.5 tabular-nums">{d.day.slice(8)}/{d.day.slice(5, 7)}</td>
-                    <td className="py-1.5 tabular-nums">{formatCurrency(d.revenue)}</td>
-                    <td className="py-1.5 tabular-nums">{d.attended}</td>
-                    <td className="py-1.5 tabular-nums">
-                      {d.ticket_avg != null ? formatCurrency(d.ticket_avg) : '—'}
-                    </td>
+          <SectionToggleHeader
+            title={`Receita diária — ${kpis.current.label}`}
+            badge={<CountBadge value={String(kpis.current.daily.length)} />}
+            open={dailyOpen}
+            onToggle={() => setDailyOpen((v) => !v)}
+          />
+          <CollapsibleBody open={dailyOpen} className="mt-3">
+            <p className="text-xs text-muted">
+              Fonte: salon_daily_metrics (sync Avec + histórico Lake).
+            </p>
+            <div className="mt-3 max-h-64 overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-card text-[0.65rem] uppercase tracking-wide text-muted">
+                  <tr>
+                    <th className="py-1.5 font-medium">Dia</th>
+                    <th className="py-1.5 font-medium">Receita</th>
+                    <th className="py-1.5 font-medium">Atendidos</th>
+                    <th className="py-1.5 font-medium">Ticket</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {[...kpis.current.daily].reverse().map((d) => (
+                    <tr key={d.day} className="border-t border-border/60">
+                      <td className="py-1.5 tabular-nums">{d.day.slice(8)}/{d.day.slice(5, 7)}</td>
+                      <td className="py-1.5 tabular-nums">{formatCurrency(d.revenue)}</td>
+                      <td className="py-1.5 tabular-nums">{d.attended}</td>
+                      <td className="py-1.5 tabular-nums">
+                        {d.ticket_avg != null ? formatCurrency(d.ticket_avg) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CollapsibleBody>
         </div>
       )}
 
@@ -825,59 +839,74 @@ export default function FinanceiroPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium">Despesas de {kpis?.current.label ?? 'este mês'}</h2>
-        <button
-          type="button"
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold"
-        >
-          <Plus size={14} /> Nova despesa
-        </button>
-      </div>
+      <div className="flex flex-col gap-2">
+        <SectionToggleHeader
+          title={`Despesas de ${kpis?.current.label ?? 'este mês'}`}
+          badge={<CountBadge value={loading ? '—' : String(expenses.length)} />}
+          open={expensesOpen}
+          onToggle={() => setExpensesOpen((v) => !v)}
+          aside={
+            <button
+              type="button"
+              onClick={() => setShowAdd(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold"
+            >
+              <Plus size={14} /> Nova despesa
+            </button>
+          }
+        />
 
-      {loading &&
-        Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-16 animate-pulse rounded-2xl bg-card" />)}
+        <CollapsibleBody open={expensesOpen} className="flex flex-col gap-2">
+          {loading &&
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-16 animate-pulse rounded-2xl bg-card" />
+            ))}
 
-      {!loading && expenses.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-          Nenhuma despesa cadastrada esse mês.
-        </div>
-      )}
-
-      {!loading &&
-        expenses.map((e) => (
-          <div key={e.id} className="flex items-center justify-between rounded-2xl border border-border bg-card p-4">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{e.description}</p>
-              <p className="mt-0.5 text-xs text-muted">
-                {categoryName(e.category_id)} · {new Date(`${e.expense_date}T12:00:00`).toLocaleDateString('pt-BR')}
-              </p>
+          {!loading && expenses.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
+              Nenhuma despesa cadastrada esse mês.
             </div>
-            <div className="flex shrink-0 items-center gap-3">
-              {e.receipt_url && (
-                <a
-                  href={e.receipt_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Ver nota fiscal"
-                  className="text-muted transition-colors hover:text-gold"
-                >
-                  <Paperclip size={16} />
-                </a>
-              )}
-              <span className="text-sm font-semibold tabular-nums">{formatCurrency(e.amount)}</span>
-              <button
-                type="button"
-                onClick={() => removeExpense(e.id)}
-                aria-label="Excluir despesa"
-                className="text-muted transition-colors hover:text-danger"
+          )}
+
+          {!loading &&
+            expenses.map((e) => (
+              <div
+                key={e.id}
+                className="flex items-center justify-between rounded-2xl border border-border bg-card p-4"
               >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{e.description}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {categoryName(e.category_id)} ·{' '}
+                    {new Date(`${e.expense_date}T12:00:00`).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  {e.receipt_url && (
+                    <a
+                      href={e.receipt_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Ver nota fiscal"
+                      className="text-muted transition-colors hover:text-gold"
+                    >
+                      <Paperclip size={16} />
+                    </a>
+                  )}
+                  <span className="text-sm font-semibold tabular-nums">{formatCurrency(e.amount)}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeExpense(e.id)}
+                    aria-label="Excluir despesa"
+                    className="text-muted transition-colors hover:text-danger"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+        </CollapsibleBody>
+      </div>
 
       {showAdd && (
         <AddExpenseSheet

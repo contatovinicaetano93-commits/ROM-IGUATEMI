@@ -426,6 +426,7 @@ export default function AdminPage() {
 
         <SectionCard
           title="Contatos (urgência)"
+          storageKey="admin.section.contatos-urgencia.open"
           badge={<CountBadge value={String(contacts.length)} />}
           className="lg:col-span-2"
         >
