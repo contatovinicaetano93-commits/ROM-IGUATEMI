@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
+import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
 
 export const SERVICE_CATEGORIES = ['corte', 'tratamento', 'coloracao', 'bem_estar', 'produto', 'outro'] as const
 export type ServiceCategory = (typeof SERVICE_CATEGORIES)[number]
@@ -156,7 +157,12 @@ export async function markServiceDone(
     where id = ${serviceId}
     returning *
   `) as ClientService[]
-  return rows[0] ?? null
+  const service = rows[0] ?? null
+  if (service) {
+    // WhatsApp pós-visita (2h) — nunca falha a conclusão se a fila falhar.
+    await enqueueAftercare(service).catch(() => undefined)
+  }
+  return service
 }
 
 /** Agenda serviço. Não grava last_price (preço de visita feita = só markServiceDone). */

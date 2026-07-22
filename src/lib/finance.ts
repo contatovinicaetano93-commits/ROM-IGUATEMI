@@ -6,6 +6,7 @@ import {
 } from '@/lib/fiscal-split'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
+import { getSalonP1DailyNear, type P1ProfessionalRow, type P1ServiceRow } from '@/lib/salon/p1-metrics'
 
 export interface FinanceCategory {
   id: string
@@ -145,6 +146,43 @@ async function sumExpenses(from: string, to: string): Promise<number> {
   return Number(rows[0]?.total ?? 0) || 0
 }
 
+export interface FinanceDayPoint {
+  day: string
+  revenue: number
+  attended: number
+  ticket_avg: number | null
+}
+
+async function listDailyMetrics(from: string, to: string): Promise<FinanceDayPoint[]> {
+  const sql = getSql()
+  const rows = (await sql`
+    select
+      day::text as day,
+      coalesce(revenue, 0)::float as revenue,
+      coalesce(attended, 0)::int as attended,
+      ticket_avg::float as ticket_avg
+    from salon_daily_metrics
+    where day >= ${from}::date and day <= ${to}::date
+    order by day asc
+  `) as { day: string; revenue: number; attended: number; ticket_avg: number | null }[]
+  return rows.map((r) => ({
+    day: r.day,
+    revenue: Math.round(Number(r.revenue) * 100) / 100,
+    attended: Number(r.attended) || 0,
+    ticket_avg: r.ticket_avg != null ? Math.round(Number(r.ticket_avg) * 100) / 100 : null,
+  }))
+}
+
+async function sumAttended(from: string, to: string): Promise<number> {
+  const sql = getSql()
+  const rows = (await sql`
+    select coalesce(sum(attended), 0)::int as attended
+    from salon_daily_metrics
+    where day >= ${from}::date and day <= ${to}::date
+  `) as { attended: number }[]
+  return Number(rows[0]?.attended ?? 0) || 0
+}
+
 export interface PaymentReconciliation {
   revenue: number
   payments_total: number
@@ -179,6 +217,16 @@ export interface FinanceKpiBucket {
   to: string
   revenue: number
   expenses: number
+  /** Proxy de comandas finalizadas (métrica attended da Avec/Lake). */
+  attended: number
+  /** Ticket médio do período (receita ÷ atendidos). */
+  ticket_avg: number | null
+  /** Série diária do mês (salon_daily_metrics — Avec sync + seed Lake). */
+  daily: FinanceDayPoint[]
+  /** Ranking 0021 (janela rolante ~30d no snapshot P1 mais próximo do fim do mês). */
+  top_professionals: P1ProfessionalRow[]
+  /** Ranking 0032 (mesmo snapshot P1). */
+  top_services: P1ServiceRow[]
   /** (receita - despesas) / receita, em % — null se não houver receita no período (Avec ainda não sincronizou). */
   gross_margin: number | null
   cash_flow: number
@@ -197,14 +245,19 @@ export interface FinanceKpis {
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
   const { from, to } = monthRange(monthKey)
-  const [revenue, expenses, payment_mix, fiscal_split] = await Promise.all([
+  const [revenue, expenses, payment_mix, fiscal_split, attended, daily, p1] = await Promise.all([
     sumRevenue(from, to),
     sumExpenses(from, to),
     getPaymentMixRange(from, to),
     getFiscalSplitSummary(from, to),
+    sumAttended(from, to),
+    listDailyMetrics(from, to),
+    getSalonP1DailyNear(to),
   ])
   const revenueRounded = Math.round(revenue * 100) / 100
   const gross_margin = revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
+  const ticket_avg =
+    attended > 0 ? Math.round((revenueRounded / attended) * 100) / 100 : null
   return {
     month: monthKey,
     label: labelMonthPt(monthKey),
@@ -212,6 +265,11 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
     to,
     revenue: revenueRounded,
     expenses: Math.round(expenses * 100) / 100,
+    attended,
+    ticket_avg,
+    daily,
+    top_professionals: (p1?.professionals ?? []).slice(0, 8),
+    top_services: (p1?.services ?? []).slice(0, 8),
     gross_margin,
     cash_flow: Math.round((revenue - expenses) * 100) / 100,
     payment_mix,
