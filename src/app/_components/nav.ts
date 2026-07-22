@@ -1,9 +1,10 @@
-import { LayoutDashboard, Users, Sun, FileBarChart, GraduationCap } from 'lucide-react'
+import { LayoutDashboard, Users, Sun, FileBarChart, GraduationCap, Columns3 } from 'lucide-react'
 import { getBrand } from '@/lib/brand'
 
 /** Nav principal (sidebar + menu mobile). Bottom bar usa só os 4 primeiros. */
 export const APP_NAV = [
   { href: '/hoje', label: 'Hoje', shortLabel: 'Hoje', icon: Sun },
+  { href: '/pipeline', label: 'Pipeline', shortLabel: 'Pipe', icon: Columns3 },
   { href: '/contatos', label: 'Contatos', shortLabel: 'Contatos', icon: Users },
   { href: '/dashboard', label: 'Visão analítica', shortLabel: 'Análise', icon: LayoutDashboard },
   { href: '/onboarding', label: 'Onboarding', shortLabel: 'Onboarding', icon: GraduationCap },
@@ -25,6 +26,7 @@ export function pageTitleFromPath(pathname: string) {
   if (pathname.startsWith('/admin/relatorio-diretoria')) return 'Relatórios'
   if (pathname.startsWith('/admin')) return 'Diagnóstico'
   if (pathname.startsWith('/hoje')) return brand.hojeTitle
+  if (pathname.startsWith('/pipeline')) return 'Pipeline'
   if (pathname.startsWith('/dashboard')) return 'Visão analítica'
   if (pathname.startsWith('/contatos/')) return 'Perfil do cliente'
   if (pathname.startsWith('/contatos')) return 'Contatos'

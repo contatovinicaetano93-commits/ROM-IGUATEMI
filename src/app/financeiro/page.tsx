@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Plus, X, Trash2, Download, Camera, Paperclip } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { PrimaryButton } from '../_components/ui'
+import { MonthYearField } from '../_components/MonthYearField'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency, todayIso } from '@/lib/salon/format'
 
@@ -131,6 +132,24 @@ function csvEscape(v: string | number | null | undefined) {
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
+const EMPTY_FISCAL_SPLIT: FiscalSplitSummary = {
+  gross_paid: 0,
+  cbs_retained: 0,
+  ibs_retained: 0,
+  net_received: 0,
+  pending_count: 0,
+  settled_count: 0,
+  configured: false,
+}
+
+function normalizeKpiBucket(bucket: FinanceKpiBucket): FinanceKpiBucket {
+  return {
+    ...bucket,
+    payment_mix: bucket.payment_mix ?? [],
+    fiscal_split: bucket.fiscal_split ?? EMPTY_FISCAL_SPLIT,
+  }
+}
+
 export default function FinanceiroPage() {
   const [month, setMonth] = useState(currentMonthKey())
   const [compareMonth, setCompareMonth] = useState('')
@@ -153,7 +172,11 @@ export default function FinanceiroPage() {
       ])
       const [kpisJson, catJson, expJson] = await Promise.all([kpisRes.json(), catRes.json(), expRes.json()])
       if (kpisJson.error) throw new Error(kpisJson.error)
-      setKpis(kpisJson.data)
+      const raw = kpisJson.data as FinanceKpis
+      setKpis({
+        current: normalizeKpiBucket(raw.current),
+        previous: normalizeKpiBucket(raw.previous),
+      })
       setCategories(catJson.data ?? [])
       setExpenses(expJson.data?.expenses ?? [])
     } catch (e) {
@@ -217,21 +240,16 @@ export default function FinanceiroPage() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-[0.65rem] uppercase tracking-wide text-muted">Mês</span>
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-gold"
-            />
+            <MonthYearField value={month} onChange={setMonth} aria-label="Mês do financeiro" />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[0.65rem] uppercase tracking-wide text-muted">Comparar com</span>
-            <input
-              type="month"
+            <MonthYearField
               value={compareMonth}
-              onChange={(e) => setCompareMonth(e.target.value)}
-              placeholder="Automático"
-              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-gold"
+              onChange={setCompareMonth}
+              allowEmpty
+              emptyLabel="Automático"
+              aria-label="Comparar com"
             />
           </label>
           <button
