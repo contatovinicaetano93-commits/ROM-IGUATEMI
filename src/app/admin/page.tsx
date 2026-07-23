@@ -246,8 +246,8 @@ export default function AdminPage() {
         className="flex items-center justify-between gap-3 rounded-2xl border border-gold/30 bg-gold/5 px-5 py-4 transition-colors hover:bg-gold/10"
       >
         <div>
-          <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">Diretoria</p>
-          <p className="mt-1 font-semibold">Relatório semanal (2 etapas)</p>
+          <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">Relatório gerência</p>
+          <p className="mt-1 font-semibold">Etapas 0011 · 0021</p>
           <p className="mt-0.5 text-xs text-muted">
             Etapa 1 · 0011 trimestre vs trimestre · Etapa 2 · 0021 mês vs mês · terças 08:00
           </p>

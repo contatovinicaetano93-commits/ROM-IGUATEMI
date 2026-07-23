@@ -227,9 +227,9 @@ export default function RelatoriosOverviewPage() {
               Financeiro
             </Link>
             {' · '}
-            Relatório Avec (diretoria):{' '}
+            Relatório gerência (Avec 0011 / 0021):{' '}
             <Link href="/admin/relatorio-diretoria" className="text-gold hover:underline">
-              0011 / 0021
+              abrir
             </Link>
           </p>
         </>
