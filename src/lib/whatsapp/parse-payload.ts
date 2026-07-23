@@ -23,44 +23,57 @@ function isFromMe(data: Record<string, unknown>): boolean {
   return key?.fromMe === true || data.fromMe === true
 }
 
-function phoneFromManyChat(b: Record<string, unknown>): string | null {
-  const candidates = [
-    b.whatsapp_phone,
-    b.phone,
-    b.wa_id,
-    b.from,
-    (b.contact as Record<string, unknown> | undefined)?.whatsapp_phone,
-    (b.contact as Record<string, unknown> | undefined)?.phone,
-    (b.subscriber as Record<string, unknown> | undefined)?.whatsapp_phone,
-    (b.subscriber as Record<string, unknown> | undefined)?.phone,
-  ]
-  for (const c of candidates) {
-    if (typeof c !== 'string' || !c.trim()) continue
-    const phone = normalizePhone(c) ?? c.replace(/\D/g, '')
-    if (phone) return phone.startsWith('+') ? phone : normalizePhone(phone) ?? `+${phone.replace(/\D/g, '')}`
-  }
-  return null
-}
+function parseCloudApiMessage(body: Record<string, unknown>): { from: string; text: string } | null {
+  if (body.object !== 'whatsapp_business_account') return null
+  const entry = body.entry as unknown[] | undefined
+  if (!Array.isArray(entry)) return null
 
-function textFromManyChat(b: Record<string, unknown>): string | null {
-  const candidates = [
-    b.last_input_text,
-    b.text,
-    b.message,
-    (b.data as Record<string, unknown> | undefined)?.text,
-    (b.payload as Record<string, unknown> | undefined)?.last_input_text,
-  ]
-  for (const c of candidates) {
-    if (typeof c === 'string' && c.trim()) return c.trim()
+  for (const ent of entry) {
+    if (!ent || typeof ent !== 'object') continue
+    const changes = (ent as { changes?: unknown[] }).changes
+    if (!Array.isArray(changes)) continue
+    for (const change of changes) {
+      if (!change || typeof change !== 'object') continue
+      const value = (change as { value?: Record<string, unknown> }).value
+      if (!value) continue
+      const messages = value.messages as unknown[] | undefined
+      if (!Array.isArray(messages) || messages.length === 0) continue
+      const msg = messages[0] as Record<string, unknown>
+      if (msg.type && msg.type !== 'text' && msg.type !== 'button' && msg.type !== 'interactive') {
+        // Ainda tenta extrair texto de botão/interativo abaixo.
+      }
+      const fromRaw = typeof msg.from === 'string' ? msg.from : null
+      if (!fromRaw) continue
+
+      let text: string | null = null
+      const textObj = msg.text as { body?: string } | undefined
+      if (typeof textObj?.body === 'string' && textObj.body.trim()) text = textObj.body.trim()
+
+      const button = msg.button as { text?: string; payload?: string } | undefined
+      if (!text && typeof button?.text === 'string' && button.text.trim()) text = button.text.trim()
+      if (!text && typeof button?.payload === 'string' && button.payload.trim()) {
+        text = button.payload.trim()
+      }
+
+      const interactive = msg.interactive as Record<string, unknown> | undefined
+      const buttonReply = interactive?.button_reply as { title?: string; id?: string } | undefined
+      const listReply = interactive?.list_reply as { title?: string; id?: string } | undefined
+      if (!text && typeof buttonReply?.title === 'string') text = buttonReply.title.trim()
+      if (!text && typeof listReply?.title === 'string') text = listReply.title.trim()
+
+      if (!text) continue
+      const phone = normalizePhone(fromRaw) ?? (fromRaw.startsWith('+') ? fromRaw : `+${fromRaw}`)
+      return { from: phone, text }
+    }
   }
   return null
 }
 
 /**
  * Aceita:
+ * - WhatsApp Cloud API (Meta) — object=whatsapp_business_account
  * - payload simples `{ from, text }`
- * - External Request / callback ManyChat
- * - legado Evolution (remoteJid) — mantido só para compat
+ * - legado ManyChat / Evolution (compat)
  */
 export function parseWhatsAppPayload(body: unknown): { from: string; text: string } | null {
   if (!body || typeof body !== 'object') return null
@@ -68,16 +81,29 @@ export function parseWhatsAppPayload(body: unknown): { from: string; text: strin
 
   if (b.fromMe === true) return null
 
+  const cloud = parseCloudApiMessage(b)
+  if (cloud) return cloud
+
+  // Status-only webhook Meta (entregue/lido) — não é mensagem de usuário.
+  if (b.object === 'whatsapp_business_account') return null
+
   if (typeof b.from === 'string' && typeof b.text === 'string') {
     const phone = normalizePhone(b.from) ?? b.from
     return { from: phone, text: b.text.trim() }
   }
 
-  // ManyChat External Request / webhook
-  const mcPhone = phoneFromManyChat(b)
-  const mcText = textFromManyChat(b)
+  // ManyChat External Request (legado)
+  const mcPhone =
+    (typeof b.whatsapp_phone === 'string' && b.whatsapp_phone) ||
+    (typeof b.phone === 'string' && b.phone) ||
+    null
+  const mcText =
+    (typeof b.last_input_text === 'string' && b.last_input_text) ||
+    (typeof b.text === 'string' && b.text) ||
+    null
   if (mcPhone && mcText) {
-    return { from: mcPhone, text: mcText }
+    const phone = normalizePhone(mcPhone) ?? mcPhone
+    return { from: phone, text: mcText.trim() }
   }
 
   const data = (b.data ?? b.message ?? b) as Record<string, unknown>
