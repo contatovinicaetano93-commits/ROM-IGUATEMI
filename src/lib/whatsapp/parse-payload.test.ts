@@ -11,7 +11,40 @@ describe('parseWhatsAppPayload', () => {
     expect(parseWhatsAppPayload({ from: '11999998888', text: 'oi', fromMe: true })).toBeNull()
   })
 
-  it('parseia webhook ManyChat (last_input_text + whatsapp_phone)', () => {
+  it('parseia webhook WhatsApp Cloud API', () => {
+    const parsed = parseWhatsAppPayload({
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                messages: [
+                  {
+                    from: '5511999998888',
+                    type: 'text',
+                    text: { body: 'Quero agendar' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    })
+    expect(parsed).toEqual({ from: '+5511999998888', text: 'Quero agendar' })
+  })
+
+  it('ignora webhook Cloud API só com status', () => {
+    expect(
+      parseWhatsAppPayload({
+        object: 'whatsapp_business_account',
+        entry: [{ changes: [{ value: { statuses: [{ id: 'wamid.x', status: 'delivered' }] } }] }],
+      }),
+    ).toBeNull()
+  })
+
+  it('parseia webhook ManyChat legado', () => {
     const parsed = parseWhatsAppPayload({
       id: 123,
       whatsapp_phone: '+5511999998888',

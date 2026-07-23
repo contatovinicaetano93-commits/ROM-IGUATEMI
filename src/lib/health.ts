@@ -96,9 +96,10 @@ export async function getHealthStatus() {
       kpi_layers: kpiLayers,
     },
     whatsapp: {
-      configured: envOk('MANYCHAT_API_KEY'),
-      webhook_secret: envOk('WHATSAPP_WEBHOOK_SECRET'),
-      provider: 'manychat',
+      configured:
+        envOk('WHATSAPP_CLOUD_TOKEN') && envOk('WHATSAPP_PHONE_NUMBER_ID'),
+      webhook_secret: envOk('WHATSAPP_APP_SECRET') || envOk('WHATSAPP_WEBHOOK_SECRET'),
+      provider: 'whatsapp_cloud',
     },
     telegram: {
       configured: envOk('TELEGRAM_BOT_TOKEN'),

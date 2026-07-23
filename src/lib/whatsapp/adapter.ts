@@ -1,240 +1,197 @@
+import { createHmac, timingSafeEqual } from 'crypto'
 import { retryWithBackoff } from '@/lib/retry'
 import { normalizePhone } from '@/lib/avec/normalize'
 
 /**
  * Interface de mensageria WhatsApp.
- * Provedor atual: ManyChat (canal oficial Meta).
- * Evolution / WhatsApp Cloud API direta foram removidos.
+ * Provedor atual: WhatsApp Cloud API oficial (Meta Graph).
  */
 export interface WhatsAppAdapter {
   sendMessage(to: string, text: string): Promise<void>
 }
 
-type ManyChatJson = {
-  status?: string
-  message?: string
-  code?: number
-  data?: unknown
+type GraphErrorBody = {
+  error?: {
+    message?: string
+    type?: string
+    code?: number
+    error_subcode?: number
+    error_data?: { details?: string }
+  }
 }
 
 function digitsOnly(value: string): string {
   return value.replace(/\D/g, '')
 }
 
-/** ManyChat espera E.164 com + (ex.: +5511999998888). */
-export function toManyChatWhatsAppPhone(to: string): string {
+/** Cloud API espera dígitos com DDI, sem + (ex.: 5511999998888). */
+export function toWhatsAppCloudPhone(to: string): string {
   const normalized = normalizePhone(to)
-  if (normalized) return normalized
-  const digits = digitsOnly(to)
-  if (!digits) throw new Error('Telefone inválido para ManyChat')
-  return `+${digits}`
+  const digits = digitsOnly(normalized ?? to)
+  if (digits.length < 10) throw new Error('Telefone inválido para WhatsApp Cloud API')
+  return digits
 }
 
-function isConfigured(): boolean {
-  return Boolean(process.env.MANYCHAT_API_KEY?.trim())
+export function isWhatsAppCloudConfigured(): boolean {
+  return Boolean(
+    process.env.WHATSAPP_CLOUD_TOKEN?.trim() && process.env.WHATSAPP_PHONE_NUMBER_ID?.trim(),
+  )
 }
 
-export function isManyChatConfigured(): boolean {
-  return isConfigured()
+function isOutsideCustomerWindowError(message: string, code?: number): boolean {
+  if (code === 131047 || code === 131026 || code === 470) return true
+  return /24\s*hour|outside.*window|re-engag|template|not in allowed|(#131047)|(#131026)/i.test(
+    message,
+  )
 }
 
-export class ManyChatApiAdapter implements WhatsAppAdapter {
-  private apiKey: string
-  private baseUrl: string
-  private outboundFlowNs: string | null
-  private messageField: string
-  private phoneFieldId: string | null
-  private sendMode: 'auto' | 'content' | 'flow'
+export class WhatsAppCloudApiAdapter implements WhatsAppAdapter {
+  private token: string
+  private phoneNumberId: string
+  private apiVersion: string
+  private templateName: string | null
+  private templateLang: string
+  private sendMode: 'auto' | 'text' | 'template'
 
   constructor() {
-    const apiKey = process.env.MANYCHAT_API_KEY?.trim()
-    if (!apiKey) {
-      throw new Error('MANYCHAT_API_KEY não configurado')
+    const token = process.env.WHATSAPP_CLOUD_TOKEN?.trim()
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim()
+    if (!token || !phoneNumberId) {
+      throw new Error(
+        'WhatsApp Cloud API não configurada — defina WHATSAPP_CLOUD_TOKEN e WHATSAPP_PHONE_NUMBER_ID',
+      )
     }
-    this.apiKey = apiKey
-    this.baseUrl = (process.env.MANYCHAT_API_BASE_URL?.trim() || 'https://api.manychat.com').replace(
-      /\/$/,
-      '',
-    )
-    this.outboundFlowNs = process.env.MANYCHAT_OUTBOUND_FLOW_NS?.trim() || null
-    this.messageField = process.env.MANYCHAT_MESSAGE_FIELD?.trim() || 'rom_outbound_text'
-    this.phoneFieldId = process.env.MANYCHAT_PHONE_FIELD_ID?.trim() || null
-    const mode = (process.env.MANYCHAT_SEND_MODE?.trim() || 'auto').toLowerCase()
-    this.sendMode = mode === 'content' || mode === 'flow' ? mode : 'auto'
+    this.token = token
+    this.phoneNumberId = phoneNumberId
+    this.apiVersion = process.env.WHATSAPP_CLOUD_API_VERSION?.trim() || 'v21.0'
+    this.templateName = process.env.WHATSAPP_TEMPLATE_AFTERCARE?.trim() || null
+    this.templateLang = process.env.WHATSAPP_TEMPLATE_LANG?.trim() || 'pt_BR'
+    const mode = (process.env.WHATSAPP_SEND_MODE?.trim() || 'auto').toLowerCase()
+    this.sendMode = mode === 'text' || mode === 'template' ? mode : 'auto'
   }
 
   async sendMessage(to: string, text: string): Promise<void> {
-    const phone = toManyChatWhatsAppPhone(to)
-    const subscriberId = await this.resolveSubscriberId(phone)
+    const phone = toWhatsAppCloudPhone(to)
 
-    if (this.sendMode === 'flow') {
-      await this.sendViaFlow(subscriberId, text)
+    if (this.sendMode === 'template') {
+      await this.sendTemplate(phone, text)
       return
     }
 
-    if (this.sendMode === 'content') {
-      await this.sendViaContent(subscriberId, text)
+    if (this.sendMode === 'text') {
+      await this.sendText(phone, text)
       return
     }
 
-    // auto: tenta texto livre (janela 24h); se Meta bloquear, usa fluxo/template.
+    // auto: texto livre na janela 24h; fora dela usa template aprovado (se configurado).
     try {
-      await this.sendViaContent(subscriberId, text)
+      await this.sendText(phone, text)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      const needsTemplate =
-        /24\s*h|message tag|template|outside.*window|3011|can't be sent/i.test(msg)
-      if (!needsTemplate || !this.outboundFlowNs) throw e
-      await this.sendViaFlow(subscriberId, text)
+      const code = (e as Error & { code?: number }).code
+      if (!isOutsideCustomerWindowError(msg, code) || !this.templateName) throw e
+      await this.sendTemplate(phone, text)
     }
   }
 
-  private async resolveSubscriberId(phoneE164: string): Promise<string> {
-    const found = await this.findSubscriberId(phoneE164)
-    if (found) return found
-
-    try {
-      const created = await this.createSubscriber(phoneE164)
-      if (created) return created
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      // Contato já existe no WhatsApp — tenta achar de novo.
-      if (!/already exists|WhatsApp ID/i.test(msg)) throw e
-    }
-
-    const again = await this.findSubscriberId(phoneE164)
-    if (again) return again
-    throw new Error(`ManyChat: não foi possível resolver subscriber para ${phoneE164}`)
-  }
-
-  private async findSubscriberId(phoneE164: string): Promise<string | null> {
-    const digits = digitsOnly(phoneE164)
-
-    // 1) System field `phone` (SMS) — funciona se criamos o contato com phone + whatsapp_phone.
-    const bySystem = await this.apiGet<ManyChatJson>(
-      `/fb/subscriber/findBySystemField?${new URLSearchParams({ phone: digits }).toString()}`,
-    )
-    const fromSystem = this.pickSubscriberId(bySystem?.data)
-    if (fromSystem) return fromSystem
-
-    // 2) Custom field espelho (recomendado para WhatsApp-only).
-    if (this.phoneFieldId) {
-      for (const value of [phoneE164, digits, `+${digits}`]) {
-        const byCustom = await this.apiGet<ManyChatJson>(
-          `/fb/subscriber/findByCustomField?${new URLSearchParams({
-            field_id: this.phoneFieldId,
-            field_value: value,
-          }).toString()}`,
-        )
-        const id = this.pickSubscriberId(byCustom?.data)
-        if (id) return id
-      }
-    }
-
-    return null
-  }
-
-  private pickSubscriberId(data: unknown): string | null {
-    if (!data) return null
-    const rows = Array.isArray(data) ? data : [data]
-    for (const row of rows) {
-      if (!row || typeof row !== 'object') continue
-      const id = (row as { id?: unknown }).id
-      if (typeof id === 'number' || typeof id === 'string') return String(id)
-    }
-    return null
-  }
-
-  private async createSubscriber(phoneE164: string): Promise<string | null> {
-    const digits = digitsOnly(phoneE164)
-    const json = await this.apiPost<ManyChatJson>('/fb/subscriber/createSubscriber', {
-      first_name: 'Cliente',
-      whatsapp_phone: phoneE164,
-      // Espelha no campo system `phone` para findBySystemField funcionar.
-      phone: digits,
-      has_opt_in_sms: true,
-      has_opt_in_email: false,
-      consent_phrase: 'ROM Club — contato operacional do salão',
-    })
-    return this.pickSubscriberId(json?.data)
-  }
-
-  private async sendViaContent(subscriberId: string, text: string): Promise<void> {
-    await this.apiPost('/fb/sending/sendContent', {
-      subscriber_id: subscriberId,
-      data: {
-        version: 'v2',
-        content: {
-          type: 'whatsapp',
-          messages: [{ type: 'text', text }],
-        },
-      },
+  private async sendText(to: string, text: string): Promise<void> {
+    await this.postMessages({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'text',
+      text: { preview_url: false, body: text.slice(0, 4096) },
     })
   }
 
-  private async sendViaFlow(subscriberId: string, text: string): Promise<void> {
-    if (!this.outboundFlowNs) {
+  /**
+   * Template aprovado na Meta.
+   * Se o template tiver 1 variável no body, envia o texto (truncado) como parâmetro.
+   * Sem variáveis: dispara só o template fixo.
+   */
+  private async sendTemplate(to: string, text: string): Promise<void> {
+    if (!this.templateName) {
       throw new Error(
-        'ManyChat: envie fora da janela 24h exige MANYCHAT_OUTBOUND_FLOW_NS (fluxo com template)',
+        'WhatsApp Cloud: fora da janela 24h exige WHATSAPP_TEMPLATE_AFTERCARE (template aprovado)',
       )
     }
 
-    // Injeta texto dinâmico no custom field antes do fluxo (template usa o campo).
-    await this.apiPost('/fb/subscriber/setCustomFieldByName', {
-      subscriber_id: subscriberId,
-      field_name: this.messageField,
-      field_value: text,
-    }).catch(() => {
-      // Campo pode não existir ainda — o fluxo ainda pode usar template fixo.
-    })
+    const useBodyParam = process.env.WHATSAPP_TEMPLATE_BODY_PARAM !== '0'
+    const body: Record<string, unknown> = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'template',
+      template: {
+        name: this.templateName,
+        language: { code: this.templateLang },
+        ...(useBodyParam
+          ? {
+              components: [
+                {
+                  type: 'body',
+                  parameters: [{ type: 'text', text: text.slice(0, 1024) }],
+                },
+              ],
+            }
+          : {}),
+      },
+    }
 
-    await this.apiPost('/fb/sending/sendFlow', {
-      subscriber_id: subscriberId,
-      flow_ns: this.outboundFlowNs,
-    })
-  }
-
-  private async apiGet<T>(path: string): Promise<T> {
-    return this.request<T>('GET', path)
-  }
-
-  private async apiPost<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('POST', path, body)
-  }
-
-  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
-    return retryWithBackoff(
-      async () => {
-        const res = await fetch(`${this.baseUrl}${path}`, {
-          method,
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            Accept: 'application/json',
-            ...(body != null ? { 'Content-Type': 'application/json' } : {}),
+    try {
+      await this.postMessages(body)
+    } catch (e) {
+      // Template sem variável — tenta de novo sem components.
+      const msg = e instanceof Error ? e.message : String(e)
+      if (useBodyParam && /parameter|component|variable|number of params/i.test(msg)) {
+        await this.postMessages({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to,
+          type: 'template',
+          template: {
+            name: this.templateName,
+            language: { code: this.templateLang },
           },
-          body: body != null ? JSON.stringify(body) : undefined,
+        })
+        return
+      }
+      throw e
+    }
+  }
+
+  private async postMessages(payload: Record<string, unknown>): Promise<void> {
+    const url = `https://graph.facebook.com/${this.apiVersion}/${this.phoneNumberId}/messages`
+
+    await retryWithBackoff(
+      async () => {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
           signal: AbortSignal.timeout(15_000),
         })
 
         const raw = await res.text()
-        let json: ManyChatJson | null = null
+        let json: GraphErrorBody | null = null
         try {
-          json = raw ? (JSON.parse(raw) as ManyChatJson) : null
+          json = raw ? (JSON.parse(raw) as GraphErrorBody) : null
         } catch {
           json = null
         }
 
-        if (!res.ok || json?.status === 'error') {
-          const detail = json?.message || raw || res.statusText
-          const err = new Error(`ManyChat API ${res.status}: ${detail}`)
+        if (!res.ok) {
+          const detail = json?.error?.message || raw || res.statusText
+          const err = new Error(`WhatsApp Cloud API ${res.status}: ${detail}`)
           ;(err as Error & { status?: number; code?: number }).status = res.status
-          if (typeof json?.code === 'number') {
-            ;(err as Error & { code?: number }).code = json.code
+          if (typeof json?.error?.code === 'number') {
+            ;(err as Error & { code?: number }).code = json.error.code
           }
           throw err
         }
-
-        return (json ?? {}) as T
       },
       {
         maxAttempts: 3,
@@ -249,5 +206,23 @@ export class ManyChatApiAdapter implements WhatsAppAdapter {
 }
 
 export function getWhatsAppAdapter(): WhatsAppAdapter {
-  return new ManyChatApiAdapter()
+  return new WhatsAppCloudApiAdapter()
+}
+
+/** Verifica assinatura X-Hub-Signature-256 do webhook Meta. */
+export function verifyMetaHubSignature(
+  rawBody: string,
+  signatureHeader: string | null,
+  appSecret: string,
+): boolean {
+  if (!signatureHeader?.startsWith('sha256=')) return false
+  const expected = createHmac('sha256', appSecret).update(rawBody, 'utf8').digest('hex')
+  const got = signatureHeader.slice('sha256='.length)
+  try {
+    const a = Buffer.from(expected, 'utf8')
+    const b = Buffer.from(got, 'utf8')
+    return a.length === b.length && timingSafeEqual(a, b)
+  } catch {
+    return false
+  }
 }
