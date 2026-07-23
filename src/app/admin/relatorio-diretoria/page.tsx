@@ -335,8 +335,8 @@ export default function RelatorioDiretoriaPage() {
           >
             <ArrowLeft size={14} /> Diagnóstico
           </Link>
-          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Admin operacional</p>
-          <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Relatório diretoria</h1>
+          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Relatório gerência</p>
+          <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Etapas 0011 · 0021</h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
             Páginas independentes: cada etapa tem seu filtro e envia só o próprio relatório.
           </p>

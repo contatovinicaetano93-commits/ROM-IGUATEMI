@@ -45,7 +45,7 @@ export function contactReturnLabel(returnTo: string): string {
   if (bare === '/financeiro' || bare.startsWith('/financeiro/')) return 'Financeiro'
   if (bare === '/estoque' || bare.startsWith('/estoque/')) return 'Estoque'
   if (bare === '/relatorios' || bare.startsWith('/relatorios/')) return 'Relatórios'
-  if (bare.startsWith('/admin/relatorio-diretoria')) return 'Relatório diretoria'
+  if (bare.startsWith('/admin/relatorio-diretoria')) return 'Relatório gerência'
   if (bare.startsWith('/admin')) return 'Admin'
   if (bare === '/onboarding' || bare.startsWith('/onboarding/')) return 'Onboarding'
   if (bare === '/contatos' || bare.startsWith('/contatos/')) return 'Contatos'
