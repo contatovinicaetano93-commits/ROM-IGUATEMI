@@ -468,7 +468,7 @@ export default function FinanceiroPage() {
       '',
       csvRow(
         'Observação',
-        'Despesas são manuais no ROM. Receita, atendidos, ticket e formas de pagamento vêm da Avec (quando o sync estiver ativo).',
+        'ROM é a fonte de fechamento do mês. Despesas são manuais. Receita/atendidos/ticket vêm de salon_daily_metrics (sync Avec + histórico). Overview completo em /relatorios.',
       ),
     ]
 
@@ -549,7 +549,7 @@ export default function FinanceiroPage() {
             disabled={!kpis}
             className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
           >
-            <Download size={14} /> Relatório (CSV)
+            <Download size={14} /> Relatório do mês (CSV)
           </button>
         </div>
       </div>

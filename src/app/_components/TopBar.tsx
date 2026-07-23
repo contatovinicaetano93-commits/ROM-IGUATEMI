@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, ChevronRight, Wallet, Boxes, GraduationCap, Stethoscope } from 'lucide-react'
+import { Menu, X, ChevronRight, Wallet, Boxes, GraduationCap, Stethoscope, FileBarChart } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV, pageTitleFromPath } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
 import { getBrand } from '@/lib/brand'
@@ -38,6 +38,7 @@ export function TopBar() {
     role === 'financeiro'
       ? [
           { href: '/financeiro', label: 'Financeiro', icon: Wallet },
+          { href: '/relatorios', label: 'Relatórios', icon: FileBarChart },
           { href: '/estoque', label: 'Estoque', icon: Boxes },
           { href: '/financeiro/diagnostico', label: 'Diagnóstico', icon: Stethoscope },
           { href: '/onboarding', label: 'Onboarding', icon: GraduationCap },

@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Wallet, Boxes, GraduationCap, Stethoscope } from 'lucide-react'
+import { Wallet, Boxes, GraduationCap, Stethoscope, FileBarChart } from 'lucide-react'
 import { BOTTOM_NAV } from './nav'
 
 const FINANCE_BOTTOM_NAV = [
   { href: '/financeiro', shortLabel: 'Financeiro', icon: Wallet },
+  { href: '/relatorios', shortLabel: 'Relatórios', icon: FileBarChart },
   { href: '/estoque', shortLabel: 'Estoque', icon: Boxes },
-  { href: '/financeiro/diagnostico', shortLabel: 'Diagnóstico', icon: Stethoscope },
   { href: '/onboarding', shortLabel: 'Onboarding', icon: GraduationCap },
 ]
 const STOCK_BOTTOM_NAV = [
