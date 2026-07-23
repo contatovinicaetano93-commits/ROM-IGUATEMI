@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Activity, Wallet, GraduationCap, Boxes, Stethoscope } from 'lucide-react'
+import { Activity, Wallet, GraduationCap, Boxes, Stethoscope, FileBarChart } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
 import { getBrand } from '@/lib/brand'
@@ -38,6 +38,7 @@ export function DesktopSidebar() {
       role === 'financeiro'
         ? [
             { href: '/financeiro', label: 'Financeiro', icon: Wallet },
+            { href: '/relatorios', label: 'Relatórios', icon: FileBarChart },
             { href: '/estoque', label: 'Estoque', icon: Boxes },
           ]
         : [{ href: '/estoque', label: 'Estoque', icon: Boxes }]

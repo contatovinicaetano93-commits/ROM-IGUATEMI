@@ -13,12 +13,22 @@ import {
   Percent,
   Package,
   AlertTriangle,
+  Download,
+  FileText,
 } from 'lucide-react'
 import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL } from '../_components/ui'
-import { formatCurrency, formatPercent, formatPercentPoints } from '@/lib/salon/format'
+import { MonthYearField } from '../_components/MonthYearField'
+import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/lib/salon/format'
 
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
+import type { PeriodAnalytics } from '@/lib/salon/period-analytics'
+import {
+  buildPeriodAnalyticsCsv,
+  buildPeriodAnalyticsPrintHtml,
+  downloadTextFile,
+  openPrintHtml,
+} from '@/lib/salon/month-overview-export'
 
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
@@ -70,27 +80,9 @@ interface PerformanceData {
   professionals: ProfessionalRanking[]
 }
 
-interface PeriodAnalytics {
-  month: string
-  label: string
-  snapshot_day: string | null
-  occupancy_avg: number | null
-  cancelled: number
-  no_shows: number
-  ticket_avg: number | null
-  lost_revenue: number
-  packages: { name: string; quantity: number; revenue: number }[]
-  packages_sold: number
-  packages_revenue: number
-  booking_channels: { channel: string; count: number }[]
-  acquisition: { channel: string; clients: number }[]
-  return_rate: number | null
-  new_clients_period: number
-  top_services: { name: string; quantity: number; revenue: number }[]
-}
-
 export default function DashboardPage() {
   const brand = getBrand()
+  const [month, setMonth] = useState(() => todayIso().slice(0, 7))
   const [data, setData] = useState<KpiData | null>(null)
   const [tm, setTm] = useState<TmComparison | null>(null)
   const [performance, setPerformance] = useState<PerformanceData | null>(null)
@@ -104,6 +96,7 @@ export default function DashboardPage() {
 
     async function loadDashboard() {
       try {
+        setLoading(true)
         const kpisRes = await apiFetch('/api/kpis', { cache: 'no-store' })
         const kpisJson = await kpisRes.json()
         if (cancelled) return
@@ -113,7 +106,7 @@ export default function DashboardPage() {
         const [tmRes, perfRes, periodRes] = await Promise.all([
           apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
           apiFetch('/api/kpis/performance', { cache: 'no-store' }),
-          apiFetch('/api/kpis/periodo', { cache: 'no-store' }),
+          apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store' }),
         ])
         if (cancelled) return
 
@@ -142,6 +135,7 @@ export default function DashboardPage() {
         }
 
         if (warnings.length) setWarn(warnings.join(' · '))
+        else setWarn(null)
       } catch (e) {
         if (!cancelled) setError(String(e))
       } finally {
@@ -153,7 +147,21 @@ export default function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [month])
+
+  function exportPeriodCsv() {
+    if (!period) return
+    downloadTextFile(
+      `visao_analitica_${period.month}_${brand.panel}.csv`,
+      buildPeriodAnalyticsCsv(period, brand.displayName),
+    )
+  }
+
+  function exportPeriodPdf() {
+    if (!period) return
+    const ok = openPrintHtml(buildPeriodAnalyticsPrintHtml(period, brand.displayName))
+    if (!ok) setWarn('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+  }
 
   const totalContacts = data?.conversion?.total_contacts ?? 0
   const conversionRate = data?.conversion?.conversion_rate ?? 0
@@ -167,12 +175,37 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
-      <div>
-        <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
-        <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
-        <p className="mt-1 text-xs text-muted">
-          Comercial e performance do período. Operação do dia fica em Hoje · dinheiro em Financeiro.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
+          <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
+          <p className="mt-1 text-xs text-muted">
+            Comercial e performance do período. Operação do dia fica em Hoje · dinheiro em Financeiro ·
+            fechamento em Relatórios.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.65rem] uppercase tracking-wide text-muted">Mês</span>
+            <MonthYearField value={month} onChange={setMonth} aria-label="Mês da visão analítica" />
+          </label>
+          <button
+            type="button"
+            onClick={exportPeriodCsv}
+            disabled={!period}
+            className="inline-flex items-center gap-2 rounded-xl border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-gold disabled:opacity-50"
+          >
+            <Download size={14} /> CSV
+          </button>
+          <button
+            type="button"
+            onClick={exportPeriodPdf}
+            disabled={!period}
+            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm disabled:opacity-50"
+          >
+            <FileText size={14} /> PDF
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -449,7 +482,7 @@ export default function DashboardPage() {
             </Link>
             {' · '}
             Ranking completo:{' '}
-            <Link href="/admin/relatorio-diretoria" className="text-gold hover:underline">
+            <Link href="/relatorios" className="text-gold hover:underline">
               Relatórios
             </Link>
           </p>

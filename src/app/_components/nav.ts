@@ -8,7 +8,7 @@ export const APP_NAV = [
   { href: '/contatos', label: 'Contatos', shortLabel: 'Contatos', icon: Users },
   { href: '/dashboard', label: 'Visão analítica', shortLabel: 'Análise', icon: LayoutDashboard },
   { href: '/onboarding', label: 'Onboarding', shortLabel: 'Onboarding', icon: GraduationCap },
-  { href: '/admin/relatorio-diretoria', label: 'Relatórios', shortLabel: 'Relatórios', icon: FileBarChart },
+  { href: '/relatorios', label: 'Relatórios', shortLabel: 'Relatórios', icon: FileBarChart, adminOnly: true },
 ] as const
 
 export const BOTTOM_NAV = APP_NAV.slice(0, 4)
@@ -17,20 +17,21 @@ export const ADMIN_NAV = { href: '/admin', label: 'Diagnóstico', shortLabel: 'A
 
 export const DIRECTOR_REPORT_NAV = {
   href: '/admin/relatorio-diretoria',
-  label: 'Relatórios',
-  shortLabel: 'Relatórios',
+  label: 'Relatório diretoria (Avec)',
+  shortLabel: 'Diretoria',
 } as const
 
 export function pageTitleFromPath(pathname: string) {
   const brand = getBrand()
-  if (pathname.startsWith('/admin/relatorio-diretoria')) return 'Relatórios'
+  if (pathname.startsWith('/relatorios')) return 'Relatórios'
+  if (pathname.startsWith('/admin/relatorio-diretoria')) return 'Relatório diretoria'
   if (pathname.startsWith('/admin')) return 'Diagnóstico'
   if (pathname.startsWith('/hoje')) return brand.hojeTitle
   if (pathname.startsWith('/pipeline')) return 'Pipeline'
-  if (pathname.startsWith('/dashboard')) return 'Visão analítica'
   if (pathname.startsWith('/contatos/')) return 'Perfil do cliente'
   if (pathname.startsWith('/contatos')) return 'Contatos'
   if (pathname.startsWith('/onboarding')) return 'Onboarding'
+  if (pathname.startsWith('/dashboard')) return 'Visão analítica'
   if (pathname.startsWith('/financeiro')) return 'Financeiro'
   if (pathname.startsWith('/estoque')) return 'Estoque'
   return brand.displayName

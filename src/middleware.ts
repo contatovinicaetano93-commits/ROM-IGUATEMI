@@ -14,6 +14,14 @@ function isFinancePath(pathname: string) {
   return pathname === '/financeiro' || pathname.startsWith('/financeiro/') || pathname.startsWith('/api/financeiro/')
 }
 
+function isRelatoriosPath(pathname: string) {
+  return (
+    pathname === '/relatorios' ||
+    pathname.startsWith('/relatorios/') ||
+    pathname.startsWith('/api/relatorios/')
+  )
+}
+
 function isStockPath(pathname: string) {
   return pathname === '/estoque' || pathname.startsWith('/estoque/') || pathname.startsWith('/api/estoque/')
 }
@@ -33,6 +41,8 @@ function isProtectedPage(pathname: string) {
     pathname.startsWith('/contatos/') ||
     pathname === '/admin' ||
     pathname.startsWith('/admin/') ||
+    pathname === '/relatorios' ||
+    pathname.startsWith('/relatorios/') ||
     pathname === '/financeiro' ||
     pathname.startsWith('/financeiro/') ||
     pathname === '/estoque' ||
@@ -88,20 +98,22 @@ export async function middleware(req: NextRequest) {
   if (isCronAuthorized(req)) return NextResponse.next()
 
   // Isolamento do painel Financeiro (Sprint 4): financeiro enxerga /financeiro
-  // + /estoque (acesso duplo, financeiro cuida de ambos) + /onboarding
-  // (compartilhado) — não hoje/dashboard/contatos/admin.
+  // + /estoque (acesso duplo) + /relatorios (overview do mês) + /onboarding
+  // — não hoje/dashboard/contatos/admin.
   const session = await getSession(req)
   const role = session?.role
   const financePath = isFinancePath(pathname)
   const stockPath = isStockPath(pathname)
   const onboardingPath = isOnboardingPath(pathname)
+  const relatoriosPath = isRelatoriosPath(pathname)
 
   if (
     role === 'financeiro' &&
     (isProtectedPage(pathname) || isProtectedApi(pathname)) &&
     !financePath &&
     !stockPath &&
-    !onboardingPath
+    !onboardingPath &&
+    !relatoriosPath
   ) {
     return NextResponse.redirect(new URL('/financeiro', req.url))
   }
@@ -115,7 +127,7 @@ export async function middleware(req: NextRequest) {
   ) {
     return NextResponse.redirect(new URL('/estoque', req.url))
   }
-  if (financePath && role !== 'admin' && role !== 'financeiro') {
+  if ((financePath || relatoriosPath) && role !== 'admin' && role !== 'financeiro') {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
     }
@@ -141,6 +153,8 @@ export const config = {
     '/contatos/:path*',
     '/admin',
     '/admin/:path*',
+    '/relatorios',
+    '/relatorios/:path*',
     '/financeiro',
     '/financeiro/:path*',
     '/estoque',
