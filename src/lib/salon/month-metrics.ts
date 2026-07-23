@@ -109,6 +109,18 @@ function shiftDay(iso: string, delta: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+export function monthAggregationRange(
+  monthKey: string,
+  today = todayIso(),
+): { from: string; to: string } {
+  const range = monthRange(monthKey)
+  const current = monthKeyFromDay(today)
+  if (monthKey < current) return range
+
+  const cutoff = monthKey === current ? shiftDay(today, -1) : shiftDay(range.from, -1)
+  return { from: range.from, to: cutoff < range.to ? cutoff : range.to }
+}
+
 /** Lista YYYY-MM-DD inclusiva. */
 export function listDaysInclusive(from: string, to: string): string[] {
   if (to < from) return []
@@ -307,13 +319,15 @@ export async function materializeSalonMonthMetrics(
   monthKey: string,
   payload: unknown = null,
 ): Promise<SalonMonthMetricsRow> {
+  await ensureSalonMonthMetricsTable()
   const sql = getSql()
   const { from, to } = monthRange(monthKey)
+  const { to: aggregationTo } = monthAggregationRange(monthKey)
   const [completeness, totals, expenses, cmv] = await Promise.all([
     getMonthCompleteness(monthKey),
-    sumDailyTotals(from, to),
-    sumExpenses(from, to),
-    sumStockCogs(from, to),
+    sumDailyTotals(from, aggregationTo),
+    sumExpenses(from, aggregationTo),
+    sumStockCogs(from, aggregationTo),
   ])
   const cash_flow = Math.round((totals.revenue - expenses) * 100) / 100
   const payloadJson = JSON.stringify(payload)

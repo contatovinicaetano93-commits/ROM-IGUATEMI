@@ -5,6 +5,7 @@ import {
   getMonthCompleteness,
   labelMonthPt,
   materializeSalonMonthMetrics,
+  monthAggregationRange,
   monthKeyFromDay,
   statusLabelPt,
   type MonthCloseStatus,
@@ -73,11 +74,13 @@ export async function computeMonthOverview(opts?: {
   month?: string
   materialize?: boolean
 }): Promise<MonthOverview> {
-  const month = opts?.month ?? monthKeyFromDay(todayIso())
+  const today = todayIso()
+  const month = opts?.month ?? monthKeyFromDay(today)
+  const { to: aggregationTo } = monthAggregationRange(month, today)
   const brand = getBrand()
 
   const [finance, analytics, completeness] = await Promise.all([
-    computeFinanceKpis({ month }),
+    computeFinanceKpis({ month, through: aggregationTo }),
     computePeriodAnalytics({ month }),
     getMonthCompleteness(month),
   ])

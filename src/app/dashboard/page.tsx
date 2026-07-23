@@ -90,6 +90,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [periodLoading, setPeriodLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -103,14 +104,11 @@ export default function DashboardPage() {
         if (kpisJson.error) setError(kpisJson.error)
         else setData(kpisJson.data)
 
-        const [tmRes, perfRes, periodRes] = await Promise.all([
+        const [tmRes, perfRes] = await Promise.all([
           apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
           apiFetch('/api/kpis/performance', { cache: 'no-store' }),
-          apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store' }),
         ])
         if (cancelled) return
-
-        const warnings: string[] = []
 
         try {
           const tmJson = await tmRes.json()
@@ -125,17 +123,6 @@ export default function DashboardPage() {
         } catch {
           // opcional
         }
-
-        try {
-          const periodJson = await periodRes.json()
-          if (periodJson.error) warnings.push(`Período: ${periodJson.error}`)
-          else if (periodJson.data) setPeriod(periodJson.data)
-        } catch {
-          warnings.push('Analytics de período indisponível')
-        }
-
-        if (warnings.length) setWarn(warnings.join(' · '))
-        else setWarn(null)
       } catch (e) {
         if (!cancelled) setError(String(e))
       } finally {
@@ -144,6 +131,32 @@ export default function DashboardPage() {
     }
 
     loadDashboard()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPeriod() {
+      setPeriodLoading(true)
+      setPeriod(null)
+      setWarn(null)
+      try {
+        const periodRes = await apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store' })
+        const periodJson = await periodRes.json()
+        if (cancelled) return
+        if (periodJson.error) setWarn(`Período: ${periodJson.error}`)
+        else if (periodJson.data) setPeriod(periodJson.data)
+      } catch {
+        if (!cancelled) setWarn('Analytics de período indisponível')
+      } finally {
+        if (!cancelled) setPeriodLoading(false)
+      }
+    }
+
+    loadPeriod()
     return () => {
       cancelled = true
     }
@@ -226,7 +239,7 @@ export default function DashboardPage() {
           icon={<Percent size={15} />}
           label={`Ocupação · ${period?.label ?? '—'}`}
           value={
-            loading || !period
+            periodLoading || !period
               ? '—'
               : period.occupancy_avg != null
                 ? formatPercentPoints(period.occupancy_avg * 100)
@@ -236,13 +249,13 @@ export default function DashboardPage() {
         <MiniStat
           icon={<AlertTriangle size={15} />}
           label="Receita perdida"
-          value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
+          value={periodLoading || !period ? '—' : formatCurrency(period.lost_revenue)}
         />
         <MiniStat
           icon={<Users size={15} />}
           label="Cancel. + no-show"
           value={
-            loading || !period
+            periodLoading || !period
               ? '—'
               : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
           }
@@ -250,18 +263,18 @@ export default function DashboardPage() {
         <MiniStat
           icon={<Package size={15} />}
           label="Pacotes (receita)"
-          value={loading || !period ? '—' : formatCurrency(period.packages_revenue)}
+          value={periodLoading || !period ? '—' : formatCurrency(period.packages_revenue)}
         />
         <MiniStat
           icon={<Sparkles size={15} />}
           label="Novos no período"
-          value={loading || !period ? '—' : String(period.new_clients_period)}
+          value={periodLoading || !period ? '—' : String(period.new_clients_period)}
         />
         <MiniStat
           icon={<TrendingUp size={15} />}
           label="Taxa de retorno"
           value={
-            loading || !period
+            periodLoading || !period
               ? '—'
               : period.return_rate != null
                 ? formatPercentPoints(period.return_rate * 100, 0)
