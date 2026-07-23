@@ -98,18 +98,21 @@ export const SETUP_ITEMS: SetupItem[] = [
   },
   {
     id: 'whatsapp',
-    label: 'WhatsApp (Evolution)',
-    envVars: ['EVOLUTION_API_URL', 'EVOLUTION_API_KEY', 'EVOLUTION_API_INSTANCE', 'WHATSAPP_WEBHOOK_SECRET'],
+    label: 'WhatsApp (ManyChat)',
+    envVars: ['MANYCHAT_API_KEY', 'WHATSAPP_WEBHOOK_SECRET'],
     priority: 'quando_tiver',
     steps: [
-      'Subir ou contratar instância Evolution API',
-      'Criar instância e conectar número WhatsApp (QR code)',
-      'Vercel: EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_API_INSTANCE',
+      'ManyChat → Settings → API → gerar API Key',
+      'Vercel: MANYCHAT_API_KEY',
+      'Opcional: MANYCHAT_OUTBOUND_FLOW_NS = fluxo com template (aftercare fora da janela 24h)',
+      'Opcional: MANYCHAT_MESSAGE_FIELD = rom_outbound_text (custom field no fluxo)',
+      'Opcional: MANYCHAT_PHONE_FIELD_ID = custom field espelho do WhatsApp ID',
       'Gere WHATSAPP_WEBHOOK_SECRET (openssl rand -hex 32)',
-      'Webhook Evolution → https://seu-dominio/api/webhooks/whatsapp',
+      'ManyChat External Request → https://seu-dominio/api/webhooks/whatsapp',
       'Header: x-whatsapp-secret = WHATSAPP_WEBHOOK_SECRET',
       'Opcional: TELEGRAM_STAFF_CHAT_IDS para alertas de handoff',
     ],
+    link: { href: 'https://api.manychat.com/', label: 'ManyChat API' },
   },
   {
     id: 'telegram',
@@ -149,7 +152,7 @@ export function isItemConfigured(
     database: { connected: boolean }
     claude: { configured: boolean }
     avec: { token: boolean; webhook_secret?: boolean }
-    whatsapp: { configured: boolean; webhook_secret?: boolean }
+    whatsapp: { configured: boolean; webhook_secret?: boolean; provider?: string }
     telegram: {
       configured: boolean
       webhook_secret?: boolean
