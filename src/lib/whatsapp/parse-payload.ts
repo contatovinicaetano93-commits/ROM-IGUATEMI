@@ -23,7 +23,45 @@ function isFromMe(data: Record<string, unknown>): boolean {
   return key?.fromMe === true || data.fromMe === true
 }
 
-// Aceita payload simples { from, text } ou webhooks Evolution API v1/v2.
+function phoneFromManyChat(b: Record<string, unknown>): string | null {
+  const candidates = [
+    b.whatsapp_phone,
+    b.phone,
+    b.wa_id,
+    b.from,
+    (b.contact as Record<string, unknown> | undefined)?.whatsapp_phone,
+    (b.contact as Record<string, unknown> | undefined)?.phone,
+    (b.subscriber as Record<string, unknown> | undefined)?.whatsapp_phone,
+    (b.subscriber as Record<string, unknown> | undefined)?.phone,
+  ]
+  for (const c of candidates) {
+    if (typeof c !== 'string' || !c.trim()) continue
+    const phone = normalizePhone(c) ?? c.replace(/\D/g, '')
+    if (phone) return phone.startsWith('+') ? phone : normalizePhone(phone) ?? `+${phone.replace(/\D/g, '')}`
+  }
+  return null
+}
+
+function textFromManyChat(b: Record<string, unknown>): string | null {
+  const candidates = [
+    b.last_input_text,
+    b.text,
+    b.message,
+    (b.data as Record<string, unknown> | undefined)?.text,
+    (b.payload as Record<string, unknown> | undefined)?.last_input_text,
+  ]
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c.trim()
+  }
+  return null
+}
+
+/**
+ * Aceita:
+ * - payload simples `{ from, text }`
+ * - External Request / callback ManyChat
+ * - legado Evolution (remoteJid) — mantido só para compat
+ */
 export function parseWhatsAppPayload(body: unknown): { from: string; text: string } | null {
   if (!body || typeof body !== 'object') return null
   const b = body as Record<string, unknown>
@@ -33,6 +71,13 @@ export function parseWhatsAppPayload(body: unknown): { from: string; text: strin
   if (typeof b.from === 'string' && typeof b.text === 'string') {
     const phone = normalizePhone(b.from) ?? b.from
     return { from: phone, text: b.text.trim() }
+  }
+
+  // ManyChat External Request / webhook
+  const mcPhone = phoneFromManyChat(b)
+  const mcText = textFromManyChat(b)
+  if (mcPhone && mcText) {
+    return { from: mcPhone, text: mcText }
   }
 
   const data = (b.data ?? b.message ?? b) as Record<string, unknown>

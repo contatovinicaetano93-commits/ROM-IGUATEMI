@@ -56,10 +56,11 @@ curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
   -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
 ```
 
-### WhatsApp (Evolution)
+### WhatsApp (ManyChat)
 
-- Instância `rom-iguatemi`
-- Webhook: `https://SEU-DOMINIO/api/webhooks/whatsapp`
+- `MANYCHAT_API_KEY` na Vercel (API da página Iguatemi)
+- Opcional: `MANYCHAT_OUTBOUND_FLOW_NS` (fluxo template aftercare)
+- Webhook External Request: `https://SEU-DOMINIO/api/webhooks/whatsapp`
 - Header: `x-whatsapp-secret`
 
 ### Avec (opcional webhook push)

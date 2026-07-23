@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     logger.debug('WhatsApp response generated', { from, intent, handoff, hasReply: !!reply })
 
     await getWhatsAppAdapter().sendMessage(from, reply)
-    logger.debug('Message sent via Evolution API', { to: from })
+    logger.debug('Message sent via ManyChat', { to: from })
 
     await logEvent({
       contactId,

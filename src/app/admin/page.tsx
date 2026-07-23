@@ -271,7 +271,7 @@ export default function AdminPage() {
                 ok={Boolean(health.avec.webhook_secret ?? health.webhooks?.avec_secret)}
                 hint={health.avec.webhook_url ?? '/api/webhooks/avec'}
               />
-              <HealthRow label="WhatsApp (Evolution)" ok={health.whatsapp.configured} />
+              <HealthRow label="WhatsApp (ManyChat)" ok={health.whatsapp.configured} />
               <HealthRow label="Telegram bot" ok={health.telegram.configured} />
               <HealthRow label="CRON_SECRET (backup)" ok={health.cron.configured} />
               <HealthRow
