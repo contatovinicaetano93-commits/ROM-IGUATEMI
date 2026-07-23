@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 import {
   upsertContact,
   updateContact,
@@ -305,7 +306,37 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   }
 }
 
-async function syncRevenue(stats: AvecSyncStats, syncRunId?: string) {
+function addCalendarDaysYmd(isoYmd: string, delta: number) {
+  const [y, m, d] = isoYmd.split('-').map(Number)
+  const dt = new Date(Date.UTC(y!, m! - 1, d! + delta))
+  return dt.toISOString().slice(0, 10)
+}
+
+function isoToBr(isoYmd: string) {
+  const [y, m, d] = isoYmd.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function listDaysInclusive(fromIso: string, toIso: string): string[] {
+  const out: string[] = []
+  let cur = fromIso
+  while (cur <= toIso) {
+    out.push(cur)
+    cur = addCalendarDaysYmd(cur, 1)
+  }
+  return out
+}
+
+/**
+ * Faturamento dia a dia.
+ * Fast: hoje + ontem (corrige atraso do relatório).
+ * Full: últimos 7 dias + hoje (mesmo padrão do 0081).
+ */
+async function syncRevenue(
+  stats: AvecSyncStats,
+  mode: AvecSyncMode,
+  syncRunId?: string,
+) {
   const def = getDailyReports().find((r) => r.mapper === 'revenue')
   if (!def) return
 
@@ -316,36 +347,52 @@ async function syncRevenue(stats: AvecSyncStats, syncRunId?: string) {
     return
   }
 
-  const { inicio, fim } = periodRange(0, 0)
-  const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
-  const result = await fetchAllAvecReport(reportId, params)
-  warnIfTruncated(stats, reportId, result)
-  await snapshotReport(reportId, params, result.rows, stats, syncRunId)
-
   const today = todayIso()
-  let revenue = 0
-  let attended = 0
+  const daysBack = mode === 'fast' ? 1 : 7
+  const from = addCalendarDaysYmd(today, -daysBack)
+  const days = listDaysInclusive(from, today)
 
-  for (const row of result.rows) {
-    const rev = normalizeRevenueRow(row)
-    if (!rev) continue
-    stats.revenue_rows++
-    // Relatório do dia: linha sem data conta como hoje (periodo já é periodRange(0,0))
-    if (!rev.day || rev.day === today) {
-      revenue += rev.revenue
-      attended += rev.attended
+  for (const day of days) {
+    const params = {
+      inicio: isoToBr(day),
+      fim: isoToBr(day),
+      site: avecSiteParam(),
+      limit: 250,
     }
-  }
+    try {
+      const result = await fetchAllAvecReport(reportId, params)
+      warnIfTruncated(stats, reportId, result)
+      await snapshotReport(reportId, params, result.rows, stats, syncRunId)
 
-  if (revenue > 0 || attended > 0) {
-    await upsertSalonMetrics(today, {
-      revenue,
-      attended: attended || undefined,
-      ticket_avg: attended > 0 ? revenue / attended : null,
-    })
+      let revenue = 0
+      let attended = 0
+      for (const row of result.rows) {
+        const rev = normalizeRevenueRow(row)
+        if (!rev) continue
+        stats.revenue_rows++
+        // Sem data no período de 1 dia → conta no dia pedido
+        if (!rev.day || rev.day === day) {
+          revenue += rev.revenue
+          attended += rev.attended
+        }
+      }
+
+      if (revenue > 0 || attended > 0) {
+        await upsertSalonMetrics(day, {
+          revenue,
+          attended: attended || undefined,
+          ticket_avg: attended > 0 ? revenue / attended : null,
+        })
+      }
+    } catch (e) {
+      stats.errors.push(`receita ${day}: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 }
 
+/**
+ * Cancelamentos / no-shows dia a dia (mesmo backfill do faturamento).
+ */
 async function syncCancellations(
   stats: AvecSyncStats,
   mode: AvecSyncMode,
@@ -361,33 +408,53 @@ async function syncCancellations(
     return
   }
 
-  const range = mode === 'fast' ? periodRange(0, 0) : periodRange(0, 7)
-  const params = { ...range, site: avecSiteParam(), limit: 250 }
-  const result = await fetchAllAvecReport(reportId, params)
-  warnIfTruncated(stats, reportId, result)
-  await snapshotReport(reportId, params, result.rows, stats, syncRunId)
-
   const today = todayIso()
-  let cancelled = 0
-  let no_shows = 0
+  const daysBack = mode === 'fast' ? 1 : 7
+  const from = addCalendarDaysYmd(today, -daysBack)
+  const days = listDaysInclusive(from, today)
 
-  for (const row of result.rows) {
-    const c = normalizeCancellationRow(row)
-    if (!c) continue
-    stats.cancellation_rows++
-    // Mesmo critério do faturamento: sem data → hoje no período pedido
-    if (!c.day || c.day === today) {
-      cancelled += c.cancelled
-      no_shows += c.noShow
+  for (const day of days) {
+    const params = {
+      inicio: isoToBr(day),
+      fim: isoToBr(day),
+      site: avecSiteParam(),
+      limit: 250,
     }
-  }
+    try {
+      const result = await fetchAllAvecReport(reportId, params)
+      warnIfTruncated(stats, reportId, result)
+      await snapshotReport(reportId, params, result.rows, stats, syncRunId)
 
-  if (cancelled > 0 || no_shows > 0) {
-    await upsertSalonMetrics(today, { cancelled, no_shows })
+      let cancelled = 0
+      let no_shows = 0
+      for (const row of result.rows) {
+        const c = normalizeCancellationRow(row)
+        if (!c) continue
+        stats.cancellation_rows++
+        if (!c.day || c.day === day) {
+          cancelled += c.cancelled
+          no_shows += c.noShow
+        }
+      }
+
+      if (cancelled > 0 || no_shows > 0) {
+        await upsertSalonMetrics(day, { cancelled, no_shows })
+      }
+    } catch (e) {
+      stats.errors.push(`cancelamentos ${day}: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 }
 
 export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSyncRun> {
+  // Fast e full compartilham o mesmo lease — evita overlap no Neon entre cron/webhook.
+  return withSyncLock(SYNC_LOCK_KEYS.avec, () => runAvecSyncUnlocked(mode), {
+    ttlMs: 6 * 60 * 1000,
+    owner: `avec-${mode}`,
+  })
+}
+
+async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
   }
@@ -426,7 +493,7 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
     }
     await syncAppointments(stats, mode, syncRunId)
     await syncAttendances(stats, mode, syncRunId)
-    await syncRevenue(stats, syncRunId)
+    await syncRevenue(stats, mode, syncRunId)
     await syncCancellations(stats, mode, syncRunId)
     // 0081 do dia no fast — Financeiro atualiza formas de pagamento sem esperar o full.
     if (mode === 'fast') {
