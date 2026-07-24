@@ -39,23 +39,20 @@ export async function getSalonMetrics(day = todayIso()): Promise<SalonDailyMetri
 
 export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) {
   const sql = getSql()
-  const existing = await getSalonMetrics(day)
-  const revenue = patch.revenue ?? existing?.revenue ?? 0
-  const appointments = patch.appointments ?? existing?.appointments ?? 0
-  const attended = patch.attended ?? existing?.attended ?? 0
-  const no_shows = patch.no_shows ?? existing?.no_shows ?? 0
-  const cancelled = patch.cancelled ?? existing?.cancelled ?? 0
-  const new_clients = patch.new_clients ?? existing?.new_clients ?? 0
-  const returning_clients = patch.returning_clients ?? existing?.returning_clients ?? 0
-  const ticket_avg =
-    patch.ticket_avg !== undefined
-      ? patch.ticket_avg
-      : attended > 0
-        ? revenue / attended
-        : existing?.ticket_avg ?? null
-  const service_duration_sum_minutes =
-    patch.service_duration_sum_minutes ?? existing?.service_duration_sum_minutes ?? 0
-  const service_duration_count = patch.service_duration_count ?? existing?.service_duration_count ?? 0
+  // null = “não alterar” no ON CONFLICT (permite sync paralelo de receita/cancel sem race).
+  const revenue = patch.revenue ?? null
+  const appointments = patch.appointments ?? null
+  const attended = patch.attended ?? null
+  const no_shows = patch.no_shows ?? null
+  const cancelled = patch.cancelled ?? null
+  const new_clients = patch.new_clients ?? null
+  const returning_clients = patch.returning_clients ?? null
+  const ticketExplicit = patch.ticket_avg !== undefined
+  const ticket_avg = ticketExplicit ? patch.ticket_avg : null
+  const recomputeTicket =
+    !ticketExplicit && (patch.revenue !== undefined || patch.attended !== undefined)
+  const service_duration_sum_minutes = patch.service_duration_sum_minutes ?? null
+  const service_duration_count = patch.service_duration_count ?? null
 
   await sql`
     insert into salon_daily_metrics (
@@ -64,21 +61,45 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
       service_duration_sum_minutes, service_duration_count, updated_at
     )
     values (
-      ${day}::date, ${revenue}, ${appointments}, ${attended}, ${no_shows}, ${cancelled},
-      ${new_clients}, ${returning_clients}, ${ticket_avg},
-      ${service_duration_sum_minutes}, ${service_duration_count}, now()
+      ${day}::date,
+      coalesce(${revenue}, 0),
+      coalesce(${appointments}, 0),
+      coalesce(${attended}, 0),
+      coalesce(${no_shows}, 0),
+      coalesce(${cancelled}, 0),
+      coalesce(${new_clients}, 0),
+      coalesce(${returning_clients}, 0),
+      ${ticket_avg},
+      coalesce(${service_duration_sum_minutes}, 0),
+      coalesce(${service_duration_count}, 0),
+      now()
     )
     on conflict (day) do update set
-      revenue = excluded.revenue,
-      appointments = excluded.appointments,
-      attended = excluded.attended,
-      no_shows = excluded.no_shows,
-      cancelled = excluded.cancelled,
-      new_clients = excluded.new_clients,
-      returning_clients = excluded.returning_clients,
-      ticket_avg = excluded.ticket_avg,
-      service_duration_sum_minutes = excluded.service_duration_sum_minutes,
-      service_duration_count = excluded.service_duration_count,
+      revenue = coalesce(${revenue}, salon_daily_metrics.revenue),
+      appointments = coalesce(${appointments}, salon_daily_metrics.appointments),
+      attended = coalesce(${attended}, salon_daily_metrics.attended),
+      no_shows = coalesce(${no_shows}, salon_daily_metrics.no_shows),
+      cancelled = coalesce(${cancelled}, salon_daily_metrics.cancelled),
+      new_clients = coalesce(${new_clients}, salon_daily_metrics.new_clients),
+      returning_clients = coalesce(${returning_clients}, salon_daily_metrics.returning_clients),
+      ticket_avg = case
+        when ${ticketExplicit} then ${ticket_avg}
+        when ${recomputeTicket} then case
+          when coalesce(${attended}, salon_daily_metrics.attended) > 0
+          then coalesce(${revenue}, salon_daily_metrics.revenue)
+               / coalesce(${attended}, salon_daily_metrics.attended)::float
+          else null
+        end
+        else salon_daily_metrics.ticket_avg
+      end,
+      service_duration_sum_minutes = coalesce(
+        ${service_duration_sum_minutes},
+        salon_daily_metrics.service_duration_sum_minutes
+      ),
+      service_duration_count = coalesce(
+        ${service_duration_count},
+        salon_daily_metrics.service_duration_count
+      ),
       updated_at = now()
   `
 }

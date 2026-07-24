@@ -481,19 +481,26 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
     if (mode === 'full') {
       await syncClients(stats, syncRunId)
     }
-    await syncAppointments(stats, mode, syncRunId)
-    await syncAttendances(stats, mode, syncRunId)
-    await syncRevenue(stats, mode, syncRunId)
-    await syncCancellations(stats, mode, syncRunId)
-    // 0081 do dia no fast — Financeiro atualiza formas de pagamento sem esperar o full.
     if (mode === 'fast') {
+      // KPI do dia primeiro e em paralelo (0088 + 0052); agenda/atendidos em seguida.
+      await Promise.all([
+        syncRevenue(stats, mode, syncRunId),
+        syncCancellations(stats, mode, syncRunId),
+      ])
+      await Promise.all([
+        syncAppointments(stats, mode, syncRunId),
+        syncAttendances(stats, mode, syncRunId),
+      ])
       try {
         await syncPaymentMixRecent(stats, syncRunId, 0)
       } catch (e) {
         stats.errors.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
-    }
-    if (mode === 'full') {
+    } else {
+      await syncAppointments(stats, mode, syncRunId)
+      await syncAttendances(stats, mode, syncRunId)
+      await syncRevenue(stats, mode, syncRunId)
+      await syncCancellations(stats, mode, syncRunId)
       for (const [label, fn] of [
         ['P1', () => syncP1Kpis(stats, syncRunId)],
         ['P2', () => syncP2Kpis(stats, syncRunId)],
