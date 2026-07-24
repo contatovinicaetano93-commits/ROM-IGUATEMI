@@ -19,6 +19,15 @@ describe('extractRows', () => {
   it('extrai de data.rows aninhado', () => {
     expect(extractRows({ data: { rows: [{ id: 3 }] } })).toEqual([{ id: 3 }])
   })
+
+  it('extrai de data.report.result (formato oficial Avec Reports)', () => {
+    expect(
+      extractRows({
+        code: 200,
+        data: { report: { description: 'x', result: [{ faturamento: 100, data: '2026-07-22' }] } },
+      }),
+    ).toEqual([{ faturamento: 100, data: '2026-07-22' }])
+  })
 })
 
 describe('pagination truncation', () => {
