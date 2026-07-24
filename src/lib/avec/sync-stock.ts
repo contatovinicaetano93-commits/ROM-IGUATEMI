@@ -161,7 +161,11 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
       active++
     }
     stats.alerts_active = active
-    stats.alerts_resolved = await resolveStaleStockAlerts(seenAvecProductIds)
+    // Só resolve stale quando o match funcionou (active>0) ou o relatório veio
+    // vazio de verdade — se 0046 trouxe linhas e nenhuma aplicou, não zera alertas.
+    if (active > 0 || result.rows.length === 0) {
+      stats.alerts_resolved = await resolveStaleStockAlerts(seenAvecProductIds)
+    }
   } catch (e) {
     stats.errors.push(`0046 (alertas): ${e instanceof Error ? e.message : String(e)}`)
   }

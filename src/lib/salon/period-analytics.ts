@@ -39,6 +39,7 @@ export function averageOccupancy(professionals: P1ProfessionalRow[]): number | n
   let simple = 0
   let count = 0
   for (const p of professionals) {
+    if (p.occupancy == null) continue
     const occ = Number(p.occupancy)
     if (!(occ >= 0) || Number.isNaN(occ)) continue
     simple += occ

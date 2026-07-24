@@ -5,6 +5,8 @@ import {
   normalize0011ReactivationRow,
   normalizeAppointmentRow,
   normalizeAttendanceRow,
+  normalizeP1AcquisitionRow,
+  normalizeP1OccupancyRow,
   normalizePhone,
   parseOptionalMoney,
   parseServiceTempoMinutes,
@@ -184,5 +186,30 @@ describe('normalize0011ReactivationRow', () => {
     })
     expect(row?.returnRate).toBeCloseTo(0.42)
     expect(row?.professional).toBe('Vitor M')
+  })
+})
+
+describe('normalizeP1OccupancyRow 0126', () => {
+  it('lê apelido + ocupacao percentual', () => {
+    const row = normalizeP1OccupancyRow({
+      apelido: 'DIEGO',
+      ocupacao: 67.79,
+    })
+    expect(row?.name).toBe('DIEGO')
+    expect(row?.occupancy).toBeCloseTo(0.6779)
+  })
+})
+
+describe('normalizeP1AcquisitionRow 0003', () => {
+  it('usa Não informado quando canal vazio mas há clientes', () => {
+    const row = normalizeP1AcquisitionRow({
+      como_conheceu: null,
+      qtd_clientes: 12,
+    })
+    expect(row).toEqual({ channel: 'Não informado', clients: 12 })
+  })
+
+  it('descarta linha sem clientes', () => {
+    expect(normalizeP1AcquisitionRow({ como_conheceu: 'Instagram', qtd_clientes: 0 })).toBeNull()
   })
 })

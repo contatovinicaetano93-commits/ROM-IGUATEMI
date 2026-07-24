@@ -5,7 +5,8 @@ export interface P1ProfessionalRow {
   revenue: number
   attended: number
   ticket_avg: number
-  occupancy: number
+  /** Fração 0–1; null quando 0126 não trouxe ocupação para o profissional. */
+  occupancy: number | null
 }
 
 export interface P1ServiceRow {

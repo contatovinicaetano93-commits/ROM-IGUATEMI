@@ -569,7 +569,15 @@ export function normalizeP1ProfessionalRevenueRow(
 export function normalizeP1OccupancyRow(
   row: Record<string, unknown>,
 ): Pick<NormalizedP1Professional, 'name' | 'occupancy'> | null {
-  const name = pick(row, ['profissional', 'nome', 'nome_profissional', 'colaborador'])
+  // 0126 costuma mandar o nome em `apelido` (mesmo campo de 0051/0248).
+  const name = pick(row, [
+    'profissional',
+    'apelido',
+    'nome',
+    'nome_profissional',
+    'colaborador',
+    'funcionario',
+  ])
   if (!name) return null
   const occupancy = parsePct(
     pick(row, ['ocupacao', 'ocupação', 'produtividade', 'taxa', 'percentual', 'percent']),
@@ -592,7 +600,7 @@ export function normalizeP1ServiceRow(row: Record<string, unknown>): NormalizedP
 export function normalizeP1AcquisitionRow(
   row: Record<string, unknown>,
 ): NormalizedP1Acquisition | null {
-  const channel = pick(row, [
+  const channelRaw = pick(row, [
     'como_conheceu',
     'como conheceu',
     'origem',
@@ -603,10 +611,13 @@ export function normalizeP1AcquisitionRow(
     'descricao',
     'nome',
   ])
-  if (!channel) return null
+  // CRM Avec frequentemente deixa o canal vazio — ainda assim conta clientes.
   const clients =
-    Number(pick(row, ['clientes', 'quantidade', 'qtd', 'total', 'count']) ?? 0) || 0
+    Number(
+      pick(row, ['qtd_clientes', 'clientes', 'quantidade', 'qtd', 'total', 'count']) ?? 0,
+    ) || 0
   if (clients <= 0) return null
+  const channel = channelRaw ?? 'Não informado'
   return { channel, clients }
 }
 

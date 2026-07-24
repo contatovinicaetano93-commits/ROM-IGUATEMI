@@ -268,12 +268,19 @@ async function sumExpenses(from: string, to: string): Promise<number> {
 async function sumStockCogs(from: string, to: string): Promise<number> {
   const sql = getSql()
   try {
+    // 0044 frequentemente manda cost=null nas saídas — fallback qty × custo do produto.
     const rows = (await sql`
-      select coalesce(sum(coalesce(cost, 0)), 0)::float as cmv
-      from stock_movements
-      where type = 'saida'
-        and (occurred_at at time zone 'America/Sao_Paulo')::date >= ${from}::date
-        and (occurred_at at time zone 'America/Sao_Paulo')::date <= ${to}::date
+      select coalesce(sum(
+        coalesce(
+          sm.cost,
+          sm.quantity * coalesce(sp.unit_cost, sp.avg_cost, 0)
+        )
+      ), 0)::float as cmv
+      from stock_movements sm
+      join stock_products sp on sp.id = sm.product_id
+      where sm.type = 'saida'
+        and (sm.occurred_at at time zone 'America/Sao_Paulo')::date >= ${from}::date
+        and (sm.occurred_at at time zone 'America/Sao_Paulo')::date <= ${to}::date
     `) as { cmv: number }[]
     return Math.round(Number(rows[0]?.cmv ?? 0) * 100) / 100
   } catch {

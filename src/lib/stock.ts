@@ -7,6 +7,20 @@ import type {
   NormalizedStockMovement,
   NormalizedStockPurchase,
 } from '@/lib/avec/normalize'
+import { normalizeSearchText } from '@/lib/search'
+
+function productNameKey(name: string): string {
+  return normalizeSearchText(name).toLowerCase()
+}
+
+/** Id sintético quando 0046 não traz produto_id e o catálogo ainda não tem o item. */
+function syntheticAlertProductId(name: string): string {
+  const slug = productNameKey(name)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+  return `alert:${slug || 'unknown'}`
+}
 
 export interface StockCategory {
   id: string
@@ -265,12 +279,14 @@ export async function applyStockAlert(
 
   let avecProductId = alert.avecProductId
   if (!avecProductId) {
-    const byName = (await sql`
-      select avec_product_id from stock_products
-      where lower(trim(name)) = lower(trim(${alert.name}))
-      limit 1
-    `) as { avec_product_id: string }[]
-    avecProductId = byName[0]?.avec_product_id ?? null
+    // Match sem acento/case — 0046 manda nome sem id e o catálogo pode diferir em acentos.
+    const target = productNameKey(alert.name)
+    const candidates = (await sql`
+      select avec_product_id, name from stock_products
+      where avec_product_id is not null
+    `) as { avec_product_id: string; name: string }[]
+    const hit = candidates.find((p) => productNameKey(p.name) === target)
+    avecProductId = hit?.avec_product_id ?? syntheticAlertProductId(alert.name)
   }
   if (!avecProductId) return null
 
@@ -388,9 +404,21 @@ export async function applyStockMovement(
   `) as { id: string }[]
   if (existing[0]) return false
 
+  let cost = mv.cost
+  if (cost == null || !(cost > 0)) {
+    const costs = (await sql`
+      select unit_cost::float as unit_cost, avg_cost::float as avg_cost
+      from stock_products where id = ${productId} limit 1
+    `) as { unit_cost: number | null; avg_cost: number | null }[]
+    const unit = costs[0]?.unit_cost ?? costs[0]?.avg_cost ?? null
+    if (unit != null && unit > 0) {
+      cost = Math.round(mv.quantity * unit * 100) / 100
+    }
+  }
+
   await sql`
     insert into stock_movements (product_id, type, quantity, cost, reason, source, occurred_at)
-    values (${productId}, ${mv.type}, ${mv.quantity}, ${mv.cost}, ${mv.reason}, ${source}, ${mv.occurredAt}::timestamptz)
+    values (${productId}, ${mv.type}, ${mv.quantity}, ${cost}, ${mv.reason}, ${source}, ${mv.occurredAt}::timestamptz)
   `
   return true
 }

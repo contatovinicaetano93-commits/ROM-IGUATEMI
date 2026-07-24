@@ -7,6 +7,7 @@ import {
 } from '@/lib/avec/normalize'
 import { resolveReportId, getDailyReports } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
+import { normalizeProKey } from '@/lib/director-report/match-pro'
 import { upsertSalonP1Daily, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
 
 type SyncStatsLike = {
@@ -60,6 +61,21 @@ function resolveId(mapper: string): string | null {
   return resolveReportId(def)
 }
 
+function getOrCreatePro(byPro: Map<string, P1ProfessionalRow>, name: string): P1ProfessionalRow {
+  const key = normalizeProKey(name)
+  const cur = byPro.get(key)
+  if (cur) return cur
+  const fresh: P1ProfessionalRow = {
+    name,
+    revenue: 0,
+    attended: 0,
+    ticket_avg: 0,
+    occupancy: null,
+  }
+  byPro.set(key, fresh)
+  return fresh
+}
+
 /**
  * P1 — sync diário (full): 0021, 0126, 0032, 0107, 0003 → salon_p1_daily
  * Não roda no fast (evita custo/API).
@@ -70,9 +86,9 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const params = { inicio, fim, limit: 250 }
 
   // professionals é alimentado por DOIS relatórios independentes (0021 revenue +
-  // 0126 ocupação) fundidos no mesmo registro por nome. Só marca ok quando os
-  // relatórios CONFIGURADOS tiverem todos sucesso — senão um sucesso parcial
-  // grava metade do registro (ex: revenue zerado) por cima do dado bom salvo antes.
+  // 0126 ocupação) fundidos no mesmo registro por nome normalizado. Só marca ok
+  // quando os relatórios CONFIGURADOS tiverem todos sucesso — senão um sucesso
+  // parcial grava metade do registro (ex: revenue zerado) por cima do dado bom.
   const byPro = new Map<string, P1ProfessionalRow>()
   let professionalsAttempted = false
   let professionalsFailed = false
@@ -87,17 +103,12 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
         const p = normalizeP1ProfessionalRevenueRow(row)
         if (!p) continue
         stats.p1_rows = (stats.p1_rows ?? 0) + 1
-        const cur = byPro.get(p.name) ?? {
-          name: p.name,
-          revenue: 0,
-          attended: 0,
-          ticket_avg: 0,
-          occupancy: 0,
-        }
+        const cur = getOrCreatePro(byPro, p.name)
         cur.revenue += p.revenue
         cur.attended += p.attended
         cur.ticket_avg = cur.attended > 0 ? cur.revenue / cur.attended : p.ticketAvg
-        byPro.set(p.name, cur)
+        // Prefere o nome do faturamento (geralmente mais completo).
+        if (p.name.length >= cur.name.length) cur.name = p.name
       }
     } catch (e) {
       professionalsFailed = true
@@ -116,15 +127,8 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
         const o = normalizeP1OccupancyRow(row)
         if (!o || o.occupancy == null) continue
         stats.p1_rows = (stats.p1_rows ?? 0) + 1
-        const cur = byPro.get(o.name) ?? {
-          name: o.name,
-          revenue: 0,
-          attended: 0,
-          ticket_avg: 0,
-          occupancy: 0,
-        }
+        const cur = getOrCreatePro(byPro, o.name)
         cur.occupancy = o.occupancy
-        byPro.set(o.name, cur)
       }
     } catch (e) {
       professionalsFailed = true
