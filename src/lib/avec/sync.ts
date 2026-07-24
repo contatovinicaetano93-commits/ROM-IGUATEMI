@@ -154,27 +154,32 @@ function warnIfTruncated(stats: AvecSyncStats, reportId: string, result: Awaited
 }
 
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
-  const params = { limit: 250, site: avecSiteParam() }
-  const result = await fetchAllAvecReport('0004', params)
-  warnIfTruncated(stats, '0004', result)
-  await snapshotReport('0004', params, result.rows, stats, syncRunId)
+  try {
+    const params = { limit: 250, site: avecSiteParam() }
+    const result = await fetchAllAvecReport('0004', params)
+    warnIfTruncated(stats, '0004', result)
+    await snapshotReport('0004', params, result.rows, stats, syncRunId)
 
-  for (const row of result.rows) {
-    try {
-      const c = normalizeClientRow(row)
-      if (!c) continue
-      await upsertContact({
-        avecClientId: c.avecClientId,
-        name: c.name,
-        email: c.email,
-        phone: c.phone,
-        channel: 'avec',
-        source: 'avec_sync_clients',
-      })
-      stats.clients_upserted++
-    } catch (e) {
-      stats.errors.push(`cliente: ${e instanceof Error ? e.message : String(e)}`)
+    for (const row of result.rows) {
+      try {
+        const c = normalizeClientRow(row)
+        if (!c) continue
+        await upsertContact({
+          avecClientId: c.avecClientId,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          channel: 'avec',
+          source: 'avec_sync_clients',
+        })
+        stats.clients_upserted++
+      } catch (e) {
+        stats.errors.push(`cliente: ${e instanceof Error ? e.message : String(e)}`)
+      }
     }
+  } catch (e) {
+    // Não derruba o full sync — P1/0021 (top profissionais) ainda precisa rodar.
+    stats.errors.push(`clientes 0004: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 

@@ -211,7 +211,7 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
     acquisition?: { channel: string; clients: number }[]
     reactivation_count?: number
   } = {}
-  if (professionalsOk) patch.professionals = professionals
+  if (professionalsOk && professionals.length > 0) patch.professionals = professionals
   if (servicesOk) patch.services = services.slice(0, 10)
   if (acquisitionOk) patch.acquisition = acquisition.slice(0, 8)
   if (reactivationOk) patch.reactivation_count = reactivation_count
