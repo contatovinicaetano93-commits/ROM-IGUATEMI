@@ -434,8 +434,30 @@ export function normalizeP1ProfessionalRevenueRow(
     pickRaw(row, ['faturamento', 'valor', 'total', 'receita', 'valor_total', 'amount']),
   )
   const attended =
-    Number(pick(row, ['atendimentos', 'comandas', 'qtd', 'quantidade', 'clientes', 'count']) ?? 0) || 0
-  const ticketRaw = parseMoney(pickRaw(row, ['ticket', 'ticket_medio', 'ticket médio', 'media', 'média']))
+    Number(
+      pick(row, [
+        'atendimentos',
+        'comandas',
+        'comandaQtd',
+        'comanda_qtd',
+        'total_servicos',
+        'qtd',
+        'quantidade',
+        'clientes',
+        'count',
+      ]) ?? 0,
+    ) || 0
+  const ticketRaw = parseMoney(
+    pickRaw(row, [
+      'ticket',
+      'ticket_medio',
+      'ticket médio',
+      'mediaFaturamento',
+      'media_faturamento',
+      'media',
+      'média',
+    ]),
+  )
   const ticketAvg = ticketRaw > 0 ? ticketRaw : attended > 0 ? revenue / attended : 0
   if (revenue <= 0 && attended <= 0) return null
   return { name, revenue, attended, ticketAvg, occupancy: null }
