@@ -147,8 +147,7 @@ export function withRequiredAvecReportParams(
     case '0051': {
       // Em 0051, `site` = origem Online/Local (""|1|0), NÃO o AVEC_UNIT_ID.
       const site = params.site
-      const origin =
-        site === '' || site === '0' || site === '1' || site === 0 || site === 1 ? site : ''
+      const origin = site === '' || site === '0' || site === '1' ? site : ''
       return { ...params, site: origin, profissional_id: params.profissional_id ?? '' }
     }
     case '0223':
