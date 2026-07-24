@@ -7,6 +7,7 @@ import {
   normalizeAttendanceRow,
   normalizePhone,
   parseOptionalMoney,
+  parseServiceTempoMinutes,
 } from '@/lib/avec/normalize'
 
 describe('normalizePhone', () => {
@@ -82,6 +83,47 @@ describe('normalizeAttendanceRow price', () => {
     })
     expect(row?.price).toBe(450)
     expect(row?.professional).toBe('Walter')
+  })
+
+  it('lê total_visitas e ultima_visita do 0002', () => {
+    const row = normalizeAttendanceRow({
+      nome: 'ANA SILVIA',
+      celular: '11912710555',
+      total_visitas: 3,
+      total_faturado: 1500,
+      ultima_visita: '2026-07-24',
+    })
+    expect(row?.totalVisits).toBe(3)
+    expect(row?.lastVisitDay).toBe('2026-07-24')
+  })
+})
+
+describe('normalizeAppointmentRow 0051/0248', () => {
+  it('converte hora_ini em minutos e status 0.6 → Faltou', () => {
+    const row = normalizeAppointmentRow({
+      salao_cliente_id: 123,
+      cliente_nome: 'Maiara',
+      data: '2026-07-18',
+      hora_ini: 1020,
+      status: 0.6,
+      apelido: 'DIEGO',
+      servico: 'ESCOVA - 220,00',
+    })
+    expect(row?.status).toBe('Faltou')
+    expect(row?.professional).toBe('DIEGO')
+    expect(row?.scheduledAt).toBeTruthy()
+    const d = new Date(row!.scheduledAt!)
+    expect(d.getHours()).toBe(17)
+    expect(d.getMinutes()).toBe(0)
+  })
+})
+
+describe('parseServiceTempoMinutes', () => {
+  it('aceita minutos e hh:mm', () => {
+    expect(parseServiceTempoMinutes(45)).toBe(45)
+    expect(parseServiceTempoMinutes('1:30')).toBe(90)
+    expect(parseServiceTempoMinutes(null)).toBeNull()
+    expect(parseServiceTempoMinutes(0)).toBeNull()
   })
 })
 

@@ -73,6 +73,20 @@ describe('withRequiredAvecReportParams', () => {
       limit: 250,
     })
   })
+
+  it('0051 usa site como origem Online/Local (não AVEC_UNIT_ID)', () => {
+    expect(withRequiredAvecReportParams('0051', { site: '40613', inicio: '24/07/2026' })).toMatchObject({
+      site: '',
+      profissional_id: '',
+    })
+    expect(withRequiredAvecReportParams('0051', { site: '1' })).toMatchObject({ site: '1' })
+  })
+
+  it('0248 default status Faltou (0.6)', () => {
+    expect(withRequiredAvecReportParams('0248', { inicio: '01/07/2026', fim: '24/07/2026' })).toMatchObject({
+      status: '0.6',
+    })
+  })
 })
 
 describe('pagination truncation', () => {

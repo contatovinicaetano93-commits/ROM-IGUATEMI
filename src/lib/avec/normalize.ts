@@ -105,6 +105,10 @@ export interface NormalizedAvecAttendance {
   endedAt: string | null
   /** null quando não dá pra calcular (falta início/fim, ou intervalo fora do razoável). */
   durationMinutes: number | null
+  /** 0002 — visitas no período do relatório (não lifetime se o range for curto). */
+  totalVisits: number | null
+  /** 0002 — YYYY-MM-DD da última visita no período. */
+  lastVisitDay: string | null
 }
 
 /**
@@ -189,10 +193,49 @@ export function normalizeClientRow(row: Record<string, unknown>): NormalizedAvec
   return { avecClientId, name, email, phone }
 }
 
+/** 0051 manda `hora_ini` em minutos desde meia-noite (ex: 1020 → 17:00). */
+function pickAppointmentTimePart(row: Record<string, unknown>): string | null {
+  const asClock = pick(row, ['hora', 'horario', 'horário', 'time', 'hora_agendamento'])
+  if (asClock) return asClock
+
+  const raw = pickRaw(row, ['hora_ini', 'hora_inicio', 'horario_inicio'])
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw < 24 * 60) {
+    const hh = Math.floor(raw / 60)
+    const mm = Math.round(raw % 60)
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+  }
+  if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) {
+    const n = Number(raw)
+    if (n >= 0 && n < 24 * 60) {
+      const hh = Math.floor(n / 60)
+      const mm = Math.round(n % 60)
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+    }
+  }
+  return null
+}
+
+/** Status Avec: texto (0051) ou código numérico (0248 — Faltou = 0.6). */
+function normalizeAppointmentStatus(raw: string | null): string | null {
+  if (!raw) return null
+  const t = raw.trim().toLowerCase()
+  if (t === '0.6' || t === 'faltou' || t === 'falta') return 'Faltou'
+  return raw.trim()
+}
+
 export function normalizeAppointmentRow(row: Record<string, unknown>): NormalizedAvecAppointment | null {
-  const avecClientId = pick(row, ['cliente_id', 'client_id', 'id_cliente', 'codigo_cliente', 'cod_cliente'])
+  const avecClientId = pick(row, [
+    'cliente_id',
+    'client_id',
+    'id_cliente',
+    'codigo_cliente',
+    'cod_cliente',
+    'salao_cliente_id',
+  ])
   const clientName = pick(row, ['cliente', 'nome', 'nome_cliente', 'cliente_nome', 'name'])
-  const phone = normalizePhone(pick(row, ['celular', 'telefone', 'phone', 'fone']))
+  const phone = normalizePhone(
+    pick(row, ['celular', 'telefone', 'phone', 'fone', 'cliente_tel', 'tel']),
+  )
   const email = pick(row, ['email', 'e_mail'])
   const serviceName = pick(row, [
     'servico',
@@ -204,13 +247,18 @@ export function normalizeAppointmentRow(row: Record<string, unknown>): Normalize
     'descricao',
   ])
   const datePart = pick(row, ['data', 'data_agendamento', 'agendamento', 'dia', 'date'])
-  const timePart = pick(row, ['hora', 'horario', 'horário', 'time', 'hora_agendamento'])
+  const timePart = pickAppointmentTimePart(row)
   const scheduledAt = parseAvecDateTime(datePart, timePart)
-  const professional = pick(row, ['profissional', 'profissional_nome', 'nome_profissional'])
+  const professional = pick(row, [
+    'profissional',
+    'profissional_nome',
+    'nome_profissional',
+    'apelido',
+  ])
   const price = parseOptionalMoney(
     pickRaw(row, ['valor', 'preco', 'preço', 'valor_servico', 'valor_serviço', 'price', 'amount', 'total'])
   )
-  const status = pick(row, ['status', 'situacao', 'situação'])
+  const status = normalizeAppointmentStatus(pick(row, ['status', 'situacao', 'situação']))
 
   if (!avecClientId && !clientName && !phone) return null
 
@@ -222,13 +270,41 @@ export function normalizeAttendanceRow(row: Record<string, unknown>): Normalized
   const clientName = pick(row, ['cliente', 'nome', 'nome_cliente', 'cliente_nome'])
   const phone = normalizePhone(pick(row, ['celular', 'telefone', 'phone']))
   const serviceName = pick(row, ['servico', 'serviço', 'procedimento', 'service', 'item', 'descricao'])
-  const datePart = pick(row, ['data', 'data_atendimento', 'data_realizacao', 'dia', 'date'])
+  const lastVisitDay = parseIsoDateOnly(
+    pick(row, ['ultima_visita', 'última visita', 'last_visit', 'data_ultima_comanda']),
+  )
+  const datePart =
+    pick(row, ['data', 'data_atendimento', 'data_realizacao', 'dia', 'date']) ?? lastVisitDay
   const timePart = pick(row, ['hora', 'horario', 'horário'])
   const attendedAt = parseAvecDateTime(datePart, timePart)
-  const professional = pick(row, ['profissional', 'profissional_nome', 'nome_profissional'])
+  const professional = pick(row, [
+    'profissional',
+    'profissional_nome',
+    'nome_profissional',
+    'todas_os_profissionais',
+  ])
   const price = parseOptionalMoney(
-    pickRaw(row, ['valor', 'preco', 'preço', 'valor_servico', 'valor_serviço', 'price', 'amount', 'total'])
+    pickRaw(row, [
+      'valor',
+      'preco',
+      'preço',
+      'valor_servico',
+      'valor_serviço',
+      'price',
+      'amount',
+      'total',
+      'total_faturado',
+    ]),
   )
+  const totalVisitsRaw = pickRaw(row, ['total_visitas', 'visitas', 'qtd_visitas'])
+  const totalVisits =
+    totalVisitsRaw == null || totalVisitsRaw === ''
+      ? null
+      : Number(totalVisitsRaw)
+  const totalVisitsSafe =
+    totalVisits != null && Number.isFinite(totalVisits) && totalVisits >= 0
+      ? Math.round(totalVisits)
+      : null
 
   // Nomes especulativos — a Avec pode não mandar nenhum destes hoje (é exatamente
   // a dúvida do Sprint 1). Se não vier, startedAt/endedAt ficam null e durationMinutes
@@ -263,7 +339,11 @@ export function normalizeAttendanceRow(row: Record<string, unknown>): Normalized
   ])
   const startedAt = startTimePart ? parseAvecDateTime(datePart, startTimePart) : null
   const endedAt = endTimePart ? parseAvecDateTime(datePart, endTimePart) : null
-  const durationMinutes = computeDurationMinutes(startedAt, endedAt)
+  let durationMinutes = computeDurationMinutes(startedAt, endedAt)
+  // 0223 — campo `tempo` (minutos) quando a unidade preenche duração do serviço.
+  if (durationMinutes == null) {
+    durationMinutes = parseServiceTempoMinutes(pickRaw(row, ['tempo', 'duracao', 'duração', 'duration']))
+  }
 
   if (!avecClientId && !clientName && !phone) return null
 
@@ -278,7 +358,29 @@ export function normalizeAttendanceRow(row: Record<string, unknown>): Normalized
     startedAt,
     endedAt,
     durationMinutes,
+    totalVisits: totalVisitsSafe,
+    lastVisitDay,
   }
+}
+
+/** 0223 `tempo` — aceita minutos numéricos ou strings "45", "45 min", "1:30". */
+export function parseServiceTempoMinutes(raw: unknown): number | null {
+  if (raw == null || raw === '') return null
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw) || raw < MIN_DURATION_MINUTES || raw > MAX_DURATION_MINUTES) return null
+    return Math.round(raw)
+  }
+  const s = String(raw).trim().toLowerCase()
+  if (!s) return null
+  const hm = s.match(/^(\d{1,2}):(\d{2})$/)
+  if (hm) {
+    const minutes = Number(hm[1]) * 60 + Number(hm[2])
+    if (minutes < MIN_DURATION_MINUTES || minutes > MAX_DURATION_MINUTES) return null
+    return minutes
+  }
+  const n = Number(s.replace(/[^\d.,]/g, '').replace(',', '.'))
+  if (!Number.isFinite(n) || n < MIN_DURATION_MINUTES || n > MAX_DURATION_MINUTES) return null
+  return Math.round(n)
 }
 
 function parseMoney(raw: unknown): number {

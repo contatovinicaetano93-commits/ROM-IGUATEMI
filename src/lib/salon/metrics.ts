@@ -106,11 +106,15 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
   `
 }
 
-// Recalcula só métricas ROM (agendamentos, novos, retornos) — não mexe em revenue/attended/no-show do Avec.
+/**
+ * Recalcula métricas ROM (agendamentos + novos).
+ * Retornos (`returning_clients`) vêm do relatório 0002 no sync Avec — não sobrescreve
+ * aqui para não zerar o KPI quando `contacts.created_at` é recente (import/sync).
+ */
 export async function recomputeSalonMetricsFromRom(day = todayIso()) {
   const sql = getSql()
 
-  const [apptRows, newRows, returningRows] = await Promise.all([
+  const [apptRows, newRows] = await Promise.all([
     sql`
       select count(*)::int as n from client_services
       where active = true
@@ -121,20 +125,10 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
       select count(*)::int as n from contacts
       where (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
     ` as unknown as Promise<{ n: number }[]>,
-    sql`
-      select count(distinct cs.contact_id)::int as n
-      from client_services cs
-      join contacts c on c.id = cs.contact_id
-      where cs.active = true
-        and cs.last_done_at is not null
-        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-        and (c.created_at at time zone 'America/Sao_Paulo')::date < ${day}::date
-    ` as unknown as Promise<{ n: number }[]>,
   ])
 
   await upsertSalonMetrics(day, {
     appointments: apptRows[0].n,
     new_clients: newRows[0].n,
-    returning_clients: returningRows[0].n,
   })
 }

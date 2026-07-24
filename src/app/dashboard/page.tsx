@@ -342,7 +342,7 @@ export default function DashboardPage() {
             )}
             {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
               <p className="mt-4 text-xs text-muted">
-                Sem dado ainda — TM depende da Avec mandar início/fim real do atendimento.
+                Sem dado ainda — TM usa duração do relatório 0223 (tempo) ou início/fim no 0002.
               </p>
             )}
           </SectionCard>

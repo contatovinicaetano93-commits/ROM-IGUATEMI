@@ -165,7 +165,7 @@ export default function HojePage() {
 
       {!loading && data && data.tm_today.avg_minutes == null && (
         <p className="-mt-2 text-[0.7rem] text-muted">
-          TM aguardando início/fim real do atendimento pela Avec (Sprint 1 — AVEC_API_TOKEN pendente).
+          TM aguardando duração na Avec (relatório 0223 · campo tempo, ou início/fim no 0002).
         </p>
       )}
 

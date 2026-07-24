@@ -141,6 +141,28 @@ export function withRequiredAvecReportParams(
       const range = currentMonthRange()
       return { ...params, inicio: params.inicio ?? range.inicio, fim: params.fim ?? range.fim }
     }
+    case '0002':
+      // Relatório de atendidos — `como_conheceu` obrigatório ("" = todos).
+      return { ...params, como_conheceu: params.como_conheceu ?? '' }
+    case '0051': {
+      // Em 0051, `site` = origem Online/Local (""|1|0), NÃO o AVEC_UNIT_ID.
+      const site = params.site
+      const origin =
+        site === '' || site === '0' || site === '1' || site === 0 || site === 1 ? site : ''
+      return { ...params, site: origin, profissional_id: params.profissional_id ?? '' }
+    }
+    case '0223':
+      return { ...params, profissional_id: params.profissional_id ?? '' }
+    case '0248': {
+      // Status Agendamento: Faltou = 0.6 (descoberta via validation do endpoint).
+      const range = currentMonthRange()
+      return {
+        ...params,
+        inicio: params.inicio ?? range.inicio,
+        fim: params.fim ?? range.fim,
+        status: params.status ?? '0.6',
+      }
+    }
     case '0007': {
       const rest = { ...params }
       delete rest.inicio
