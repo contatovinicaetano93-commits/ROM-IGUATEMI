@@ -90,6 +90,68 @@ function addCalendarDays(isoYmd: string, delta: number) {
   return dt.toISOString().slice(0, 10)
 }
 
+function currentMonthRange() {
+  const [year, month] = todayIso().split('-')
+  const inicio = fmtBrFromYmd(`${year}-${month}-01`)
+  return { inicio, fim: fmtBrFromYmd(todayIso()) }
+}
+
+function brDateToIso(value: string | undefined) {
+  if (!value) return null
+  const [day, month, year] = value.split('/').map(Number)
+  if (!day || !month || !year) return null
+  const dt = new Date(Date.UTC(year, month - 1, day))
+  if (Number.isNaN(dt.getTime())) return null
+  return dt.toISOString().slice(0, 10)
+}
+
+function returnRatePeriods(params: AvecReportParams) {
+  const fallback = currentMonthRange()
+  const inicio2 = params.inicio ?? fallback.inicio
+  const fim2 = params.fim ?? fallback.fim
+  const inicio2Iso = brDateToIso(inicio2)
+  const inicio1 = inicio2Iso ? fmtBrFromYmd(addCalendarDays(inicio2Iso, -45)) : fallback.inicio
+
+  return {
+    inicio1: params.inicio1 ?? inicio1,
+    fim1: params.fim1 ?? inicio2,
+    inicio2: params.inicio2 ?? inicio2,
+    fim2: params.fim2 ?? fim2,
+  }
+}
+
+/**
+ * Alguns relatórios da Avec exigem parâmetros mesmo para o estado "Todos".
+ * Os valores abaixo vêm dos defaults/validações do próprio endpoint de Reports.
+ */
+export function withRequiredAvecReportParams(
+  reportId: string,
+  params: AvecReportParams = {},
+): AvecReportParams {
+  switch (reportId) {
+    case '0149':
+      return { ...params, local: params.local ?? '' }
+    case '0021':
+      return { ...params, tipo: params.tipo ?? 'todos' }
+    case '0126':
+      return { ...params, minutos: params.minutos ?? 60 }
+    case '0107':
+      return { ...params, dias: params.dias ?? 90 }
+    case '0001': {
+      const range = currentMonthRange()
+      return { ...params, inicio: params.inicio ?? range.inicio, fim: params.fim ?? range.fim }
+    }
+    case '0007': {
+      const rest = { ...params }
+      delete rest.inicio
+      delete rest.fim
+      return { ...returnRatePeriods(params), ...rest }
+    }
+    default:
+      return params
+  }
+}
+
 /** Intervalo em datas de calendário America/Sao_Paulo (não UTC do servidor). */
 export function periodRange(daysBack = 0, daysForward = 14) {
   const today = todayIso()
@@ -132,15 +194,16 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
 
 export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
   assertAvecMockAllowed()
+  const effectiveParams = withRequiredAvecReportParams(reportId, params)
   if (isAvecMock()) {
-    return getMockReport(reportId, params.page ?? 1)
+    return getMockReport(reportId, effectiveParams.page ?? 1)
   }
 
   const { baseUrl, token } = getConfig()
   const qs = new URLSearchParams()
-  qs.set('page', String(params.page ?? 1))
-  qs.set('limit', String(params.limit ?? 250))
-  for (const [k, v] of Object.entries(params)) {
+  qs.set('page', String(effectiveParams.page ?? 1))
+  qs.set('limit', String(effectiveParams.limit ?? 250))
+  for (const [k, v] of Object.entries(effectiveParams)) {
     if (k === 'page' || k === 'limit' || v === undefined) continue
     qs.set(k, String(v))
   }

@@ -1,4 +1,4 @@
-import { fetchAllAvecReport, periodRange } from '@/lib/avec/client'
+import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
 import {
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
@@ -80,8 +80,9 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
   if (id0021) {
     professionalsAttempted = true
     try {
-      const rows = asRows(await fetchAllAvecReport(id0021, params))
-      await snapshotSafe(id0021, params, rows, stats, syncRunId)
+      const reportParams = withRequiredAvecReportParams(id0021, params)
+      const rows = asRows(await fetchAllAvecReport(id0021, reportParams))
+      await snapshotSafe(id0021, reportParams, rows, stats, syncRunId)
       for (const row of rows) {
         const p = normalizeP1ProfessionalRevenueRow(row)
         if (!p) continue
@@ -108,8 +109,9 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
   if (id0126) {
     professionalsAttempted = true
     try {
-      const rows = asRows(await fetchAllAvecReport(id0126, params))
-      await snapshotSafe(id0126, params, rows, stats, syncRunId)
+      const reportParams = withRequiredAvecReportParams(id0126, params)
+      const rows = asRows(await fetchAllAvecReport(id0126, reportParams))
+      await snapshotSafe(id0126, reportParams, rows, stats, syncRunId)
       for (const row of rows) {
         const o = normalizeP1OccupancyRow(row)
         if (!o || o.occupancy == null) continue
@@ -190,8 +192,9 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const id0107 = resolveId('reactivation')
   if (id0107) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0107, { limit: 250 }))
-      await snapshotSafe(id0107, { limit: 250 }, rows, stats, syncRunId)
+      const reportParams = withRequiredAvecReportParams(id0107, { limit: 250 })
+      const rows = asRows(await fetchAllAvecReport(id0107, reportParams))
+      await snapshotSafe(id0107, reportParams, rows, stats, syncRunId)
       reactivation_count = rows.length
       stats.p1_rows = (stats.p1_rows ?? 0) + rows.length
       reactivationOk = true

@@ -1,4 +1,4 @@
-import { fetchAllAvecReport, periodRange } from '@/lib/avec/client'
+import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
 import {
   normalizeP2BirthdayRow,
   normalizeP2ChannelRow,
@@ -218,8 +218,9 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
   if (id0001) {
     try {
       // Aniversariantes do mês corrente (sem período longo)
-      const rows = asRows(await fetchAllAvecReport(id0001, { limit: 250 }))
-      await snapshotSafe(id0001, { limit: 250 }, rows, stats, syncRunId)
+      const reportParams = withRequiredAvecReportParams(id0001, { limit: 250 })
+      const rows = asRows(await fetchAllAvecReport(id0001, reportParams))
+      await snapshotSafe(id0001, reportParams, rows, stats, syncRunId)
       let counted = 0
       for (const row of rows) {
         if (normalizeP2BirthdayRow(row)) counted++

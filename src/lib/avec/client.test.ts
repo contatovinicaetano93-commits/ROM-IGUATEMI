@@ -4,6 +4,7 @@ import {
   formatTruncationWarning,
   getAvecSyncMaxPages,
   wasPaginationTruncated,
+  withRequiredAvecReportParams,
   type AvecReportFetchResult,
 } from '@/lib/avec/client'
 
@@ -27,6 +28,50 @@ describe('extractRows', () => {
         data: { report: { description: 'x', result: [{ faturamento: 100, data: '2026-07-22' }] } },
       }),
     ).toEqual([{ faturamento: 100, data: '2026-07-22' }])
+  })
+})
+
+describe('withRequiredAvecReportParams', () => {
+  it('adiciona defaults exigidos pelos relatórios Avec que aceitam filtros vazios', () => {
+    expect(withRequiredAvecReportParams('0149', { inicio: '24/07/2026' })).toMatchObject({
+      inicio: '24/07/2026',
+      local: '',
+    })
+    expect(withRequiredAvecReportParams('0021', { inicio: '01/07/2026', fim: '24/07/2026' })).toMatchObject({
+      inicio: '01/07/2026',
+      fim: '24/07/2026',
+      tipo: 'todos',
+    })
+    expect(withRequiredAvecReportParams('0126', { inicio: '01/07/2026', fim: '24/07/2026' })).toMatchObject({
+      minutos: 60,
+    })
+    expect(withRequiredAvecReportParams('0107', { limit: 250 })).toMatchObject({
+      dias: 90,
+      limit: 250,
+    })
+  })
+
+  it('preenche intervalo mensal para aniversariantes quando o caller nao envia datas', () => {
+    const params = withRequiredAvecReportParams('0001', { limit: 250 })
+    expect(params.limit).toBe(250)
+    expect(params.inicio).toMatch(/^\d{2}\/\d{2}\/\d{4}$/)
+    expect(params.fim).toMatch(/^\d{2}\/\d{2}\/\d{4}$/)
+  })
+
+  it('converte inicio/fim do 0007 para os quatro parametros exigidos', () => {
+    expect(
+      withRequiredAvecReportParams('0007', {
+        inicio: '01/07/2026',
+        fim: '24/07/2026',
+        limit: 250,
+      }),
+    ).toEqual({
+      inicio1: '17/05/2026',
+      fim1: '01/07/2026',
+      inicio2: '01/07/2026',
+      fim2: '24/07/2026',
+      limit: 250,
+    })
   })
 })
 
