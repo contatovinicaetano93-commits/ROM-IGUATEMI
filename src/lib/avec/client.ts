@@ -100,6 +100,7 @@ export function periodRange(daysBack = 0, daysForward = 14) {
 }
 
 // Extrai linhas do JSON de relatório — formato varia por endpoint.
+// Formato oficial Avec Reports: { code, data: { report: { result: [...] } } }
 export function extractRows(payload: unknown): Record<string, unknown>[] {
   if (!payload) return []
   if (Array.isArray(payload)) return payload as Record<string, unknown>[]
@@ -111,11 +112,18 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
     if (Array.isArray(val)) return val as Record<string, unknown>[]
   }
 
-  // Alguns relatórios retornam { data: { rows: [...] } }
+  // Alguns relatórios retornam { data: { rows: [...] } } ou { data: { report: { result: [...] } } }
   if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) {
     const nested = obj.data as Record<string, unknown>
-    for (const key of ['rows', 'items', 'data']) {
+    for (const key of ['rows', 'items', 'data', 'result', 'registros', 'lista']) {
       if (Array.isArray(nested[key])) return nested[key] as Record<string, unknown>[]
+    }
+    const report = nested.report
+    if (report && typeof report === 'object' && !Array.isArray(report)) {
+      const rep = report as Record<string, unknown>
+      for (const key of ['result', 'rows', 'items', 'data', 'registros', 'lista']) {
+        if (Array.isArray(rep[key])) return rep[key] as Record<string, unknown>[]
+      }
     }
   }
 
