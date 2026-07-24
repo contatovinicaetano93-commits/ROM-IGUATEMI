@@ -69,9 +69,9 @@ export function getAvecUnitId(): string | null {
   return process.env.AVEC_UNIT_ID?.trim() || null
 }
 
-/** Valor do param `site` nos relatórios Avec (vazio se não configurado). */
-export function avecSiteParam(): string {
-  return getAvecUnitId() ?? ''
+/** Valor do param `site` nos relatórios Avec (omitido se não configurado). */
+export function avecSiteParam(): string | undefined {
+  return getAvecUnitId() ?? undefined
 }
 
 export function parseSeedPreset(value: string | undefined | null): RomSeedPreset | null {

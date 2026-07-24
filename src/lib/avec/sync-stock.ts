@@ -105,7 +105,14 @@ async function snapshotSafe(
 async function syncPositions(stats: StockSyncStats, syncRunId: string) {
   const id = reportId('stock_position')
   if (!id) return
-  const params = { inicio: fmtAvecDate(new Date()), marca: '', linha: '', categoria: '', limit: 250 }
+  const params = {
+    inicio: fmtAvecDate(new Date()),
+    marca: '',
+    linha: '',
+    local: '',
+    categoria: '',
+    limit: 250,
+  }
   try {
     const result = await fetchAllAvecReport(id, params)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))

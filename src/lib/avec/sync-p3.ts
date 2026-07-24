@@ -1,4 +1,4 @@
-import { fetchAllAvecReport, periodRange } from '@/lib/avec/client'
+import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
 import {
   normalizeP3CurveRow,
   normalizeP3NewClientsRow,
@@ -72,8 +72,9 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const id0007 = resolveId('return_rate')
   if (id0007) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0007, params))
-      await snapshotSafe(id0007, params, rows, stats, syncRunId)
+      const reportParams = withRequiredAvecReportParams(id0007, params)
+      const rows = asRows(await fetchAllAvecReport(id0007, reportParams))
+      await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
       // Preferência: média ponderada se várias linhas; senão primeira taxa válida
       let sum = 0
       let n = 0
