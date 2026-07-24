@@ -307,7 +307,7 @@ export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAve
   const revenue = parseMoney(
     pickRaw(row, ['valor', 'total', 'faturamento', 'receita', 'valor_total', 'amount', 'liquido'])
   )
-  const attended = Number(pick(row, ['atendimentos', 'qtd', 'quantidade', 'count']) ?? 0) || 0
+  const attended = Number(pick(row, ['atendimentos', 'comandaQtd', 'comandas', 'qtd', 'quantidade', 'count']) ?? 0) || 0
   const datePart = pick(row, ['data', 'dia', 'date', 'periodo'])
   const day = datePart ? parseAvecDateTime(datePart)?.slice(0, 10) ?? null : null
   if (revenue <= 0 && attended <= 0) return null

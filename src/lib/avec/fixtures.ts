@@ -102,7 +102,14 @@ export function getMockReport(reportId: string, page = 1) {
   if (reportId === '0051') return { data: mockAppointments() }
   if (reportId === '0002') return { data: mockAttendances() }
   if (reportId === '0081') return { data: mockPayments() }
-  if (reportId === 'revenue' || reportId === process.env.AVEC_REPORT_REVENUE) return { data: mockRevenue() }
+  if (
+    reportId === 'revenue' ||
+    reportId === '0088' ||
+    reportId === process.env.AVEC_REPORT_REVENUE ||
+    reportId === process.env.AVEC_REPORT_REVENUE_CURVE
+  ) {
+    return { data: mockRevenue() }
+  }
   if (reportId === 'cancellations' || reportId === process.env.AVEC_REPORT_CANCELLATIONS)
     return { data: mockCancellations() }
   return { data: [] }
