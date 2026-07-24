@@ -51,7 +51,8 @@ const CORE: AvecReportDef[] = [
   { id: '0051', tier: 'A', name: 'Agendamentos', mapper: 'appointments', schedule: 'fast' },
   { id: '0002', tier: 'A', name: 'Atendidos', mapper: 'attendances', schedule: 'fast' },
   {
-    id: 'revenue',
+    // 0088 = Faturamento do estabelecimento por dia do mês (override: AVEC_REPORT_REVENUE)
+    id: '0088',
     tier: 'A',
     name: 'Faturamento',
     mapper: 'revenue',
