@@ -54,6 +54,8 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
   const service_duration_sum_minutes = patch.service_duration_sum_minutes ?? null
   const service_duration_count = patch.service_duration_count ?? null
 
+  // Neon serializa number como texto; coalesce(param, 0) infere int e quebra
+  // receita decimal (ex: 165304.8). Cast explícito evita isso.
   await sql`
     insert into salon_daily_metrics (
       day, revenue, appointments, attended, no_shows, cancelled,
@@ -62,42 +64,42 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
     )
     values (
       ${day}::date,
-      coalesce(${revenue}, 0),
-      coalesce(${appointments}, 0),
-      coalesce(${attended}, 0),
-      coalesce(${no_shows}, 0),
-      coalesce(${cancelled}, 0),
-      coalesce(${new_clients}, 0),
-      coalesce(${returning_clients}, 0),
-      ${ticket_avg},
-      coalesce(${service_duration_sum_minutes}, 0),
-      coalesce(${service_duration_count}, 0),
+      coalesce(${revenue}::numeric, 0::numeric),
+      coalesce(${appointments}::int, 0),
+      coalesce(${attended}::int, 0),
+      coalesce(${no_shows}::int, 0),
+      coalesce(${cancelled}::int, 0),
+      coalesce(${new_clients}::int, 0),
+      coalesce(${returning_clients}::int, 0),
+      ${ticket_avg}::numeric,
+      coalesce(${service_duration_sum_minutes}::numeric, 0::numeric),
+      coalesce(${service_duration_count}::int, 0),
       now()
     )
     on conflict (day) do update set
-      revenue = coalesce(${revenue}, salon_daily_metrics.revenue),
-      appointments = coalesce(${appointments}, salon_daily_metrics.appointments),
-      attended = coalesce(${attended}, salon_daily_metrics.attended),
-      no_shows = coalesce(${no_shows}, salon_daily_metrics.no_shows),
-      cancelled = coalesce(${cancelled}, salon_daily_metrics.cancelled),
-      new_clients = coalesce(${new_clients}, salon_daily_metrics.new_clients),
-      returning_clients = coalesce(${returning_clients}, salon_daily_metrics.returning_clients),
+      revenue = coalesce(${revenue}::numeric, salon_daily_metrics.revenue),
+      appointments = coalesce(${appointments}::int, salon_daily_metrics.appointments),
+      attended = coalesce(${attended}::int, salon_daily_metrics.attended),
+      no_shows = coalesce(${no_shows}::int, salon_daily_metrics.no_shows),
+      cancelled = coalesce(${cancelled}::int, salon_daily_metrics.cancelled),
+      new_clients = coalesce(${new_clients}::int, salon_daily_metrics.new_clients),
+      returning_clients = coalesce(${returning_clients}::int, salon_daily_metrics.returning_clients),
       ticket_avg = case
-        when ${ticketExplicit} then ${ticket_avg}
+        when ${ticketExplicit} then ${ticket_avg}::numeric
         when ${recomputeTicket} then case
-          when coalesce(${attended}, salon_daily_metrics.attended) > 0
-          then coalesce(${revenue}, salon_daily_metrics.revenue)
-               / coalesce(${attended}, salon_daily_metrics.attended)::float
+          when coalesce(${attended}::int, salon_daily_metrics.attended) > 0
+          then coalesce(${revenue}::numeric, salon_daily_metrics.revenue)
+               / coalesce(${attended}::int, salon_daily_metrics.attended)::float
           else null
         end
         else salon_daily_metrics.ticket_avg
       end,
       service_duration_sum_minutes = coalesce(
-        ${service_duration_sum_minutes},
+        ${service_duration_sum_minutes}::numeric,
         salon_daily_metrics.service_duration_sum_minutes
       ),
       service_duration_count = coalesce(
-        ${service_duration_count},
+        ${service_duration_count}::int,
         salon_daily_metrics.service_duration_count
       ),
       updated_at = now()

@@ -381,10 +381,11 @@ async function syncRevenue(
       }
 
       if (revenue > 0 || attended > 0) {
+        const attendedInt = Math.round(attended)
         await upsertSalonMetrics(day, {
-          revenue,
-          attended: attended || undefined,
-          ticket_avg: attended > 0 ? revenue / attended : null,
+          revenue: Math.round(revenue * 100) / 100,
+          attended: attendedInt || undefined,
+          ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
         })
       }
     } catch (e) {

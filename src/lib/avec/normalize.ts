@@ -560,6 +560,7 @@ export function normalizeP2RatingRow(row: Record<string, unknown>): NormalizedP2
 /** 0081 — formas de pagamento */
 export function normalizeP2PaymentRow(row: Record<string, unknown>): NormalizedP2Payment | null {
   const method = pick(row, [
+    'formaPagamento',
     'forma_pagamento',
     'forma de pagamento',
     'pagamento',
@@ -570,7 +571,9 @@ export function normalizeP2PaymentRow(row: Record<string, unknown>): NormalizedP
     'nome',
   ])
   if (!method) return null
-  const amount = parseMoney(pickRaw(row, ['valor', 'total', 'faturamento', 'amount', 'receita']))
+  const amount = parseMoney(
+    pickRaw(row, ['faturamento', 'valor', 'total', 'amount', 'receita', 'valor_total']),
+  )
   if (amount <= 0) return null
   return { method, amount }
 }
