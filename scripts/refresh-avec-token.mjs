@@ -74,8 +74,23 @@ function setLocalStorage(origin, map) {
 }
 
 async function mintSalonTokenWithPlaywright(statePath) {
+  // Resolve o módulo a partir do cache do npx (-p playwright).
+  const resolve = spawnSync(
+    'npx',
+    ['--yes', '-p', 'playwright@1.49.1', 'node', '-e', "process.stdout.write(require.resolve('playwright'))"],
+    { encoding: 'utf8', maxBuffer: 1024 * 1024 },
+  )
+  const playwrightEntry = (resolve.stdout || '').trim()
+  if (resolve.status !== 0 || !playwrightEntry) {
+    throw new Error(`Não resolveu playwright: ${(resolve.stderr || '').slice(0, 300)}`)
+  }
+  spawnSync('npx', ['--yes', 'playwright@1.49.1', 'install', 'chromium'], {
+    encoding: 'utf8',
+    stdio: 'ignore',
+  })
+
   const script = `
-const { chromium } = require('playwright');
+const { chromium } = require(${JSON.stringify(playwrightEntry)});
 (async () => {
   const statePath = process.argv[1];
   const browser = await chromium.launch({ headless: true });
@@ -94,16 +109,10 @@ const { chromium } = require('playwright');
 `
   const tmpJs = '/tmp/avec-mint-token-playwright.js'
   writeFileSync(tmpJs, script)
-  // Garante browser + roda o script com o pacote playwright.
-  spawnSync('npx', ['--yes', 'playwright@1.49.1', 'install', 'chromium'], {
+  const r2 = spawnSync('node', [tmpJs, statePath], {
     encoding: 'utf8',
-    stdio: 'ignore',
+    maxBuffer: 4 * 1024 * 1024,
   })
-  const r2 = spawnSync(
-    'npx',
-    ['--yes', '-p', 'playwright@1.49.1', 'node', tmpJs, statePath],
-    { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
-  )
   const out = (r2.stdout || '').trim()
   if (r2.status !== 0 || !out || out.includes('NO_TOKEN')) {
     throw new Error(
