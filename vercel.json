@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/avec/sync",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/avec/sync?mode=full",
