@@ -503,11 +503,12 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
         stats.errors.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
     } else {
-      await syncAppointments(stats, mode, syncRunId)
-      await syncAttendances(stats, mode, syncRunId)
-      await syncRevenue(stats, mode, syncRunId)
-      await syncCancellations(stats, mode, syncRunId)
+      // Full: cada etapa isolada — 403/WAF num relatório não pode impedir P1/P2/P3.
       for (const [label, fn] of [
+        ['appointments', () => syncAppointments(stats, mode, syncRunId)],
+        ['attendances', () => syncAttendances(stats, mode, syncRunId)],
+        ['revenue', () => syncRevenue(stats, mode, syncRunId)],
+        ['cancellations', () => syncCancellations(stats, mode, syncRunId)],
         ['P1', () => syncP1Kpis(stats, syncRunId)],
         ['P2', () => syncP2Kpis(stats, syncRunId)],
         ['P3', () => syncP3Kpis(stats, syncRunId)],

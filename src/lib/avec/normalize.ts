@@ -511,6 +511,8 @@ export function normalizeP1AcquisitionRow(
 /** 0056 — agendamentos por canal */
 export function normalizeP2ChannelRow(row: Record<string, unknown>): NormalizedP2Channel | null {
   const channel = pick(row, [
+    'tipoAgendamento',
+    'tipo_agendamento',
     'canal',
     'origem',
     'fonte',
