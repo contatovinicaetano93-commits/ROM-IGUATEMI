@@ -57,16 +57,14 @@ export async function runAvecWebhookSideEffects(event: string) {
   const baseUrl = internalBaseUrl()
   if (!baseUrl) return
 
-  const tasks: Promise<void>[] = []
-
+  // Sequencial: fast e full compartilham o lock `avec_sync`.
+  // Em paralelo o segundo era skipped (sync_em_andamento) e P1–P3 sumia.
   if (FAST_EVENTS.has(event)) {
-    tasks.push(postSync('fast', baseUrl))
+    await postSync('fast', baseUrl)
   }
   if (FULL_EVENTS.has(event)) {
-    tasks.push(postSync('full', baseUrl))
+    await postSync('full', baseUrl)
   }
-
-  await Promise.allSettled(tasks)
 }
 
 /** Não bloqueia a resposta do webhook — dispara sync em background. */

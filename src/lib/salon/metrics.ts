@@ -122,10 +122,13 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
       where (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
     ` as unknown as Promise<{ n: number }[]>,
     sql`
-      select count(*)::int as n from contacts
-      where status = 'convertido'
-        and (created_at at time zone 'America/Sao_Paulo')::date < ${day}::date
-        and (last_contact_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      select count(distinct cs.contact_id)::int as n
+      from client_services cs
+      join contacts c on c.id = cs.contact_id
+      where cs.active = true
+        and cs.last_done_at is not null
+        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+        and (c.created_at at time zone 'America/Sao_Paulo')::date < ${day}::date
     ` as unknown as Promise<{ n: number }[]>,
   ])
 

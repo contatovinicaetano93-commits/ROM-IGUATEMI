@@ -1,5 +1,6 @@
 import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
 import {
+  isP3NonReturnerRow,
   normalizeP3CurveRow,
   normalizeP3NewClientsRow,
   normalizeP3ReturnRateRow,
@@ -7,6 +8,7 @@ import {
 import { resolveReportId, getDailyReports } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
 import { upsertSalonP3Daily } from '@/lib/salon/p3-metrics'
+import { getSql } from '@/lib/db'
 
 type SyncStatsLike = {
   snapshots_saved: number
@@ -22,6 +24,47 @@ function todayIsoLocal() {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date())
+}
+
+/**
+ * Taxa de retorno local: clientes com visita nos 45 dias antes do mês corrente
+ * que também tiveram visita no mês corrente.
+ */
+async function computeLocalReturnRate(): Promise<number | null> {
+  const sql = getSql()
+  const rows = (await sql`
+    with bounds as (
+      select
+        (date_trunc('month', timezone('America/Sao_Paulo', now()))::date - 45) as p1_start,
+        (date_trunc('month', timezone('America/Sao_Paulo', now()))::date) as month_start,
+        timezone('America/Sao_Paulo', now())::date as today
+    ),
+    visited_p1 as (
+      select distinct cs.contact_id
+      from client_services cs, bounds b
+      where cs.active = true
+        and cs.last_done_at is not null
+        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date >= b.p1_start
+        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date < b.month_start
+    ),
+    returned as (
+      select distinct cs.contact_id
+      from client_services cs
+      join visited_p1 v on v.contact_id = cs.contact_id
+      cross join bounds b
+      where cs.active = true
+        and cs.last_done_at is not null
+        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date >= b.month_start
+        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date <= b.today
+    )
+    select
+      (select count(*)::int from visited_p1) as cohort,
+      (select count(*)::int from returned) as returned
+  `) as { cohort: number; returned: number }[]
+  const cohort = Number(rows[0]?.cohort ?? 0)
+  const returned = Number(rows[0]?.returned ?? 0)
+  if (cohort <= 0) return null
+  return Math.round((returned / cohort) * 10000) / 10000
 }
 
 function asRows(result: unknown): Record<string, unknown>[] {
@@ -72,23 +115,56 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const id0007 = resolveId('return_rate')
   if (id0007) {
     try {
-      const reportParams = withRequiredAvecReportParams(id0007, params)
+      // 0007 exige inicio1/fim1/inicio2/fim2 (mês corrente + 45d antes) — não passar inicio/fim rolantes.
+      const reportParams = withRequiredAvecReportParams(id0007, { limit: 250 })
       const rows = asRows(await fetchAllAvecReport(id0007, reportParams))
       await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
-      // Preferência: média ponderada se várias linhas; senão primeira taxa válida
       let sum = 0
       let n = 0
+      let nonReturners = 0
       for (const row of rows) {
         const r = normalizeP3ReturnRateRow(row)
-        if (r == null) continue
-        stats.p3_rows = (stats.p3_rows ?? 0) + 1
-        sum += r
-        n++
+        if (r != null) {
+          stats.p3_rows = (stats.p3_rows ?? 0) + 1
+          sum += r
+          n++
+          continue
+        }
+        if (isP3NonReturnerRow(row)) nonReturners++
       }
-      if (n > 0) return_rate = Math.round((sum / n) * 10000) / 10000
-      returnRateOk = true
+      if (n > 0) {
+        return_rate = Math.round((sum / n) * 10000) / 10000
+        returnRateOk = true
+      } else if (nonReturners > 0) {
+        // Lista 0007 = sem retorno. Taxa ≈ retornaram / (retornaram + lista),
+        // usando cohort local (visitas no período 1 implícito via ROM).
+        const local = await computeLocalReturnRate()
+        if (local != null) {
+          return_rate = local
+          returnRateOk = true
+          stats.p3_rows = (stats.p3_rows ?? 0) + nonReturners
+        } else {
+          stats.warnings?.push(
+            `P3 0007: ${nonReturners} clientes sem retorno, sem taxa explícita — retorno local indisponível`,
+          )
+        }
+      }
     } catch (e) {
       stats.errors.push(`P3 0007: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  // Fallback ROM se 0007 falhou/vazio
+  if (!returnRateOk) {
+    try {
+      const local = await computeLocalReturnRate()
+      if (local != null) {
+        return_rate = local
+        returnRateOk = true
+        stats.warnings?.push('P3 return_rate: usando cálculo local (client_services)')
+      }
+    } catch (e) {
+      stats.warnings?.push(`P3 return_rate local: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

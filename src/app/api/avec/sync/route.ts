@@ -6,6 +6,7 @@ import { isAuthorized } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 import { getDeploymentContext } from '@/lib/deployment'
+import { isSyncLockBusyError } from '@/lib/sync-lock'
 
 /** Sync Avec pode demorar (vários relatórios). */
 export const maxDuration = 300
@@ -64,17 +65,32 @@ async function executeSync(
     }
   }
 
-  const run = await runAvecSync(mode)
-  return ok({
-    ...run,
-    skipped: false,
-    mode,
-    schedule: mode === 'fast' ? 'intraday' : 'full',
-    note:
-      mode === 'fast'
-        ? 'Sync fast — agenda/caixa do dia (sem P1–P3)'
-        : 'Sync full — catálogo + P1/P2/P3',
-  })
+  try {
+    const run = await runAvecSync(mode)
+    return ok({
+      ...run,
+      skipped: false,
+      mode,
+      schedule: mode === 'fast' ? 'intraday' : 'full',
+      note:
+        mode === 'fast'
+          ? 'Sync fast — agenda/caixa do dia (sem P1–P3)'
+          : 'Sync full — catálogo + P1/P2/P3',
+    })
+  } catch (e) {
+    if (isSyncLockBusyError(e)) {
+      // Cron/webhook: skip silencioso — outro sync ainda está no Neon.
+      return ok({
+        skipped: true,
+        reason: 'sync_em_andamento',
+        mode,
+        holder: e.holder,
+        expires_at: e.expiresAt,
+        note: 'Outro sync Avec já está em execução (lock distribuído)',
+      })
+    }
+    throw e
+  }
 }
 
 export async function POST(req: NextRequest) {

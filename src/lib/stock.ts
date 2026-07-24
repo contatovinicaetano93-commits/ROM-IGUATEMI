@@ -213,11 +213,11 @@ export async function upsertStockProductFromPosition(
   const rows = (await sql`
     insert into stock_products (
       avec_product_id, sku, name, category_id, brand_id, location_id,
-      unit_cost, unit_price, current_qty, last_synced_at
+      unit_cost, unit_price, current_qty, minimum_qty, last_synced_at
     )
     values (
       ${pos.avecProductId}, ${pos.sku}, ${pos.name}, ${categoryId}, ${brandId}, ${locationId},
-      ${pos.unitCost}, ${pos.unitPrice}, ${pos.quantity}, now()
+      ${pos.unitCost}, ${pos.unitPrice}, ${pos.quantity}, ${pos.minimumQty}, now()
     )
     on conflict (avec_product_id) do update set
       sku = coalesce(excluded.sku, stock_products.sku),
@@ -228,6 +228,7 @@ export async function upsertStockProductFromPosition(
       unit_cost = coalesce(excluded.unit_cost, stock_products.unit_cost),
       unit_price = coalesce(excluded.unit_price, stock_products.unit_price),
       current_qty = excluded.current_qty,
+      minimum_qty = coalesce(excluded.minimum_qty, stock_products.minimum_qty),
       last_synced_at = excluded.last_synced_at,
       updated_at = now()
     returning id
@@ -256,17 +257,33 @@ async function ensureProductExists(avecProductId: string, name: string): Promise
 // ---------------------------------------------------------------------------
 
 /** Aplica uma linha de 0046: garante o produto, atualiza mínimo/sugestão e abre/atualiza alerta ativo. */
-export async function applyStockAlert(alert: NormalizedStockAlert): Promise<string> {
+export async function applyStockAlert(
+  alert: NormalizedStockAlert,
+): Promise<{ productId: string; avecProductId: string } | null> {
   const sql = getSql()
   const categoryId = await upsertCategoryByName(alert.categoryName)
 
+  let avecProductId = alert.avecProductId
+  if (!avecProductId) {
+    const byName = (await sql`
+      select avec_product_id from stock_products
+      where lower(trim(name)) = lower(trim(${alert.name}))
+      limit 1
+    `) as { avec_product_id: string }[]
+    avecProductId = byName[0]?.avec_product_id ?? null
+  }
+  if (!avecProductId) return null
+
   const rows = (await sql`
     insert into stock_products (avec_product_id, name, category_id, current_qty, minimum_qty, suggested_reposition, last_synced_at)
-    values (${alert.avecProductId}, ${alert.name}, ${categoryId}, ${alert.currentQty}, ${alert.minimumQty}, ${alert.suggestedReposition}, now())
+    values (${avecProductId}, ${alert.name}, ${categoryId}, ${alert.currentQty}, ${alert.minimumQty}, ${alert.suggestedReposition}, now())
     on conflict (avec_product_id) do update set
       name = excluded.name,
       category_id = coalesce(stock_products.category_id, excluded.category_id),
-      current_qty = excluded.current_qty,
+      current_qty = case
+        when excluded.current_qty > 0 then excluded.current_qty
+        else stock_products.current_qty
+      end,
       minimum_qty = excluded.minimum_qty,
       suggested_reposition = excluded.suggested_reposition,
       last_synced_at = excluded.last_synced_at,
@@ -292,7 +309,7 @@ export async function applyStockAlert(alert: NormalizedStockAlert): Promise<stri
     `
   }
 
-  return productId
+  return { productId, avecProductId }
 }
 
 /**

@@ -694,8 +694,11 @@ export function normalize0011ReactivationRow(
 /** 0007 — taxa de retorno (0..1) */
 export function normalizeP3ReturnRateRow(row: Record<string, unknown>): number | null {
   const raw = pick(row, [
+    'taxaRetorno',
     'taxa_retorno',
     'taxa de retorno',
+    'percentualRetorno',
+    'percentual_retorno',
     'retorno',
     'taxa',
     'percentual',
@@ -707,6 +710,12 @@ export function normalizeP3ReturnRateRow(row: Record<string, unknown>): number |
   const pct = parsePct(raw)
   if (pct == null || pct < 0) return null
   return pct
+}
+
+/** Linha de 0007 = cliente sem retorno no período 2 (lista, sem taxa). */
+export function isP3NonReturnerRow(row: Record<string, unknown>): boolean {
+  if (normalizeP3ReturnRateRow(row) != null) return false
+  return Boolean(pick(row, ['cliente', 'nome', 'nome_cliente', 'cliente_id', 'id', 'telefone', 'celular', 'email']))
 }
 
 /** 0017 — novos clientes no período (contagem por linha ou campo) */
@@ -766,6 +775,21 @@ export interface NormalizedStockPosition {
   quantity: number
   unitCost: number | null
   unitPrice: number | null
+  minimumQty: number | null
+}
+
+/** Qtd Avec: number puro, "7.000000", ou texto "7 unidades" / "0 unidades e 10 g". */
+export function parseAvecQty(raw: unknown): number {
+  if (raw == null) return 0
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0
+  const s = String(raw).trim()
+  if (!s) return 0
+  const direct = Number(s.replace(',', '.'))
+  if (Number.isFinite(direct)) return direct
+  const m = s.replace(',', '.').match(/-?\d+(?:\.\d+)?/)
+  if (!m) return 0
+  const n = Number(m[0])
+  return Number.isFinite(n) ? n : 0
 }
 
 /** 0149 — Posição de Estoque (saldo por produto numa data). */
@@ -774,19 +798,40 @@ export function normalizeStockPositionRow(row: Record<string, unknown>): Normali
   const name = pick(row, ['produto', 'nome', 'nome_produto', 'descricao', 'name'])
   if (!avecProductId || !name) return null
 
-  const sku = pick(row, ['sku', 'codigo_barras', 'referencia', 'referência'])
+  const sku = pick(row, ['sku', 'codigo_barras', 'cod_barra', 'referencia', 'referência'])
   const categoryName = pick(row, ['categoria', 'linha', 'category'])
   const brandName = pick(row, ['marca', 'brand'])
   const locationId = pick(row, ['local_estoque_id', 'local_estoque', 'estoque_id', 'local'])
-  const quantity = Number(pick(row, ['quantidade', 'estoque', 'saldo', 'qtd', 'qtd_estoque']) ?? 0) || 0
-  const unitCost = parseOptionalMoney(pickRaw(row, ['custo_unitario', 'custo_medio', 'custo médio', 'custo']))
-  const unitPrice = parseOptionalMoney(pickRaw(row, ['preco_venda', 'preço_venda', 'valor_venda', 'preco', 'preço']))
+  // Avec manda estoque_atual / total (numérico); "quantidade" às vezes é texto "7 unidades".
+  const quantity = parseAvecQty(
+    pickRaw(row, ['estoque_atual', 'total', 'qtd_estoque', 'quantidade', 'estoque', 'saldo', 'qtd']),
+  )
+  const unitCost = parseOptionalMoney(
+    pickRaw(row, ['custo_medio', 'custo médio', 'custo_medio_p', 'custo_unitario', 'custo']),
+  )
+  const unitPrice = parseOptionalMoney(
+    pickRaw(row, ['preco_venda', 'preço_venda', 'valor_venda', 'valor', 'preco', 'preço']),
+  )
+  const minimumQty = parseAvecQty(
+    pickRaw(row, ['estoque_minimo', 'quantidade_minima', 'minimo', 'mínimo']),
+  )
 
-  return { avecProductId, sku, name, categoryName, brandName, locationId, quantity, unitCost, unitPrice }
+  return {
+    avecProductId,
+    sku,
+    name,
+    categoryName,
+    brandName,
+    locationId,
+    quantity,
+    unitCost,
+    unitPrice,
+    minimumQty: minimumQty > 0 ? minimumQty : null,
+  }
 }
 
 export interface NormalizedStockAlert {
-  avecProductId: string
+  avecProductId: string | null
   name: string
   categoryName: string | null
   currentQty: number
@@ -796,16 +841,20 @@ export interface NormalizedStockAlert {
 
 /** 0046 — Produtos abaixo do estoque mínimo (Avec já calcula a sugestão de reposição). */
 export function normalizeStockAlertRow(row: Record<string, unknown>): NormalizedStockAlert | null {
-  const avecProductId = pick(row, ['produto_id', 'id_produto', 'codigo_produto', 'codigo', 'id'])
   const name = pick(row, ['produto', 'nome', 'nome_produto', 'descricao', 'name'])
-  if (!avecProductId || !name) return null
+  if (!name) return null
+  // 0046 frequentemente não traz id — resolve por nome no apply.
+  const avecProductId = pick(row, ['produto_id', 'id_produto', 'codigo_produto', 'codigo', 'id'])
 
-  const categoryName = pick(row, ['categoria', 'linha', 'category'])
-  const currentQty =
-    Number(pick(row, ['quantidade_atual', 'estoque_atual', 'quantidade', 'estoque', 'saldo']) ?? 0) || 0
-  const minimumQty =
-    Number(pick(row, ['estoque_minimo', 'quantidade_minima', 'minimo', 'mínimo']) ?? 0) || 0
-  const suggestedRaw = pick(row, [
+  const categoryName = pick(row, ['categoria', 'linha', 'marca', 'category'])
+  const currentQty = parseAvecQty(
+    pickRaw(row, ['atual', 'quantidade_atual', 'estoque_atual', 'quantidade', 'estoque', 'saldo']),
+  )
+  const minimumQty = parseAvecQty(
+    pickRaw(row, ['estoque_minimo', 'quantidade_minima', 'minimo', 'mínimo']),
+  )
+  const suggestedRepositionRaw = pickRaw(row, [
+    'sugestao',
     'sugestao_reposicao',
     'sugestão de reposição',
     'sugestao_compra',
@@ -814,7 +863,10 @@ export function normalizeStockAlertRow(row: Record<string, unknown>): Normalized
     'reposição',
     'quantidade_sugerida',
   ])
-  const suggestedReposition = suggestedRaw ? Number(suggestedRaw) || null : null
+  const suggestedReposition =
+    suggestedRepositionRaw == null || suggestedRepositionRaw === ''
+      ? null
+      : parseAvecQty(suggestedRepositionRaw) || null
 
   return { avecProductId, name, categoryName, currentQty, minimumQty, suggestedReposition }
 }
@@ -851,16 +903,30 @@ export function normalizeStockMovementRow(row: Record<string, unknown>): Normali
   const name = pick(row, ['produto', 'nome', 'nome_produto', 'descricao', 'name'])
   if (!avecProductId || !name) return null
 
-  const type = inferMovementType(row)
-  if (!type) return null
-
-  const quantity = Number(pick(row, ['quantidade', 'qtd', 'quantidade_movimentada']) ?? 0) || 0
+  // Preferir qtd_absoluta (signed): negativo = saída, positivo = entrada.
+  const absRaw = pickRaw(row, ['qtd_absoluta', 'quantidade_absoluta'])
+  let type = inferMovementType(row)
+  let quantity = 0
+  if (absRaw != null && absRaw !== '') {
+    const signed = typeof absRaw === 'number' ? absRaw : Number(String(absRaw).replace(',', '.'))
+    if (Number.isFinite(signed) && signed !== 0) {
+      quantity = Math.abs(signed)
+      if (!type) type = signed < 0 ? 'saida' : 'entrada'
+    }
+  }
+  if (quantity <= 0) {
+    quantity = parseAvecQty(pickRaw(row, ['quantidade', 'qtd', 'quantidade_movimentada']))
+  }
   if (quantity <= 0) return null
+  if (!type) {
+    // Sem tipo explícito: recebimento/compra → entrada; resto com qty positiva → saída (consumo típico).
+    const reason = (pick(row, ['motivo', 'motivo_movimento', 'razao', 'razão']) ?? '').toLowerCase()
+    type = ENTRADA_HINTS.some((h) => reason.includes(h)) ? 'entrada' : 'saida'
+  }
 
-  // Custo: valor de compra (entrada) ou custo médio da época (saída) — a própria Avec já resolve isso.
   const cost = parseOptionalMoney(pickRaw(row, ['custo', 'custo_unitario', 'custo_medio', 'valor', 'valor_total']))
   const reason = pick(row, ['motivo', 'motivo_movimento', 'razao', 'razão'])
-  const datePart = pick(row, ['data', 'data_movimento', 'dia', 'date'])
+  const datePart = pick(row, ['data', 'data_movimento', 'dia', 'date', 'datacad'])
   const timePart = pick(row, ['hora', 'horario', 'horário'])
   const occurredAt = parseAvecDateTime(datePart, timePart)
 
