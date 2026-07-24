@@ -550,7 +550,7 @@ export async function computeStockKpis(): Promise<StockKpis> {
     select
       count(*)::int as total_products,
       count(*) filter (where current_qty <= 0)::int as zero_products,
-      coalesce(sum(current_qty * coalesce(unit_cost, 0)), 0)::float as total_value,
+      coalesce(sum(greatest(current_qty, 0) * coalesce(unit_cost, 0)), 0)::float as total_value,
       max(last_synced_at) as last_synced_at
     from stock_products
   `) as {
