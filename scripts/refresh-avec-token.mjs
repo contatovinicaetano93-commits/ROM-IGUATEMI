@@ -73,21 +73,44 @@ function setLocalStorage(origin, map) {
   origin.localStorage = Object.entries(map).map(([name, value]) => ({ name, value }))
 }
 
-async function mintSalonTokenWithPlaywright(statePath) {
-  // Resolve o módulo a partir do cache do npx (-p playwright).
-  const resolve = spawnSync(
-    'npx',
-    ['--yes', '-p', 'playwright@1.49.1', 'node', '-e', "process.stdout.write(require.resolve('playwright'))"],
-    { encoding: 'utf8', maxBuffer: 1024 * 1024 },
-  )
-  const playwrightEntry = (resolve.stdout || '').trim()
-  if (resolve.status !== 0 || !playwrightEntry) {
-    throw new Error(`Não resolveu playwright: ${(resolve.stderr || '').slice(0, 300)}`)
+function resolvePlaywrightEntry() {
+  const candidates = [
+    process.env.PLAYWRIGHT_MODULE,
+    '/tmp/pw-avec/node_modules/playwright',
+    'playwright',
+  ].filter(Boolean)
+  for (const c of candidates) {
+    try {
+      return require.resolve(c)
+    } catch {
+      /* try next */
+    }
   }
-  spawnSync('npx', ['--yes', 'playwright@1.49.1', 'install', 'chromium'], {
-    encoding: 'utf8',
-    stdio: 'ignore',
-  })
+  const resolve = spawnSync(
+    'npm',
+    ['root', '-g'],
+    { encoding: 'utf8' },
+  )
+  const g = (resolve.stdout || '').trim()
+  if (g) {
+    try {
+      return require.resolve(`${g}/playwright`)
+    } catch {
+      /* ignore */
+    }
+  }
+  throw new Error(
+    'Playwright não encontrado. Rode: npm i --prefix /tmp/pw-avec playwright && npx --prefix /tmp/pw-avec playwright install chromium',
+  )
+}
+
+async function mintSalonTokenWithPlaywright(statePath) {
+  const playwrightEntry = resolvePlaywrightEntry()
+  spawnSync(
+    process.env.PLAYWRIGHT_CLI || 'npx',
+    ['--yes', 'playwright@1.49.1', 'install', 'chromium'],
+    { encoding: 'utf8', stdio: 'ignore' },
+  )
 
   const script = `
 const { chromium } = require(${JSON.stringify(playwrightEntry)});
@@ -99,8 +122,9 @@ const { chromium } = require(${JSON.stringify(playwrightEntry)});
   await page.goto('https://admin.avec.beauty/admin/', { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(5000);
   const token = await page.evaluate(() => localStorage.getItem('token'));
+  const url = page.url();
   if (!token) {
-    console.error('NO_TOKEN');
+    console.error('NO_TOKEN url=' + url);
     process.exit(2);
   }
   process.stdout.write(token);
@@ -116,7 +140,7 @@ const { chromium } = require(${JSON.stringify(playwrightEntry)});
   const out = (r2.stdout || '').trim()
   if (r2.status !== 0 || !out || out.includes('NO_TOKEN')) {
     throw new Error(
-      `Playwright falhou ao emitir token: ${(r2.stderr || out || '').slice(0, 400)}`,
+      `Playwright falhou ao emitir token (login Avec pode ter expirado): ${(r2.stderr || out || '').slice(0, 400)}`,
     )
   }
   return out
