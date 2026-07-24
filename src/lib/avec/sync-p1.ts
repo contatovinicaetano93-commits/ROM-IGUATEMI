@@ -171,7 +171,7 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
     }
   }
 
-  const acquisition: { channel: string; clients: number }[] = []
+  const acquisitionByChannel = new Map<string, number>()
   let acquisitionOk = false
   const id0003 = resolveId('acquisition')
   if (id0003) {
@@ -182,14 +182,16 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
         const a = normalizeP1AcquisitionRow(row)
         if (!a) continue
         stats.p1_rows = (stats.p1_rows ?? 0) + 1
-        acquisition.push(a)
+        acquisitionByChannel.set(a.channel, (acquisitionByChannel.get(a.channel) ?? 0) + a.clients)
       }
-      acquisition.sort((a, b) => b.clients - a.clients)
       acquisitionOk = true
     } catch (e) {
       stats.errors.push(`P1 0003: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
+  const acquisition = Array.from(acquisitionByChannel.entries())
+    .map(([channel, clients]) => ({ channel, clients }))
+    .sort((a, b) => b.clients - a.clients)
 
   let reactivation_count = 0
   let reactivationOk = false
