@@ -168,8 +168,22 @@ export default function AdminPage() {
     try {
       const res = await apiFetch('/api/avec/sync', { method: 'POST', cache: 'no-store' })
       const json = await res.json()
-      if (json.error) setSyncMsg(`Erro: ${json.error}`)
-      else setSyncMsg(`Sync ${json.data?.status ?? 'ok'} — recarregando…`)
+      if (json.error) {
+        setSyncMsg(`Erro: ${json.error}`)
+      } else if (json.data?.skipped) {
+        const reason = json.data.reason as string | undefined
+        if (reason === 'sync_em_andamento') {
+          setSyncMsg(
+            'Não rodou: outro sync ainda está em andamento. Espere ~1–2 min e clique de novo (ou Atualizar).',
+          )
+        } else if (reason === 'sync_recente') {
+          setSyncMsg(json.data.note ?? 'Sync recente — aguardando janela mínima.')
+        } else {
+          setSyncMsg(json.data.note ?? `Sync ignorado (${reason ?? 'skipped'})`)
+        }
+      } else {
+        setSyncMsg(`Sync ${json.data?.status ?? 'ok'} — recarregando…`)
+      }
       await load()
     } catch (e) {
       setSyncMsg(String(e))

@@ -124,11 +124,20 @@ async function finishAvecSyncRun(
 export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null> {
   const sql = getSql()
   // Skip open (in-flight) rows — begin inserts status='partial' until finish updates it.
+  // Also skip legacy orphans (partial + zero work) that never got in_progress.
   if (kind) {
     const rows = (await sql`
       select * from avec_sync_runs
       where kind = ${kind}
         and coalesce(stats->>'in_progress', 'false') <> 'true'
+        and not (
+          status = 'partial'
+          and coalesce((stats->>'appointments_synced')::int, 0) = 0
+          and coalesce((stats->>'revenue_rows')::int, 0) = 0
+          and coalesce((stats->>'clients_upserted')::int, 0) = 0
+          and coalesce(jsonb_array_length(stats->'errors'), 0) = 0
+          and coalesce(jsonb_array_length(stats->'warnings'), 0) = 0
+        )
       order by created_at desc limit 1
     `) as AvecSyncRun[]
     return rows[0] ?? null
@@ -136,6 +145,14 @@ export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null
   const rows = (await sql`
     select * from avec_sync_runs
     where coalesce(stats->>'in_progress', 'false') <> 'true'
+      and not (
+        status = 'partial'
+        and coalesce((stats->>'appointments_synced')::int, 0) = 0
+        and coalesce((stats->>'revenue_rows')::int, 0) = 0
+        and coalesce((stats->>'clients_upserted')::int, 0) = 0
+        and coalesce(jsonb_array_length(stats->'errors'), 0) = 0
+        and coalesce(jsonb_array_length(stats->'warnings'), 0) = 0
+      )
     order by created_at desc limit 1
   `) as AvecSyncRun[]
   return rows[0] ?? null

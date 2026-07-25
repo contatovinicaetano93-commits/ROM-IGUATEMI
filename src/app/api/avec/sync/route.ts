@@ -120,10 +120,10 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '*/5 * * * *', mode: 'fast', path: '/api/avec/sync' },
+        fast: { schedule: '*/2 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: { schedule: '*/10 * * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
         cadence:
-          'fast a cada 5 min + full a cada 10 min (backup) — tempo real via webhook Avec',
+          'fast a cada 2 min + full a cada 10 min (backup) — tempo real via webhook Avec',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),
