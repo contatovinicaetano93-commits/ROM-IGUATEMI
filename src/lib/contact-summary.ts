@@ -42,7 +42,7 @@ async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
   if (ids.length === 0) return []
   const sql = getSql()
   return (await sql`
-    select * from contacts where id in ${ids}
+    select * from contacts where id = any(${ids}::uuid[])
   `) as ContactRow[]
 }
 
