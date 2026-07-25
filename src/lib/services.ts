@@ -207,7 +207,7 @@ export async function clearOrphanSchedulesForDay(
     update client_services set scheduled_at = null
     where scheduled_at is not null
       and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-      and id not in ${keepServiceIds}
+      and not (id = any(${keepServiceIds}))
     returning id
   `) as { id: string }[]
   return rows.length

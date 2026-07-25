@@ -63,11 +63,19 @@ export interface ContactRow {
   anonymized_at: string | null
 }
 
-function isPhoneUniqueViolation(error: unknown): boolean {
+function isUniqueViolation(error: unknown, ...needles: string[]): boolean {
   const e = error as { code?: string; message?: string; constraint?: string }
   if (e?.code !== '23505') return false
   const hay = `${e.constraint ?? ''} ${e.message ?? ''}`
-  return hay.includes('contacts_phone_idx') || hay.includes('(phone)')
+  return needles.some((n) => hay.includes(n))
+}
+
+function isPhoneUniqueViolation(error: unknown): boolean {
+  return isUniqueViolation(error, 'contacts_phone_idx', '(phone)')
+}
+
+function isAvecIdUniqueViolation(error: unknown): boolean {
+  return isUniqueViolation(error, 'contacts_avec_client_id_idx', '(avec_client_id)')
 }
 
 /** Atualiza contato existente casado por telefone (conflito com novo avec_client_id). */
@@ -139,11 +147,30 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       `) as ContactRow[]
       return rows[0]
     } catch (e) {
-      // Mesmo telefone já ligado a outro avec_client_id (ou seed sem id) — reusa a linha.
-      if (!phone || !isPhoneUniqueViolation(e)) throw e
-      const merged = await mergeContactByPhone(phone, input)
-      if (!merged) throw e
-      return merged
+      // Telefone já ligado a outro id — reusa a linha do telefone.
+      if (phone && isPhoneUniqueViolation(e)) {
+        const merged = await mergeContactByPhone(phone, input)
+        if (merged) return merged
+      }
+      // Corrida / índice unique: carrega pelo avec_client_id e atualiza.
+      if (isAvecIdUniqueViolation(e)) {
+        const existing = await getContactByAvecId(input.avecClientId)
+        if (existing) {
+          const nextStatus = resolveStatus(existing.status, input.status) ?? existing.status
+          const updated = (await sql`
+            update contacts set
+              last_contact_at = now(),
+              name = coalesce(${input.name ?? null}, name),
+              email = coalesce(${input.email ?? null}, email),
+              phone = coalesce(${phone}, phone),
+              status = ${nextStatus}
+            where id = ${existing.id}
+            returning *
+          `) as ContactRow[]
+          if (updated[0]) return updated[0]
+        }
+      }
+      throw e
     }
   }
 
