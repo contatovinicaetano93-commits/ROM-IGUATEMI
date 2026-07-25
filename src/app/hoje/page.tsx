@@ -56,6 +56,7 @@ interface HojeData {
     appointments: number
     attended: number
     no_shows: number
+    cancelled: number
     ticket_avg: number | null
     new_clients: number
   }
@@ -182,10 +183,10 @@ export default function HojePage() {
         />
         <KpiCard
           icon={<AlertTriangle size={16} />}
-          label="No-shows"
-          value={loading ? '—' : String(salon?.no_shows ?? 0)}
+          label="Cancelamentos"
+          value={loading ? '—' : String(salon?.cancelled ?? 0)}
           loading={loading}
-          warn={(salon?.no_shows ?? 0) > 0}
+          warn={(salon?.cancelled ?? 0) > 0}
           source={avecSource}
         />
         <KpiCard
