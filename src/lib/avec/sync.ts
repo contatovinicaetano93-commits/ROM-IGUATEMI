@@ -32,7 +32,6 @@ import {
   normalizeAttendanceRow,
   normalizeRevenueRow,
   normalizeCancellationRow,
-  parseAvecDateTime,
   parseServiceTempoMinutes,
   guessServiceCategory,
   isNailService,
@@ -236,14 +235,31 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         const had = existing.some((s) => s.name.toLowerCase() === appt.serviceName!.toLowerCase())
         const service = await findOrCreateService(contact.id, appt.serviceName)
         if (!had) stats.services_created++
-        if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
-          await scheduleService(service.id, appt.scheduledAt, appt.professional)
-          stats.services_scheduled++
-        } else if (appt.professional && !service.professional_name) {
-          await patchServiceVisitMeta(service.id, {
+
+        // 0051 status Pago = comanda fechada. Usa hora_ini do agendamento (único relógio
+        // estável que a Avec manda) — evita Concluídos todos com o mesmo horário inventado.
+        const isPaid = /pago|finaliz|conclu|atendid|realiz/.test(status)
+        const isCancelled = /cancel/.test(status)
+
+        if (isPaid) {
+          await markServiceDone(service.id, {
+            doneAt: appt.scheduledAt,
             professionalName: appt.professional,
+            lastPrice: appt.price,
           })
+          await updateContact(contact.id, { status: 'convertido' })
+          stats.services_completed++
+        } else if (!isCancelled) {
+          if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
+            await scheduleService(service.id, appt.scheduledAt, appt.professional)
+            stats.services_scheduled++
+          } else if (appt.professional && !service.professional_name) {
+            await patchServiceVisitMeta(service.id, {
+              professionalName: appt.professional,
+            })
+          }
         }
+
         if (appt.professional && isNailService(appt.serviceName)) {
           await setPreferredManicurist(contact.id, appt.professional)
         } else if (appt.professional && isHairService(appt.serviceName)) {
@@ -310,17 +326,28 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         const service = await findOrCreateService(contact.id, att.serviceName)
         const isNew = servicesCreatedRecently(service)
         if (isNew) stats.services_created++
-        await markServiceDone(service.id, {
-          doneAt: att.attendedAt,
-          professionalName: att.professional,
-          lastPrice: att.price,
-        })
+        // 0002 desta unidade só manda ultima_visita (data) — sem hora. Não sobrescrever
+        // o horário do 0051 Pago com meia-noite/placeholder.
+        const doneAt = att.endedAt ?? att.startedAt ?? null
+        if (doneAt) {
+          await markServiceDone(service.id, {
+            doneAt,
+            professionalName: att.professional,
+            lastPrice: att.price,
+          })
+          stats.services_completed++
+        } else if (att.professional || att.price != null) {
+          await patchServiceVisitMeta(service.id, {
+            professionalName: att.professional,
+            lastPrice: att.price,
+            allowLastPrice: true,
+          })
+        }
         if (att.professional && isNailService(att.serviceName)) {
           await setPreferredManicurist(contact.id, att.professional)
         } else if (att.professional && isHairService(att.serviceName)) {
           await setPreferredHairstylist(contact.id, att.professional)
         }
-        stats.services_completed++
       }
 
       stats.attendances_synced++
@@ -563,7 +590,9 @@ async function syncReturningFrom0002(
         returningByDay.set(day, (returningByDay.get(day) ?? 0) + 1)
       }
 
-      // Backfill last_done_at só p/ quem veio hoje (evita reescrever milhares no cron).
+      // Contato/serviço de quem veio hoje — NÃO inventar horário (antes usava 12:00 e
+      // apagava o last_done_at real do syncAttendances → Pipeline Concluídos todos iguais).
+      // Só marca concluído se a Avec mandou hora real (fim ou início).
       if (att.lastVisitDay === today) {
         try {
           const contact = await upsertContact({
@@ -575,12 +604,18 @@ async function syncReturningFrom0002(
           })
           const serviceName = att.serviceName || 'Atendimento'
           const service = await findOrCreateService(contact.id, serviceName)
-          const doneAt = parseAvecDateTime(att.lastVisitDay, '12:00')
+          const doneAt = att.endedAt ?? att.startedAt ?? null
           if (doneAt) {
             await markServiceDone(service.id, {
               doneAt,
               professionalName: att.professional,
               lastPrice: att.price,
+            })
+          } else if (att.professional || att.price != null) {
+            await patchServiceVisitMeta(service.id, {
+              professionalName: att.professional,
+              lastPrice: att.price,
+              allowLastPrice: true,
             })
           }
         } catch (e) {
@@ -700,17 +735,18 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         stats.errors.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
     } else {
-      // Full: cada etapa isolada — 403/WAF num relatório não pode impedir P1/P2/P3.
+      // Full: P1/P2/P3 primeiro — ocupação/aquisição não pode morrer no timeout 300s
+      // depois de agenda/atendimentos. Cada etapa isolada (403/WAF não derruba o resto).
       for (const [label, fn] of [
+        ['P1', () => syncP1Kpis(stats, syncRunId)],
+        ['P2', () => syncP2Kpis(stats, syncRunId)],
+        ['P3', () => syncP3Kpis(stats, syncRunId)],
         ['appointments', () => syncAppointments(stats, mode, syncRunId)],
         ['attendances', () => syncAttendances(stats, mode, syncRunId)],
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],
         ['cancellations', () => syncCancellations(stats, mode, syncRunId)],
         ['no-shows-0248', () => syncNoShows0248(stats, mode, syncRunId)],
         ['tm-0223', () => syncDurationFrom0223(stats, syncRunId)],
-        ['P1', () => syncP1Kpis(stats, syncRunId)],
-        ['P2', () => syncP2Kpis(stats, syncRunId)],
-        ['P3', () => syncP3Kpis(stats, syncRunId)],
       ] as const) {
         try {
           await fn()
