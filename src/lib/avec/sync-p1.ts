@@ -7,7 +7,10 @@ import {
 } from '@/lib/avec/normalize'
 import { resolveReportId, getDailyReports } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
-import { normalizeProKey } from '@/lib/director-report/match-pro'
+import {
+  findNearProInMap,
+  occupancyMergeKey,
+} from '@/lib/director-report/match-pro'
 import { upsertSalonP1Daily, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
 
 type SyncStatsLike = {
@@ -61,10 +64,15 @@ function resolveId(mapper: string): string | null {
   return resolveReportId(def)
 }
 
+function normalizeFallbackKey(name: string): string {
+  return name.trim().toLowerCase() || '_unknown'
+}
+
 function getOrCreatePro(byPro: Map<string, P1ProfessionalRow>, name: string): P1ProfessionalRow {
-  const key = normalizeProKey(name)
-  const cur = byPro.get(key)
-  if (cur) return cur
+  const near = findNearProInMap(byPro, name)
+  if (near) return near.value
+
+  const key = occupancyMergeKey(name)
   const fresh: P1ProfessionalRow = {
     name,
     revenue: 0,
@@ -72,8 +80,27 @@ function getOrCreatePro(byPro: Map<string, P1ProfessionalRow>, name: string): P1
     ticket_avg: 0,
     occupancy: null,
   }
-  byPro.set(key, fresh)
+  byPro.set(key || normalizeFallbackKey(name), fresh)
   return fresh
+}
+
+/**
+ * Aplica ocupação 0126 sobre o mapa 0021 sem inventar valor:
+ * só grava se occupancy != null (caller) e usa near-match quando o nome diverge.
+ */
+function applyOccupancy(
+  byPro: Map<string, P1ProfessionalRow>,
+  name: string,
+  occupancy: number,
+): void {
+  const near = findNearProInMap(byPro, name)
+  if (near) {
+    near.value.occupancy = occupancy
+    return
+  }
+  // Sem match no faturamento: cria linha só com ocupação (não inventa revenue).
+  const cur = getOrCreatePro(byPro, name)
+  cur.occupancy = occupancy
 }
 
 /**
@@ -86,8 +113,8 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const params = { inicio, fim, limit: 250 }
 
   // professionals é alimentado por DOIS relatórios independentes (0021 revenue +
-  // 0126 ocupação) fundidos no mesmo registro por nome normalizado. Só marca ok
-  // quando os relatórios CONFIGURADOS tiverem todos sucesso — senão um sucesso
+  // 0126 ocupação) fundidos no mesmo registro por nome normalizado / near-match.
+  // Só marca ok quando os relatórios CONFIGURADOS tiverem todos sucesso — senão um sucesso
   // parcial grava metade do registro (ex: revenue zerado) por cima do dado bom.
   const byPro = new Map<string, P1ProfessionalRow>()
   let professionalsAttempted = false
@@ -127,8 +154,7 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
         const o = normalizeP1OccupancyRow(row)
         if (!o || o.occupancy == null) continue
         stats.p1_rows = (stats.p1_rows ?? 0) + 1
-        const cur = getOrCreatePro(byPro, o.name)
-        cur.occupancy = o.occupancy
+        applyOccupancy(byPro, o.name, o.occupancy)
       }
     } catch (e) {
       professionalsFailed = true

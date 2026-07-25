@@ -179,6 +179,8 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
           phone: c.phone,
           channel: 'avec',
           source: 'avec_sync_clients',
+          // Base massiva Avec ≠ lead novo do funil (WhatsApp/manual).
+          status: 'importado',
         })
         stats.clients_upserted++
       } catch (e) {

@@ -186,26 +186,95 @@ async function sumAttended(from: string, to: string): Promise<number> {
  * Custo de mercadoria vendida (proxy): soma do custo das saídas de estoque no período
  * (Avec 0044 → stock_movements). Não é CMV fiscal completo.
  */
-async function sumStockCogs(from: string, to: string): Promise<number> {
+export interface CmvCoverage {
+  /** Soma do CMV (custo movimento ou fallback produto). */
+  cmv: number
+  /** Total de saídas no período. */
+  saidas_total: number
+  /** Saídas com `stock_movements.cost` preenchido (> 0). */
+  with_movement_cost: number
+  /** Saídas sem cost na movimento, mas com custo no produto (unit/avg). */
+  with_product_fallback: number
+  /** Saídas sem custo útil (zeram no CMV). */
+  with_zero: number
+  /**
+   * % das saídas com custo na própria saída (não fallback).
+   * Null se não houver saídas.
+   */
+  movement_cost_pct: number | null
+  /**
+   * % das saídas com algum custo (movimento ou produto).
+   * Null se não houver saídas.
+   */
+  any_cost_pct: number | null
+}
+
+export const EMPTY_CMV_COVERAGE: CmvCoverage = {
+  cmv: 0,
+  saidas_total: 0,
+  with_movement_cost: 0,
+  with_product_fallback: 0,
+  with_zero: 0,
+  movement_cost_pct: null,
+  any_cost_pct: null,
+}
+
+async function sumStockCogs(from: string, to: string): Promise<CmvCoverage> {
   const sql = getSql()
   try {
     // 0044 frequentemente manda cost=null nas saídas — fallback qty × custo do produto.
     const rows = (await sql`
-      select coalesce(sum(
-        coalesce(
-          sm.cost,
-          sm.quantity * coalesce(sp.unit_cost, sp.avg_cost, 0)
-        )
-      ), 0)::float as cmv
+      select
+        coalesce(sum(
+          coalesce(
+            sm.cost,
+            sm.quantity * coalesce(sp.unit_cost, sp.avg_cost, 0)
+          )
+        ), 0)::float as cmv,
+        count(*)::int as saidas_total,
+        count(*) filter (
+          where sm.cost is not null and sm.cost > 0
+        )::int as with_movement_cost,
+        count(*) filter (
+          where (sm.cost is null or sm.cost <= 0)
+            and coalesce(sp.unit_cost, sp.avg_cost, 0) > 0
+        )::int as with_product_fallback,
+        count(*) filter (
+          where (sm.cost is null or sm.cost <= 0)
+            and coalesce(sp.unit_cost, sp.avg_cost, 0) <= 0
+        )::int as with_zero
       from stock_movements sm
       left join stock_products sp on sp.id = sm.product_id
       where sm.type = 'saida'
         and (sm.occurred_at at time zone 'America/Sao_Paulo')::date >= ${from}::date
         and (sm.occurred_at at time zone 'America/Sao_Paulo')::date <= ${to}::date
-    `) as { cmv: number }[]
-    return Math.round(Number(rows[0]?.cmv ?? 0) * 100) / 100
+    `) as {
+      cmv: number
+      saidas_total: number
+      with_movement_cost: number
+      with_product_fallback: number
+      with_zero: number
+    }[]
+
+    const row = rows[0]
+    const saidas_total = Number(row?.saidas_total ?? 0) || 0
+    const with_movement_cost = Number(row?.with_movement_cost ?? 0) || 0
+    const with_product_fallback = Number(row?.with_product_fallback ?? 0) || 0
+    const with_zero = Number(row?.with_zero ?? 0) || 0
+    const pct = (n: number) =>
+      saidas_total > 0 ? Math.round((n / saidas_total) * 1000) / 10 : null
+
+    return {
+      cmv: Math.round(Number(row?.cmv ?? 0) * 100) / 100,
+      saidas_total,
+      with_movement_cost,
+      with_product_fallback,
+      with_zero,
+      movement_cost_pct: pct(with_movement_cost),
+      any_cost_pct: pct(with_movement_cost + with_product_fallback),
+    }
   } catch {
-    return 0
+    return { ...EMPTY_CMV_COVERAGE }
   }
 }
 
@@ -251,6 +320,8 @@ export interface FinanceKpiBucket {
   daily: FinanceDayPoint[]
   /** CMV proxy: custo das saídas de estoque no mês. */
   cmv: number
+  /** Cobertura do CMV: quantas saídas tinham custo real vs fallback vs zero. */
+  cmv_coverage: CmvCoverage
   /** Margem após despesas e CMV: (receita − despesas − CMV) / receita. */
   margin_after_cmv: number | null
   /** (receita - despesas) / receita, em % — null se não houver receita no período. */
@@ -271,15 +342,17 @@ export interface FinanceKpis {
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
   const { from, to } = monthRange(monthKey)
-  const [revenue, expenses, payment_mix, fiscal_split, attended, daily, cmv] = await Promise.all([
-    sumRevenue(from, to),
-    sumExpenses(from, to),
-    getPaymentMixRange(from, to),
-    getFiscalSplitSummary(from, to),
-    sumAttended(from, to),
-    listDailyMetrics(from, to),
-    sumStockCogs(from, to),
-  ])
+  const [revenue, expenses, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
+    await Promise.all([
+      sumRevenue(from, to),
+      sumExpenses(from, to),
+      getPaymentMixRange(from, to),
+      getFiscalSplitSummary(from, to),
+      sumAttended(from, to),
+      listDailyMetrics(from, to),
+      sumStockCogs(from, to),
+    ])
+  const cmv = cmvCoverage.cmv
   const revenueRounded = Math.round(revenue * 100) / 100
   const expensesRounded = Math.round(expenses * 100) / 100
   const gross_margin =
@@ -299,6 +372,7 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
     ticket_avg,
     daily,
     cmv,
+    cmv_coverage: cmvCoverage,
     margin_after_cmv,
     gross_margin,
     cash_flow: Math.round((revenue - expenses) * 100) / 100,

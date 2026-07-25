@@ -31,6 +31,9 @@ interface Contact {
   top_action: string | null
 }
 
+/** Status fixos do funil — sempre disponíveis no filtro (mesmo com lista vazia). */
+const FUNNEL_STATUS_OPTIONS = ['novo', 'importado', 'em_atendimento', 'agendado', 'convertido', 'perdido']
+
 export default function ContatosPage() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -40,16 +43,26 @@ export default function ContatosPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [channelFilter, setChannelFilter] = useState<string>('all')
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
 
-  async function load() {
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300)
+    return () => window.clearTimeout(t)
+  }, [query])
+
+  async function load(searchQ = debouncedQuery) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ sort: 'urgency' })
       if (pendingOnly) params.set('pending', 'true')
+      if (searchQ) params.set('q', searchQ)
       const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) setError(json.error)
-      else setContacts(json.data ?? [])
+      else {
+        setError(null)
+        setContacts(json.data ?? [])
+      }
     } catch (e) {
       setError(String(e))
     } finally {
@@ -58,24 +71,23 @@ export default function ContatosPage() {
   }
 
   useEffect(() => {
-    void load()
+    void load(debouncedQuery)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingOnly])
+  }, [pendingOnly, debouncedQuery])
 
-  const statusOptions = Array.from(new Set(contacts.map((c) => c.status)))
+  const statusFromData = Array.from(new Set(contacts.map((c) => c.status)))
+  const statusOptions = Array.from(new Set([...FUNNEL_STATUS_OPTIONS, ...statusFromData]))
   const channelOptions = Array.from(new Set(contacts.map((c) => c.channel)))
-  const hasFilters = statusOptions.length > 0 || channelOptions.length > 0
+  const hasFilters = true
 
-  const q = query.trim().toLowerCase()
-  const qDigits = q.replace(/\D/g, '')
   const filtered = contacts.filter((c) => {
     if (statusFilter !== 'all' && c.status !== statusFilter) return false
     if (channelFilter !== 'all' && c.channel !== channelFilter) return false
-    if (!q) return true
-    const nameMatch = c.name?.toLowerCase().includes(q) ?? false
-    const phoneMatch = qDigits.length > 0 && (c.phone?.replace(/\D/g, '').includes(qDigits) ?? false)
-    return nameMatch || phoneMatch
+    return true
   })
+
+  const emptyNovoHint =
+    statusFilter === 'novo' && !loading && filtered.length === 0 && !debouncedQuery
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -97,50 +109,46 @@ export default function ContatosPage() {
         </div>
       </div>
 
-      {contacts.length > 0 && (
-        <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => setPendingOnly((v) => !v)}
+          aria-pressed={pendingOnly}
+          className={`flex items-center justify-center gap-2 rounded-2xl border py-2.5 text-sm font-medium transition-colors ${
+            pendingOnly
+              ? 'border-gold bg-gold/15 text-gold'
+              : 'border-border bg-card text-muted active:text-foreground'
+          }`}
+        >
+          <AlertTriangle size={15} />
+          {pendingOnly ? 'Mostrando só pendentes' : 'Só ações pendentes'}
+        </button>
+        <UrgencyBadgeLegend />
+      </div>
+
+      <div className="relative">
+        <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          type="search"
+          inputMode="search"
+          enterKeyHint="search"
+          aria-label="Buscar por nome ou telefone"
+          placeholder="Buscar por nome ou telefone (toda a base)"
+          className="w-full rounded-2xl border border-border bg-card py-2.5 pl-10 pr-10 text-base outline-none focus:border-gold"
+        />
+        {query && (
           <button
             type="button"
-            onClick={() => setPendingOnly((v) => !v)}
-            aria-pressed={pendingOnly}
-            className={`flex items-center justify-center gap-2 rounded-2xl border py-2.5 text-sm font-medium transition-colors ${
-              pendingOnly
-                ? 'border-gold bg-gold/15 text-gold'
-                : 'border-border bg-card text-muted active:text-foreground'
-            }`}
+            onClick={() => setQuery('')}
+            aria-label="Limpar busca"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted active:text-foreground"
           >
-            <AlertTriangle size={15} />
-            {pendingOnly ? 'Mostrando só pendentes' : 'Só ações pendentes'}
+            <X size={18} />
           </button>
-          <UrgencyBadgeLegend />
-        </div>
-      )}
-
-      {contacts.length > 0 && (
-        <div className="relative">
-          <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            type="search"
-            inputMode="search"
-            enterKeyHint="search"
-            aria-label="Buscar por nome ou telefone"
-            placeholder="Buscar por nome ou telefone"
-            className="w-full rounded-2xl border border-border bg-card py-2.5 pl-10 pr-10 text-base outline-none focus:border-gold"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              aria-label="Limpar busca"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted active:text-foreground"
-            >
-              <X size={18} />
-            </button>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {hasFilters && (
         <div className="flex flex-col gap-2">
@@ -150,12 +158,20 @@ export default function ContatosPage() {
             active={statusFilter}
             onSelect={setStatusFilter}
           />
-          <FilterRow
-            label="Canal"
-            options={channelOptions.map((c) => ({ value: c, label: CHANNEL_LABEL[c] ?? c }))}
-            active={channelFilter}
-            onSelect={setChannelFilter}
-          />
+          {channelOptions.length > 0 && (
+            <FilterRow
+              label="Canal"
+              options={channelOptions.map((c) => ({ value: c, label: CHANNEL_LABEL[c] ?? c }))}
+              active={channelFilter}
+              onSelect={setChannelFilter}
+            />
+          )}
+          <p className="text-[0.7rem] leading-relaxed text-muted">
+            <span className="font-medium text-foreground/80">Novo lead</span> = WhatsApp/manual.
+            {' '}
+            <span className="font-medium text-foreground/80">Importado</span> = base Avec (0004), não
+            é lead novo do funil.
+          </p>
         </div>
       )}
 
@@ -177,11 +193,29 @@ export default function ContatosPage() {
             </div>
           ))}
 
-        {!loading && contacts.length === 0 && !error && (
+        {!loading && contacts.length === 0 && !error && !debouncedQuery && (
           <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato ainda. Toque em “Novo contato”.</p>
         )}
 
-        {!loading && contacts.length > 0 && filtered.length === 0 && (
+        {!loading && emptyNovoHint && (
+          <p className="px-4 py-12 text-center text-sm text-muted">
+            Nenhum lead novo no momento — a base Avec aparece em{' '}
+            <button
+              type="button"
+              className="text-gold underline-offset-2 hover:underline"
+              onClick={() => setStatusFilter('importado')}
+            >
+              Importado
+            </button>
+            .
+          </p>
+        )}
+
+        {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && (
+          <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato encontrado.</p>
+        )}
+
+        {!loading && contacts.length === 0 && debouncedQuery && !error && (
           <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato encontrado.</p>
         )}
 

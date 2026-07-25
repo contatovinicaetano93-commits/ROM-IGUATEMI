@@ -5,7 +5,8 @@ import { Info, X } from 'lucide-react'
 import { CollapsibleBody, SectionToggleHeader, useSectionOpen } from './CollapsibleSection'
 
 export const STATUS_LABEL: Record<string, string> = {
-  novo: 'Novo',
+  novo: 'Novo lead',
+  importado: 'Importado',
   em_atendimento: 'Em atendimento',
   agendado: 'Agendado',
   convertido: 'Convertido',
@@ -15,6 +16,7 @@ export const STATUS_LABEL: Record<string, string> = {
 // tom = classe de cor semântica pra pills e destaques
 export const STATUS_TONE: Record<string, string> = {
   novo: 'bg-gold/15 text-gold',
+  importado: 'bg-border text-muted',
   em_atendimento: 'bg-sky-500/15 text-sky-300',
   agendado: 'bg-violet-500/15 text-violet-300',
   convertido: 'bg-success/15 text-success',

@@ -30,13 +30,29 @@ function mockBucketSql(opts: {
   attended?: number
   daily?: unknown[]
   cmv?: number
+  saidas_total?: number
+  with_movement_cost?: number
+  with_product_fallback?: number
+  with_zero?: number
 }) {
+  const saidas = opts.saidas_total ?? (opts.cmv ? 10 : 0)
+  const withMov = opts.with_movement_cost ?? (opts.cmv ? 4 : 0)
+  const withFb = opts.with_product_fallback ?? (opts.cmv ? 4 : 0)
+  const withZero = opts.with_zero ?? Math.max(0, saidas - withMov - withFb)
   sqlMock
     .mockResolvedValueOnce([{ revenue: opts.revenue }])
     .mockResolvedValueOnce([{ total: opts.expenses }])
     .mockResolvedValueOnce([{ attended: opts.attended ?? 0 }])
     .mockResolvedValueOnce(opts.daily ?? [])
-    .mockResolvedValueOnce([{ cmv: opts.cmv ?? 0 }])
+    .mockResolvedValueOnce([
+      {
+        cmv: opts.cmv ?? 0,
+        saidas_total: saidas,
+        with_movement_cost: withMov,
+        with_product_fallback: withFb,
+        with_zero: withZero,
+      },
+    ])
 }
 
 describe('finance', () => {
@@ -132,6 +148,10 @@ describe('finance', () => {
       expect(result.current.ticket_avg).toBe(200)
       expect(result.current.cmv).toBe(500)
       expect(result.current.margin_after_cmv).toBe(55)
+      expect(result.current.cmv_coverage.saidas_total).toBe(10)
+      expect(result.current.cmv_coverage.with_movement_cost).toBe(4)
+      expect(result.current.cmv_coverage.movement_cost_pct).toBe(40)
+      expect(result.current.cmv_coverage.any_cost_pct).toBe(80)
       expect(result.previous.month).toBe('2026-06')
       expect(result.previous.gross_margin).toBe(75)
     })

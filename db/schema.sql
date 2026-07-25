@@ -11,7 +11,7 @@ create table if not exists contacts (
   email text,
   channel text not null check (channel in ('whatsapp', 'telegram', 'avec', 'instagram', 'manual')),
   source text not null default 'manual',
-  status text not null default 'novo' check (status in ('novo', 'em_atendimento', 'agendado', 'convertido', 'perdido')),
+  status text not null default 'novo' check (status in ('novo', 'importado', 'em_atendimento', 'agendado', 'convertido', 'perdido')),
   avec_client_id text,
   notes text,
   preferred_manicurist text,

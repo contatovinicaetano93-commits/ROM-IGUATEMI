@@ -13,14 +13,22 @@ interface UpsertContactInput {
   status?: ContactStatus
 }
 
-export const CONTACT_STATUSES = ['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido'] as const
+export const CONTACT_STATUSES = [
+  'novo',
+  'importado',
+  'em_atendimento',
+  'agendado',
+  'convertido',
+  'perdido',
+] as const
 export type ContactStatus = (typeof CONTACT_STATUSES)[number]
 
 const STATUS_RANK: Record<ContactStatus, number> = {
-  novo: 0,
-  em_atendimento: 1,
-  agendado: 2,
-  convertido: 3,
+  importado: 0,
+  novo: 1,
+  em_atendimento: 2,
+  agendado: 3,
+  convertido: 4,
   perdido: -1,
 }
 
@@ -83,7 +91,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         email = coalesce(excluded.email, contacts.email),
         phone = coalesce(excluded.phone, contacts.phone),
         status = case
-          when contacts.status in ('novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
+          when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
+          when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
           when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
           when contacts.status = 'convertido' then 'convertido'
           when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
@@ -111,7 +120,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       email = coalesce(excluded.email, contacts.email),
       avec_client_id = coalesce(excluded.avec_client_id, contacts.avec_client_id),
       status = case
-        when contacts.status in ('novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
+        when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
+        when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
         when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
         when contacts.status = 'convertido' then 'convertido'
         when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'

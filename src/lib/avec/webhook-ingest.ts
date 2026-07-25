@@ -87,7 +87,7 @@ export type NormalizedAvecWebhook = {
   completed_at?: string
   professional_name?: string
   price?: number
-  status?: 'novo' | 'em_atendimento' | 'agendado' | 'convertido' | 'perdido'
+  status?: 'novo' | 'importado' | 'em_atendimento' | 'agendado' | 'convertido' | 'perdido'
 }
 
 /** Normaliza payloads Avec / Zapier / Make / bridge manual para o formato ROM. */
