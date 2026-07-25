@@ -97,7 +97,8 @@ export async function POST(req: NextRequest) {
   try {
     if (!(await authorize(req))) return err('Não autorizado', 401)
     const cron = isCronAuthorized(req)
-    return await executeSync(req, { force: !cron, defaultMode: 'full', cron })
+    // Manual/default POST = fast (agenda/caixa). Full só com ?mode=full — evita 504 no Admin.
+    return await executeSync(req, { force: !cron, defaultMode: 'fast', cron })
   } catch (e) {
     return handleError(e)
   }
