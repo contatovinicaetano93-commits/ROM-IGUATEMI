@@ -58,6 +58,13 @@ describe('findNearProInMap', () => {
     expect(findNearProInMap(byPro, 'DOUGLAS GARCIA')?.value.name).toBe('DOUGLAS DA CONCEIÇÃO GARCIA')
   })
 
+  it('casa sobrenome com typo leve (kampos/campos)', () => {
+    const byPro = new Map([
+      [occupancyMergeKey('LUCAS CAMPOS DE MACEDO'), { name: 'LUCAS CAMPOS DE MACEDO', occupancy: null as number | null }],
+    ])
+    expect(findNearProInMap(byPro, ' LUCAS.KAMPOS')?.value.name).toBe('LUCAS CAMPOS DE MACEDO')
+  })
+
   it('não adivinha quando dois batem no mesmo first+last', () => {
     const byPro = new Map([
       ['lucas kampos', { name: 'Lucas Kampos' }],

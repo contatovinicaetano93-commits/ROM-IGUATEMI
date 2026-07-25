@@ -61,6 +61,40 @@ export function firstAndLastSignificantKey(key: string): string | null {
   return `${tokens[0]} ${tokens[tokens.length - 1]}`
 }
 
+/** Distância de edição (Levenshtein) — só para tokens curtos de sobrenome. */
+export function editDistance(a: string, b: string): number {
+  if (a === b) return 0
+  if (!a.length) return b.length
+  if (!b.length) return a.length
+  const prev = new Array<number>(b.length + 1)
+  const cur = new Array<number>(b.length + 1)
+  for (let j = 0; j <= b.length; j++) prev[j] = j
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = i
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      cur[j] = Math.min(cur[j - 1]! + 1, prev[j]! + 1, prev[j - 1]! + cost)
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = cur[j]!
+  }
+  return prev[b.length]!
+}
+
+/**
+ * Prenome igual + sobrenome do nome curto ≈ algum token do longo (≤1 edição, len≥4).
+ * Ex.: "lucas kampos" ↔ "lucas campos de macedo" (kampos≈campos).
+ */
+export function isFuzzyLastSignificantMatch(a: string, b: string): boolean {
+  const ta = significantNameTokens(a)
+  const tb = significantNameTokens(b)
+  if (ta.length < 2 || tb.length < 2) return false
+  if (ta[0] !== tb[0]) return false
+  const [short, long] = ta.length <= tb.length ? [ta, tb] : [tb, ta]
+  const needle = short[short.length - 1]!
+  if (needle.length < 4) return false
+  return long.slice(1).some((tok) => tok.length >= 4 && editDistance(needle, tok) <= 1)
+}
+
 /**
  * Chave canônica para fundir 0021↔0126: normaliza + tira cargo.
  */
@@ -104,6 +138,12 @@ export function findNearProInMap<T>(
 
     // Apelido ⊂ nome completo (ex.: "mauricio carvalho" ⊂ "mauricio de carvalho lima").
     if (isSignificantTokenSubset(key, k) || isSignificantTokenSubset(k, key)) {
+      candidates.push({ key: k, value })
+      continue
+    }
+
+    // Sobrenome com typo leve (kampos/campos) — só se único.
+    if (isFuzzyLastSignificantMatch(key, k)) {
       candidates.push({ key: k, value })
       continue
     }
@@ -160,7 +200,8 @@ export function matchDirectorProfessional(
     if (fl && pFl && fl === pFl) return true
     const pFlSig = firstAndLastSignificantKey(pk)
     if (flSig && pFlSig && flSig === pFlSig) return true
-    return isSignificantTokenSubset(key, pk) || isSignificantTokenSubset(pk, key)
+    if (isSignificantTokenSubset(key, pk) || isSignificantTokenSubset(pk, key)) return true
+    return isFuzzyLastSignificantMatch(key, pk)
   })
   return partialMatches.length === 1 ? partialMatches[0]! : null
 }
