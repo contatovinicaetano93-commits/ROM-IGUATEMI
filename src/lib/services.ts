@@ -184,6 +184,57 @@ export async function scheduleService(
   return rows[0] ?? null
 }
 
+/**
+ * Remove agendamentos órfãos do dia — serviços ainda com scheduled_at hoje
+ * que não estão na agenda aberta da Avec (0051). Evita KPI/lista inflados
+ * depois que o status virou Pago/Cancelado.
+ */
+export async function clearOrphanSchedulesForDay(
+  day: string,
+  keepServiceIds: string[],
+): Promise<number> {
+  const sql = getSql()
+  if (keepServiceIds.length === 0) {
+    const rows = (await sql`
+      update client_services set scheduled_at = null
+      where scheduled_at is not null
+        and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      returning id
+    `) as { id: string }[]
+    return rows.length
+  }
+  const rows = (await sql`
+    update client_services set scheduled_at = null
+    where scheduled_at is not null
+      and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      and id not in ${keepServiceIds}
+    returning id
+  `) as { id: string }[]
+  return rows.length
+}
+
+/** Agendamentos abertos só do dia (painel Hoje / alinhado ao Pipeline). */
+export async function listTodaySchedules(
+  day: string,
+  limit = 150,
+): Promise<ScheduledServiceRow[]> {
+  const sql = getSql()
+  return (await sql`
+    select cs.*, c.name as contact_name
+    from client_services cs
+    join contacts c on c.id = cs.contact_id
+    where cs.active = true
+      and cs.scheduled_at is not null
+      and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      and (
+        cs.last_done_at is null
+        or (cs.last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
+      )
+    order by cs.scheduled_at asc
+    limit ${limit}
+  `) as ScheduledServiceRow[]
+}
+
 export async function setServiceProfessional(
   serviceId: string,
   professionalName: string

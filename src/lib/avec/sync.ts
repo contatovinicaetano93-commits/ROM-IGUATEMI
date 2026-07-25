@@ -13,6 +13,8 @@ import {
   scheduleService,
   markServiceDone,
   patchServiceVisitMeta,
+  clearOrphanSchedulesForDay,
+  clearServiceSchedule,
 } from '@/lib/services'
 import {
   fetchAllAvecReport,
@@ -202,22 +204,30 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
   const today = todayIso()
   const noShowsByDay = new Map<string, number>()
+  /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
+  const todayOpenServiceIds: string[] = []
+  let todayBooked = 0
+  let todayRows = 0
 
   for (const row of result.rows) {
     try {
       const appt = normalizeAppointmentRow(row)
       if (!appt) continue
 
-      if (mode === 'fast' && appt.scheduledAt) {
-        const day = toSalonDateIso(appt.scheduledAt)
-        if (day !== today) continue
-      }
+      const apptDay = appt.scheduledAt ? toSalonDateIso(appt.scheduledAt) : null
+      if (mode === 'fast' && apptDay && apptDay !== today) continue
 
       // No-show via status da agenda 0051 (fonte canônica: 0248 status=0.6).
       const status = (appt.status ?? '').toLowerCase()
       if (/falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu/.test(status) && appt.scheduledAt) {
-        const day = toSalonDateIso(appt.scheduledAt)
-        if (day) noShowsByDay.set(day, (noShowsByDay.get(day) ?? 0) + 1)
+        if (apptDay) noShowsByDay.set(apptDay, (noShowsByDay.get(apptDay) ?? 0) + 1)
+      }
+
+      const isPaid = /pago|finaliz|conclu|atendid|realiz/.test(status)
+      const isCancelled = /cancel/.test(status)
+      if (apptDay === today) {
+        todayRows++
+        if (!isCancelled) todayBooked++
       }
 
       const contact = await upsertContact({
@@ -227,7 +237,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         phone: appt.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_appointments_fast' : 'avec_sync_appointments',
-        status: 'agendado',
+        status: isPaid ? 'convertido' : 'agendado',
       })
 
       if (appt.serviceName && appt.scheduledAt) {
@@ -238,16 +248,12 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
         // 0051 status Pago = comanda fechada. Usa hora_ini do agendamento (único relógio
         // estável que a Avec manda) — evita Concluídos todos com o mesmo horário inventado.
-        const isPaid = /pago|finaliz|conclu|atendid|realiz/.test(status)
-        const isCancelled = /cancel/.test(status)
-
         if (isPaid) {
           await markServiceDone(service.id, {
             doneAt: appt.scheduledAt,
             professionalName: appt.professional,
             lastPrice: appt.price,
           })
-          await updateContact(contact.id, { status: 'convertido' })
           stats.services_completed++
         } else if (!isCancelled) {
           if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
@@ -258,6 +264,9 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
               professionalName: appt.professional,
             })
           }
+          if (apptDay === today) todayOpenServiceIds.push(service.id)
+        } else if (isCancelled && apptDay === today && service.scheduled_at) {
+          await clearServiceSchedule(service.id)
         }
 
         if (appt.professional && isNailService(appt.serviceName)) {
@@ -270,6 +279,19 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       stats.appointments_synced++
     } catch (e) {
       stats.errors.push(`agendamento: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  // Reconcilia órfãos + KPI Agendados = abertos+pagos do dia (não só leftovers abertos).
+  if (todayRows > 0) {
+    try {
+      const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
+      if (cleared > 0) {
+        stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
+      }
+      await upsertSalonMetrics(today, { appointments: todayBooked })
+    } catch (e) {
+      stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

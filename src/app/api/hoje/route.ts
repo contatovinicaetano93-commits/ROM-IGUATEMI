@@ -6,7 +6,7 @@ import { getSalonMetrics, recomputeSalonMetricsFromRom } from '@/lib/salon/metri
 import { computeSalonIntelligence } from '@/lib/salon/intelligence'
 import { listActionItems } from '@/lib/salon/recommendations'
 import { slicePlaybookForRole } from '@/lib/salon/playbook'
-import { listUpcomingSchedules } from '@/lib/services'
+import { listTodaySchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { todayIso } from '@/lib/salon/format'
@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
     const [salonRaw, playbookAll, scheduleRaw, leadRows, avecLast, reactivation] = await Promise.all([
       getSalonMetrics(day),
       listActionItems(),
-      // Hoje + próximos dias, ordenados por data/hora (mais próximo primeiro).
-      listUpcomingSchedules(7, 150),
+      // Só o dia corrente — alinhado ao KPI Agendados / Pipeline (não misturar 7 dias).
+      listTodaySchedules(day, 150),
       sql`
         select
           count(*) filter (where status = 'novo')::int as novos,

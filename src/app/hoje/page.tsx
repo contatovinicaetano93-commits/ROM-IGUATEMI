@@ -290,7 +290,7 @@ export default function HojePage() {
         {scheduleOpen && (
           <>
             <p className="text-[0.65rem] text-muted/70">
-              1 linha por serviço · horário em destaque · ordem cronológica
+              Abertos de hoje · 1 linha por serviço · ordem cronológica
             </p>
 
             {loading &&
