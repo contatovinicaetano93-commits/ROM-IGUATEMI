@@ -92,8 +92,12 @@ async function mergeContactByPhone(
   if (!row) return null
 
   const nextStatus = resolveStatus(row.status, input.status) ?? row.status
-  // Só grava avec_client_id se a linha ainda não tiver — evita violar unique em outro id.
-  const nextAvecId = row.avec_client_id ?? input.avecClientId ?? null
+  // Só associa avec_client_id se a linha ainda não tiver E o id não estiver em outro contato.
+  let nextAvecId = row.avec_client_id
+  if (!nextAvecId && input.avecClientId) {
+    const taken = await getContactByAvecId(input.avecClientId)
+    if (!taken) nextAvecId = input.avecClientId
+  }
 
   const updated = (await sql`
     update contacts set
