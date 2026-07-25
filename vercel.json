@@ -6,19 +6,19 @@
     },
     {
       "path": "/api/avec/sync",
-      "schedule": "* * * * *"
+      "schedule": "*/10 * * * *"
     },
     {
       "path": "/api/avec/sync?mode=full",
-      "schedule": "*/10 * * * *"
+      "schedule": "5 * * * *"
     },
     {
       "path": "/api/estoque/sync",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/10 * * * *"
     },
     {
       "path": "/api/estoque/sync?mode=full",
-      "schedule": "*/10 * * * *"
+      "schedule": "15 * * * *"
     },
     {
       "path": "/api/director-report",
