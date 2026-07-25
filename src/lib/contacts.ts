@@ -65,9 +65,10 @@ export interface ContactRow {
 
 function isUniqueViolation(error: unknown, ...needles: string[]): boolean {
   const e = error as { code?: string; message?: string; constraint?: string }
-  if (e?.code !== '23505') return false
   const hay = `${e.constraint ?? ''} ${e.message ?? ''}`
-  return needles.some((n) => hay.includes(n))
+  if (!needles.some((n) => hay.includes(n))) return false
+  // Neon às vezes omite code 23505 e só manda a mensagem.
+  return e?.code === '23505' || /duplicate key/i.test(hay)
 }
 
 function isPhoneUniqueViolation(error: unknown): boolean {
