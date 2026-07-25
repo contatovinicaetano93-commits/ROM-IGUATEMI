@@ -69,6 +69,11 @@ export function isAvecRowNoiseError(raw: string): boolean {
   )
 }
 
+/** Relatórios opcionais / WAF — core do dia (0088/0052/0051) pode estar OK. */
+export function isAvecOptionalReportNoise(raw: string): boolean {
+  return /^(TM 0223|P2 0081|recorrentes 0002)/i.test(raw)
+}
+
 export type AvecSyncOutcomeStatus = 'ok' | 'partial' | 'error'
 
 /**
@@ -103,7 +108,12 @@ export function classifyAvecSyncOutcome(stats: {
     (stats.clients_upserted ?? 0) > 0
 
   const softWarning = (w: string) =>
-    /AVEC_UNIT_ID vazio/i.test(w) || /conflito de contato/i.test(w)
+    /AVEC_UNIT_ID vazio/i.test(w) ||
+    /conflito de contato/i.test(w) ||
+    /TM 0223/i.test(w) ||
+    /recorrentes 0002/i.test(w) ||
+    /P2 0081/i.test(w) ||
+    /Relatório 0223/i.test(w)
 
   const materialWarnings = warnings.filter((w) => !softWarning(w))
 
