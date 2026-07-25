@@ -69,6 +69,8 @@ export interface AvecSyncStats {
   p1_rows?: number
   p2_rows?: number
   p3_rows?: number
+  /** Set only on the open row inserted by begin; omitted when the run finishes. */
+  in_progress?: boolean
 }
 
 export interface AvecSyncRun {
@@ -93,9 +95,11 @@ async function recordSyncRun(kind: string, status: AvecSyncRun['status'], stats:
 /** Abre run no início — snapshots recebem sync_run_id correto. */
 async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<AvecSyncRun> {
   const sql = getSql()
+  // Mark open rows so getLastAvecSync can ignore in-flight runs (status is still 'partial').
+  const openStats = { ...stats, in_progress: true }
   const rows = (await sql`
     insert into avec_sync_runs (kind, status, stats)
-    values (${kind}, 'partial', ${JSON.stringify(stats)}::jsonb)
+    values (${kind}, 'partial', ${JSON.stringify(openStats)}::jsonb)
     returning *
   `) as AvecSyncRun[]
   return rows[0]!
@@ -119,14 +123,20 @@ async function finishAvecSyncRun(
 
 export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null> {
   const sql = getSql()
+  // Skip open (in-flight) rows — begin inserts status='partial' until finish updates it.
   if (kind) {
     const rows = (await sql`
-      select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
+      select * from avec_sync_runs
+      where kind = ${kind}
+        and coalesce(stats->>'in_progress', 'false') <> 'true'
+      order by created_at desc limit 1
     `) as AvecSyncRun[]
     return rows[0] ?? null
   }
   const rows = (await sql`
-    select * from avec_sync_runs order by created_at desc limit 1
+    select * from avec_sync_runs
+    where coalesce(stats->>'in_progress', 'false') <> 'true'
+    order by created_at desc limit 1
   `) as AvecSyncRun[]
   return rows[0] ?? null
 }
