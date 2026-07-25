@@ -111,8 +111,10 @@ async function applyContactMerge(
     status: input.status,
   })
 
-  // Troca de telefone só se o número novo estiver livre.
-  let nextPhone = planned.phone
+  // Troca/anexo de telefone só se o número novo estiver livre.
+  // Parte de existing.phone — planned.phone pode ser o número conflitante
+  // quando o contato atual está sem phone e outro registro já o possui.
+  let nextPhone = existing.phone
   if (phone && existing.phone && phone !== existing.phone) {
     const owner = await getContactByPhone(phone)
     if (!owner || owner.id === existing.id) nextPhone = phone

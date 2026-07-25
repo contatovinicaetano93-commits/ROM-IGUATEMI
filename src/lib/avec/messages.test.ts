@@ -133,6 +133,23 @@ describe('classifyAvecSyncOutcome', () => {
     expect(out.status).toBe('error')
   })
 
+  it('marca error quando só há ruído de contato e nenhum KPI core', () => {
+    const out = classifyAvecSyncOutcome({
+      errors: [
+        'agendamento: duplicate key value violates unique constraint "contacts_phone_idx"',
+      ],
+      warnings: [],
+      revenue_rows: 0,
+      appointments_synced: 0,
+      attendances_synced: 0,
+      cancellation_rows: 0,
+      clients_upserted: 0,
+    })
+    expect(out.status).toBe('error')
+    expect(out.errors).toHaveLength(0)
+    expect(out.warnings.some((w) => /conflito de contato/i.test(w))).toBe(true)
+  })
+
   it('marca partial com erro hard mas core OK', () => {
     const out = classifyAvecSyncOutcome({
       errors: ['Avec 0223 HTTP 500'],

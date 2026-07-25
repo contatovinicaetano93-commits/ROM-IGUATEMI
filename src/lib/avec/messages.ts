@@ -107,7 +107,8 @@ export function classifyAvecSyncOutcome(stats: {
 
   const materialWarnings = warnings.filter((w) => !softWarning(w))
 
-  if (hard.length > 0 && !coreOk) {
+  // Sem KPI core: erro hard ou só ruído de contato → error (não mascarar como ok).
+  if (!coreOk && (hard.length > 0 || noise.length > 0)) {
     return { status: 'error', errors: hard, warnings }
   }
   if (hard.length > 0 || materialWarnings.length > 0) {
