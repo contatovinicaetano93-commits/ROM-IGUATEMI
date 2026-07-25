@@ -55,13 +55,13 @@ export function averageOccupancy(professionals: P1ProfessionalRow[]): number | n
   return Math.round(avg * 1000) / 1000
 }
 
-/** Receita perdida estimada: (cancelados + no-shows) × ticket médio. */
+/** Receita perdida estimada: (cancelados + no-shows) × ticket médio. Null se não há ticket (não pintar R$ 0 falso). */
 export function estimateLostRevenue(
   cancelled: number,
   noShows: number,
   ticketAvg: number | null,
-): number {
-  if (ticketAvg == null || !(ticketAvg > 0)) return 0
+): number | null {
+  if (ticketAvg == null || !(ticketAvg > 0)) return null
   const lost = (Math.max(0, cancelled) + Math.max(0, noShows)) * ticketAvg
   return Math.round(lost * 100) / 100
 }
@@ -121,7 +121,7 @@ export interface PeriodAnalytics {
   cancelled: number
   no_shows: number
   ticket_avg: number | null
-  lost_revenue: number
+  lost_revenue: number | null
   packages: P2PackageRow[]
   packages_sold: number
   packages_revenue: number

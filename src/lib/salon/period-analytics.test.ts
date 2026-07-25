@@ -38,6 +38,7 @@ describe('period-analytics', () => {
       ]),
     ).toBe(0.8)
     expect(estimateLostRevenue(2, 3, 100)).toBe(500)
+    expect(estimateLostRevenue(2, 3, null)).toBeNull()
   })
 
   it('monta bucket comercial do período', async () => {

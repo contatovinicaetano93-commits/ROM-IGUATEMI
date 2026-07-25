@@ -185,7 +185,11 @@ export default function RelatoriosOverviewPage() {
                 </li>
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Receita perdida (est.)</span>
-                  <span className="tabular-nums">{formatCurrency(data.analytics.lost_revenue)}</span>
+                  <span className="tabular-nums">
+                    {data.analytics.lost_revenue != null
+                      ? formatCurrency(data.analytics.lost_revenue)
+                      : '—'}
+                  </span>
                 </li>
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Pacotes / receita</span>

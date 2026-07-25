@@ -47,6 +47,17 @@ describe('findNearProInMap', () => {
     expect(hit?.value.name).toBe('Maria Clara Souza')
   })
 
+  it('casa apelido ⊂ nome completo (Mauricio / Diogo / Douglas)', () => {
+    const byPro = new Map([
+      [occupancyMergeKey('MAURICIO DE CARVALHO LIMA'), { name: 'MAURICIO DE CARVALHO LIMA', occupancy: null as number | null }],
+      [occupancyMergeKey('DIOGO MARCELO PITARO'), { name: 'DIOGO MARCELO PITARO', occupancy: null as number | null }],
+      [occupancyMergeKey('DOUGLAS DA CONCEIÇÃO GARCIA'), { name: 'DOUGLAS DA CONCEIÇÃO GARCIA', occupancy: null as number | null }],
+    ])
+    expect(findNearProInMap(byPro, 'MAURICIO CARVALHO')?.value.name).toBe('MAURICIO DE CARVALHO LIMA')
+    expect(findNearProInMap(byPro, 'DIOGO PITARO')?.value.name).toBe('DIOGO MARCELO PITARO')
+    expect(findNearProInMap(byPro, 'DOUGLAS GARCIA')?.value.name).toBe('DOUGLAS DA CONCEIÇÃO GARCIA')
+  })
+
   it('não adivinha quando dois batem no mesmo first+last', () => {
     const byPro = new Map([
       ['lucas kampos', { name: 'Lucas Kampos' }],

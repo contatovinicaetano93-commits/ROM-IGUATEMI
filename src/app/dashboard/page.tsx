@@ -236,7 +236,11 @@ export default function DashboardPage() {
         <MiniStat
           icon={<AlertTriangle size={15} />}
           label="Receita perdida"
-          value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
+          value={
+            loading || !period || period.lost_revenue == null
+              ? '—'
+              : formatCurrency(period.lost_revenue)
+          }
         />
         <MiniStat
           icon={<Users size={15} />}

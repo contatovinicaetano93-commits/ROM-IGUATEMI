@@ -25,9 +25,38 @@ export function proNameTokens(key: string): string[] {
   return key.split(/\s+/).filter(Boolean)
 }
 
+/** Partículas PT — ignoradas no match por subconjunto de tokens. */
+const NAME_PARTICLES = new Set(['de', 'da', 'do', 'dos', 'das', 'e', 'di', 'du', 'del', 'della'])
+
+/** Tokens significativos (sem de/da/do…) para casar apelido ⊂ nome completo. */
+export function significantNameTokens(key: string): string[] {
+  return proNameTokens(key).filter((t) => !NAME_PARTICLES.has(t))
+}
+
+/**
+ * True se os tokens significativos do nome curto estão contidos no longo
+ * e o primeiro token (prenome) coincide — ex.: "mauricio carvalho" ⊂ "mauricio de carvalho lima".
+ */
+export function isSignificantTokenSubset(shortKey: string, longKey: string): boolean {
+  const shortToks = significantNameTokens(shortKey)
+  const longToks = significantNameTokens(longKey)
+  if (shortToks.length < 2 || longToks.length < 2) return false
+  if (shortToks[0] !== longToks[0]) return false
+  if (shortToks.length > longToks.length) return false
+  const longSet = new Set(longToks)
+  return shortToks.every((t) => longSet.has(t))
+}
+
 /** Primeiro + último token — útil quando 0021 manda nome completo e 0126 manda apelido+sobrenome. */
 export function firstAndLastTokenKey(key: string): string | null {
   const tokens = proNameTokens(key)
+  if (tokens.length < 2) return null
+  return `${tokens[0]} ${tokens[tokens.length - 1]}`
+}
+
+/** first+last só com tokens significativos (pula "da"/"de" no meio do sobrenome). */
+export function firstAndLastSignificantKey(key: string): string | null {
+  const tokens = significantNameTokens(key)
   if (tokens.length < 2) return null
   return `${tokens[0]} ${tokens[tokens.length - 1]}`
 }
@@ -54,6 +83,7 @@ export function findNearProInMap<T>(
   if (exact) return { key, value: exact }
 
   const fl = firstAndLastTokenKey(key)
+  const flSig = firstAndLastSignificantKey(key)
   const candidates: { key: string; value: T }[] = []
 
   for (const [k, value] of byPro) {
@@ -62,6 +92,18 @@ export function findNearProInMap<T>(
 
     const kFl = firstAndLastTokenKey(k)
     if (fl && kFl && fl === kFl) {
+      candidates.push({ key: k, value })
+      continue
+    }
+
+    const kFlSig = firstAndLastSignificantKey(k)
+    if (flSig && kFlSig && flSig === kFlSig) {
+      candidates.push({ key: k, value })
+      continue
+    }
+
+    // Apelido ⊂ nome completo (ex.: "mauricio carvalho" ⊂ "mauricio de carvalho lima").
+    if (isSignificantTokenSubset(key, k) || isSignificantTokenSubset(k, key)) {
       candidates.push({ key: k, value })
       continue
     }
@@ -102,8 +144,9 @@ export function matchDirectorProfessional(
   if (exact) return exact
 
   const fl = firstAndLastTokenKey(key)
+  const flSig = firstAndLastSignificantKey(key)
 
-  // Match parcial por prefixo/substring / first+last (ex.: "Vitor M" ↔ "Vitor").
+  // Match parcial por prefixo/substring / first+last / subconjunto (ex.: "Vitor M" ↔ "Vitor").
   // Se mais de um profissional do portfólio bater com o mesmo nome parcial
   // (ex.: dois "Lucas"), não adivinha — melhor faturamento não atribuído do
   // que atribuído ao profissional errado silenciosamente.
@@ -114,7 +157,10 @@ export function matchDirectorProfessional(
       return true
     }
     const pFl = firstAndLastTokenKey(pk)
-    return Boolean(fl && pFl && fl === pFl)
+    if (fl && pFl && fl === pFl) return true
+    const pFlSig = firstAndLastSignificantKey(pk)
+    if (flSig && pFlSig && flSig === pFlSig) return true
+    return isSignificantTokenSubset(key, pk) || isSignificantTokenSubset(pk, key)
   })
   return partialMatches.length === 1 ? partialMatches[0]! : null
 }
