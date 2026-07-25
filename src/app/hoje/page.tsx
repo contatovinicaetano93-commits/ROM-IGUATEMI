@@ -155,6 +155,29 @@ export default function HojePage() {
         </div>
       )}
 
+      {!loading && syncUi && (syncUi.status === 'error' || syncUi.status === 'partial') && (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            syncUi.status === 'error'
+              ? 'border-danger/40 bg-danger/10 text-danger'
+              : 'border-warning/40 bg-warning/10 text-warning'
+          }`}
+          role="alert"
+        >
+          <p className="font-medium">
+            {syncUi.status === 'error'
+              ? 'Sync Avec com falha — números de hoje podem estar desatualizados.'
+              : 'Sync Avec incompleto — confira se agenda/caixa batem com a Avec.'}
+          </p>
+          {(syncUi.detail || syncUi.label) && (
+            <p className="mt-1 text-xs opacity-90">{syncUi.detail || syncUi.label}</p>
+          )}
+          <p className="mt-1.5 text-xs opacity-80">
+            Abra Admin → Sync Avec ou aguarde o próximo ciclo automático.
+          </p>
+        </div>
+      )}
+
       {/* KPIs do salão — faturamento só para admin; fonte discreta sob o valor */}
       <div className={`grid grid-cols-2 gap-3 ${canViewRevenue ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
         {canViewRevenue && (

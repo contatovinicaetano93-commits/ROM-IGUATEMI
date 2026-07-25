@@ -46,6 +46,7 @@ import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
 import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
+import { maybeNotifySyncFailure } from '@/lib/avec/notify-sync-failure'
 import type { RomPanelId } from '@/lib/brand'
 import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
 
@@ -753,11 +754,25 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       payload: { avec_sync: stats, status, mode },
     })
 
+    await maybeNotifySyncFailure({
+      runId: finished.id,
+      status,
+      mode,
+      error: topError ?? finished.error,
+    })
+
     return finished
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e)
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
-    return finishAvecSyncRun(run.id, 'error', stats, msg)
+    const finished = await finishAvecSyncRun(run.id, 'error', stats, msg)
+    await maybeNotifySyncFailure({
+      runId: finished.id,
+      status: 'error',
+      mode,
+      error: msg,
+    })
+    return finished
   }
 }
