@@ -77,6 +77,7 @@ export async function middleware(req: NextRequest) {
 
   const allowHeaderTokens =
     pathname === '/api/avec/sync' ||
+    pathname === '/api/avec/refresh-token' ||
     pathname === '/api/estoque/sync' ||
     pathname === '/api/director-report' ||
     pathname === '/api/lgpd/purge' ||

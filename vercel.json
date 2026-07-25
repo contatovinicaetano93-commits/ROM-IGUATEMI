@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/avec/refresh-token",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/avec/sync",
       "schedule": "* * * * *"
     },

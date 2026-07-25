@@ -4,6 +4,8 @@
 // Auth: header Authorization = token puro (sem "Bearer").
 
 import { getMockReport } from '@/lib/avec/fixtures'
+import { isAvecLoginConfigured } from '@/lib/avec/refresh-token'
+import { loadRuntimeAvecApiToken } from '@/lib/avec/token-store'
 import { todayIso } from '@/lib/salon/format'
 import { isProduction } from '@/lib/env'
 import { retryWithBackoff } from '@/lib/retry'
@@ -32,9 +34,11 @@ export interface AvecReportParams {
   [key: string]: string | number | undefined
 }
 
-function getConfig() {
+async function getAvecConfig() {
   const baseUrl = getAvecBaseUrl()
-  const token = process.env.AVEC_API_TOKEN
+  // Preferência: token renovado no Neon (cron 6h) → env Vercel.
+  const runtime = await loadRuntimeAvecApiToken()
+  const token = runtime ?? process.env.AVEC_API_TOKEN?.trim() ?? ''
   if (!token) {
     throw new Error('AVEC_API_TOKEN é obrigatório para sync com Avec')
   }
@@ -46,7 +50,11 @@ export function getAvecBaseUrl() {
 }
 
 export function isAvecConfigured() {
-  return Boolean(process.env.AVEC_API_TOKEN) || isAvecMock()
+  return (
+    Boolean(process.env.AVEC_API_TOKEN?.trim()) ||
+    isAvecMock() ||
+    isAvecLoginConfigured()
+  )
 }
 
 export async function testAvecConnection() {
@@ -220,7 +228,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
     return getMockReport(reportId, effectiveParams.page ?? 1)
   }
 
-  const { baseUrl, token } = getConfig()
+  const { baseUrl, token } = await getAvecConfig()
   const qs = new URLSearchParams()
   qs.set('page', String(effectiveParams.page ?? 1))
   qs.set('limit', String(effectiveParams.limit ?? 250))
