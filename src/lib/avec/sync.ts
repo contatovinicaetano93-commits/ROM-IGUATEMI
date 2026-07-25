@@ -22,6 +22,11 @@ import {
   periodRange,
 } from '@/lib/avec/client'
 import {
+  formatAvecErrorList,
+  formatAvecUserMessage,
+  isAvecTokenExpiredError,
+} from '@/lib/avec/messages'
+import {
   normalizeClientRow,
   normalizeAppointmentRow,
   normalizeAttendanceRow,
@@ -720,6 +725,8 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
     }
 
+    stats.errors = formatAvecErrorList(stats.errors)
+
     const status: AvecSyncRun['status'] =
       stats.errors.length > 0 && stats.clients_upserted + stats.appointments_synced === 0
         ? 'error'
@@ -727,7 +734,14 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
           ? 'partial'
           : 'ok'
 
-    const finished = await finishAvecSyncRun(run.id, status, stats)
+    // Superfície clara quando o token morreu (Admin/Hoje leem `error`, não só stats JSON).
+    const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))
+    const topError =
+      status === 'error'
+        ? (authErr ?? formatAvecUserMessage(stats.errors[0]) ?? stats.errors[0] ?? undefined)
+        : authErr
+
+    const finished = await finishAvecSyncRun(run.id, status, stats, topError)
 
     await logEvent({
       contactId: null,
@@ -739,7 +753,8 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
 
     return finished
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const raw = e instanceof Error ? e.message : String(e)
+    const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
     return finishAvecSyncRun(run.id, 'error', stats, msg)
   }

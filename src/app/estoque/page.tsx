@@ -21,6 +21,11 @@ import {
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency } from '@/lib/salon/format'
 import {
+  deriveAvecSyncUi,
+  formatAvecUserMessage,
+  isAvecTokenExpiredError,
+} from '@/lib/avec/messages'
+import {
   alertRepositionCost,
   sortPurchaseQueue,
   purchaseQueueTotalCost,
@@ -103,23 +108,16 @@ interface SyncRun {
   status: 'ok' | 'error' | 'partial'
   created_at: string
   error: string | null
+  stats?: {
+    warnings?: string[]
+    errors?: string[]
+  } | null
 }
 interface SyncStatus {
   configured: boolean
   stock_auth_configured: boolean
   last_fast: SyncRun | null
   last_full: SyncRun | null
-}
-
-function timeAgo(iso: string | null): string {
-  if (!iso) return 'nunca'
-  const diffMs = Date.now() - new Date(iso).getTime()
-  const min = Math.round(diffMs / 60000)
-  if (min < 1) return 'agora mesmo'
-  if (min < 60) return `há ${min} min`
-  const h = Math.round(min / 60)
-  if (h < 24) return `há ${h}h`
-  return `há ${Math.round(h / 24)}d`
 }
 
 function SyncBadge({ status }: { status: SyncStatus | null }) {
@@ -129,8 +127,23 @@ function SyncBadge({ status }: { status: SyncStatus | null }) {
   }
   const run = status.last_fast
   if (!run) return <CountBadge value="Ainda não sincronizado" tone="danger" />
-  if (run.status === 'error') return <CountBadge value={`Falhou ${timeAgo(run.created_at)}`} tone="danger" />
-  return <CountBadge value={`Sincronizado ${timeAgo(run.created_at)}`} tone={run.status === 'partial' ? 'gold' : 'success'} />
+
+  const ui = deriveAvecSyncUi({
+    configured: status.configured,
+    last: run,
+  })
+  return <CountBadge value={ui.label} tone={ui.tone} />
+}
+
+function stockSyncWarnings(status: SyncStatus | null): string[] {
+  const fromFast = status?.last_fast?.stats?.warnings ?? []
+  const fromFull = status?.last_full?.stats?.warnings ?? []
+  // Prefere o run mais recente que tenha avisos (fast ou full).
+  const fastAt = status?.last_fast?.created_at ? Date.parse(status.last_fast.created_at) : 0
+  const fullAt = status?.last_full?.created_at ? Date.parse(status.last_full.created_at) : 0
+  if (fullAt >= fastAt && fromFull.length > 0) return fromFull
+  if (fromFast.length > 0) return fromFast
+  return fromFull
 }
 
 function StockKpiCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'warning' | 'success' }) {
@@ -301,6 +314,11 @@ export default function EstoquePage() {
   const notOnboarded =
     !loading && syncStatus && (!syncStatus.stock_auth_configured || !syncStatus.last_fast)
 
+  const truncationWarnings = stockSyncWarnings(syncStatus)
+  const lastRunError =
+    syncStatus?.last_fast?.error ?? syncStatus?.last_full?.error ?? null
+  const tokenExpired = isAvecTokenExpiredError(lastRunError)
+
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -328,6 +346,24 @@ export default function EstoquePage() {
       {error && (
         <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted">
           Não foi possível carregar ({error}). Confirme se o banco está configurado.
+        </div>
+      )}
+
+      {tokenExpired && (
+        <div className="rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
+          {formatAvecUserMessage(lastRunError) ??
+            'Token Avec expirado — renovar para atualizar alertas e saldos.'}
+        </div>
+      )}
+
+      {truncationWarnings.length > 0 && (
+        <div className="space-y-1 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <p className="font-medium">Sync de estoque incompleto (limite de páginas)</p>
+          {truncationWarnings.map((w) => (
+            <p key={w} className="text-xs opacity-90">
+              {w}
+            </p>
+          ))}
         </div>
       )}
 

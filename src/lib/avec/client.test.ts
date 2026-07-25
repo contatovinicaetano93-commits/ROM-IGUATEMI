@@ -110,6 +110,18 @@ describe('pagination truncation', () => {
     expect(msg).toContain('AVEC_SYNC_MAX_PAGES')
   })
 
+  it('nomeia relatórios de estoque no aviso de truncamento', () => {
+    const result: AvecReportFetchResult = {
+      rows: new Array(250).fill({}),
+      truncated: true,
+      pagesFetched: 200,
+      maxPages: 200,
+      limit: 250,
+    }
+    expect(formatTruncationWarning('0046', result)).toContain('alertas de estoque')
+    expect(formatTruncationWarning('0149', result)).toContain('posição de estoque')
+  })
+
   it('usa padrão 200 páginas e respeita env', () => {
     const env = process.env
     delete process.env.AVEC_SYNC_MAX_PAGES

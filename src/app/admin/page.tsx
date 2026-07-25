@@ -9,6 +9,11 @@ import { SetupChecklist } from './SetupChecklist'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import type { RomSeedPreset } from '@/lib/brand'
+import {
+  deriveAvecSyncUi,
+  formatAvecUserMessage,
+  isAvecTokenExpiredError,
+} from '@/lib/avec/messages'
 
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
@@ -147,7 +152,10 @@ export default function AdminPage() {
       const json = await res.json()
       const c = json.data?.connection
       if (c?.ok) setConnMsg(`OK — ${c.sample_rows ?? 0} linha(s) no relatório 0004`)
-      else setConnMsg(`Falhou: ${c?.error ?? json.error ?? 'erro desconhecido'}`)
+      else {
+        const raw = c?.error ?? json.error ?? 'erro desconhecido'
+        setConnMsg(`Falhou: ${formatAvecUserMessage(raw) ?? raw}`)
+      }
       if (json.data) setAvec(json.data)
     } catch (e) {
       setConnMsg(String(e))
@@ -383,9 +391,36 @@ export default function AdminPage() {
               )}
               {avec.last ? (
                 <>
-                  <Row label="Último status" value={avec.last.status} />
-                  <Row label="Quando" value={fmtIso(avec.last.created_at)} />
-                  {avec.last.error && <p className="text-xs text-danger">{avec.last.error}</p>}
+                  {(() => {
+                    const syncUi = deriveAvecSyncUi({
+                      configured: avec.configured,
+                      last: avec.last,
+                    })
+                    return (
+                      <>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted">Último status</span>
+                          <CountBadge value={syncUi.label} tone={syncUi.tone} />
+                        </div>
+                        <Row label="Quando" value={fmtIso(avec.last.created_at)} />
+                        {syncUi.status === 'error' && (syncUi.detail || avec.last.error) && (
+                          <p className="text-xs text-danger">
+                            {syncUi.detail ??
+                              formatAvecUserMessage(avec.last.error) ??
+                              avec.last.error}
+                          </p>
+                        )}
+                        {isAvecTokenExpiredError(avec.last.error) && (
+                          <p className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+                            Token Avec expirado — renovar com{' '}
+                            <code className="text-[0.7rem]">node scripts/refresh-avec-token.mjs</code>{' '}
+                            e atualizar <code className="text-[0.7rem]">AVEC_API_TOKEN</code> na
+                            Vercel.
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
                   {Array.isArray(avec.last.stats?.warnings) && avec.last.stats.warnings.length > 0 && (
                     <div className="space-y-1 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
                       {(avec.last.stats.warnings as string[]).map((w) => (

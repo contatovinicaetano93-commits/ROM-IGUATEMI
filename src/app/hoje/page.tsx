@@ -24,6 +24,7 @@ import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { contactHref } from '@/lib/auth-redirect'
 import { usePersistedBool } from '@/lib/use-persisted-bool'
+import { deriveAvecSyncUi } from '@/lib/avec/messages'
 
 const HOJE_OPEN_SCHEDULE_KEY = 'hoje.section.agendamentos.open'
 const HOJE_OPEN_PLAYBOOK_KEY = 'hoje.section.playbook.open'
@@ -70,6 +71,15 @@ interface HojeData {
     reactivated: number
     rate: number | null
   }
+  avec?: {
+    configured: boolean
+    last: {
+      status: string
+      created_at: string
+      error: string | null
+      stats?: { warnings?: string[]; errors?: string[] } | null
+    } | null
+  }
 }
 
 export default function HojePage() {
@@ -95,6 +105,9 @@ export default function HojePage() {
   const salon = data?.salon
   // Só mostra faturamento depois da API confirmar (staff nunca vê)
   const canViewRevenue = Boolean(data?.can_view_revenue)
+  const syncUi = data?.avec
+    ? deriveAvecSyncUi({ configured: data.avec.configured, last: data.avec.last })
+    : null
   const dayLabel = data
     ? new Date(data.day + 'T12:00:00').toLocaleDateString('pt-BR', {
         weekday: 'long',
@@ -105,13 +118,28 @@ export default function HojePage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
-      <div>
-        <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Playbook do dia</p>
-        <h1 className="mt-1 flex items-center gap-2 text-xl font-semibold capitalize lg:text-2xl">
-          <Sun size={22} className="text-gold" />
-          Hoje no {brand.displayName}
-        </h1>
-        {!loading && data && <p className="mt-0.5 text-xs text-muted capitalize">{dayLabel}</p>}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Playbook do dia</p>
+          <h1 className="mt-1 flex items-center gap-2 text-xl font-semibold capitalize lg:text-2xl">
+            <Sun size={22} className="text-gold" />
+            Hoje no {brand.displayName}
+          </h1>
+          {!loading && data && <p className="mt-0.5 text-xs text-muted capitalize">{dayLabel}</p>}
+        </div>
+        {!loading && syncUi && (
+          <div className="flex flex-col items-end gap-1">
+            <CountBadge value={syncUi.label} tone={syncUi.tone} />
+            {syncUi.status === 'error' && syncUi.detail && (
+              <p className="max-w-[16rem] text-right text-[0.65rem] text-danger">{syncUi.detail}</p>
+            )}
+            {syncUi.warnings.length > 0 && syncUi.status !== 'error' && (
+              <p className="max-w-[16rem] text-right text-[0.65rem] text-warning">
+                Sync incompleto — {syncUi.warnings.length} aviso(s)
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (

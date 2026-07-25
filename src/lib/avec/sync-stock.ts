@@ -12,6 +12,11 @@ import {
   type AvecReportParams,
 } from '@/lib/avec/client'
 import {
+  formatAvecErrorList,
+  formatAvecUserMessage,
+  isAvecTokenExpiredError,
+} from '@/lib/avec/messages'
+import {
   normalizeStockPositionRow,
   normalizeStockAlertRow,
   normalizeStockMovementRow,
@@ -278,6 +283,8 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
       await syncValuation(stats, run.id)
     }
 
+    stats.errors = formatAvecErrorList(stats.errors)
+
     const hadAnyData = stats.positions_synced > 0 || stats.movements_synced > 0
     const status: StockSyncRun['status'] =
       stats.errors.length > 0 && !hadAnyData
@@ -286,9 +293,16 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
           ? 'partial'
           : 'ok'
 
-    return await finishRun(run.id, status, stats)
+    const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))
+    const topError =
+      status === 'error'
+        ? (authErr ?? formatAvecUserMessage(stats.errors[0]) ?? stats.errors[0] ?? undefined)
+        : authErr
+
+    return await finishRun(run.id, status, stats, topError)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const raw = e instanceof Error ? e.message : String(e)
+    const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
     return await finishRun(run.id, 'error', stats, msg)
   }

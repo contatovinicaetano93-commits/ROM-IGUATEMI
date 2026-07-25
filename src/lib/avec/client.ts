@@ -241,7 +241,14 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
 
       if (!res.ok) {
         const text = await res.text().catch(() => '')
-        const err = new Error(`Avec ${reportId} HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}`)
+        // 401: mensagem clara em PT (Admin/Hoje mapeiam via formatAvecUserMessage).
+        const body =
+          res.status === 401
+            ? 'token Avec expirado — renovar'
+            : text
+              ? text.slice(0, 200)
+              : ''
+        const err = new Error(`Avec ${reportId} HTTP ${res.status}${body ? `: ${body}` : ''}`)
         ;(err as Error & { status?: number }).status = res.status
         throw err
       }
@@ -285,6 +292,10 @@ export const AVEC_REPORT_LABELS: Record<string, string> = {
   '0004': 'clientes',
   '0051': 'agendamentos',
   '0002': 'atendimentos',
+  '0149': 'posição de estoque',
+  '0046': 'alertas de estoque',
+  '0044': 'movimentos de estoque',
+  '0323': 'origem de compra',
 }
 
 export function wasPaginationTruncated(rowsOnLastPage: number, limit: number, page: number, maxPages: number) {
