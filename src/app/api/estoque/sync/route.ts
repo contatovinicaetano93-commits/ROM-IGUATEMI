@@ -1,4 +1,4 @@
-import { NextRequest, after } from 'next/server'
+import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireStock } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
@@ -23,27 +23,20 @@ async function execute(req: NextRequest, cron: boolean) {
 
   const mode = parseMode(req)
 
-  if (cron) {
-    after(async () => {
-      try {
-        await runStockSync(mode)
-      } catch (e) {
-        if (isSyncLockBusyError(e)) return
-        console.error('[estoque sync cron]', e instanceof Error ? e.message : e)
-      }
-    })
-    return ok({
-      accepted: true,
-      mode,
-      note: 'Sync estoque aceito — executando em background',
-    })
-  }
-
   try {
     const run = await runStockSync(mode)
     return ok({ ...run, mode })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
+      if (cron) {
+        return ok({
+          skipped: true,
+          reason: 'sync_em_andamento',
+          mode,
+          holder: e.holder,
+          expires_at: e.expiresAt,
+        })
+      }
       return err(e.message, 429)
     }
     throw e

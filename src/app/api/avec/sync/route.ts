@@ -1,4 +1,4 @@
-import { NextRequest, after } from 'next/server'
+import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { isAvecConfigured, isAvecMock, getAvecBaseUrl, testAvecConnection } from '@/lib/avec/client'
 import { runAvecSync, getLastAvecSync, type AvecSyncMode } from '@/lib/avec/sync'
@@ -24,7 +24,7 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
   return cronFallback
 }
 
-const FAST_MIN_GAP_MS = 45_000
+const FAST_MIN_GAP_MS = 90_000
 const FULL_MIN_GAP_MS = 120_000
 
 async function executeSync(
@@ -34,7 +34,6 @@ async function executeSync(
   const mode = parseMode(req, opts?.defaultMode ?? 'fast')
 
   if (!isAvecConfigured()) {
-    // Cron/webhook: skip silencioso — evita spam de erro antes do token na terça
     if (opts?.cron) {
       return ok({
         skipped: true,
@@ -65,27 +64,10 @@ async function executeSync(
     }
   }
 
-  // Cron externo (cron-job.org) estoura ~30s — ack imediato e sync em background.
-  // Admin/force continua aguardando o resultado completo.
-  if (opts?.cron && !opts.force) {
-    after(async () => {
-      try {
-        await runAvecSync(mode)
-      } catch (e) {
-        if (isSyncLockBusyError(e)) return
-        console.error('[avec sync cron]', e instanceof Error ? e.message : e)
-      }
-    })
-    return ok({
-      accepted: true,
-      skipped: false,
-      mode,
-      schedule: mode === 'fast' ? 'intraday' : 'full',
-      note: 'Sync Avec aceito — executando em background (evita timeout do cron)',
-    })
-  }
-
   try {
+    // Sync completo na request (maxDuration 300s). Cron externo com timeout <60s
+    // deve usar o cron da Vercel ou aumentar o timeout do cliente — ack em background
+    // deixava lock/run órfãos quando o isolate encerrava cedo.
     const run = await runAvecSync(mode)
     return ok({
       ...run,
@@ -99,7 +81,6 @@ async function executeSync(
     })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
-      // Cron/webhook: skip silencioso — outro sync ainda está no Neon.
       return ok({
         skipped: true,
         reason: 'sync_em_andamento',
@@ -143,7 +124,7 @@ export async function GET(req: NextRequest) {
         fast: { schedule: '*/2 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: { schedule: '*/10 * * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
         cadence:
-          'fast a cada 2 min + full a cada 10 min (backup) — tempo real via webhook Avec',
+          'fast a cada 2 min + full a cada 10 min (backup) — tempo real via webhook Avec. Cron externo precisa timeout ≥120s.',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),
