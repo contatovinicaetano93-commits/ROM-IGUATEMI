@@ -18,6 +18,7 @@ import {
   formatPercentPoints,
   todayIso,
 } from '@/lib/salon/format'
+import { formatKpiSources } from '@/lib/kpi-source'
 
 interface FiscalSplitSummary {
   gross_paid: number
@@ -89,6 +90,7 @@ function FinanceKpiCard({
   compareLabel,
   positive,
   loading,
+  source,
 }: {
   label: string
   value: string
@@ -97,6 +99,8 @@ function FinanceKpiCard({
   compareLabel: string
   positive: boolean | null
   loading: boolean
+  /** Fonte curta (Avec / proxy / manual / incompleto) — padrão do glossário. */
+  source?: string
 }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
@@ -106,6 +110,9 @@ function FinanceKpiCard({
       ) : (
         <>
           <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
+          {source ? (
+            <p className="mt-0.5 text-[0.6rem] uppercase tracking-wide text-muted/70">{source}</p>
+          ) : null}
           {delta && (
             <p
               className={`mt-1 text-xs font-medium ${
@@ -189,11 +196,11 @@ function reconciliationStatusLabel(status: PaymentReconciliation['status']) {
 const FINANCE_LEGEND: { term: string; meaning: string }[] = [
   {
     term: 'Receita',
-    meaning: 'Faturamento do período (sync Avec / métricas diárias do salão).',
+    meaning: 'Faturamento do período (fonte: Avec → métricas diárias ROM).',
   },
   {
     term: 'Atendidos',
-    meaning: 'Quantidade de atendimentos concluídos no mês.',
+    meaning: 'Quantidade de atendimentos concluídos no mês (fonte: Avec / ROM).',
   },
   {
     term: 'Ticket médio',
@@ -209,11 +216,12 @@ const FINANCE_LEGEND: { term: string; meaning: string }[] = [
   },
   {
     term: 'CMV',
-    meaning: 'Custo das saídas de estoque no mês (proxy de produtos consumidos/vendidos).',
+    meaning:
+      'Proxy: custo das saídas de estoque no mês (Avec 0044). Não é CMV fiscal completo.',
   },
   {
     term: 'Margem após CMV',
-    meaning: '((Receita − Despesas − CMV) ÷ Receita) × 100. CMV = custo das saídas de estoque.',
+    meaning: '((Receita − Despesas − CMV) ÷ Receita) × 100. CMV = proxy de saídas de estoque.',
   },
   {
     term: 'Fluxo',
@@ -568,6 +576,7 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.revenue >= kpis.previous.revenue : null}
           loading={loading}
+          source={formatKpiSources('avec', 'rom')}
         />
         <FinanceKpiCard
           label="Atendidos"
@@ -584,6 +593,7 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? (kpis.current.attended ?? 0) >= (kpis.previous.attended ?? 0) : null}
           loading={loading}
+          source={formatKpiSources('avec')}
         />
         <FinanceKpiCard
           label="Ticket médio"
@@ -606,6 +616,7 @@ export default function FinanceiroPage() {
               : null
           }
           loading={loading}
+          source={formatKpiSources('rom')}
         />
         <FinanceKpiCard
           label="Despesas"
@@ -614,6 +625,7 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.expenses <= kpis.previous.expenses : null}
           loading={loading}
+          source={formatKpiSources('manual')}
         />
         <FinanceKpiCard
           label="Margem bruta"
@@ -630,6 +642,7 @@ export default function FinanceiroPage() {
               : null
           }
           loading={loading}
+          source={formatKpiSources('rom')}
         />
         <FinanceKpiCard
           label="Fluxo (receita − despesas)"
@@ -638,6 +651,7 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.cash_flow >= kpis.previous.cash_flow : null}
           loading={loading}
+          source={formatKpiSources('rom')}
         />
       </div>
 
@@ -649,6 +663,7 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.cmv <= kpis.previous.cmv : null}
           loading={loading}
+          source={formatKpiSources('proxy', 'avec')}
         />
         <FinanceKpiCard
           label="Margem após CMV"
@@ -671,6 +686,7 @@ export default function FinanceiroPage() {
               : null
           }
           loading={loading}
+          source={formatKpiSources('proxy', 'rom')}
         />
       </div>
 

@@ -5,6 +5,7 @@ import { getSql } from '@/lib/db'
 import { getSalonMetrics, recomputeSalonMetricsFromRom } from '@/lib/salon/metrics'
 import { computeSalonIntelligence } from '@/lib/salon/intelligence'
 import { listActionItems } from '@/lib/salon/recommendations'
+import { slicePlaybookForRole } from '@/lib/salon/playbook'
 import { listUpcomingSchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     const day = todayIso()
     const sql = getSql()
 
-    const [salonRaw, playbook, scheduleRaw, leadRows, avecLast, reactivation] = await Promise.all([
+    const [salonRaw, playbookAll, scheduleRaw, leadRows, avecLast, reactivation] = await Promise.all([
       getSalonMetrics(day),
       listActionItems(),
       // Hoje + próximos dias, ordenados por data/hora (mais próximo primeiro).
@@ -41,6 +42,9 @@ export async function GET(req: NextRequest) {
         rate: null as number | null,
       })),
     ])
+
+    const playbookSlice = slicePlaybookForRole(playbookAll, auth.session.role)
+    const playbook = playbookSlice.items
 
     const scheduleToday = [...scheduleRaw].sort(compareScheduleByTimeThenName)
     const leads = leadRows[0]
@@ -85,13 +89,16 @@ export async function GET(req: NextRequest) {
       intelligence,
       can_view_revenue: auth.session.can_view_revenue,
       role: auth.session.role,
-      playbook: playbook.slice(0, 8),
+      playbook,
+      playbook_focus: playbookSlice.focus,
+      playbook_audience: playbookSlice.audience,
       scheduleToday,
       leads: {
         novos: leads.novos,
         whatsapp_sem_resposta: leads.whatsapp_novos,
       },
-      overdue_total: playbook.reduce((s, a) => s + a.overdue, 0),
+      // Total de atrasos na base (não só no slice do papel) — alerta de recepção.
+      overdue_total: playbookAll.reduce((s, a) => s + a.overdue, 0),
       reactivation,
       avec: {
         configured: isAvecConfigured(),

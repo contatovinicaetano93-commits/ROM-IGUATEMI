@@ -25,6 +25,7 @@ import { getBrand } from '@/lib/brand'
 import { contactHref } from '@/lib/auth-redirect'
 import { usePersistedBool } from '@/lib/use-persisted-bool'
 import { deriveAvecSyncUi } from '@/lib/avec/messages'
+import { formatKpiSources, kpiSourceFromSyncStatus } from '@/lib/kpi-source'
 
 const HOJE_OPEN_SCHEDULE_KEY = 'hoje.section.agendamentos.open'
 const HOJE_OPEN_PLAYBOOK_KEY = 'hoje.section.playbook.open'
@@ -60,8 +61,10 @@ interface HojeData {
   }
   tm_today: { avg_minutes: number | null; sample_count: number }
   can_view_revenue?: boolean
-  role?: 'admin' | 'staff'
+  role?: 'admin' | 'staff' | 'financeiro' | 'estoque'
   playbook: PlaybookItem[]
+  playbook_focus?: string
+  playbook_audience?: 'staff' | 'admin'
   scheduleToday: ScheduleItem[]
   leads: { novos: number; whatsapp_sem_resposta: number }
   overdue_total: number
@@ -108,6 +111,10 @@ export default function HojePage() {
   const syncUi = data?.avec
     ? deriveAvecSyncUi({ configured: data.avec.configured, last: data.avec.last })
     : null
+  const syncSource = kpiSourceFromSyncStatus(syncUi?.status)
+  const avecSource = data?.avec?.configured
+    ? formatKpiSources('avec', ...(syncSource ? [syncSource] : []))
+    : undefined
   const dayLabel = data
     ? new Date(data.day + 'T12:00:00').toLocaleDateString('pt-BR', {
         weekday: 'long',
@@ -148,7 +155,7 @@ export default function HojePage() {
         </div>
       )}
 
-      {/* KPIs do salão — faturamento só para admin */}
+      {/* KPIs do salão — faturamento só para admin; fonte discreta sob o valor */}
       <div className={`grid grid-cols-2 gap-3 ${canViewRevenue ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
         {canViewRevenue && (
           <KpiCard
@@ -156,6 +163,7 @@ export default function HojePage() {
             label="Faturamento"
             value={loading ? '—' : formatCurrency(salon?.revenue ?? 0)}
             loading={loading}
+            source={avecSource}
           />
         )}
         <KpiCard
@@ -163,12 +171,14 @@ export default function HojePage() {
           label="Agendados"
           value={loading ? '—' : String(salon?.appointments ?? 0)}
           loading={loading}
+          source={avecSource}
         />
         <KpiCard
           icon={<TrendingUp size={16} />}
           label="Atendidos"
           value={loading ? '—' : String(salon?.attended ?? 0)}
           loading={loading}
+          source={avecSource}
         />
         <KpiCard
           icon={<AlertTriangle size={16} />}
@@ -176,6 +186,7 @@ export default function HojePage() {
           value={loading ? '—' : String(salon?.no_shows ?? 0)}
           loading={loading}
           warn={(salon?.no_shows ?? 0) > 0}
+          source={avecSource}
         />
         <KpiCard
           icon={<Clock size={16} />}
@@ -188,6 +199,11 @@ export default function HojePage() {
                 : '—'
           }
           loading={loading}
+          source={
+            !loading && data?.tm_today.avg_minutes == null
+              ? formatKpiSources('avec', 'incomplete')
+              : avecSource
+          }
         />
       </div>
 
@@ -339,6 +355,10 @@ export default function HojePage() {
 
         {playbookOpen && (
           <>
+            {!loading && data?.playbook_focus && (
+              <p className="text-[0.65rem] text-muted/70">{data.playbook_focus}</p>
+            )}
+
             {!loading && (data?.playbook.length ?? 0) > 0 && (
               <UrgencyBadgeLegend showScheduled={false} />
             )}
@@ -441,12 +461,15 @@ function KpiCard({
   value,
   loading,
   warn,
+  source,
 }: {
   icon: React.ReactNode
   label: string
   value: string
   loading: boolean
   warn?: boolean
+  /** Fonte curta (Avec / proxy / incompleto / desatualizado) — não polui o hero. */
+  source?: string
 }) {
   return (
     <div
@@ -459,7 +482,12 @@ function KpiCard({
       {loading ? (
         <div className="h-7 w-16 animate-pulse rounded bg-border" />
       ) : (
-        <p className={`text-lg font-semibold tabular-nums ${warn ? 'text-warning' : ''}`}>{value}</p>
+        <>
+          <p className={`text-lg font-semibold tabular-nums ${warn ? 'text-warning' : ''}`}>{value}</p>
+          {source ? (
+            <p className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted/70">{source}</p>
+          ) : null}
+        </>
       )}
     </div>
   )
