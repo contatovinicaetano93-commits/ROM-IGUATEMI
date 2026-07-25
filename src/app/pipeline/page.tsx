@@ -47,7 +47,8 @@ function PipelineColumn({
   emptyLabel: string
   storageKey: string
 }) {
-  const [open, setOpen] = useSectionOpen(storageKey, false)
+  // Pipeline: colunas abertas por padrão (recepção precisa ver a lista).
+  const [open, setOpen] = useSectionOpen(storageKey, true)
   return (
     <section
       className={`flex min-w-0 flex-1 flex-col rounded-2xl border border-border bg-card ${
@@ -144,7 +145,7 @@ export default function PipelinePage() {
             {dayLabel || 'Agenda do dia'}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Colunas com o que já temos da Avec: agendados e concluídos.
+            Agendados = agenda Avec (0051). Concluídos = atendimentos Avec (0002) + marcações no ROM.
           </p>
         </div>
         <button

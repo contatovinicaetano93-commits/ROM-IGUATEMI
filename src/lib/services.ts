@@ -268,6 +268,22 @@ export async function autoCompleteServicesOnConversion(contactId: string): Promi
   return marked
 }
 
+/** Agenda do dia de um profissional específico — usado pelo bot Telegram de funcionários. */
+export async function listTodayScheduleForProfessional(professionalName: string): Promise<ScheduledServiceRow[]> {
+  const sql = getSql()
+  return (await sql`
+    select cs.*, c.name as contact_name
+    from client_services cs
+    join contacts c on c.id = cs.contact_id
+    where cs.active = true
+      and cs.scheduled_at is not null
+      and lower(cs.professional_name) = lower(${professionalName})
+      and cs.scheduled_at >= date_trunc('day', now())
+      and cs.scheduled_at < date_trunc('day', now()) + interval '1 day'
+    order by cs.scheduled_at asc
+  `) as ScheduledServiceRow[]
+}
+
 // Próximos agendamentos globais — painel e lembretes visuais.
 export async function listUpcomingSchedules(days = 7, limit = 20): Promise<ScheduledServiceRow[]> {
   const sql = getSql()
@@ -298,6 +314,11 @@ export async function listTodayPipeline(day: string): Promise<{
       where cs.active = true
         and cs.scheduled_at is not null
         and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+        -- Já concluídos no dia saem de Agendados (ficam só em Concluídos).
+        and (
+          cs.last_done_at is null
+          or (cs.last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
+        )
       order by cs.scheduled_at asc
     `,
     sql`
