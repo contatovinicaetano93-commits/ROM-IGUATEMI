@@ -266,10 +266,12 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
     {
       maxAttempts: 3,
       initialDelayMs: 1000,
-      // 4xx é erro de request (token/params) — repetir não resolve. Só vale retry em falha de rede ou 5xx.
+      // Rede/5xx: retry. 403: 1 retry (WAF/blip da Avec). Demais 4xx: não.
       shouldRetry: (e) => {
         const status = (e as Error & { status?: number }).status
-        return status === undefined || status >= 500
+        if (status === undefined || status >= 500) return true
+        if (status === 403) return true
+        return false
       },
     },
   )

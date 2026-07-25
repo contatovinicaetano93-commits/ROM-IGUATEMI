@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   AVEC_TOKEN_EXPIRED_MESSAGE,
+  classifyAvecSyncOutcome,
   deriveAvecSyncUi,
   formatAvecErrorList,
   formatAvecUserMessage,
@@ -103,5 +104,41 @@ describe('deriveAvecSyncUi', () => {
     expect(ui.status).toBe('partial')
     expect(ui.warnings).toHaveLength(1)
     expect(ui.warnings[0]).toContain('0046')
+  })
+})
+
+describe('classifyAvecSyncOutcome', () => {
+  it('marca ok quando core KPI veio e só há ruído de telefone', () => {
+    const out = classifyAvecSyncOutcome({
+      errors: [
+        'agendamento: duplicate key value violates unique constraint "contacts_phone_idx"',
+      ],
+      warnings: ['AVEC_UNIT_ID vazio — sync sem filtro de site'],
+      revenue_rows: 1,
+      cancellation_rows: 10,
+      appointments_synced: 0,
+    })
+    expect(out.status).toBe('ok')
+    expect(out.errors).toHaveLength(0)
+    expect(out.warnings.some((w) => /conflito de contato/i.test(w))).toBe(true)
+  })
+
+  it('marca error quando não há dado core', () => {
+    const out = classifyAvecSyncOutcome({
+      errors: ['Avec 0051 HTTP 403'],
+      warnings: [],
+      revenue_rows: 0,
+      appointments_synced: 0,
+    })
+    expect(out.status).toBe('error')
+  })
+
+  it('marca partial com erro hard mas core OK', () => {
+    const out = classifyAvecSyncOutcome({
+      errors: ['Avec 0223 HTTP 500'],
+      warnings: [],
+      revenue_rows: 1,
+    })
+    expect(out.status).toBe('partial')
   })
 })

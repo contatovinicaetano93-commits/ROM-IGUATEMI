@@ -22,6 +22,7 @@ import {
   periodRange,
 } from '@/lib/avec/client'
 import {
+  classifyAvecSyncOutcome,
   formatAvecErrorList,
   formatAvecUserMessage,
   isAvecTokenExpiredError,
@@ -685,19 +686,19 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         syncCancellations(stats, mode, syncRunId),
         syncNoShows0248(stats, mode, syncRunId),
       ])
-      await Promise.all([
-        syncAppointments(stats, mode, syncRunId),
-        syncAttendances(stats, mode, syncRunId),
-      ])
+      // Sequencial: evita corrida no mesmo telefone entre agenda e atendidos.
+      await syncAppointments(stats, mode, syncRunId)
+      await syncAttendances(stats, mode, syncRunId)
+      // TM / 0081 são opcionais no fast — falha não pode derrubar o sync do dia.
       try {
         await syncDurationFrom0223(stats, syncRunId)
       } catch (e) {
-        stats.errors.push(`TM 0223 fast: ${e instanceof Error ? e.message : String(e)}`)
+        stats.warnings.push(`TM 0223 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
       try {
         await syncPaymentMixRecent(stats, syncRunId, 0)
       } catch (e) {
-        stats.errors.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
+        stats.warnings.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
     } else {
       // Full: cada etapa isolada — 403/WAF num relatório não pode impedir P1/P2/P3.
@@ -728,13 +729,10 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     }
 
     stats.errors = formatAvecErrorList(stats.errors)
-
-    const status: AvecSyncRun['status'] =
-      stats.errors.length > 0 && stats.clients_upserted + stats.appointments_synced === 0
-        ? 'error'
-        : stats.errors.length > 0 || stats.warnings.length > 0
-          ? 'partial'
-          : 'ok'
+    const outcome = classifyAvecSyncOutcome(stats)
+    stats.errors = outcome.errors
+    stats.warnings = outcome.warnings
+    const status: AvecSyncRun['status'] = outcome.status
 
     // Superfície clara quando o token morreu (Admin/Hoje leem `error`, não só stats JSON).
     const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))

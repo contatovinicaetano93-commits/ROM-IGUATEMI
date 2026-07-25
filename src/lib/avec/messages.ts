@@ -62,6 +62,60 @@ export function formatAvecErrorList(errors: string[]): string[] {
   return errors.map((e) => formatAvecUserMessage(e) ?? e)
 }
 
+/** Ruído de linha (contato/agenda) — não invalida KPI de caixa/cancelamentos. */
+export function isAvecRowNoiseError(raw: string): boolean {
+  return /^(agendamento|atendimento|cliente):\s*.*(duplicate key|unique constraint|contacts_phone_idx|contacts_avec_client_id)/i.test(
+    raw,
+  )
+}
+
+export type AvecSyncOutcomeStatus = 'ok' | 'partial' | 'error'
+
+/**
+ * Classifica o sync com foco em dados verificáveis:
+ * - demove colisões de telefone para warning (após merge elas não deveriam ocorrer)
+ * - `error` só se não houve dado core (receita/agenda/atendidos/cancel)
+ * - warnings soft (AVEC_UNIT_ID) não sozinhas forçam partial quando core OK
+ */
+export function classifyAvecSyncOutcome(stats: {
+  errors: string[]
+  warnings: string[]
+  clients_upserted?: number
+  appointments_synced?: number
+  attendances_synced?: number
+  revenue_rows?: number
+  cancellation_rows?: number
+}): { status: AvecSyncOutcomeStatus; errors: string[]; warnings: string[] } {
+  const noise = stats.errors.filter(isAvecRowNoiseError)
+  const hard = stats.errors.filter((e) => !isAvecRowNoiseError(e))
+  const warnings = [...stats.warnings]
+  if (noise.length > 0) {
+    warnings.push(
+      `${noise.length} linha(s) de agenda/atendimento com conflito de contato (telefone/id) — KPIs de caixa preservados`,
+    )
+  }
+
+  const coreOk =
+    (stats.revenue_rows ?? 0) > 0 ||
+    (stats.appointments_synced ?? 0) > 0 ||
+    (stats.attendances_synced ?? 0) > 0 ||
+    (stats.cancellation_rows ?? 0) > 0 ||
+    (stats.clients_upserted ?? 0) > 0
+
+  const softWarning = (w: string) =>
+    /AVEC_UNIT_ID vazio/i.test(w) || /conflito de contato/i.test(w)
+
+  const materialWarnings = warnings.filter((w) => !softWarning(w))
+
+  if (hard.length > 0 && !coreOk) {
+    return { status: 'error', errors: hard, warnings }
+  }
+  if (hard.length > 0 || materialWarnings.length > 0) {
+    return { status: 'partial', errors: hard, warnings }
+  }
+  return { status: 'ok', errors: hard, warnings }
+}
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0)

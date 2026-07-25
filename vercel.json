@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/avec/sync",
-      "schedule": "* * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/avec/sync?mode=full",
