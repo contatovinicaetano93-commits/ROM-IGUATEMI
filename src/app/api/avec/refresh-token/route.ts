@@ -9,7 +9,7 @@ export const maxDuration = 60
 
 /**
  * Renova JWT Avec (~12h) via Cognito + amplify/signin.
- * Cron Vercel: a cada 6 horas (`0 */6 * * *`).
+ * Cron Vercel: a cada 6 horas (0 every-6h * * *).
  * Também aceita admin autenticado (force=1).
  */
 async function authorize(req: NextRequest) {
