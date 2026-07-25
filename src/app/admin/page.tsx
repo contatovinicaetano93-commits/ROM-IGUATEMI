@@ -162,11 +162,15 @@ export default function AdminPage() {
     }
   }
 
-  async function runAvecSync() {
+  async function runAvecSync(mode: 'fast' | 'full' = 'fast') {
     setSyncing(true)
     setSyncMsg(null)
     try {
-      const res = await apiFetch('/api/avec/sync', { method: 'POST', cache: 'no-store' })
+      // fast = agenda/caixa do dia (~1–2 min). full = + catálogo/P1–P3 (pode estourar timeout).
+      const res = await apiFetch(`/api/avec/sync?mode=${mode}`, {
+        method: 'POST',
+        cache: 'no-store',
+      })
       const json = await res.json()
       if (json.error) {
         setSyncMsg(`Erro: ${json.error}`)
@@ -182,7 +186,12 @@ export default function AdminPage() {
           setSyncMsg(json.data.note ?? `Sync ignorado (${reason ?? 'skipped'})`)
         }
       } else {
-        setSyncMsg(`Sync ${json.data?.status ?? 'ok'} — recarregando…`)
+        const when = json.data?.created_at
+          ? new Date(json.data.created_at).toLocaleString('pt-BR')
+          : null
+        setSyncMsg(
+          `Sync ${mode} ${json.data?.status ?? 'ok'}${when ? ` · ${when}` : ''} — recarregando…`,
+        )
       }
       await load()
     } catch (e) {
@@ -459,13 +468,25 @@ export default function AdminPage() {
               {connMsg && <p className="text-xs text-muted">{connMsg}</p>}
               <p className="rounded-xl border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground/80">
                 <span className="font-semibold text-gold">Tempo real:</span> webhook{' '}
-                <code className="text-[0.7rem]">/api/webhooks/avec</code> (header{' '}
-                <code className="text-[0.7rem]">x-avec-secret</code>). Cron fast 5 min + full 10 min
-                como backup; webhook dispara sync em tempo real.
+                <code className="text-[0.7rem]">/api/webhooks/avec</code>. Cron fast a cada 2 min +
+                full a cada 10 min. Use <span className="font-semibold">sync do dia</span> no
+                manual — o full pode passar de 5 min e o navegador corta.
               </p>
-              <PrimaryButton type="button" onClick={runAvecSync} disabled={syncing || !avec.configured}>
-                {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
+              <PrimaryButton
+                type="button"
+                onClick={() => void runAvecSync('fast')}
+                disabled={syncing || !avec.configured}
+              >
+                {syncing ? 'Sincronizando…' : 'Rodar sync do dia agora'}
               </PrimaryButton>
+              <button
+                type="button"
+                onClick={() => void runAvecSync('full')}
+                disabled={syncing || !avec.configured}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold text-foreground/90 disabled:opacity-60 lg:hover:bg-card"
+              >
+                Sync completo (P1–P3, pode demorar)
+              </button>
               {syncMsg && <p className="text-xs text-muted">{syncMsg}</p>}
             </div>
           ) : (
