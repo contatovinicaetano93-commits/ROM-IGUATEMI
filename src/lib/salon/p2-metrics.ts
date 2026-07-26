@@ -100,6 +100,41 @@ export async function ensureSalonP2Table() {
   `
 }
 
+function jsonArrLen(v: unknown): number {
+  return Array.isArray(v) ? v.length : 0
+}
+
+/** Último dia com canais/pacotes/notas — usado quando o 0081 cria o dia sem comércio. */
+async function previousCommerceSnapshot(day: string): Promise<SalonP2Daily | null> {
+  const sql = getSql()
+  try {
+    const rows = (await sql`
+      select
+        day::text as day,
+        booking_channels,
+        packages,
+        packages_sold,
+        ratings_avg::float as ratings_avg,
+        ratings_count,
+        payment_mix,
+        birthday_count,
+        updated_at
+      from salon_p2_daily
+      where day < ${day}::date
+        and (
+          jsonb_array_length(coalesce(booking_channels, '[]'::jsonb)) > 0
+          or jsonb_array_length(coalesce(packages, '[]'::jsonb)) > 0
+          or coalesce(ratings_count, 0) > 0
+        )
+      order by day desc
+      limit 1
+    `) as SalonP2Daily[]
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function upsertSalonP2Daily(
   day: string,
   patch: {
@@ -119,14 +154,43 @@ export async function upsertSalonP2Daily(
   `) as SalonP2Daily[]
   const cur = existing[0]
 
+  const curChannelsEmpty = jsonArrLen(cur?.booking_channels) === 0
+  const curPackagesEmpty = jsonArrLen(cur?.packages) === 0
+  const needsPrev =
+    (patch.booking_channels === undefined && curChannelsEmpty) ||
+    (patch.packages === undefined && curPackagesEmpty) ||
+    (patch.ratings_count === undefined && Number(cur?.ratings_count ?? 0) === 0)
+  const prev = needsPrev ? await previousCommerceSnapshot(day) : null
+
   const booking_channels =
-    patch.booking_channels ?? (cur?.booking_channels as P2ChannelRow[] | undefined) ?? []
-  const packages = patch.packages ?? (cur?.packages as P2PackageRow[] | undefined) ?? []
-  const packages_sold = patch.packages_sold ?? Number(cur?.packages_sold ?? 0)
-  const ratings_avg = patch.ratings_avg ?? Number(cur?.ratings_avg ?? 0)
-  const ratings_count = patch.ratings_count ?? Number(cur?.ratings_count ?? 0)
+    patch.booking_channels ??
+    (curChannelsEmpty ? undefined : (cur?.booking_channels as P2ChannelRow[] | undefined)) ??
+    (prev?.booking_channels as P2ChannelRow[] | undefined) ??
+    []
+  const packages =
+    patch.packages ??
+    (curPackagesEmpty ? undefined : (cur?.packages as P2PackageRow[] | undefined)) ??
+    (prev?.packages as P2PackageRow[] | undefined) ??
+    []
+  const packages_sold =
+    patch.packages_sold ??
+    (curPackagesEmpty && prev ? Number(prev.packages_sold ?? 0) : Number(cur?.packages_sold ?? 0))
+  const ratings_avg =
+    patch.ratings_avg ??
+    (Number(cur?.ratings_count ?? 0) === 0 && prev
+      ? Number(prev.ratings_avg ?? 0)
+      : Number(cur?.ratings_avg ?? 0))
+  const ratings_count =
+    patch.ratings_count ??
+    (Number(cur?.ratings_count ?? 0) === 0 && prev
+      ? Number(prev.ratings_count ?? 0)
+      : Number(cur?.ratings_count ?? 0))
   const payment_mix = patch.payment_mix ?? (cur?.payment_mix as P2PaymentRow[] | undefined) ?? []
-  const birthday_count = patch.birthday_count ?? Number(cur?.birthday_count ?? 0)
+  const birthday_count =
+    patch.birthday_count ??
+    (Number(cur?.birthday_count ?? 0) === 0 && prev
+      ? Number(prev.birthday_count ?? 0)
+      : Number(cur?.birthday_count ?? 0))
 
   await sql`
     insert into salon_p2_daily (
