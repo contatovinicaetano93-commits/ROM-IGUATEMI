@@ -212,7 +212,22 @@ export default function ContatosPage() {
         )}
 
         {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && (
-          <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato encontrado.</p>
+          <div className="space-y-2 px-4 py-12 text-center text-sm text-muted">
+            <p>Nenhum contato encontrado com esses filtros.</p>
+            {pendingOnly && statusFilter !== 'all' && (
+              <p>
+                Há {contacts.length} pendente{contacts.length === 1 ? '' : 's'} em outros status —{' '}
+                <button
+                  type="button"
+                  className="text-gold underline-offset-2 hover:underline"
+                  onClick={() => setStatusFilter('all')}
+                >
+                  limpar filtro de status
+                </button>
+                .
+              </p>
+            )}
+          </div>
         )}
 
         {!loading && contacts.length === 0 && debouncedQuery && !error && (
