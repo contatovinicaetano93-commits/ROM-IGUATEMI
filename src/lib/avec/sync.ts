@@ -13,6 +13,7 @@ import {
   scheduleService,
   markServiceDone,
   patchServiceVisitMeta,
+  ensureServiceCadence,
 } from '@/lib/services'
 import {
   fetchAllAvecReport,
@@ -24,6 +25,7 @@ import {
 import {
   formatAvecErrorList,
   formatAvecUserMessage,
+  hardAvecSyncWarnings,
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
@@ -35,6 +37,7 @@ import {
   parseAvecDateTime,
   parseServiceTempoMinutes,
   guessServiceCategory,
+  defaultCadenceDaysForServiceName,
   isNailService,
   isHairService,
 } from '@/lib/avec/normalize'
@@ -133,11 +136,20 @@ export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null
 async function findOrCreateService(contactId: string, serviceName: string) {
   const services = await listServices(contactId)
   const match = services.find((s) => s.name.toLowerCase() === serviceName.toLowerCase())
-  if (match) return match
+  const cadenceDays = defaultCadenceDaysForServiceName(serviceName)
+  if (match) {
+    // Sync antigo criava serviços sem cadence — completa na próxima visita/agenda.
+    if (match.cadence_days == null) {
+      const patched = await ensureServiceCadence(match.id, cadenceDays)
+      return patched ?? match
+    }
+    return match
+  }
 
   const created = await addService(contactId, {
     name: serviceName,
     category: guessServiceCategory(serviceName),
+    cadenceDays,
   })
   return created
 }
@@ -729,12 +741,47 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
 
     stats.errors = formatAvecErrorList(stats.errors)
 
+    // Truncamento / unit-id vazio ficam em warnings (UI), mas não impedem status ok.
+    const hardWarnings = hardAvecSyncWarnings(stats.warnings)
+    const hadCoreRows =
+      stats.clients_upserted +
+        stats.appointments_synced +
+        stats.attendances_synced +
+        stats.revenue_rows +
+        stats.cancellation_rows >
+      0
     const status: AvecSyncRun['status'] =
-      stats.errors.length > 0 && stats.clients_upserted + stats.appointments_synced === 0
+      stats.errors.length > 0 && !hadCoreRows
         ? 'error'
-        : stats.errors.length > 0 || stats.warnings.length > 0
+        : stats.errors.length > 0 || hardWarnings.length > 0
           ? 'partial'
           : 'ok'
+
+    // Superfície clara quando o token morreu (Admin/Hoje leem `error`, não só stats JSON).
+    const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))
+    const topError =
+      status === 'error'
+        ? (authErr ?? formatAvecUserMessage(stats.errors[0]) ?? stats.errors[0] ?? undefined)
+        : authErr
+
+    const finished = await finishAvecSyncRun(run.id, status, stats, topError)
+
+    await logEvent({
+      contactId: null,
+      channel: 'avec',
+      direction: 'in',
+      handledBy: 'system',
+      payload: { avec_sync: stats, status, mode },
+    })
+
+    return finished
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e)
+    const msg = formatAvecUserMessage(raw) ?? raw
+    stats.errors.push(msg)
+    return finishAvecSyncRun(run.id, 'error', stats, msg)
+  }
+}
 
     // Superfície clara quando o token morreu (Admin/Hoje leem `error`, não só stats JSON).
     const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))

@@ -12,9 +12,11 @@ import {
   scheduleService,
   markServiceDone,
   clearServiceSchedule,
+  ensureServiceCadence,
 } from '@/lib/services'
 import {
   guessServiceCategory,
+  defaultCadenceDaysForServiceName,
   isNailService,
   isHairService,
   parseOptionalMoney,
@@ -242,7 +244,14 @@ export async function ingestAvecWebhook(rawBody: unknown) {
         service = await addService(contact.id, {
           name: payload.service_name,
           category: guessServiceCategory(payload.service_name),
+          cadenceDays: defaultCadenceDaysForServiceName(payload.service_name),
         })
+      } else if (service.cadence_days == null) {
+        const patched = await ensureServiceCadence(
+          service.id,
+          defaultCadenceDaysForServiceName(payload.service_name),
+        )
+        if (patched) service = patched
       }
       await scheduleService(service.id, payload.scheduled_at, payload.professional_name)
       await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
@@ -263,7 +272,14 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       service = await addService(contact.id, {
         name: payload.service_name,
         category: guessServiceCategory(payload.service_name),
+        cadenceDays: defaultCadenceDaysForServiceName(payload.service_name),
       })
+    } else if (service.cadence_days == null) {
+      const patched = await ensureServiceCadence(
+        service.id,
+        defaultCadenceDaysForServiceName(payload.service_name),
+      )
+      if (patched) service = patched
     }
     await markServiceDone(service.id, {
       doneAt: payload.completed_at,

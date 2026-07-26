@@ -184,6 +184,21 @@ export async function scheduleService(
   return rows[0] ?? null
 }
 
+/** Preenche cadence_days só se ainda estiver null (não sobrescreve cadência manual). */
+export async function ensureServiceCadence(
+  serviceId: string,
+  cadenceDays: number,
+): Promise<ClientService | null> {
+  if (!Number.isFinite(cadenceDays) || cadenceDays <= 0) return null
+  const sql = getSql()
+  const rows = (await sql`
+    update client_services set cadence_days = ${Math.floor(cadenceDays)}
+    where id = ${serviceId} and cadence_days is null
+    returning *
+  `) as ClientService[]
+  return rows[0] ?? null
+}
+
 export async function setServiceProfessional(
   serviceId: string,
   professionalName: string

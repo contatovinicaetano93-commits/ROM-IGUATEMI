@@ -1088,12 +1088,42 @@ export function normalizeStockValuationRow(row: Record<string, unknown>): Normal
   return { key, totalCost, percentage }
 }
 
+export type AvecServiceCategory = 'corte' | 'tratamento' | 'coloracao' | 'bem_estar' | 'outro'
+
 // Mapeia nome de serviço Avec → categoria ROM (heurística simples).
-export function guessServiceCategory(name: string): 'corte' | 'tratamento' | 'coloracao' | 'bem_estar' | 'outro' {
+export function guessServiceCategory(name: string): AvecServiceCategory {
   const n = name.toLowerCase()
   if (n.includes('corte') || n.includes('cabeleir')) return 'corte'
   if (n.includes('color') || n.includes('mecha') || n.includes('tintura')) return 'coloracao'
   if (isNailService(n) || n.includes('massag') || n.includes('spa')) return 'bem_estar'
   if (n.includes('hidrat') || n.includes('nutri') || n.includes('trat') || n.includes('escova')) return 'tratamento'
   return 'outro'
+}
+
+/**
+ * Cadência padrão (dias) por categoria — usada no sync Avec quando o salão
+ * ainda não definiu cadence_days. Sem isso, Contatos/playbook ficam sem
+ * overdue/due_soon (next_due_at calculado só com cadence).
+ */
+export function defaultCadenceDaysForCategory(category: AvecServiceCategory): number {
+  switch (category) {
+    case 'corte':
+      return 35
+    case 'coloracao':
+      return 60
+    case 'tratamento':
+      return 45
+    case 'bem_estar':
+      return 28
+    case 'outro':
+      return 30
+    default: {
+      const _exhaustive: never = category
+      return _exhaustive
+    }
+  }
+}
+
+export function defaultCadenceDaysForServiceName(name: string): number {
+  return defaultCadenceDaysForCategory(guessServiceCategory(name))
 }

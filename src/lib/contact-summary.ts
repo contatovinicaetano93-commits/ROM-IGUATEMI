@@ -17,6 +17,8 @@ export interface ListContactsWithSummaryOpts {
   limit?: number
   /** Busca server-side por nome (ilike) ou telefone (dígitos). */
   query?: string | null
+  /** Só contatos com pending_actions > 0 (calcula sobre toda a base de serviços). */
+  pendingOnly?: boolean
 }
 
 function withUrgency(
@@ -61,6 +63,7 @@ export async function listContactsWithSummary(
   const rawQuery = (opts.query ?? '').trim()
   const q = rawQuery.toLowerCase()
   const qDigits = rawQuery.replace(/\D/g, '')
+  const pendingOnly = opts.pendingOnly === true
 
   const sql = getSql()
 
@@ -73,6 +76,41 @@ export async function listContactsWithSummary(
     const list = byContact.get(s.contact_id) ?? []
     list.push(s)
     byContact.set(s.contact_id, list)
+  }
+
+  if (pendingOnly && !(q || qDigits.length >= 3)) {
+    // Filtra pendentes sobre TODA a base de serviços (não só top-N recentes).
+    const pendingRanked = Array.from(byContact.keys())
+      .map((id) => {
+        const u = urgencyForServices(byContact.get(id) ?? [])
+        return { id, u }
+      })
+      .filter((x) => x.u.pending_actions > 0)
+      .sort((a, b) =>
+        compareByOverdueThenName(
+          { max_overdue_days: a.u.max_overdue_days, name: null },
+          { max_overdue_days: b.u.max_overdue_days, name: null },
+        ),
+      )
+      .slice(0, limit)
+
+    const pendingIds = pendingRanked.map((x) => x.id)
+    const pendingContacts = await fetchContactsByIds(pendingIds)
+    const byId = new Map(pendingContacts.map((c) => [c.id, c]))
+    const ordered = pendingIds
+      .map((id) => byId.get(id))
+      .filter((c): c is ContactRow => Boolean(c))
+
+    ordered.sort((a, b) => {
+      const ua = urgencyForServices(byContact.get(a.id) ?? [])
+      const ub = urgencyForServices(byContact.get(b.id) ?? [])
+      return compareByOverdueThenName(
+        { max_overdue_days: ua.max_overdue_days, name: a.name },
+        { max_overdue_days: ub.max_overdue_days, name: b.name },
+      )
+    })
+
+    return withUrgency(ordered, byContact)
   }
 
   if (q || qDigits.length >= 3) {
@@ -89,7 +127,8 @@ export async function listContactsWithSummary(
       order by created_at desc
       limit ${limit}
     `) as ContactRow[]
-    return withUrgency(contacts, byContact)
+    const withU = withUrgency(contacts, byContact)
+    return pendingOnly ? withU.filter((c) => c.pending_actions > 0) : withU
   }
 
   // Contatos com urgência > 0 (atraso / vencendo / agendado) — prioridade.

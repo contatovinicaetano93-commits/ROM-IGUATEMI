@@ -14,6 +14,7 @@ import {
 import {
   formatAvecErrorList,
   formatAvecUserMessage,
+  hardAvecSyncWarnings,
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
@@ -286,10 +287,11 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
     stats.errors = formatAvecErrorList(stats.errors)
 
     const hadAnyData = stats.positions_synced > 0 || stats.movements_synced > 0
+    const hardWarnings = hardAvecSyncWarnings(stats.warnings)
     const status: StockSyncRun['status'] =
       stats.errors.length > 0 && !hadAnyData
         ? 'error'
-        : stats.errors.length > 0 || stats.warnings.length > 0
+        : stats.errors.length > 0 || hardWarnings.length > 0
           ? 'partial'
           : 'ok'
 

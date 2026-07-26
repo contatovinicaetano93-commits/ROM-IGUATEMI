@@ -33,9 +33,10 @@ export async function GET(req: NextRequest) {
 
     const rawLimit = Number(searchParams.get('limit') ?? 500)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 500
-    let items = await listContactsWithSummary({ limit, query })
+    let items = await listContactsWithSummary({ limit, query, pendingOnly })
 
-    if (pendingOnly) {
+    // pendingOnly já filtrado em listContactsWithSummary (sobre toda a base).
+    if (pendingOnly && query) {
       items = items.filter((c) => c.pending_actions > 0)
     }
 

@@ -4,7 +4,9 @@ import {
   deriveAvecSyncUi,
   formatAvecErrorList,
   formatAvecUserMessage,
+  hardAvecSyncWarnings,
   isAvecTokenExpiredError,
+  isSoftAvecSyncWarning,
 } from '@/lib/avec/messages'
 
 describe('isAvecTokenExpiredError', () => {
@@ -103,5 +105,23 @@ describe('deriveAvecSyncUi', () => {
     expect(ui.status).toBe('partial')
     expect(ui.warnings).toHaveLength(1)
     expect(ui.warnings[0]).toContain('0046')
+  })
+})
+
+describe('isSoftAvecSyncWarning', () => {
+  it('trata truncamento e unit id como soft', () => {
+    expect(
+      isSoftAvecSyncWarning(
+        'Relatório 0223 (0223) atingiu o limite de 400 páginas (100000 linhas, 250/página). Pode haver dados não sincronizados — aumente AVEC_SYNC_MAX_PAGES na Vercel.',
+      ),
+    ).toBe(true)
+    expect(isSoftAvecSyncWarning('AVEC_UNIT_ID vazio — sync sem filtro')).toBe(true)
+    expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
+    expect(
+      hardAvecSyncWarnings([
+        'AVEC_UNIT_ID vazio — sync sem filtro',
+        'Falha ao gravar snapshot',
+      ]),
+    ).toEqual(['Falha ao gravar snapshot'])
   })
 })
