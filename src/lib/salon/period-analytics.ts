@@ -26,6 +26,12 @@ function monthRange(monthKey: string): { from: string; to: string } {
   return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
 }
 
+/** Mês corrente = acumulado até hoje; meses fechados = calendário completo. */
+function monthToDateRange(monthKey: string, referenceDay = todayIso()): { from: string; to: string } {
+  const range = monthRange(monthKey)
+  return monthKey === currentMonthKey(referenceDay) ? { ...range, to: referenceDay } : range
+}
+
 function labelMonthPt(monthKey: string): string {
   const [y, m] = monthKey.split('-')
   const idx = Number(m) - 1
