@@ -30,14 +30,21 @@ describe('period-analytics', () => {
   })
 
   it('pondera ocupação e estima receita perdida', async () => {
-    const { averageOccupancy, estimateLostRevenue } = await import('@/lib/salon/period-analytics')
+    const { averageOccupancy, coerceOccupancyFraction, estimateLostRevenue, monthToDateRange } =
+      await import('@/lib/salon/period-analytics')
     expect(
       averageOccupancy([
         { name: 'A', revenue: 100, attended: 10, ticket_avg: 10, occupancy: 0.8 },
         { name: 'B', revenue: 50, attended: 0, ticket_avg: 0, occupancy: 0.2 },
       ]),
     ).toBe(0.8)
+    expect(coerceOccupancyFraction(1.063)).toBeCloseTo(1.063)
+    expect(coerceOccupancyFraction(67.79)).toBeCloseTo(0.6779)
     expect(estimateLostRevenue(2, 3, 100)).toBe(500)
+    expect(monthToDateRange('2026-07', '2026-07-26')).toEqual({
+      from: '2026-07-01',
+      to: '2026-07-26',
+    })
   })
 
   it('monta bucket comercial do período', async () => {

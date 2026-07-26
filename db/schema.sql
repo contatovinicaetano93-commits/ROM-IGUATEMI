@@ -85,13 +85,19 @@ create table if not exists avec_sync_runs (
 create index if not exists avec_sync_runs_created_idx on avec_sync_runs (created_at desc);
 
 -- KPIs agregados por dia e canal — o painel administrativo lê daqui.
+-- Funil: exclui dump Avec (status importado / sources de backfill).
 -- count(*) é bigint; o cast ::int garante que o driver retorne número (não string).
 create or replace view v_kpi_daily as
 select
-  date_trunc('day', created_at) as day,
+  (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date as day,
   channel,
   count(*)::int as contacts_count
 from contacts
+where anonymized_at is null
+  and status <> 'importado'
+  and coalesce(source, '') not like 'avec_sync_clients%'
+  and coalesce(source, '') not like 'avec_backfill%'
+  and coalesce(source, '') not like 'avec_lake%'
 group by 1, 2
 order by 1 desc;
 
@@ -100,17 +106,21 @@ select
   status,
   count(*)::int as contacts_count
 from contacts
+where anonymized_at is null
 group by 1;
 
 create or replace view v_kpi_conversion as
 select
   coalesce(
     count(*) filter (where status = 'convertido')::float
-      / nullif(count(*), 0)::float,
+      / nullif(count(*) filter (where status <> 'importado'), 0)::float,
     0
   ) as conversion_rate,
-  count(*)::int as total_contacts
-from contacts;
+  count(*)::int as total_contacts,
+  count(*) filter (where status <> 'importado')::int as funnel_contacts,
+  count(*) filter (where status = 'importado')::int as imported_contacts
+from contacts
+where anonymized_at is null;
 
 -- Snapshots imutáveis dos relatórios Avec — reprocessável e resiliente.
 create table if not exists avec_report_snapshots (

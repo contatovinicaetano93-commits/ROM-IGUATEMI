@@ -18,7 +18,12 @@ import {
 interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
   byStatus: { status: string; contacts_count: number }[]
-  conversion: { conversion_rate: number; total_contacts: number } | null
+  conversion: {
+    conversion_rate: number
+    total_contacts: number
+    funnel_contacts?: number
+    imported_contacts?: number
+  } | null
 }
 
 interface ContactRow {
@@ -334,9 +339,18 @@ export default function AdminPage() {
             <Skeleton />
           ) : kpis ? (
             <div className="space-y-3 text-sm">
-              <Row label="Contatos totais" value={String(kpis.conversion?.total_contacts ?? 0)} highlight />
               <Row
-                label="Taxa de conversão"
+                label="Funil ativo (sem importado)"
+                value={String(kpis.conversion?.funnel_contacts ?? 0)}
+                highlight
+              />
+              <Row
+                label="Base Avec importada"
+                value={String(kpis.conversion?.imported_contacts ?? 0)}
+              />
+              <Row label="Total na base" value={String(kpis.conversion?.total_contacts ?? 0)} />
+              <Row
+                label="Conversão no funil"
                 value={`${((kpis.conversion?.conversion_rate ?? 0) * 100).toFixed(1)}%`}
               />
               <div className="border-t border-border pt-3">
