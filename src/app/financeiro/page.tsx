@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, X, Trash2, Download, Camera, Paperclip } from 'lucide-react'
+import { Plus, X, Trash2, Download, FileText, Camera, Paperclip } from 'lucide-react'
+import { downloadTextFile, openCsvAsPdf } from '@/lib/salon/csv-print'
 import { upload } from '@vercel/blob/client'
 import { CountBadge, PrimaryButton } from '../_components/ui'
 import {
@@ -378,8 +379,8 @@ export default function FinanceiroPage() {
     load()
   }, [load])
 
-  function downloadReport() {
-    if (!kpis) return
+  function buildFinanceReportLines(): string[] | null {
+    if (!kpis) return null
     const cur = kpis.current
     const prev = kpis.previous
     const rec = cur.payment_reconciliation
@@ -523,17 +524,29 @@ export default function FinanceiroPage() {
         'ROM é a fonte de fechamento do mês. Despesas são manuais. Receita/atendidos/ticket vêm de salon_daily_metrics (sync Avec + histórico). Overview completo em /relatorios.',
       ),
     ]
+    return lines
+  }
 
-    // BOM UTF-8: Excel/Numbers reconhecem acentos e formato BR.
-    const blob = new Blob(['\uFEFF' + lines.join('\n')], {
-      type: 'text/csv;charset=utf-8',
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `financeiro_${cur.month}_vs_${prev.month}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  function downloadReportCsv() {
+    if (!kpis) return
+    const lines = buildFinanceReportLines()
+    if (!lines) return
+    downloadTextFile(
+      `financeiro_${kpis.current.month}_vs_${kpis.previous.month}.csv`,
+      '\uFEFF' + lines.join('\n'),
+    )
+  }
+
+  async function downloadReportPdf() {
+    if (!kpis) return
+    const lines = buildFinanceReportLines()
+    if (!lines) return
+    const ok = await openCsvAsPdf(
+      `Relatório financeiro — ${kpis.current.label}`,
+      lines.join('\n'),
+      `vs ${kpis.previous.label} · gerado em ${new Date().toLocaleString('pt-BR')}`,
+    )
+    if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
   }
 
   async function removeExpense(id: string) {
@@ -597,11 +610,19 @@ export default function FinanceiroPage() {
           </label>
           <button
             type="button"
-            onClick={downloadReport}
+            onClick={downloadReportCsv}
             disabled={!kpis}
             className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
           >
-            <Download size={14} /> Relatório do mês (CSV)
+            <Download size={14} /> CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => void downloadReportPdf()}
+            disabled={!kpis}
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
+          >
+            <FileText size={14} /> PDF
           </button>
         </div>
       </div>

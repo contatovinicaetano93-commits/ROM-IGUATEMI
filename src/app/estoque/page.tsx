@@ -11,7 +11,10 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
+  Download,
+  FileText,
 } from 'lucide-react'
+import { downloadTextFile, openCsvAsPdf } from '@/lib/salon/csv-print'
 import { SectionCard, PrimaryButton, InfoBanner, CountBadge } from '../_components/ui'
 import {
   CollapsibleBody,
@@ -311,6 +314,59 @@ export default function EstoquePage() {
     }
   }
 
+  function buildEstoqueOverviewCsv(): string {
+    const esc = (v: string | number | null | undefined) => {
+      const s = v == null ? '' : String(v)
+      if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+      return s
+    }
+    const row = (...cols: Array<string | number | null | undefined>) => cols.map(esc).join(';')
+    const money = (n: number | null | undefined) =>
+      n == null
+        ? ''
+        : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const lines = [
+      row('=== ESTOQUE — VISÃO GERAL ==='),
+      row('Gerado em', new Date().toLocaleString('pt-BR')),
+      row('Produtos', kpis?.total_products ?? ''),
+      row('Valor em estoque', money(kpis?.total_value)),
+      row('Fila de compra (itens)', purchaseQueue.length),
+      row('Fila de compra (custo est.)', money(queueTotalCost)),
+      row('Zerados', kpis?.zero_products ?? ''),
+      row('Alertas ativos', kpis?.active_alerts ?? ''),
+      '',
+      row('=== FILA DE COMPRA (TOP) ==='),
+      row('Produto', 'Atual', 'Mínimo', 'Reposição', 'Custo est.'),
+      ...(purchaseQueue.length
+        ? purchaseQueue.slice(0, 200).map((a) =>
+            row(
+              a.product_name,
+              a.current_qty,
+              a.minimum_qty,
+              a.suggested_reposition ?? '',
+              money(alertRepositionCost(a)),
+            ),
+          )
+        : [row('(vazia)')]),
+    ]
+    return '\uFEFF' + lines.join('\n')
+  }
+
+  function downloadEstoqueCsv() {
+    if (!kpis) return
+    downloadTextFile(`estoque-visao-${todayIsoDaySp()}.csv`, buildEstoqueOverviewCsv())
+  }
+
+  async function downloadEstoquePdf() {
+    if (!kpis) return
+    const ok = await openCsvAsPdf(
+      'Estoque — visão geral',
+      buildEstoqueOverviewCsv(),
+      `Gerado em ${new Date().toLocaleString('pt-BR')}`,
+    )
+    if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+  }
+
   const notOnboarded =
     !loading && syncStatus && (!syncStatus.stock_auth_configured || !syncStatus.last_fast)
 
@@ -331,6 +387,22 @@ export default function EstoquePage() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <SyncBadge status={syncStatus} />
+          <button
+            type="button"
+            onClick={downloadEstoqueCsv}
+            disabled={!kpis}
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
+          >
+            <Download size={14} /> CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => void downloadEstoquePdf()}
+            disabled={!kpis}
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
+          >
+            <FileText size={14} /> PDF
+          </button>
           <button
             type="button"
             onClick={triggerSync}

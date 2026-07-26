@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   ArrowLeft,
   Download,
+  FileText,
   RefreshCw,
   TrendingUp,
   Users,
@@ -17,6 +18,7 @@ import {
 import { SectionCard, CountBadge, PrimaryButton } from '../../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency, formatPercent, whatsAppWebUrl } from '@/lib/salon/format'
+import { downloadTextFile, openCsvAsPdf } from '@/lib/salon/csv-print'
 import type { DirectorReport } from '@/lib/director-report/types'
 import { buildRecallWhatsAppMessage } from '@/lib/director-report/recall-message'
 
@@ -246,6 +248,17 @@ export default function RelatorioDiretoriaPage() {
     await downloadBlob(q, filename)
   }
 
+  async function print0011(format: string, title: string) {
+    const q = new URLSearchParams({
+      format,
+      quarter,
+      compare,
+    })
+    if (forceDemo) q.set('mock', '1')
+    if (proId0011) q.set('professional_id', proId0011)
+    await printCsvFromApi(q, title)
+  }
+
   async function download0021(format: string, filename: string) {
     const q = new URLSearchParams({
       format,
@@ -257,6 +270,19 @@ export default function RelatorioDiretoriaPage() {
     if (forceDemo) q.set('mock', '1')
     if (proId0021) q.set('professional_id', proId0021)
     await downloadBlob(q, filename)
+  }
+
+  async function print0021(format: string, title: string) {
+    const q = new URLSearchParams({
+      format,
+      month,
+      quarter_0021: quarter0021,
+      compare_0021: compareQuarter0021,
+      compare_months: compareMonths ? '1' : '0',
+    })
+    if (forceDemo) q.set('mock', '1')
+    if (proId0021) q.set('professional_id', proId0021)
+    await printCsvFromApi(q, title)
   }
 
   async function downloadProfileXlsx() {
@@ -281,6 +307,74 @@ export default function RelatorioDiretoriaPage() {
     a.download = filename
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function printCsvFromApi(q: URLSearchParams, title: string) {
+    const res = await apiFetch(`/api/director-report?${q}`)
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      setError(json.error ?? 'Falha ao exportar PDF')
+      return
+    }
+    const csv = await res.text()
+    const ok = await openCsvAsPdf(title, csv, `Gerado em ${new Date().toLocaleString('pt-BR')}`)
+    if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+  }
+
+  function buildStockReportCsv(): string {
+    const k = stockKpis
+    const esc = (v: string | number | null | undefined) => {
+      const s = v == null ? '' : String(v)
+      if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+      return s
+    }
+    const row = (...cols: Array<string | number | null | undefined>) => cols.map(esc).join(';')
+    const money = (n: number | null | undefined) =>
+      n == null ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const cats =
+      (k?.by_category_period?.length ?? 0) > 0 ? k!.by_category_period! : (k?.by_category ?? [])
+    const lines = [
+      row('=== ESTOQUE — RELATÓRIO GERÊNCIA ==='),
+      row('Gerado em', new Date().toLocaleString('pt-BR')),
+      row('Valor local (0149)', money(k?.total_value)),
+      row('Total Avec (0045)', money(k?.avec_official_total)),
+      row('Drift', money(k?.drift)),
+      row('Alertas ativos', k?.active_alerts ?? ''),
+      row('Produtos zerados', k?.zero_products ?? ''),
+      row('Último sync', k?.last_synced_at ?? ''),
+      '',
+      row('=== CUSTO POR CATEGORIA ==='),
+      row('Categoria', 'Custo', '%'),
+      ...(cats.length
+        ? cats.map((b) =>
+            row(b.key, money(b.totalCost), b.percentage != null ? `${b.percentage}` : ''),
+          )
+        : [row('(sem dados)')]),
+      '',
+      row('=== CUSTO POR MARCA ==='),
+      row('Marca', 'Custo', '%'),
+      ...((k?.by_brand.length ?? 0)
+        ? k!.by_brand.map((b) =>
+            row(b.key, money(b.totalCost), b.percentage != null ? `${b.percentage}` : ''),
+          )
+        : [row('(sem dados)')]),
+    ]
+    return '\uFEFF' + lines.join('\n')
+  }
+
+  function downloadStockCsv() {
+    if (!stockKpis) return
+    downloadTextFile(`estoque-gerencia-${defaultMonthKey()}.csv`, buildStockReportCsv())
+  }
+
+  async function downloadStockPdf() {
+    if (!stockKpis) return
+    const ok = await openCsvAsPdf(
+      'Estoque — Relatório gerência',
+      buildStockReportCsv(),
+      `Gerado em ${new Date().toLocaleString('pt-BR')}`,
+    )
+    if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
   }
 
   async function send0011() {
@@ -463,8 +557,20 @@ export default function RelatorioDiretoriaPage() {
                 label="CSV comparativo"
               />
               <ExportBtn
+                onClick={() =>
+                  void print0011('csv-return-compare', '0011 · Comparativo trimestre')
+                }
+                label="PDF comparativo"
+                icon="pdf"
+              />
+              <ExportBtn
                 onClick={() => download0011('csv-reactivation', '0011-lista-clientes.csv')}
                 label="CSV lista clientes"
+              />
+              <ExportBtn
+                onClick={() => void print0011('csv-reactivation', '0011 · Lista de clientes')}
+                label="PDF lista clientes"
+                icon="pdf"
               />
             </span>
           </div>
@@ -756,17 +862,33 @@ export default function RelatorioDiretoriaPage() {
             </span>
             <span className="ml-auto flex flex-wrap gap-2">
               {compareMonths ? (
-                <ExportBtn
-                  onClick={() =>
-                    download0021('csv-revenue-compare', '0021-comparativo-trimestre.csv')
-                  }
-                  label="CSV comparativo"
-                />
+                <>
+                  <ExportBtn
+                    onClick={() =>
+                      download0021('csv-revenue-compare', '0021-comparativo-trimestre.csv')
+                    }
+                    label="CSV comparativo"
+                  />
+                  <ExportBtn
+                    onClick={() =>
+                      void print0021('csv-revenue-compare', '0021 · Comparativo trimestre')
+                    }
+                    label="PDF comparativo"
+                    icon="pdf"
+                  />
+                </>
               ) : (
-                <ExportBtn
-                  onClick={() => download0021('csv-revenue', '0021-mes.csv')}
-                  label="CSV do mês"
-                />
+                <>
+                  <ExportBtn
+                    onClick={() => download0021('csv-revenue', '0021-mes.csv')}
+                    label="CSV do mês"
+                  />
+                  <ExportBtn
+                    onClick={() => void print0021('csv-revenue', '0021 · Faturamento do mês')}
+                    label="PDF do mês"
+                    icon="pdf"
+                  />
+                </>
               )}
               {proId0021 && (
                 <ExportBtn onClick={downloadProfileXlsx} label="Exportar Excel (perfil)" />
@@ -940,6 +1062,18 @@ export default function RelatorioDiretoriaPage() {
               Drift acima de R$ 50 — conferir sync da posição (0149) vs valorização oficial (0045).
             </div>
           )}
+
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted">
+            <span className="text-foreground">Etapa 3 · estoque valorizado</span>
+            <span className="ml-auto flex flex-wrap gap-2">
+              <ExportBtn onClick={downloadStockCsv} label="CSV estoque" />
+              <ExportBtn
+                onClick={() => void downloadStockPdf()}
+                label="PDF estoque"
+                icon="pdf"
+              />
+            </span>
+          </div>
 
           <SectionCard
             title="Custo por categoria (0142 / 0243)"
@@ -1141,14 +1275,23 @@ function StockValuationBars({ buckets }: { buckets: StockValuationBucket[] }) {
   )
 }
 
-function ExportBtn({ onClick, label }: { onClick: () => void; label: string }) {
+function ExportBtn({
+  onClick,
+  label,
+  icon = 'csv',
+}: {
+  onClick: () => void
+  label: string
+  icon?: 'csv' | 'pdf'
+}) {
+  const Icon = icon === 'pdf' ? FileText : Download
   return (
     <button
       type="button"
       onClick={onClick}
       className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[0.65rem] text-foreground hover:border-gold/40 hover:text-gold"
     >
-      <Download size={12} />
+      <Icon size={12} />
       {label}
     </button>
   )
