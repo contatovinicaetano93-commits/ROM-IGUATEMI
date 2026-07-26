@@ -221,6 +221,30 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
   return []
 }
 
+/** Uma renovação por invocação serverless — evita stampede em 401 paralelo. */
+let avecTokenRefreshInFlight: Promise<string | null> | null = null
+
+async function forceRefreshAvecToken(): Promise<string | null> {
+  if (!isAvecLoginConfigured()) return null
+  if (!avecTokenRefreshInFlight) {
+    avecTokenRefreshInFlight = (async () => {
+      try {
+        const { mintAvecApiToken } = await import('@/lib/avec/refresh-token')
+        const { saveAvecApiToken } = await import('@/lib/avec/token-store')
+        const minted = await mintAvecApiToken({ force: true })
+        await saveAvecApiToken(minted.token)
+        process.env.AVEC_API_TOKEN = minted.token
+        return minted.token
+      } catch {
+        return null
+      }
+    })().finally(() => {
+      avecTokenRefreshInFlight = null
+    })
+  }
+  return avecTokenRefreshInFlight
+}
+
 export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
   assertAvecMockAllowed()
   const effectiveParams = withRequiredAvecReportParams(reportId, params)
@@ -228,7 +252,9 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
     return getMockReport(reportId, effectiveParams.page ?? 1)
   }
 
-  const { baseUrl, token } = await getAvecConfig()
+  const cfg = await getAvecConfig()
+  const baseUrl = cfg.baseUrl
+  let token = cfg.token
   const qs = new URLSearchParams()
   qs.set('page', String(effectiveParams.page ?? 1))
   qs.set('limit', String(effectiveParams.limit ?? 250))
@@ -238,6 +264,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
   }
 
   const url = `${baseUrl}/reports/${reportId}?${qs}`
+  let refreshedFor401 = false
 
   return retryWithBackoff(
     async () => {
@@ -246,6 +273,32 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
         cache: 'no-store',
         signal: AbortSignal.timeout(30_000),
       })
+
+      // JWT pode estar “válido” no relógio e ainda assim a Avec devolver 401 —
+      // renova via login Cognito e tenta 1× de novo no mesmo request.
+      if (res.status === 401 && !refreshedFor401 && isAvecLoginConfigured()) {
+        const next = await forceRefreshAvecToken()
+        if (next) {
+          token = next
+          refreshedFor401 = true
+          const retry = await fetch(url, {
+            headers: { Authorization: token, Accept: 'application/json' },
+            cache: 'no-store',
+            signal: AbortSignal.timeout(30_000),
+          })
+          if (retry.ok) return retry.json()
+          const retryText = await retry.text().catch(() => '')
+          const body =
+            retry.status === 401
+              ? 'token Avec expirado — renovar'
+              : retryText
+                ? retryText.slice(0, 200)
+                : ''
+          const err = new Error(`Avec ${reportId} HTTP ${retry.status}${body ? `: ${body}` : ''}`)
+          ;(err as Error & { status?: number }).status = retry.status
+          throw err
+        }
+      }
 
       if (!res.ok) {
         const text = await res.text().catch(() => '')
