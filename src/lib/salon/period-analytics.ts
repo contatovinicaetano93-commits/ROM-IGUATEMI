@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { asJsonArray } from '@/lib/sql-json'
 import { todayIso } from '@/lib/salon/format'
 import {
   getSalonP1DailyNear,
@@ -151,8 +152,8 @@ export async function computePeriodAnalytics(opts?: {
   ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
-  const professionals = p1?.professionals ?? []
-  const packages = (p2?.packages ?? []).slice(0, 10)
+  const professionals = asJsonArray<P1ProfessionalRow>(p1?.professionals).slice(0, 8)
+  const packages = asJsonArray<P2PackageRow>(p2?.packages).slice(0, 10)
   const packages_revenue =
     Math.round(packages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
 
@@ -170,11 +171,11 @@ export async function computePeriodAnalytics(opts?: {
     packages,
     packages_sold: Number(p2?.packages_sold ?? 0) || 0,
     packages_revenue,
-    booking_channels: (p2?.booking_channels ?? []).slice(0, 10),
-    acquisition: (p1?.acquisition ?? []).slice(0, 10),
+    booking_channels: asJsonArray<P2ChannelRow>(p2?.booking_channels).slice(0, 10),
+    acquisition: asJsonArray<P1AcquisitionRow>(p1?.acquisition).slice(0, 10),
     return_rate: p3 != null ? Number(p3.return_rate) : null,
     new_clients_period: Number(p3?.new_clients_period ?? 0) || 0,
-    top_professionals: professionals.slice(0, 8),
-    top_services: (p1?.services ?? []).slice(0, 8),
+    top_professionals: professionals,
+    top_services: asJsonArray<P1ServiceRow>(p1?.services).slice(0, 8),
   }
 }

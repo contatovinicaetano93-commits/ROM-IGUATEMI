@@ -379,7 +379,7 @@ export async function listTodayPipeline(day: string): Promise<{
       where cs.active = true
         and cs.last_done_at is not null
         and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-      order by cs.last_done_at asc
+      order by lower(coalesce(c.name, '')), lower(cs.name), cs.last_done_at asc
     `,
   ])
   return {

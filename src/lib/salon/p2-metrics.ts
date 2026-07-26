@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { asJsonArray } from '@/lib/sql-json'
 
 export interface P2ChannelRow {
   channel: string
@@ -120,12 +121,12 @@ export async function upsertSalonP2Daily(
   const cur = existing[0]
 
   const booking_channels =
-    patch.booking_channels ?? (cur?.booking_channels as P2ChannelRow[] | undefined) ?? []
-  const packages = patch.packages ?? (cur?.packages as P2PackageRow[] | undefined) ?? []
+    patch.booking_channels ?? asJsonArray<P2ChannelRow>(cur?.booking_channels)
+  const packages = patch.packages ?? asJsonArray<P2PackageRow>(cur?.packages)
   const packages_sold = patch.packages_sold ?? Number(cur?.packages_sold ?? 0)
   const ratings_avg = patch.ratings_avg ?? Number(cur?.ratings_avg ?? 0)
   const ratings_count = patch.ratings_count ?? Number(cur?.ratings_count ?? 0)
-  const payment_mix = patch.payment_mix ?? (cur?.payment_mix as P2PaymentRow[] | undefined) ?? []
+  const payment_mix = patch.payment_mix ?? asJsonArray<P2PaymentRow>(cur?.payment_mix)
   const birthday_count = patch.birthday_count ?? Number(cur?.birthday_count ?? 0)
 
   await sql`
