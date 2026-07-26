@@ -179,7 +179,7 @@ export async function computePeriodAnalytics(opts?: {
     packages_revenue,
     booking_channels: asJsonArray<P2ChannelRow>(p2?.booking_channels).slice(0, 10),
     acquisition: asJsonArray<P1AcquisitionRow>(p1?.acquisition).slice(0, 10),
-    return_rate: p3 != null ? Number(p3.return_rate) : null,
+    return_rate: p3?.return_rate != null ? Number(p3.return_rate) : null,
     new_clients_period: Number(p3?.new_clients_period ?? 0) || 0,
     top_professionals: professionals,
     top_services: asJsonArray<P1ServiceRow>(p1?.services).slice(0, 8),

@@ -116,12 +116,13 @@ async function computeReturnRateFromAvec(
     }
     if (cohort.size <= 0) return null
 
-    let nonInCohort = 0
+    // Clientes únicos sem retorno ∩ cohort (não contar linhas duplicadas/ruído).
+    const nonInCohort = new Set<string>()
     for (const row of nonReturnerRows) {
       const k = clientMatchKey(row)
-      if (k && cohort.has(k)) nonInCohort++
+      if (k && cohort.has(k)) nonInCohort.add(k)
     }
-    const returned = Math.max(0, cohort.size - nonInCohort)
+    const returned = Math.max(0, cohort.size - nonInCohort.size)
     return Math.round((returned / cohort.size) * 10000) / 10000
   } catch (e) {
     stats.warnings?.push(
@@ -185,7 +186,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
       await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
       let sum = 0
       let n = 0
-      let nonReturners = 0
+      const nonReturnerRows: Record<string, unknown>[] = []
       for (const row of rows) {
         const r = normalizeP3ReturnRateRow(row)
         if (r != null) {
@@ -194,8 +195,9 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
           n++
           continue
         }
-        if (isP3NonReturnerRow(row)) nonReturners++
+        if (isP3NonReturnerRow(row)) nonReturnerRows.push(row)
       }
+      const nonReturners = nonReturnerRows.length
       if (n > 0) {
         return_rate = Math.round((sum / n) * 10000) / 10000
         returnRateOk = true
@@ -204,7 +206,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
         const local = await computeLocalReturnRate()
         const viaAvec =
           local == null
-            ? await computeReturnRateFromAvec(rows, reportParams, stats, syncRunId)
+            ? await computeReturnRateFromAvec(nonReturnerRows, reportParams, stats, syncRunId)
             : null
         const rate = local ?? viaAvec
         if (rate != null) {

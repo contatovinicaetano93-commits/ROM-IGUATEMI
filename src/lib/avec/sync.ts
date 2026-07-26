@@ -207,7 +207,6 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
   const todayOpenServiceIds: string[] = []
   let todayBooked = 0
-  let todayRows = 0
 
   for (const row of result.rows) {
     try {
@@ -219,15 +218,16 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
       // No-show via status da agenda 0051 (fonte canônica: 0248 status=0.6).
       const status = (appt.status ?? '').toLowerCase()
-      if (/falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu/.test(status) && appt.scheduledAt) {
+      const isNoShow = /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu/.test(status)
+      if (isNoShow && appt.scheduledAt) {
         if (apptDay) noShowsByDay.set(apptDay, (noShowsByDay.get(apptDay) ?? 0) + 1)
       }
 
       const isPaid = /pago|finaliz|conclu|atendid|realiz/.test(status)
       const isCancelled = /cancel/.test(status)
       if (apptDay === today) {
-        todayRows++
-        if (!isCancelled) todayBooked++
+        // Agendados = abertos+pagos (exclui cancelados e faltas/no-shows).
+        if (!isCancelled && !isNoShow) todayBooked++
       }
 
       const contact = await upsertContact({
@@ -282,17 +282,16 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
     }
   }
 
-  // Reconcilia órfãos + KPI Agendados = abertos+pagos do dia (não só leftovers abertos).
-  if (todayRows > 0) {
-    try {
-      const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
-      if (cleared > 0) {
-        stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
-      }
-      await upsertSalonMetrics(today, { appointments: todayBooked })
-    } catch (e) {
-      stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)
+  // Sempre reconcilia o dia após 0051 OK — inclusive quando Avec não tem linhas hoje
+  // (senão órfãos locais e KPI Agendados ficam stale).
+  try {
+    const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
+    if (cleared > 0) {
+      stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
     }
+    await upsertSalonMetrics(today, { appointments: todayBooked })
+  } catch (e) {
+    stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   for (const [day, no_shows] of noShowsByDay) {
