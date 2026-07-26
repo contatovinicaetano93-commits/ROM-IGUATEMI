@@ -146,6 +146,17 @@ function stockSyncWarnings(status: SyncStatus | null): string[] {
   return fromFull
 }
 
+/** Erro só do sync de estoque mais recente — não herda falha antiga do full. */
+function latestStockRunError(status: SyncStatus | null): string | null {
+  if (!status) return null
+  const fast = status.last_fast
+  const full = status.last_full
+  const fastAt = fast?.created_at ? Date.parse(fast.created_at) : 0
+  const fullAt = full?.created_at ? Date.parse(full.created_at) : 0
+  const latest = fastAt >= fullAt ? fast : full
+  return latest?.error ?? null
+}
+
 function StockKpiCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'warning' | 'success' }) {
   const subTone = tone === 'warning' ? 'text-warning' : tone === 'success' ? 'text-success' : 'text-muted'
   return (
@@ -315,8 +326,7 @@ export default function EstoquePage() {
     !loading && syncStatus && (!syncStatus.stock_auth_configured || !syncStatus.last_fast)
 
   const truncationWarnings = stockSyncWarnings(syncStatus)
-  const lastRunError =
-    syncStatus?.last_fast?.error ?? syncStatus?.last_full?.error ?? null
+  const lastRunError = latestStockRunError(syncStatus)
   const tokenExpired = isAvecTokenExpiredError(lastRunError)
 
   return (
