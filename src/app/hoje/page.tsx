@@ -242,8 +242,10 @@ export default function HojePage() {
         <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-4">
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-danger" />
           <p className="text-sm">
-            <span className="font-semibold text-danger">{data!.overdue_total} serviço(s) atrasado(s)</span>
-            {' — '}priorize reagendar hoje.
+            <span className="font-semibold text-danger">
+              {data!.overdue_total} serviço(s) atrasado(s) no foco de hoje
+            </span>
+            {' — '}priorize reagendar.
           </p>
         </div>
       )}
