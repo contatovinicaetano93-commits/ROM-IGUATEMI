@@ -116,12 +116,13 @@ async function computeReturnRateFromAvec(
     }
     if (cohort.size <= 0) return null
 
-    let nonInCohort = 0
+    const nonInCohort = new Set<string>()
     for (const row of nonReturnerRows) {
+      if (!isP3NonReturnerRow(row)) continue
       const k = clientMatchKey(row)
-      if (k && cohort.has(k)) nonInCohort++
+      if (k && cohort.has(k)) nonInCohort.add(k)
     }
-    const returned = Math.max(0, cohort.size - nonInCohort)
+    const returned = Math.max(0, cohort.size - nonInCohort.size)
     return Math.round((returned / cohort.size) * 10000) / 10000
   } catch (e) {
     stats.warnings?.push(
@@ -204,7 +205,12 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
         const local = await computeLocalReturnRate()
         const viaAvec =
           local == null
-            ? await computeReturnRateFromAvec(rows, reportParams, stats, syncRunId)
+            ? await computeReturnRateFromAvec(
+                rows.filter(isP3NonReturnerRow),
+                reportParams,
+                stats,
+                syncRunId,
+              )
             : null
         const rate = local ?? viaAvec
         if (rate != null) {

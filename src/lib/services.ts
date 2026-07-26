@@ -194,20 +194,14 @@ export async function clearOrphanSchedulesForDay(
   keepServiceIds: string[],
 ): Promise<number> {
   const sql = getSql()
-  if (keepServiceIds.length === 0) {
-    const rows = (await sql`
-      update client_services set scheduled_at = null
-      where scheduled_at is not null
-        and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-      returning id
-    `) as { id: string }[]
-    return rows.length
-  }
+  // Sem IDs abertos na Avec: não apagar a agenda inteira (preserva manuais/WhatsApp).
+  // Pagos/cancelados do 0051 já limpam scheduled_at no loop de sync.
+  if (keepServiceIds.length === 0) return 0
   const rows = (await sql`
     update client_services set scheduled_at = null
     where scheduled_at is not null
       and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-      and not (id = any(${keepServiceIds}))
+      and not (id = any(${keepServiceIds}::uuid[]))
     returning id
   `) as { id: string }[]
   return rows.length

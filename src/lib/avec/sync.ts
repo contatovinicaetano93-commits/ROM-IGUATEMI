@@ -218,16 +218,20 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       if (mode === 'fast' && apptDay && apptDay !== today) continue
 
       // No-show via status da agenda 0051 (fonte canônica: 0248 status=0.6).
+      // Inclui "não atendido" — senão /atendid/ em isPaid casa o substring de "atendido".
       const status = (appt.status ?? '').toLowerCase()
-      if (/falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu/.test(status) && appt.scheduledAt) {
+      const isNoShow =
+        /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu|n[aã]o\s*atendid/.test(status)
+      const isPaid = !isNoShow && /pago|finaliz|conclu|atendid|realiz/.test(status)
+      const isCancelled = /cancel/.test(status)
+      if (isNoShow && appt.scheduledAt) {
         if (apptDay) noShowsByDay.set(apptDay, (noShowsByDay.get(apptDay) ?? 0) + 1)
       }
 
-      const isPaid = /pago|finaliz|conclu|atendid|realiz/.test(status)
-      const isCancelled = /cancel/.test(status)
       if (apptDay === today) {
         todayRows++
-        if (!isCancelled) todayBooked++
+        // Agendados = abertos + pagos (não misturar faltas/no-shows).
+        if (!isCancelled && !isNoShow) todayBooked++
       }
 
       const contact = await upsertContact({
@@ -255,7 +259,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             lastPrice: appt.price,
           })
           stats.services_completed++
-        } else if (!isCancelled) {
+        } else if (isNoShow || isCancelled) {
+          if (apptDay === today && service.scheduled_at) {
+            await clearServiceSchedule(service.id)
+          }
+        } else {
           if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
             await scheduleService(service.id, appt.scheduledAt, appt.professional)
             stats.services_scheduled++
@@ -265,8 +273,6 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             })
           }
           if (apptDay === today) todayOpenServiceIds.push(service.id)
-        } else if (isCancelled && apptDay === today && service.scheduled_at) {
-          await clearServiceSchedule(service.id)
         }
 
         if (appt.professional && isNailService(appt.serviceName)) {

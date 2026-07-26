@@ -66,7 +66,8 @@ export async function upsertSalonP3Daily(
 }
 
 /**
- * Snapshot P3 não vazio mais recente ≤ targetDay.
+ * Snapshot P3 mais recente ≤ targetDay.
+ * Inclui return_rate = 0 (0% é válido; linhas só existem após upsert de sync).
  * return_rate / new_clients_period vêm da Avec (0007 / 0017) em janela rolante.
  */
 export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Daily | null> {
@@ -81,14 +82,6 @@ export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Dai
         updated_at
       from salon_p3_daily
       where day <= ${targetDay}::date
-        and (
-          coalesce(return_rate, 0) > 0
-          or coalesce(new_clients_period, 0) > 0
-          or case
-            when jsonb_typeof(revenue_curve) = 'array' then jsonb_array_length(revenue_curve)
-            else 0
-          end > 0
-        )
       order by day desc
       limit 1
     `) as SalonP3Daily[]

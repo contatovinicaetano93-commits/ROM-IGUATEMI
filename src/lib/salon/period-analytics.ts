@@ -148,7 +148,7 @@ export async function computePeriodAnalytics(opts?: {
   month?: string
 }): Promise<PeriodAnalytics> {
   const month = opts?.month ?? currentMonthKey(todayIso())
-  const { from, to } = monthRange(month)
+  const { from, to } = monthToDateRange(month)
   const [totals, loss, p1, p2, p3] = await Promise.all([
     sumRevenueAndAttended(from, to),
     sumAttendanceLoss(from, to),
