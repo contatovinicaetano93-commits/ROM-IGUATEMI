@@ -180,8 +180,8 @@ export default function DashboardPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
           <p className="mt-1 text-xs text-muted">
-            Comercial e performance do período. Operação do dia fica em Hoje · dinheiro em Financeiro ·
-            fechamento em Relatórios.
+            Comercial e performance do mês acumulado selecionado. Use Hoje para operação diária ·
+            dinheiro em Financeiro · fechamento em Relatórios.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -220,11 +220,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Pulso comercial do período (Avec + métricas) */}
+      {/* Pulso comercial do mês acumulado (Avec + métricas) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <MiniStat
           icon={<Percent size={15} />}
-          label={`Ocupação · ${period?.label ?? '—'}`}
+          label={`Ocupação · mês acumulado (${period?.label ?? '—'})`}
           value={
             loading || !period
               ? '—'
@@ -235,12 +235,12 @@ export default function DashboardPage() {
         />
         <MiniStat
           icon={<AlertTriangle size={15} />}
-          label="Receita perdida"
+          label="Receita perdida · mês acumulado"
           value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
         />
         <MiniStat
           icon={<Users size={15} />}
-          label="Cancel. + no-show"
+          label="Cancel. + no-show · mês acumulado"
           value={
             loading || !period
               ? '—'
@@ -249,17 +249,17 @@ export default function DashboardPage() {
         />
         <MiniStat
           icon={<Package size={15} />}
-          label="Pacotes (receita)"
+          label="Pacotes (receita) · mês acumulado"
           value={loading || !period ? '—' : formatCurrency(period.packages_revenue)}
         />
         <MiniStat
           icon={<Sparkles size={15} />}
-          label="Novos no período"
+          label="Novos · mês acumulado"
           value={loading || !period ? '—' : String(period.new_clients_period)}
         />
         <MiniStat
           icon={<TrendingUp size={15} />}
-          label="Taxa de retorno"
+          label="Taxa retorno · mês acumulado"
           value={
             loading || !period
               ? '—'
@@ -471,9 +471,9 @@ export default function DashboardPage() {
           </SectionCard>
 
           <p className="text-xs text-muted">
-            Operação do dia:{' '}
+            Atalhos:{' '}
             <Link href="/hoje" className="text-gold hover:underline">
-              Hoje
+              Hoje (operação diária)
             </Link>
             {' · '}
             Caixa:{' '}

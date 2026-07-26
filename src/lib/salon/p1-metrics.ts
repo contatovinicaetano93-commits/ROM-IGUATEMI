@@ -126,6 +126,21 @@ export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Dai
         updated_at
       from salon_p1_daily
       where day <= ${targetDay}::date
+        and (
+          case
+            when jsonb_typeof(professionals) = 'array' then jsonb_array_length(professionals)
+            else 0
+          end > 0
+          or case
+            when jsonb_typeof(services) = 'array' then jsonb_array_length(services)
+            else 0
+          end > 0
+          or case
+            when jsonb_typeof(acquisition) = 'array' then jsonb_array_length(acquisition)
+            else 0
+          end > 0
+          or coalesce(reactivation_count, 0) > 0
+        )
       order by day desc
       limit 1
     `) as SalonP1Daily[]

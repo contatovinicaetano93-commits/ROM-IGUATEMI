@@ -56,7 +56,7 @@ export async function getPaymentMixRange(from: string, to: string): Promise<P2Pa
 }
 
 /**
- * Snapshot P2 mais recente ≤ targetDay.
+ * Snapshot P2 não vazio mais recente ≤ targetDay.
  * booking_channels / packages são janelas rolantes (~30d) no sync full — não deltas diários.
  */
 export async function getSalonP2DailyNear(targetDay: string): Promise<SalonP2Daily | null> {
@@ -75,6 +75,17 @@ export async function getSalonP2DailyNear(targetDay: string): Promise<SalonP2Dai
         updated_at
       from salon_p2_daily
       where day <= ${targetDay}::date
+        and (
+          case
+            when jsonb_typeof(booking_channels) = 'array' then jsonb_array_length(booking_channels)
+            else 0
+          end > 0
+          or case
+            when jsonb_typeof(packages) = 'array' then jsonb_array_length(packages)
+            else 0
+          end > 0
+          or coalesce(packages_sold, 0) > 0
+        )
       order by day desc
       limit 1
     `) as SalonP2Daily[]

@@ -55,6 +55,7 @@ interface HojeData {
     revenue: number | null
     appointments: number
     attended: number
+    cancelled: number
     no_shows: number
     ticket_avg: number | null
     new_clients: number
@@ -156,11 +157,11 @@ export default function HojePage() {
       )}
 
       {/* KPIs do salão — faturamento só para admin; fonte discreta sob o valor */}
-      <div className={`grid grid-cols-2 gap-3 ${canViewRevenue ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
+      <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${canViewRevenue ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
         {canViewRevenue && (
           <KpiCard
             icon={<DollarSign size={16} />}
-            label="Faturamento"
+            label="Faturamento do dia"
             value={loading ? '—' : formatCurrency(salon?.revenue ?? 0)}
             loading={loading}
             source={avecSource}
@@ -168,21 +169,29 @@ export default function HojePage() {
         )}
         <KpiCard
           icon={<Calendar size={16} />}
-          label="Agendados"
+          label="Agendados do dia"
           value={loading ? '—' : String(salon?.appointments ?? 0)}
           loading={loading}
           source={avecSource}
         />
         <KpiCard
           icon={<TrendingUp size={16} />}
-          label="Atendidos"
+          label="Atendidos do dia"
           value={loading ? '—' : String(salon?.attended ?? 0)}
           loading={loading}
           source={avecSource}
         />
         <KpiCard
           icon={<AlertTriangle size={16} />}
-          label="No-shows"
+          label="Cancelados do dia"
+          value={loading ? '—' : String(salon?.cancelled ?? 0)}
+          loading={loading}
+          warn={(salon?.cancelled ?? 0) > 0}
+          source={avecSource}
+        />
+        <KpiCard
+          icon={<AlertTriangle size={16} />}
+          label="No-shows do dia"
           value={loading ? '—' : String(salon?.no_shows ?? 0)}
           loading={loading}
           warn={(salon?.no_shows ?? 0) > 0}
@@ -190,7 +199,7 @@ export default function HojePage() {
         />
         <KpiCard
           icon={<Clock size={16} />}
-          label="TM atendimento"
+          label="TM atendimento hoje"
           value={
             loading
               ? '—'
