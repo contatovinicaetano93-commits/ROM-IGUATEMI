@@ -1,5 +1,30 @@
 import { getSql } from '@/lib/db'
 
+/** Mantém só os N snapshots mais recentes por report_id (quota Neon). */
+export async function pruneReportSnapshots(keepPerReport = 5): Promise<number> {
+  const sql = getSql()
+  const keep = Math.max(1, Math.floor(keepPerReport))
+  try {
+    const deleted = (await sql`
+      with ranked as (
+        select id,
+               row_number() over (
+                 partition by report_id
+                 order by fetched_at desc nulls last, id desc
+               ) as rn
+        from avec_report_snapshots
+      )
+      delete from avec_report_snapshots s
+      using ranked r
+      where s.id = r.id and r.rn > ${keep}
+      returning s.id
+    `) as { id: string }[]
+    return deleted.length
+  } catch {
+    return 0
+  }
+}
+
 export async function saveReportSnapshot(
   reportId: string,
   params: Record<string, unknown>,

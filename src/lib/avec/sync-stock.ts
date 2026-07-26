@@ -23,7 +23,7 @@ import {
   normalizeStockPurchaseRow,
 } from '@/lib/avec/normalize'
 import { getStockReports, getFastStockReports, getFullStockReports } from '@/lib/avec/registry'
-import { saveReportSnapshot } from '@/lib/avec/snapshots'
+import { pruneReportSnapshots, saveReportSnapshot } from '@/lib/avec/snapshots'
 import {
   upsertStockProductFromPosition,
   applyStockAlert,
@@ -176,12 +176,22 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
   }
 }
 
+function stockMovementsDaysBack(): number {
+  const raw = process.env.STOCK_MOVEMENTS_DAYS_BACK?.trim()
+  if (raw) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 1) return Math.min(60, Math.floor(n))
+  }
+  // 14 dias: CMV MTD não fica “zerado” se o cron full falhar alguns dias.
+  return 14
+}
+
 async function syncMovements(stats: StockSyncStats, syncRunId: string) {
   const id = reportId('stock_movement')
   if (!id) return
-  // Janela com sobreposição (3 dias) — reprocessar não duplica (dedup por
+  // Janela com sobreposição — reprocessar não duplica (dedup por
   // produto+tipo+quantidade+data+origem em applyStockMovement).
-  const { inicio, fim } = periodRange(3, 0)
+  const { inicio, fim } = periodRange(stockMovementsDaysBack(), 0)
   const params = { inicio, fim, limit: 250 }
   try {
     const result = await fetchAllAvecReport(id, params)
@@ -281,6 +291,14 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
       await syncMovements(stats, run.id)
       await syncPurchaseOrigin(stats, run.id)
       await syncValuation(stats, run.id)
+    }
+
+    // Snapshots incham o Neon rápido — mantém só os 5 mais recentes por relatório.
+    try {
+      const pruned = await pruneReportSnapshots(5)
+      if (pruned > 0) stats.warnings.push(`snapshots podados: ${pruned}`)
+    } catch {
+      // não bloqueia o sync
     }
 
     stats.errors = formatAvecErrorList(stats.errors)
