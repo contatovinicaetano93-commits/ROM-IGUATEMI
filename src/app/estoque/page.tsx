@@ -211,6 +211,7 @@ export default function EstoquePage() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pdfError, setPdfError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showBrands, setShowBrands] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -364,7 +365,8 @@ export default function EstoquePage() {
       buildEstoqueOverviewCsv(),
       `Gerado em ${new Date().toLocaleString('pt-BR')}`,
     )
-    if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+    if (!ok) setPdfError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+    else setPdfError(null)
   }
 
   const notOnboarded =
@@ -414,6 +416,12 @@ export default function EstoquePage() {
           </button>
         </div>
       </div>
+
+      {pdfError && (
+        <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted">
+          {pdfError}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted">

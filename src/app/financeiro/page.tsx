@@ -343,6 +343,7 @@ export default function FinanceiroPage() {
   const [expenses, setExpenses] = useState<FinanceExpense[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pdfError, setPdfError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [fiscalImporting, setFiscalImporting] = useState(false)
   const [fiscalImportMsg, setFiscalImportMsg] = useState<string | null>(null)
@@ -546,7 +547,8 @@ export default function FinanceiroPage() {
       lines.join('\n'),
       `vs ${kpis.previous.label} · gerado em ${new Date().toLocaleString('pt-BR')}`,
     )
-    if (!ok) setError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+    if (!ok) setPdfError('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
+    else setPdfError(null)
   }
 
   async function removeExpense(id: string) {
@@ -626,6 +628,12 @@ export default function FinanceiroPage() {
           </button>
         </div>
       </div>
+
+      {pdfError && (
+        <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted">
+          {pdfError}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted">
