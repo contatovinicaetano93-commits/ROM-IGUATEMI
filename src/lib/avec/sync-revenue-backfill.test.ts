@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-/** Espelha a lógica de janela do sync de receita (fast=1, full=7). */
-function revenueBackfillDays(today: string, mode: 'fast' | 'full'): string[] {
-  const daysBack = mode === 'fast' ? 1 : 7
-  const [y, m, d] = today.split('-').map(Number)
+/** Espelha a lógica de janela do sync de receita (fast=1, full=7, env override). */
+function revenueBackfillDays(
+  today: string,
+  mode: 'fast' | 'full',
+  envDaysBack?: string,
+): string[] {
+  const parsed = envDaysBack != null && envDaysBack !== '' ? Number(envDaysBack) : NaN
+  const daysBack =
+    Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : mode === 'fast' ? 1 : 7
   const add = (iso: string, delta: number) => {
     const [yy, mm, dd] = iso.split('-').map(Number)
     return new Date(Date.UTC(yy!, mm! - 1, dd! + delta)).toISOString().slice(0, 10)
@@ -15,9 +20,6 @@ function revenueBackfillDays(today: string, mode: 'fast' | 'full'): string[] {
     out.push(cur)
     cur = add(cur, 1)
   }
-  void y
-  void m
-  void d
   return out
 }
 
@@ -31,5 +33,12 @@ describe('revenue backfill window', () => {
     expect(days[0]).toBe('2026-07-16')
     expect(days.at(-1)).toBe('2026-07-23')
     expect(days).toHaveLength(8)
+  })
+
+  it('AVEC_REVENUE_DAYS_BACK cobre o mês acumulado', () => {
+    const days = revenueBackfillDays('2026-07-26', 'fast', '25')
+    expect(days[0]).toBe('2026-07-01')
+    expect(days.at(-1)).toBe('2026-07-26')
+    expect(days).toHaveLength(26)
   })
 })

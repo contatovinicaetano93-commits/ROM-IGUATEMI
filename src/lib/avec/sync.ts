@@ -358,10 +358,22 @@ function listDaysInclusive(fromIso: string, toIso: string): string[] {
   return out
 }
 
+/** Janela de backfill diário: AVEC_REVENUE_DAYS_BACK override; senão fast=1, full=7. */
+function revenueDaysBack(mode: AvecSyncMode): number {
+  const raw = process.env.AVEC_REVENUE_DAYS_BACK?.trim()
+  if (raw) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n)
+  }
+  return mode === 'fast' ? 1 : 7
+}
+
 /**
  * Faturamento dia a dia.
  * Fast: hoje + ontem (corrige atraso do relatório).
  * Full: últimos 7 dias + hoje (mesmo padrão do 0081).
+ * Override: AVEC_REVENUE_DAYS_BACK=N (ex.: mês incompleto).
+ * Sempre grava a linha do dia (mesmo receita 0) para Relatórios não marcar gap.
  */
 async function syncRevenue(
   stats: AvecSyncStats,
@@ -379,7 +391,7 @@ async function syncRevenue(
   }
 
   const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
+  const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
   const days = listDaysInclusive(from, today)
 
@@ -408,19 +420,18 @@ async function syncRevenue(
         }
       }
 
-      if (revenue > 0 || attended > 0) {
-        const attendedInt = Math.round(attended)
-        await upsertSalonMetrics(day, {
-          revenue: Math.round(revenue * 100) / 100,
-          attended: attendedInt || undefined,
-          ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
-        })
-      }
+      const attendedInt = Math.round(attended)
+      await upsertSalonMetrics(day, {
+        revenue: Math.round(revenue * 100) / 100,
+        attended: attendedInt,
+        ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
+      })
     } catch (e) {
       stats.errors.push(`receita ${day}: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 }
+
 
 /**
  * Cancelamentos / no-shows dia a dia (mesmo backfill do faturamento).
