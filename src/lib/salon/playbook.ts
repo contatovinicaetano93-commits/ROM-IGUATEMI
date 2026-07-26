@@ -36,6 +36,11 @@ function adminScore(item: ActionItem): number {
   return item.urgency_score * 10 + item.recommendations.length
 }
 
+/** Soma serviços atrasados nos itens do playbook (foco do dia, não a base inteira). */
+export function countOverdueServices(items: ActionItem[]): number {
+  return items.reduce((sum, item) => sum + item.overdue, 0)
+}
+
 /**
  * Fatia e prioriza o playbook do dia por papel.
  * Staff (recepção): só ações de contato (atrasado / vencendo / agendado).

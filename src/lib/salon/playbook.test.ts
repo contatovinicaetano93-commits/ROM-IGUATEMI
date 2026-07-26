@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { playbookFocusLabel, slicePlaybookForRole } from '@/lib/salon/playbook'
+import {
+  countOverdueServices,
+  playbookFocusLabel,
+  slicePlaybookForRole,
+} from '@/lib/salon/playbook'
 import type { ActionItem } from '@/lib/salon/recommendations'
 
 function item(partial: Partial<ActionItem> & { contact_id: string }): ActionItem {
@@ -70,5 +74,20 @@ describe('slicePlaybookForRole', () => {
     const { audience } = slicePlaybookForRole([overdue], 'financeiro')
     expect(audience).toBe('admin')
     expect(playbookFocusLabel('admin')).toMatch(/Gestão/)
+  })
+})
+
+describe('countOverdueServices', () => {
+  it('soma só os atrasos dos itens do playbook (foco do dia)', () => {
+    const items = [
+      item({ contact_id: 'a', overdue: 2 }),
+      item({ contact_id: 'b', overdue: 0 }),
+      item({ contact_id: 'c', overdue: 1 }),
+    ]
+    expect(countOverdueServices(items)).toBe(3)
+  })
+
+  it('retorna 0 quando não há atrasos no foco', () => {
+    expect(countOverdueServices([item({ contact_id: 'x', overdue: 0 })])).toBe(0)
   })
 })

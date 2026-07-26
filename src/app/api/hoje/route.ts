@@ -5,7 +5,7 @@ import { getSql } from '@/lib/db'
 import { getSalonMetrics, recomputeSalonMetricsFromRom } from '@/lib/salon/metrics'
 import { computeSalonIntelligence } from '@/lib/salon/intelligence'
 import { listActionItems } from '@/lib/salon/recommendations'
-import { slicePlaybookForRole } from '@/lib/salon/playbook'
+import { countOverdueServices, slicePlaybookForRole } from '@/lib/salon/playbook'
 import { listUpcomingSchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
@@ -97,8 +97,8 @@ export async function GET(req: NextRequest) {
         novos: leads.novos,
         whatsapp_sem_resposta: leads.whatsapp_novos,
       },
-      // Total de atrasos na base (não só no slice do papel) — alerta de recepção.
-      overdue_total: playbookAll.reduce((s, a) => s + a.overdue, 0),
+      // Atrasos do foco de hoje (playbook do papel) — não o backlog da base inteira.
+      overdue_total: countOverdueServices(playbook),
       reactivation,
       avec: {
         configured: isAvecConfigured(),
