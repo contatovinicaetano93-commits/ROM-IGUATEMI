@@ -103,16 +103,18 @@ function aggregatePaymentMix(rows: Record<string, unknown>[]): P2PaymentRow[] {
 /**
  * Sync 0081 (formas de pagamento) dia a dia.
  * Fast: só hoje. Full (via syncP2): últimos `daysBack` dias + hoje.
+ * `endDay` (opcional): ancora a janela no fim customizado em vez de hoje (backfill FROM/TO).
  */
 export async function syncPaymentMixRecent(
   stats: SyncStatsLike,
   syncRunId?: string,
   daysBack = 0,
+  endDay?: string,
 ) {
   const id0081 = resolveId('payment_mix') ?? '0081'
-  const today = todayIsoLocal()
-  const from = addCalendarDays(today, -Math.max(0, daysBack))
-  const days = listDaysInclusive(from, today)
+  const end = endDay ?? todayIsoLocal()
+  const from = addCalendarDays(end, -Math.max(0, daysBack))
+  const days = listDaysInclusive(from, end)
 
   for (const day of days) {
     const params = {
@@ -263,5 +265,10 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
   }
 
   // 0081: últimos 7 dias (full) — dia a dia para o Financeiro somar o mês sem double-count.
-  await syncPaymentMixRecent(stats, syncRunId, 7)
+  // AVEC_REVENUE_DAYS_BACK alinha a janela com o backfill de receita quando definido.
+  const raw = process.env.AVEC_REVENUE_DAYS_BACK?.trim()
+  const parsed = raw ? Number(raw) : NaN
+  const daysBack =
+    Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 7
+  await syncPaymentMixRecent(stats, syncRunId, daysBack)
 }

@@ -8,8 +8,9 @@
  *
  * Opcional: FROM=2026-07-01 TO=2026-07-26
  */
-import { fetchAllAvecReport } from '../src/lib/avec/client'
+import { fetchAllAvecReport, formatTruncationWarning } from '../src/lib/avec/client'
 import { normalizeRevenueRow } from '../src/lib/avec/normalize'
+import { getDailyReports, resolveReportId } from '../src/lib/avec/registry'
 import { syncPaymentMixRecent } from '../src/lib/avec/sync-p2'
 import { avecSiteParam } from '../src/lib/brand'
 import { materializeSalonMonthMetrics, monthKeyFromDay } from '../src/lib/salon/month-metrics'
@@ -48,10 +49,17 @@ function monthStartOf(todayYmd: string) {
   return `${todayYmd.slice(0, 7)}-01`
 }
 
+function resolveRevenueReportId(): string {
+  const def = getDailyReports().find((r) => r.mapper === 'revenue')
+  if (!def) return '0088'
+  return resolveReportId(def) ?? '0088'
+}
+
 async function backfillRevenue(from: string, to: string) {
   const days = listDaysInclusive(from, to)
   const summary: { day: string; revenue: number; attended: number }[] = []
   const errors: string[] = []
+  const reportId = resolveRevenueReportId()
 
   for (const day of days) {
     const params = {
@@ -61,14 +69,15 @@ async function backfillRevenue(from: string, to: string) {
       limit: 250,
     }
     try {
-      const result = await fetchAllAvecReport('0088', params)
-      const rows = Array.isArray(result)
-        ? result
-        : ((result as { rows?: Record<string, unknown>[] }).rows ?? [])
+      const result = await fetchAllAvecReport(reportId, params)
+      if (result.truncated) {
+        console.warn(formatTruncationWarning(reportId, result))
+      }
+      const rows = result.rows
 
       let revenue = 0
       let attended = 0
-      for (const row of rows as Record<string, unknown>[]) {
+      for (const row of rows) {
         const rev = normalizeRevenueRow(row)
         if (!rev) continue
         if (!rev.day || rev.day === day) {
@@ -78,20 +87,25 @@ async function backfillRevenue(from: string, to: string) {
       }
 
       const attendedInt = Math.round(attended)
-      // Sempre grava a linha do dia (mesmo 0) — senão Relatórios marca INCOMPLETO.
-      await upsertSalonMetrics(day, {
-        revenue: Math.round(revenue * 100) / 100,
-        attended: attendedInt,
-        ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
-      })
-      summary.push({ day, revenue: Math.round(revenue * 100) / 100, attended: attendedInt })
+      const revenueRounded = Math.round(revenue * 100) / 100
+      if (revenueRounded > 0 || attendedInt > 0) {
+        await upsertSalonMetrics(day, {
+          revenue: revenueRounded,
+          attended: attendedInt || undefined,
+          ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
+        })
+      } else {
+        // Garante linha do dia (Relatórios) sem clobber de métricas existentes.
+        await upsertSalonMetrics(day, {})
+      }
+      summary.push({ day, revenue: revenueRounded, attended: attendedInt })
       console.log(
-        `0088 ${day} revenue=${Math.round(revenue)} attended=${attendedInt} rows=${rows.length}`,
+        `${reportId} ${day} revenue=${Math.round(revenue)} attended=${attendedInt} rows=${rows.length}`,
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       errors.push(`${day}: ${msg}`)
-      console.error(`0088 ERR ${day}`, msg)
+      console.error(`${reportId} ERR ${day}`, msg)
     }
   }
 
@@ -118,8 +132,9 @@ async function main() {
     warnings: [] as string[],
     p2_rows: 0,
   }
-  console.log('0081 start', { daysBack })
-  await syncPaymentMixRecent(payStats, undefined, daysBack)
+  console.log('0081 start', { daysBack, to })
+  // Ancora em `to` (não em hoje) para alinhar 0081 com o intervalo FROM/TO da receita.
+  await syncPaymentMixRecent(payStats, undefined, daysBack, to)
   console.log(
     '0081 done',
     JSON.stringify({

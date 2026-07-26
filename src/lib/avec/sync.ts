@@ -421,11 +421,18 @@ async function syncRevenue(
       }
 
       const attendedInt = Math.round(attended)
-      await upsertSalonMetrics(day, {
-        revenue: Math.round(revenue * 100) / 100,
-        attended: attendedInt,
-        ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
-      })
+      const revenueRounded = Math.round(revenue * 100) / 100
+      if (revenueRounded > 0 || attendedInt > 0) {
+        await upsertSalonMetrics(day, {
+          revenue: revenueRounded,
+          // 0 → undefined: coalesce no upsert preserva attended já gravado.
+          attended: attendedInt || undefined,
+          ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
+        })
+      } else {
+        // Garante linha do dia (Relatórios) sem clobber de métricas existentes.
+        await upsertSalonMetrics(day, {})
+      }
     } catch (e) {
       stats.errors.push(`receita ${day}: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -452,7 +459,7 @@ async function syncCancellations(
   }
 
   const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
+  const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
   const days = listDaysInclusive(from, today)
 
@@ -706,7 +713,11 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         stats.errors.push(`TM 0223 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
       try {
-        await syncPaymentMixRecent(stats, syncRunId, 0)
+        // Default fast: só hoje (0). Com AVEC_REVENUE_DAYS_BACK, alinha com receita.
+        const payDays = process.env.AVEC_REVENUE_DAYS_BACK?.trim()
+          ? revenueDaysBack(mode)
+          : 0
+        await syncPaymentMixRecent(stats, syncRunId, payDays)
       } catch (e) {
         stats.errors.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
