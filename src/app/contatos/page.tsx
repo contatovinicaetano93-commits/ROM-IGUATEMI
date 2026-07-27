@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Plus, X, Phone, Search, ChevronRight, AlertTriangle, Clock, Calendar } from 'lucide-react'
@@ -43,7 +43,7 @@ function statusFromSearchParam(raw: string | null): string {
   return 'all'
 }
 
-export default function ContatosPage() {
+function ContatosPageContent() {
   const searchParams = useSearchParams()
   const [contacts, setContacts] = useState<Contact[]>([])
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
@@ -335,6 +335,22 @@ export default function ContatosPage() {
 
       {formOpen && <NewContactSheet onClose={() => setFormOpen(false)} onCreated={load} />}
     </main>
+  )
+}
+
+export default function ContatosPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
+          <div className="h-10 w-48 animate-pulse rounded-xl bg-card" />
+          <div className="h-12 w-full animate-pulse rounded-2xl bg-card" />
+          <div className="h-72 w-full animate-pulse rounded-2xl bg-card" />
+        </main>
+      }
+    >
+      <ContatosPageContent />
+    </Suspense>
   )
 }
 
