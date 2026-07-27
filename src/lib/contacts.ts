@@ -37,8 +37,11 @@ const STATUS_RANK: Record<ContactStatus, number> = {
  */
 export function mergeContactStatus(current: ContactStatus, incoming: ContactStatus): ContactStatus {
   if (incoming === 'perdido') return 'perdido'
-  // Remarcação / retorno: perdido volta ao funil via agenda ou atendimento.
-  if (current === 'perdido' && (incoming === 'agendado' || incoming === 'convertido')) {
+  // Remarcação / retorno / handoff WhatsApp: perdido volta ao funil.
+  if (
+    current === 'perdido' &&
+    (incoming === 'agendado' || incoming === 'convertido' || incoming === 'em_atendimento')
+  ) {
     return incoming
   }
   if (current === 'perdido') return current
@@ -75,6 +78,8 @@ async function mergeContactByPhone(
   `) as ContactRow[]
   const row = existing[0]
   if (!row) return null
+  // LGPD: nunca re-identificar linha anonimizada via merge por telefone.
+  if (row.anonymized_at) return row
 
   const nextStatus = resolveStatus(row.status, input.status) ?? row.status
   // Só grava avec_client_id se a linha ainda não tiver — evita unique em outro id.
@@ -92,10 +97,10 @@ async function mergeContactByPhone(
         when contacts.source like 'avec_sync_clients%' then contacts.source
         else coalesce(${input.source}, contacts.source)
       end
-    where id = ${row.id}
+    where id = ${row.id} and anonymized_at is null
     returning *
   `) as ContactRow[]
-  return updated[0] ?? null
+  return updated[0] ?? row
 }
 
 export interface ContactRow {
@@ -167,13 +172,20 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
             when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
             when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
             when contacts.status = 'convertido' then 'convertido'
-            when contacts.status = 'perdido' and excluded.status in ('agendado', 'convertido')
+            when contacts.status = 'perdido' and excluded.status in ('agendado', 'convertido', 'em_atendimento')
               then excluded.status
             else contacts.status
           end
+        where contacts.anonymized_at is null
         returning *
       `) as ContactRow[]
-      return rows[0]
+      if (rows[0]) return rows[0]
+      // Tombstone LGPD: avec_client_id preservado — sync casa na linha anonimizada e não restaura PII.
+      const frozen = (await sql`
+        select * from contacts where avec_client_id = ${input.avecClientId} limit 1
+      `) as ContactRow[]
+      if (frozen[0]?.anonymized_at) return frozen[0]
+      throw new Error('upsertContact: conflito avec_client_id sem linha retornada')
     } catch (e) {
       // Mesmo telefone já ligado a outro avec_client_id (ou seed sem id) — reusa a linha.
       if (!phone || !isPhoneUniqueViolation(e)) throw e
@@ -217,14 +229,21 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
         when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
         when contacts.status = 'convertido' then 'convertido'
-        when contacts.status = 'perdido' and excluded.status in ('agendado', 'convertido')
+        when contacts.status = 'perdido' and excluded.status in ('agendado', 'convertido', 'em_atendimento')
           then excluded.status
         else contacts.status
       end
-    where contacts.phone is not null
+    where contacts.phone is not null and contacts.anonymized_at is null
     returning *
   `) as ContactRow[]
-  return rows[0]
+  if (rows[0]) return rows[0]
+  if (phone) {
+    const frozen = (await sql`
+      select * from contacts where phone = ${phone} limit 1
+    `) as ContactRow[]
+    if (frozen[0]?.anonymized_at) return frozen[0]
+  }
+  throw new Error('upsertContact: conflito phone sem linha retornada')
 }
 
 export async function getContactByAvecId(avecClientId: string): Promise<ContactRow | null> {
@@ -243,9 +262,9 @@ export async function getContactById(id: string): Promise<ContactRow | null> {
 
 /**
  * LGPD (direito ao esquecimento / retenção automática) — remove PII do contato.
- * Zera phone/avec_client_id de propósito: são as chaves que o upsertContact usa
- * pra casar um sync novo com essa linha, então zerá-las já impede re-identificação
- * futura sem precisar de guarda extra no upsert.
+ * Mantém `avec_client_id` como tombstone: o próximo sync casa nessa linha e o
+ * upsert (guarda `anonymized_at`) não restaura nome/telefone — evita INSERT
+ * duplicado com PII. Phone fica null (não casa por telefone).
  */
 export async function anonymizeContact(id: string): Promise<ContactRow | null> {
   const sql = getSql()
@@ -255,7 +274,6 @@ export async function anonymizeContact(id: string): Promise<ContactRow | null> {
         phone = null,
         email = null,
         notes = null,
-        avec_client_id = null,
         preferred_manicurist = null,
         preferred_hairstylist = null,
         anonymized_at = now()
@@ -266,7 +284,15 @@ export async function anonymizeContact(id: string): Promise<ContactRow | null> {
 
   await sql`delete from contact_brief_cache where contact_id = ${id}`
   await sql`delete from contact_events where contact_id = ${id}`
-  await sql`update client_services set notes = null, product = null where contact_id = ${id}`
+  await sql`
+    update client_services
+    set notes = null,
+        product = null,
+        last_price = null,
+        professional_name = null,
+        scheduled_at = null
+    where contact_id = ${id}
+  `
 
   return rows[0]
 }
@@ -308,14 +334,15 @@ interface UpdateContactInput {
 // TODO: Consider optimistic locking with version field for high-concurrency scenarios.
 export async function updateContact(id: string, patch: UpdateContactInput): Promise<ContactRow | null> {
   const sql = getSql()
+  const current = await getContactById(id)
+  if (!current) return null
+  if (current.anonymized_at) return current
+
   const phone = patch.phone ? normalizePhone(patch.phone) ?? patch.phone.trim() : undefined
 
   let status: ContactStatus | null = patch.status ?? null
   if (patch.status) {
-    const current = await getContactById(id)
-    if (current) {
-      status = mergeContactStatus(current.status as ContactStatus, patch.status)
-    }
+    status = mergeContactStatus(current.status as ContactStatus, patch.status)
   }
 
   // null no PATCH = limpeza explícita → grava '' (≠ SQL NULL = nunca definido).

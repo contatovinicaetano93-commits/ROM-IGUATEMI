@@ -37,4 +37,30 @@ describe('normalizeAvecWebhookBody', () => {
     expect(n.price).toBe(90)
     expect(n.scheduled_at).toBeTruthy()
   })
+
+  it('não trata "não pago" como convertido', () => {
+    const n = normalizeAvecWebhookBody({
+      event: 'appointment.updated',
+      client_id: '1',
+      status: 'não pago',
+    })
+    expect(n.status).toBeUndefined()
+  })
+
+  it('trata pago como convertido e em atendimento como aberto', () => {
+    expect(
+      normalizeAvecWebhookBody({
+        event: 'appointment.updated',
+        client_id: '1',
+        status: 'pago',
+      }).status,
+    ).toBe('convertido')
+    expect(
+      normalizeAvecWebhookBody({
+        event: 'appointment.updated',
+        client_id: '1',
+        status: 'em atendimento',
+      }).status,
+    ).toBeUndefined()
+  })
 })

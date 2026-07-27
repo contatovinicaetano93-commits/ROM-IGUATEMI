@@ -4,6 +4,7 @@ import { askAI, isAiConfigured } from '@/lib/ai/client'
 import { buildContactContext, contactContextForAI } from '@/lib/salon/context-builder'
 import { getBrand } from '@/lib/brand'
 import { pickLastVisit } from '@/lib/services'
+import { SALON_TIMEZONE } from '@/lib/salon/format'
 
 function briefPrompt() {
   const brand = getBrand()
@@ -11,7 +12,7 @@ function briefPrompt() {
 Gere um briefing curto e direto para o backstaff/executor, em português, no máximo 5 linhas.
 Objetivo: facilitar o front no cross-sell e up-sell. Use SOMENTE os dados fornecidos.
 Formato: 1 linha de contexto do cliente (inclua manicure/cabeleireiro preferidos e última visita se houver) + bullets de ações recomendadas (o que oferecer e por quê).
-Seja prático e caloroso, sem inventar informação que não está nos dados.`
+Seja prático e caloroso, sem inventar informação que não está nos dados. Não cite preços nem valores em R$.`
 }
 
 export function buildRuleBrief(
@@ -32,7 +33,9 @@ export function buildRuleBrief(
     .join('. ')
   const prefsSuffix = prefs ? ` ${prefs}.` : ''
   if (last) {
-    const when = new Date(last.last_done_at).toLocaleDateString('pt-BR')
+    const when = new Date(last.last_done_at).toLocaleDateString('pt-BR', {
+      timeZone: SALON_TIMEZONE,
+    })
     const pro = last.professional_name ? ` com ${last.professional_name}` : ''
     linhas.push(`${nome} — última visita ${when}: ${last.service_name}${pro}.${prefsSuffix}`)
   } else {

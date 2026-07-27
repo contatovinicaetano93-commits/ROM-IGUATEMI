@@ -2,6 +2,7 @@ import { getSql } from '@/lib/db'
 import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 import {
   upsertContact,
+  updateContact,
   logEvent,
   setPreferredManicurist,
   setPreferredHairstylist,
@@ -46,6 +47,12 @@ import { saveReportSnapshot } from '@/lib/avec/snapshots'
 import { getDeploymentContext } from '@/lib/deployment'
 import { recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
+import {
+  isAvecCancelledStatus,
+  isAvecNegativeOutcomeStatus,
+  isAvecNoShowStatus,
+  isAvecPaidStatus,
+} from '@/lib/avec/appointment-status'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
 import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
@@ -251,19 +258,13 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
       // Status agenda 0051. No-show KPI: fonte canônica é 0248 (não gravar aqui).
       // "Em Atendimento" / "A Realizar" = aberto — NÃO marcar pago nem perdido.
+      // "não pago" não casa com \bpago\b.
       const status = (appt.status ?? '').toLowerCase()
-      const isNoShow =
-        /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu|n[aã]o\s*atendid/.test(status)
-      const isNegativeOutcome = /n[aã]o\s*(realiz|conclu|finaliz|atendid)/.test(status)
-      // pago / finalizado / concluído / atendido(a) / realizado(a) — nunca "atendimento" nem "a realizar".
-      const isPaid =
-        !isNoShow &&
-        !isNegativeOutcome &&
-        (/\bpago\b/.test(status) ||
-          /\b(finaliz|conclu)\w*\b/.test(status) ||
-          /\batendid[oa]s?\b/.test(status) ||
-          /\brealizad[oa]s?\b/.test(status))
-      const isCancelled = /cancel/.test(status)
+      const isNoShow = isAvecNoShowStatus(status)
+      const isNegativeOutcome = isAvecNegativeOutcomeStatus(status)
+      const isPaid = isAvecPaidStatus(status)
+      const isCancelled = isAvecCancelledStatus(status)
+      const isLostOutcome = isCancelled || isNoShow || isNegativeOutcome
 
       if (apptDay === today) {
         todayRows++
@@ -283,13 +284,9 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         phone: appt.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_appointments_fast' : 'avec_sync_appointments',
-        // Cancel/no-show/negativo → perdido (não deixar agendado no funil).
-        status:
-          isPaid
-            ? 'convertido'
-            : isCancelled || isNoShow || isNegativeOutcome
-              ? 'perdido'
-              : 'agendado',
+        // Cancel/no-show: não marca perdido aqui — só se não restar slot aberto
+        // (evita um cancel demotar contato com outro horário ainda aberto).
+        status: isPaid ? 'convertido' : isLostOutcome ? undefined : 'agendado',
       })
 
       if (appt.serviceName && appt.scheduledAt) {
@@ -307,7 +304,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             lastPrice: appt.price,
           })
           stats.services_completed++
-        } else if (isNoShow || isCancelled || isNegativeOutcome) {
+        } else if (isLostOutcome) {
           // Só limpa se o slot aberto for do mesmo dia do cancel/no-show (não apaga futuro).
           if (
             apptDay &&
@@ -315,6 +312,10 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             toSalonDateIso(service.scheduled_at) === apptDay
           ) {
             await clearServiceSchedule(service.id)
+          }
+          const remaining = await listServices(contact.id)
+          if (!remaining.some((s) => s.scheduled_at)) {
+            await updateContact(contact.id, { status: 'perdido' })
           }
         } else {
           if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
@@ -332,6 +333,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
           await setPreferredManicurist(contact.id, appt.professional)
         } else if (appt.professional && isHairService(appt.serviceName)) {
           await setPreferredHairstylist(contact.id, appt.professional)
+        }
+      } else if (isLostOutcome) {
+        const remaining = await listServices(contact.id)
+        if (!remaining.some((s) => s.scheduled_at)) {
+          await updateContact(contact.id, { status: 'perdido' })
         }
       }
 
