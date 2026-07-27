@@ -114,4 +114,14 @@ describe('finance-compare-export', () => {
     expect(html).toContain('<svg')
     expect(html).toContain('2.873.783,43')
   })
+
+  it('SVG de barras não gera height negativo com fluxo negativo', () => {
+    const neg: FinanceKpis = {
+      ...sample,
+      current: { ...sample.current, expenses: 5_000_000, cash_flow: sample.current.revenue - 5_000_000 },
+      previous: { ...sample.previous, expenses: 100, cash_flow: -100 },
+    }
+    const html = buildFinanceComparePrintHtml(neg)
+    expect(html).not.toMatch(/height="-\d/)
+  })
 })
