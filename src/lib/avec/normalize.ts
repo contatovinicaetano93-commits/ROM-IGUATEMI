@@ -1,3 +1,5 @@
+import { toSalonDateIso } from '@/lib/salon/format'
+
 // Normalização defensiva — colunas dos relatórios Avec variam por unidade/versão.
 
 function pick(row: Record<string, unknown>, keys: string[]): string | null {
@@ -445,7 +447,7 @@ export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAve
   )
   const attended = Number(pick(row, ['atendimentos', 'comandaQtd', 'comandas', 'qtd', 'quantidade', 'count']) ?? 0) || 0
   const datePart = pick(row, ['data', 'dia', 'date', 'periodo'])
-  const day = datePart ? parseAvecDateTime(datePart)?.slice(0, 10) ?? null : null
+  const day = datePart ? toSalonDateIso(parseAvecDateTime(datePart)) : null
   if (revenue <= 0 && attended <= 0) return null
   return { day, revenue, attended }
 }
@@ -453,7 +455,7 @@ export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAve
 export function normalizeCancellationRow(row: Record<string, unknown>): NormalizedAvecCancellation | null {
   const status = (pick(row, ['status', 'situacao', 'situação']) ?? '').toLowerCase()
   const datePart = pick(row, ['data', 'data_agendamento', 'dia', 'date'])
-  const day = datePart ? parseAvecDateTime(datePart)?.slice(0, 10) ?? null : null
+  const day = datePart ? toSalonDateIso(parseAvecDateTime(datePart)) : null
   const isNoShow = status.includes('falta') || status.includes('no-show') || status.includes('noshow')
   const isCancelled = status.includes('cancel')
 
@@ -758,7 +760,7 @@ function parseIsoDateOnly(raw: string | null): string | null {
     return `${y}-${String(br[2]).padStart(2, '0')}-${String(br[1]).padStart(2, '0')}`
   }
   const dt = parseAvecDateTime(raw)
-  return dt ? dt.slice(0, 10) : null
+  return dt ? toSalonDateIso(dt) : null
 }
 
 /** 0011 — cliente a reativar (ou linha de resumo com taxa). */

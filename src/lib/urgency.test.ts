@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ClientService } from '@/lib/services'
-import { urgencyForContact } from '@/lib/urgency'
+import { urgencyForServices } from '@/lib/salon/urgency'
 
 function service(overrides: Partial<ClientService> & Pick<ClientService, 'name'>): ClientService {
   return {
@@ -20,9 +20,9 @@ function service(overrides: Partial<ClientService> & Pick<ClientService, 'name'>
   }
 }
 
-describe('urgencyForContact', () => {
+describe('urgencyForServices (compat)', () => {
   it('marca serviço atrasado quando cadência venceu', () => {
-    const result = urgencyForContact([
+    const result = urgencyForServices([
       service({
         name: 'Corte',
         cadence_days: 30,
@@ -36,7 +36,7 @@ describe('urgencyForContact', () => {
   })
 
   it('prioriza atrasados sobre vencendo em urgency_score', () => {
-    const overdue = urgencyForContact([
+    const overdue = urgencyForServices([
       service({
         name: 'Coloração',
         category: 'coloracao',
@@ -44,7 +44,7 @@ describe('urgencyForContact', () => {
         last_done_at: new Date(Date.now() - 50 * 86_400_000).toISOString(),
       }),
     ])
-    const dueSoon = urgencyForContact([
+    const dueSoon = urgencyForServices([
       service({
         name: 'Corte',
         cadence_days: 30,
