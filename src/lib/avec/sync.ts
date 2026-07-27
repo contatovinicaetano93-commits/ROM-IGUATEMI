@@ -35,6 +35,7 @@ import {
   normalizeAttendanceRow,
   normalizeRevenueRow,
   normalizeCancellationRow,
+  parseAvecDateTime,
   parseServiceTempoMinutes,
   guessServiceCategory,
   defaultCadenceDaysForServiceName,
@@ -484,8 +485,8 @@ async function syncRevenue(
           ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
         })
       } else {
-        // Relatório vazio = dia sem faturamento Avec — zera receita (não manter stale).
-        await upsertSalonMetrics(day, { revenue: 0, ticket_avg: null })
+        // Relatório vazio = dia sem caixa Avec — zera receita e atendidos (não manter stale).
+        await upsertSalonMetrics(day, { revenue: 0, attended: 0, ticket_avg: null })
       }
     } catch (e) {
       stats.errors.push(`receita ${day}: ${e instanceof Error ? e.message : String(e)}`)
@@ -529,23 +530,18 @@ async function syncCancellations(
       await snapshotReport(reportId, params, result.rows, stats, syncRunId)
 
       let cancelled = 0
-      let no_shows = 0
       for (const row of result.rows) {
         const c = normalizeCancellationRow(row)
         if (!c) continue
         stats.cancellation_rows++
         if (!c.day || c.day === day) {
           cancelled += c.cancelled
-          no_shows += c.noShow
+          // c.noShow ignorado — métrica no_shows só via 0248
         }
       }
 
-      // Só grava no_shows se o 0052 trouxe Falta — senão o 0248 é a fonte.
-      if (cancelled > 0 || no_shows > 0) {
-        await upsertSalonMetrics(day, {
-          cancelled: cancelled > 0 ? cancelled : undefined,
-          no_shows: no_shows > 0 ? no_shows : undefined,
-        })
+      if (cancelled > 0) {
+        await upsertSalonMetrics(day, { cancelled })
       }
     } catch (e) {
       stats.errors.push(`cancelamentos ${day}: ${e instanceof Error ? e.message : String(e)}`)
@@ -581,7 +577,7 @@ async function syncNoShows0248(
       const appt = normalizeAppointmentRow(row)
       const day =
         (appt?.scheduledAt ? toSalonDateIso(appt.scheduledAt) : null) ??
-        (typeof row.data === 'string' ? String(row.data).slice(0, 10) : null)
+        (typeof row.data === 'string' ? toSalonDateIso(parseAvecDateTime(String(row.data))) : null)
       if (!day) continue
       // Endpoint já filtrado por status=0.6 (Faltou).
       byDay.set(day, (byDay.get(day) ?? 0) + 1)
@@ -760,16 +756,15 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       await syncClients(stats, syncRunId)
     }
     if (mode === 'fast') {
-      // KPI do dia primeiro e em paralelo (0088 + 0052); agenda/atendidos em seguida.
+      // KPI do dia primeiro (0088 + 0052 + 0248); depois agenda → atendidos em sequência
+      // (paralelo 0051∥0002 podia reabrir serviço já marcado done).
       await Promise.all([
         syncRevenue(stats, mode, syncRunId),
         syncCancellations(stats, mode, syncRunId),
         syncNoShows0248(stats, mode, syncRunId),
       ])
-      await Promise.all([
-        syncAppointments(stats, mode, syncRunId),
-        syncAttendances(stats, mode, syncRunId),
-      ])
+      await syncAppointments(stats, mode, syncRunId)
+      await syncAttendances(stats, mode, syncRunId)
       try {
         await syncDurationFrom0223(stats, syncRunId)
       } catch (e) {

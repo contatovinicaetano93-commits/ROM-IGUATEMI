@@ -171,10 +171,10 @@ export default function HojePage() {
         )}
         <KpiCard
           icon={<Calendar size={16} />}
-          label="Agendados"
+          label="Agenda do dia"
           value={loading ? '—' : String(salon?.appointments ?? 0)}
           loading={loading}
-          source={avecSource}
+          source={formatKpiSources('rom', 'avec', ...(syncSource ? [syncSource] : []))}
         />
         <KpiCard
           icon={<TrendingUp size={16} />}

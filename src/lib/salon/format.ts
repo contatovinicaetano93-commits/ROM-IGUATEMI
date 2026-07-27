@@ -28,11 +28,16 @@ export function toSalonDateIso(
 
 export function fmtSchedule(iso: string) {
   const d = new Date(iso)
-  const today = new Date()
-  if (d.toDateString() === today.toDateString()) {
-    return `Hoje, ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+  const timeOpts: Intl.DateTimeFormatOptions = {
+    timeZone: SALON_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+  }
+  if (toSalonDateIso(d) === todayIso()) {
+    return `Hoje, ${d.toLocaleTimeString('pt-BR', timeOpts)}`
   }
   return d.toLocaleString('pt-BR', {
+    timeZone: SALON_TIMEZONE,
     weekday: 'short',
     day: '2-digit',
     month: 'short',

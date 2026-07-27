@@ -122,15 +122,23 @@ export async function listContactsWithSummary(
       items.sort(compareByOverdueThenName)
       return items.slice(0, limit)
     }
-    const contacts = (await sql`
-      select * from contacts
+    const idRows = (await sql`
+      select id, name from contacts
       where status = ${status}
-      order by created_at desc
-      limit ${limit}
-    `) as ContactRow[]
-    const items = withUrgency(contacts, byContact)
-    items.sort(compareByOverdueThenName)
-    return items.slice(0, limit)
+    `) as { id: string; name: string | null }[]
+    const ranked = idRows
+      .map((r) => {
+        const u = urgencyForServices(byContact.get(r.id) ?? [])
+        return { id: r.id, name: r.name, max_overdue_days: u.max_overdue_days }
+      })
+      .sort(compareByOverdueThenName)
+      .slice(0, limit)
+    if (ranked.length === 0) return []
+    const ordered = await orderContactsByUrgency(
+      ranked.map((r) => r.id),
+      byContact,
+    )
+    return withUrgency(ordered, byContact)
   }
 
   if (pendingOnly && !(q || qDigits.length >= 3)) {

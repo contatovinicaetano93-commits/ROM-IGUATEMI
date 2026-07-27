@@ -116,6 +116,9 @@ export async function middleware(req: NextRequest) {
     !onboardingPath &&
     !relatoriosPath
   ) {
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
+    }
     return NextResponse.redirect(new URL('/financeiro', req.url))
   }
   // Isolamento do painel Estoque: estoque só enxerga /estoque (+ /onboarding) —
@@ -126,6 +129,9 @@ export async function middleware(req: NextRequest) {
     !stockPath &&
     !onboardingPath
   ) {
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
+    }
     return NextResponse.redirect(new URL('/estoque', req.url))
   }
   if ((financePath || relatoriosPath) && role !== 'admin' && role !== 'financeiro') {
