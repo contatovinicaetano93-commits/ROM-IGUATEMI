@@ -35,14 +35,20 @@ export async function GET(req: NextRequest) {
     const rawLimit = Number(searchParams.get('limit') ?? 500)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 500
     // pending/status filtrados na query (base inteira) — não só no top urgente em memória.
-    let items = await listContactsWithSummary({ limit, query, pendingOnly, status })
+    const { items: rawItems, total } = await listContactsWithSummary({
+      limit,
+      query,
+      pendingOnly,
+      status,
+    })
+    let items = rawItems
 
     if (sort === 'urgency') {
       // Mais tempo sem retorno (dias) primeiro; empate em ordem alfabética.
-      items.sort(compareByOverdueThenName)
+      items = [...items].sort(compareByOverdueThenName)
     }
 
-    return ok(items)
+    return ok(items, { total, limit, status: status ?? 'all', pending: pendingOnly })
   } catch (e) {
     return handleError(e)
   }

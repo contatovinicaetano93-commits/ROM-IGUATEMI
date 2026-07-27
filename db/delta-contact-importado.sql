@@ -12,4 +12,4 @@ update contacts
 set status = 'importado'
 where status = 'novo'
   and channel = 'avec'
-  and source = 'avec_sync_clients';
+  and coalesce(source, '') like 'avec_sync_clients%';

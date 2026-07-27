@@ -261,7 +261,7 @@ export default function HojePage() {
           <MessageCircle size={18} className="mt-0.5 shrink-0 text-warning" />
           <p className="text-sm">
             <span className="font-semibold text-warning">{data!.leads.whatsapp_sem_resposta} lead(s) WhatsApp hoje</span>
-            {' '}com status novo no funil — priorize o primeiro contato.
+            {' '}ainda com status Novo — priorize o primeiro contato.
           </p>
         </div>
       )}
@@ -446,14 +446,14 @@ export default function HojePage() {
 
       {!loading && (data?.leads.novos ?? 0) > 0 && (
         <Link
-          href="/contatos"
+          href="/contatos?status=novo"
           className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 active:bg-surface"
         >
           <div className="flex items-center gap-3">
             <Users size={18} className="text-gold" />
             <div>
-              <p className="text-sm font-medium">{data!.leads.novos} novo(s) lead(s) hoje</p>
-              <p className="text-xs text-muted">Funil WhatsApp/manual · ver Contatos</p>
+              <p className="text-sm font-medium">{data!.leads.novos} entrada(s) no funil hoje</p>
+              <p className="text-xs text-muted">Exceto Importado Avec · ver Novo lead</p>
             </div>
           </div>
           <ChevronRight size={16} className="text-muted" />

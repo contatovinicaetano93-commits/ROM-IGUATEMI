@@ -34,13 +34,19 @@ export async function GET(req: NextRequest) {
       listTodaySchedules(day, 150),
       sql`
         select
+          -- Entrada do dia (não some quando WhatsApp promove novo → em_atendimento).
           count(*) filter (
-            where status = 'novo'
+            where status <> 'importado'
+              and coalesce(source, '') not like 'avec_sync_clients%'
+              and coalesce(source, '') not like 'avec_backfill%'
+              and coalesce(source, '') not like 'avec_lake%'
+              and anonymized_at is null
               and (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
           )::int as novos,
           count(*) filter (
-            where status = 'novo'
-              and channel = 'whatsapp'
+            where channel = 'whatsapp'
+              and status = 'novo'
+              and anonymized_at is null
               and (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
           )::int as whatsapp_novos
         from contacts
