@@ -52,8 +52,11 @@ async function handleClienteCommand(chatId: number, query: string) {
   const digits = normalized.replace(/\D/g, '')
   const rows = (await sql`
     select * from contacts
-    where name ilike ${'%' + normalized + '%'}
-       or (${digits} <> '' and regexp_replace(coalesce(phone,''), '\\D', '', 'g') like ${'%' + digits + '%'})
+    where anonymized_at is null
+      and (
+        name ilike ${'%' + normalized + '%'}
+        or (${digits} <> '' and regexp_replace(coalesce(phone,''), '\\D', '', 'g') like ${'%' + digits + '%'})
+      )
     order by last_contact_at desc
     limit 1
   `) as ContactRow[]

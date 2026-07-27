@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAuth } from '@/lib/auth'
-import { logEvent, updateContact } from '@/lib/contacts'
+import { getContactById, logEvent, updateContact } from '@/lib/contacts'
 import { getSql } from '@/lib/db'
 import {
   markServiceDone,
@@ -38,14 +38,17 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const { id } = await ctx.params
     const body = schema.parse(await req.json())
 
+    const existing = await getServiceById(id)
+    if (!existing) return err('Serviço não encontrado', 404)
+    const contact = await getContactById(existing.contact_id)
+    if (contact?.anonymized_at) return err('Contato anonimizado', 410)
+
     let service: ClientService | null
     if (body.action === 'done') service = await markServiceDone(id)
     else if (body.action === 'deactivate') service = await deactivateService(id)
     else if (body.action === 'schedule') {
       service = await scheduleService(id, body.scheduledAt)
       if (!service) {
-        const existing = await getServiceById(id)
-        if (!existing) return err('Serviço não encontrado', 404)
         return err(
           'Não foi possível remarcar: serviço já concluído neste dia (fuso SP).',
           409,

@@ -14,6 +14,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     const { id } = await ctx.params
     const contact = await getContactById(id)
     if (!contact) return err('Contato não encontrado', 404)
+    if (contact.anonymized_at) return err('Contato anonimizado', 410)
 
     const rawServices = await listServices(id)
     const services = enrichServices(rawServices)

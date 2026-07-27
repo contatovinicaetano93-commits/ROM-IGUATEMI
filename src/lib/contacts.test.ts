@@ -27,9 +27,10 @@ describe('mergeContactStatus', () => {
     expect(mergeContactStatus('em_atendimento', 'novo')).toBe('em_atendimento')
   })
 
-  it('mantém perdido salvo retorno com atendimento (convertido)', () => {
-    expect(mergeContactStatus('perdido', 'agendado')).toBe('perdido')
+  it('permite remarcação: perdido → agendado; e retorno com atendimento', () => {
+    expect(mergeContactStatus('perdido', 'agendado')).toBe('agendado')
     expect(mergeContactStatus('perdido', 'convertido')).toBe('convertido')
+    expect(mergeContactStatus('perdido', 'novo')).toBe('perdido')
   })
 
   it('marca perdido quando explícito', () => {

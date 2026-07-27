@@ -142,7 +142,8 @@ export interface MarkServiceDoneOpts {
   lastPrice?: number | null
 }
 
-// Marca o serviço como realizado — reinicia o ciclo e limpa agendamento.
+// Marca o serviço como realizado — reinicia o ciclo.
+// Só limpa scheduled_at do mesmo dia SP do doneAt (não apaga remarcação futura).
 // Não regride last_done_at (greatest) — evita aftercare duplicado quando 0051/0002
 // mandam horários diferentes no mesmo dia SP.
 export async function markServiceDone(
@@ -163,7 +164,13 @@ export async function markServiceDone(
         when ${doneAt}::timestamptz > last_done_at then ${doneAt}::timestamptz
         else last_done_at
       end,
-      scheduled_at = null,
+      scheduled_at = case
+        when scheduled_at is null then null
+        when (scheduled_at at time zone 'America/Sao_Paulo')::date
+          = (${doneAt}::timestamptz at time zone 'America/Sao_Paulo')::date
+          then null
+        else scheduled_at
+      end,
       professional_name = coalesce(${opts.professionalName ?? null}, professional_name),
       last_price = coalesce(${opts.lastPrice ?? null}, last_price)
     where id = ${serviceId}
@@ -399,6 +406,10 @@ export async function listTodayScheduleForProfessional(
 // Próximos agendamentos globais — painel e lembretes visuais.
 export async function listUpcomingSchedules(days = 7, limit = 20): Promise<ScheduledServiceRow[]> {
   const sql = getSql()
+  const from = todayIso()
+  const [y, m, d] = from.split('-').map(Number)
+  const end = new Date(Date.UTC(y!, m! - 1, d! + days))
+  const to = end.toISOString().slice(0, 10)
   return (await sql`
     select cs.*, c.name as contact_name
     from client_services cs
@@ -406,8 +417,8 @@ export async function listUpcomingSchedules(days = 7, limit = 20): Promise<Sched
     where cs.active = true
       and c.anonymized_at is null
       and cs.scheduled_at is not null
-      and cs.scheduled_at >= now()
-      and cs.scheduled_at < now() + (${days}::int || ' days')::interval
+      and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date >= ${from}::date
+      and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date < ${to}::date
     order by cs.scheduled_at asc
     limit ${limit}
   `) as ScheduledServiceRow[]

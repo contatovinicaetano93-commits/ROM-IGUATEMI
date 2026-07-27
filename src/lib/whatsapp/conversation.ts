@@ -152,8 +152,18 @@ export async function handleWhatsAppMessage(from: string, text: string): Promise
         : `Oi! Sou a recepcionista virtual do ${brand.aiPersonaName}. Posso ajudar com agendamento ou dúvidas sobre nossos serviços. Como posso te ajudar?`
   }
 
-  const inboundCount = historyEvents.filter((e) => e.direction === 'in').length
-  if (inboundCount >= 4 && (intent === 'agendar' || intent === 'remarcar' || intent === 'duvida')) {
+  const inboundSinceResolve = (() => {
+    let n = 0
+    for (const e of historyEvents) {
+      if (e.payload?.handoff_resolved === true) break
+      if (e.direction === 'in') n++
+    }
+    return n
+  })()
+  if (
+    inboundSinceResolve >= 4 &&
+    (intent === 'agendar' || intent === 'remarcar' || intent === 'duvida')
+  ) {
     const handoffReply = await triggerHandoff(contact, 'Conversa longa sem resolução', text)
     return { contactId: contact.id, reply: handoffReply, intent, handoff: true }
   }
