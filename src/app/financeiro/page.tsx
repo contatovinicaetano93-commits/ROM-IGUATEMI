@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, X, Trash2, Download, Camera, Paperclip } from 'lucide-react'
+import { Plus, X, Trash2, Download, Camera, Paperclip, FileText } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { CountBadge, PrimaryButton } from '../_components/ui'
 import {
@@ -19,6 +19,9 @@ import {
   todayIso,
 } from '@/lib/salon/format'
 import { formatKpiSources } from '@/lib/kpi-source'
+import { buildFinanceComparePrintHtml } from '@/lib/finance-compare-export'
+import { openPrintHtml } from '@/lib/salon/month-overview-export'
+import { getBrand } from '@/lib/brand'
 
 interface FiscalSplitSummary {
   gross_paid: number
@@ -536,6 +539,14 @@ export default function FinanceiroPage() {
     URL.revokeObjectURL(url)
   }
 
+  function printCompareReport() {
+    if (!kpis) return
+    const ok = openPrintHtml(buildFinanceComparePrintHtml(kpis, getBrand().displayName))
+    if (!ok) {
+      setError('Permita pop-ups para gerar o PDF do relatório comparativo.')
+    }
+  }
+
   async function removeExpense(id: string) {
     if (!confirm('Excluir essa despesa?')) return
     await apiFetch(`/api/financeiro/despesas/${id}`, { method: 'DELETE' })
@@ -602,6 +613,14 @@ export default function FinanceiroPage() {
             className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
           >
             <Download size={14} /> Relatório do mês (CSV)
+          </button>
+          <button
+            type="button"
+            onClick={printCompareReport}
+            disabled={!kpis}
+            className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
+          >
+            <FileText size={14} /> PDF com gráficos
           </button>
         </div>
       </div>
