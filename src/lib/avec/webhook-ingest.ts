@@ -22,6 +22,10 @@ import {
   defaultCadenceDaysForServiceName,
 } from '@/lib/avec/normalize'
 import { toSalonDateIso } from '@/lib/salon/format'
+import {
+  isAvecOpenStatus,
+  isAvecPaidStatus,
+} from '@/lib/avec/appointment-status'
 
 const EVENT_ALIASES: Record<string, string> = {
   'client.upsert': 'client.upsert',
@@ -213,14 +217,9 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
     status = 'perdido'
   }
   if (!status && statusRaw) {
-    const looksPaid =
-      /\bpago\b/.test(statusRaw) ||
-      /\b(finaliz|conclu)\w*\b/.test(statusRaw) ||
-      /\batendid[oa]s?\b/.test(statusRaw) ||
-      /\brealizad[oa]s?\b/.test(statusRaw)
-    const looksOpen =
-      /\batendimento\b/.test(statusRaw) || /\b(a|por|para)\s+realizar\b/.test(statusRaw)
-    if (looksPaid && !looksOpen) status = 'convertido'
+    if (isAvecPaidStatus(statusRaw) && !isAvecOpenStatus(statusRaw)) {
+      status = 'convertido'
+    }
   }
 
   return {
@@ -248,6 +247,9 @@ export async function ingestAvecWebhook(rawBody: unknown) {
   const payload = normalizeAvecWebhookBody(rawBody)
   const event = payload.event
 
+  const isCancelledEvent =
+    event === 'appointment.cancelled' || payload.status === 'perdido'
+
   const contact = await upsertContact({
     phone: payload.phone,
     name: payload.name,
@@ -255,15 +257,13 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     channel: 'avec',
     source: 'avec_webhook',
     avecClientId: payload.client_id,
-    status: payload.status,
+    // Cancel: status perdido só depois de checar se ainda há slot aberto.
+    status: isCancelledEvent ? undefined : payload.status,
   })
 
-  if (payload.status) {
+  if (payload.status && !isCancelledEvent) {
     await updateContact(contact.id, { status: payload.status })
   }
-
-  const isCancelledEvent =
-    event === 'appointment.cancelled' || payload.status === 'perdido'
 
   if (isCancelledEvent) {
     const services = await listServices(contact.id)
@@ -279,8 +279,11 @@ export async function ingestAvecWebhook(rawBody: unknown) {
         }
       }
     }
-    // Sem service_name: não limpa agenda em massa — só marca perdido (sync 0051 reconcilia).
-    await updateContact(contact.id, { status: 'perdido' })
+    // Só marca perdido se não restar outro horário aberto neste contato.
+    const remaining = await listServices(contact.id)
+    if (!remaining.some((s) => s.scheduled_at)) {
+      await updateContact(contact.id, { status: 'perdido' })
+    }
   } else if (
     (event === 'appointment.created' || event === 'appointment.updated') &&
     payload.status === 'convertido' &&

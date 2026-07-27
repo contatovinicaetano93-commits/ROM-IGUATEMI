@@ -4,7 +4,7 @@ import type { EnrichedService, Recommendation } from '@/lib/recommendations'
 import { fetchContactKpis } from '@/lib/salon/kpis'
 import { getSalonMetrics } from '@/lib/salon/metrics'
 import { listActionItems } from '@/lib/salon/recommendations'
-import { todayIso } from '@/lib/salon/format'
+import { SALON_TIMEZONE, todayIso } from '@/lib/salon/format'
 import { listTodaySchedules, pickLastVisit, type LastVisit } from '@/lib/services'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 
@@ -17,16 +17,14 @@ function fmtService(s: EnrichedService) {
   return parts.join(' ')
 }
 
+/** Sem preço: contexto IA/brief é staff (≠ admin financeiro). */
 function fmtLastVisit(v: LastVisit | null): string | null {
   if (!v) return null
-  const when = new Date(v.last_done_at).toLocaleDateString('pt-BR')
+  const when = new Date(v.last_done_at).toLocaleDateString('pt-BR', {
+    timeZone: SALON_TIMEZONE,
+  })
   const parts = [when, v.service_name]
   if (v.professional_name) parts.push(`com ${v.professional_name}`)
-  if (v.last_price != null) {
-    parts.push(
-      v.last_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-    )
-  }
   return parts.join(' · ')
 }
 
@@ -102,7 +100,6 @@ export function hashContactContext(contact: ContactRow, services: EnrichedServic
           at: last.last_done_at,
           service: last.service_name,
           pro: last.professional_name,
-          price: last.last_price,
         }
       : null,
     services: services.map((s) => ({

@@ -145,6 +145,7 @@ export function formatDateBr(iso: string | null | undefined) {
 
 export function formatVisitDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', {
+    timeZone: SALON_TIMEZONE,
     day: '2-digit',
     month: 'short',
     year: 'numeric',

@@ -30,6 +30,7 @@ describe('mergeContactStatus', () => {
   it('permite remarcação: perdido → agendado; e retorno com atendimento', () => {
     expect(mergeContactStatus('perdido', 'agendado')).toBe('agendado')
     expect(mergeContactStatus('perdido', 'convertido')).toBe('convertido')
+    expect(mergeContactStatus('perdido', 'em_atendimento')).toBe('em_atendimento')
     expect(mergeContactStatus('perdido', 'novo')).toBe('perdido')
   })
 

@@ -1,16 +1,27 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
+import { requireSession } from '@/lib/auth'
 import { getContactById, logEvent } from '@/lib/contacts'
 import { addService, listServices, SERVICE_CATEGORIES } from '@/lib/services'
 import { enrichServices } from '@/lib/recommendations'
 
 type Ctx = { params: Promise<{ id: string }> }
 
-export async function GET(_req: NextRequest, ctx: Ctx) {
+export async function GET(req: NextRequest, ctx: Ctx) {
   try {
+    const auth = await requireSession(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+
     const { id } = await ctx.params
-    const services = enrichServices(await listServices(id))
+    const contact = await getContactById(id)
+    if (!contact) return err('Contato não encontrado', 404)
+    if (contact.anonymized_at) return err('Contato anonimizado', 410)
+
+    const canViewRevenue = auth.session.can_view_revenue
+    const services = enrichServices(await listServices(id)).map((s) =>
+      canViewRevenue ? s : { ...s, last_price: null },
+    )
     return ok(services)
   } catch (e) {
     return handleError(e)
