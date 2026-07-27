@@ -50,12 +50,13 @@ export default function ContatosPage() {
     return () => window.clearTimeout(t)
   }, [query])
 
-  async function load(searchQ = debouncedQuery) {
+  async function load(searchQ = debouncedQuery, status = statusFilter) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ sort: 'urgency' })
       if (pendingOnly) params.set('pending', 'true')
       if (searchQ) params.set('q', searchQ)
+      if (status !== 'all') params.set('status', status)
       const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) setError(json.error)
@@ -71,23 +72,23 @@ export default function ContatosPage() {
   }
 
   useEffect(() => {
-    void load(debouncedQuery)
+    void load(debouncedQuery, statusFilter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingOnly, debouncedQuery])
+  }, [pendingOnly, debouncedQuery, statusFilter])
 
   const statusFromData = Array.from(new Set(contacts.map((c) => c.status)))
   const statusOptions = Array.from(new Set([...FUNNEL_STATUS_OPTIONS, ...statusFromData]))
   const channelOptions = Array.from(new Set(contacts.map((c) => c.channel)))
   const hasFilters = true
 
+  // Status já vem filtrado no servidor; canal continua client-side na página atual.
   const filtered = contacts.filter((c) => {
-    if (statusFilter !== 'all' && c.status !== statusFilter) return false
     if (channelFilter !== 'all' && c.channel !== channelFilter) return false
     return true
   })
 
   const emptyNovoHint =
-    statusFilter === 'novo' && !loading && filtered.length === 0 && !debouncedQuery
+    statusFilter === 'novo' && !loading && filtered.length === 0 && !debouncedQuery && !error
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -212,7 +213,23 @@ export default function ContatosPage() {
         )}
 
         {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && (
-          <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato encontrado.</p>
+          <div className="space-y-2 px-4 py-12 text-center text-sm text-muted">
+            <p>Nenhum contato encontrado com esses filtros.</p>
+            {pendingOnly && statusFilter !== 'all' && (
+              <p>
+                Há {contacts.length} pendente{contacts.length === 1 ? '' : 's'} neste status com outro
+                canal —{' '}
+                <button
+                  type="button"
+                  className="text-gold underline-offset-2 hover:underline"
+                  onClick={() => setChannelFilter('all')}
+                >
+                  limpar filtro de canal
+                </button>
+                .
+              </p>
+            )}
+          </div>
         )}
 
         {!loading && contacts.length === 0 && debouncedQuery && !error && (

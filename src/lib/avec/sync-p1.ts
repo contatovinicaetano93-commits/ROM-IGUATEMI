@@ -164,9 +164,10 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
 
   const professionalsOk = professionalsAttempted && !professionalsFailed
 
+  // Elenco completo no snapshot — ocupação média pondera todos com 0126.
+  // O painel corta top N na UI / ranking.
   const professionals = Array.from(byPro.values())
     .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 10)
     .map((p) => ({
       ...p,
       revenue: Math.round(p.revenue),

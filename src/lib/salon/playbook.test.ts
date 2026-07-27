@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  countOverdueContacts,
   countOverdueServices,
   playbookFocusLabel,
   slicePlaybookForRole,
@@ -77,17 +78,19 @@ describe('slicePlaybookForRole', () => {
   })
 })
 
-describe('countOverdueServices', () => {
-  it('soma só os atrasos dos itens do playbook (foco do dia)', () => {
+describe('countOverdueServices / countOverdueContacts', () => {
+  it('soma serviços e conta contatos com atraso no playbook', () => {
     const items = [
       item({ contact_id: 'a', overdue: 2 }),
       item({ contact_id: 'b', overdue: 0 }),
       item({ contact_id: 'c', overdue: 1 }),
     ]
     expect(countOverdueServices(items)).toBe(3)
+    expect(countOverdueContacts(items)).toBe(2)
   })
 
   it('retorna 0 quando não há atrasos no foco', () => {
     expect(countOverdueServices([item({ contact_id: 'x', overdue: 0 })])).toBe(0)
+    expect(countOverdueContacts([item({ contact_id: 'x', overdue: 0 })])).toBe(0)
   })
 })
