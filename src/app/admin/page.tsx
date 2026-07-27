@@ -100,10 +100,12 @@ export default function AdminPage() {
   const [avec, setAvec] = useState<AvecStatus | null>(null)
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [backfilling, setBackfilling] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [seedMsg, setSeedMsg] = useState<string | null>(null)
   const [seedPreset, setSeedPreset] = useState<RomSeedPreset>(brand.panel)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
   const [connMsg, setConnMsg] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -180,6 +182,56 @@ export default function AdminPage() {
       setSyncMsg(String(e))
     } finally {
       setSyncing(false)
+    }
+  }
+
+  /** Puxa receita/atendidos do ano (chunks) — preenche meses zerados no Financeiro. */
+  async function runRevenueYearBackfill() {
+    setBackfilling(true)
+    setBackfillMsg('Iniciando backfill do ano…')
+    try {
+      let from: string | null = null
+      let chunks = 0
+      let revenueRows = 0
+      while (chunks < 40) {
+        chunks++
+        const qs = new URLSearchParams({ chunk_days: '14' })
+        if (from) qs.set('from', from)
+        const res = await apiFetch(`/api/avec/sync/revenue-backfill?${qs}`, {
+          method: 'POST',
+          cache: 'no-store',
+        })
+        const json = await res.json()
+        if (json.error) {
+          setBackfillMsg(`Erro: ${json.error}`)
+          return
+        }
+        const data = json.data as {
+          from: string
+          to: string
+          done: boolean
+          next_from: string | null
+          status: string
+          stats?: { revenue_rows?: number; errors?: string[] }
+        }
+        revenueRows += data.stats?.revenue_rows ?? 0
+        setBackfillMsg(
+          `Chunk ${chunks}: ${data.from} → ${data.to} (${data.status}) · linhas ${revenueRows}`,
+        )
+        if (data.done || !data.next_from) {
+          setBackfillMsg(
+            `Backfill concluído (${chunks} chunks, ${revenueRows} linhas de receita). Abra /financeiro e compare os meses.`,
+          )
+          await load()
+          return
+        }
+        from = data.next_from
+      }
+      setBackfillMsg('Parou no limite de chunks — rode de novo para continuar.')
+    } catch (e) {
+      setBackfillMsg(String(e))
+    } finally {
+      setBackfilling(false)
     }
   }
 
@@ -467,6 +519,18 @@ export default function AdminPage() {
                 {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
               </PrimaryButton>
               {syncMsg && <p className="text-xs text-muted">{syncMsg}</p>}
+              <PrimaryButton
+                type="button"
+                onClick={runRevenueYearBackfill}
+                disabled={backfilling || syncing || !avec.configured}
+              >
+                {backfilling ? 'Puxando métricas do ano…' : 'Puxar métricas do ano (Financeiro)'}
+              </PrimaryButton>
+              <p className="text-[0.65rem] text-muted">
+                Preenche <code className="text-[0.65rem]">salon_daily_metrics</code> desde janeiro
+                (receita/atendidos Avec 0088) para o comparativo mensal não ficar em R$&nbsp;0.
+              </p>
+              {backfillMsg && <p className="text-xs text-muted">{backfillMsg}</p>}
             </div>
           ) : (
             <Skeleton />
