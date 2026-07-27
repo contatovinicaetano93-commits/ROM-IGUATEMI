@@ -45,6 +45,13 @@ export function formatAvecUserMessage(raw: string | null | undefined): string | 
   if (!raw) return null
   if (isAvecTokenExpiredError(raw)) return AVEC_TOKEN_EXPIRED_MESSAGE
 
+  // WAF/edge devolve HTML 403 (não JSON) — comum em egress serverless.
+  if (/\bHTTP\s*403\b/i.test(raw) && /<html|403 Forbidden/i.test(raw)) {
+    const report = raw.match(/Avec\s+(\d{4})/i)?.[1]
+    const prefix = report ? `Avec ${report}` : 'Avec'
+    return `${prefix} bloqueado pelo WAF (403) — retry automático; se persistir, rode sync fora da Vercel ou aguarde`
+  }
+
   // HTTP 403 com corpo JSON — manter contexto, sem despejar JSON longo
   const http = raw.match(/\bHTTP\s*(\d+)\b/i)
   if (http && raw.includes('{')) {

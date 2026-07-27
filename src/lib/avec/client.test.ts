@@ -1,12 +1,38 @@
 import { describe, expect, it } from 'vitest'
 import {
+  avecReportHeaders,
   extractRows,
   formatTruncationWarning,
   getAvecSyncMaxPages,
+  isAvecWafForbiddenError,
+  normalizeAvecApiToken,
   wasPaginationTruncated,
   withRequiredAvecReportParams,
   type AvecReportFetchResult,
 } from '@/lib/avec/client'
+
+describe('normalizeAvecApiToken / WAF helpers', () => {
+  it('remove prefixo Bearer', () => {
+    expect(normalizeAvecApiToken('Bearer abc.def.ghi')).toBe('abc.def.ghi')
+    expect(normalizeAvecApiToken('abc.def.ghi')).toBe('abc.def.ghi')
+  })
+
+  it('monta headers com Origin/User-Agent do admin Avec', () => {
+    const h = avecReportHeaders('Bearer tok')
+    expect(h.Authorization).toBe('tok')
+    expect(h.Origin).toBe('https://admin.avec.beauty')
+    expect(h['User-Agent']).toMatch(/Safari/)
+  })
+
+  it('detecta 403 HTML de WAF', () => {
+    const err = new Error('Avec 0004 HTTP 403: <html><title>403 Forbidden</title></html>')
+    ;(err as Error & { status?: number }).status = 403
+    expect(isAvecWafForbiddenError(err)).toBe(true)
+    const json = new Error('Avec 0004 HTTP 403: {"error":"forbidden"}')
+    ;(json as Error & { status?: number }).status = 403
+    expect(isAvecWafForbiddenError(json)).toBe(false)
+  })
+})
 
 describe('extractRows', () => {
   it('extrai array direto', () => {

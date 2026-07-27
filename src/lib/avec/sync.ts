@@ -837,11 +837,12 @@ async function syncReturningFrom0002(
 /**
  * TM atendimento — 0223 (`tempo`) é catálogo sem filtro de data.
  * Não grava como KPI do dia (só 0002 com duração real). Snapshot fica para auditoria.
+ * Uma página basta (payload não é retido) — paginar 50k linhas estoura o sync.
  */
 async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
   try {
     const params = { profissional_id: '', limit: 250 }
-    const result = await fetchAllAvecReport('0223', params)
+    const result = await fetchAllAvecReport('0223', params, 1)
     warnIfTruncated(stats, '0223', result)
     await snapshotReport('0223', params, result.rows, stats, syncRunId)
     stats.warnings.push('TM 0223: catálogo ignorado para KPI do dia (fonte: 0002)')
@@ -861,6 +862,11 @@ export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSync
 async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
+  }
+
+  const debug = process.env.AVEC_SYNC_DEBUG === '1' || process.env.AVEC_SYNC_DEBUG === 'true'
+  const step = (label: string) => {
+    if (debug) console.log(`[avec-sync] ${mode} ${label} @ ${new Date().toISOString()}`)
   }
 
   const deployment = getDeploymentContext()
@@ -889,23 +895,33 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
 
   const run = await beginAvecSyncRun(mode, stats)
   const syncRunId = run.id
+  step(`begin ${run.id}`)
 
   try {
     await healImportadoStatus(stats)
+    step('healed')
     // Fast: agenda/caixa do dia. Full: + catálogo + P1/P2/P3.
     if (mode === 'full') {
+      step('clients…')
       await syncClients(stats, syncRunId)
+      step(`clients done upserted=${stats.clients_upserted}`)
     }
     if (mode === 'fast') {
       // KPI do dia primeiro (0088 + 0052 + 0248); depois agenda → atendidos em sequência
       // (paralelo 0051∥0002 podia reabrir serviço já marcado done).
+      step('revenue/cancel/noshow…')
       await Promise.all([
         syncRevenue(stats, mode, syncRunId),
         syncCancellations(stats, mode, syncRunId),
         syncNoShows0248(stats, mode, syncRunId),
       ])
+      step(`kpi day revenue_rows=${stats.revenue_rows}`)
+      step('appointments…')
       await syncAppointments(stats, mode, syncRunId)
+      step(`appointments=${stats.appointments_synced}`)
+      step('attendances…')
       await syncAttendances(stats, mode, syncRunId)
+      step(`attendances=${stats.attendances_synced}`)
       try {
         await syncDurationFrom0223(stats, syncRunId)
       } catch (e) {
@@ -920,6 +936,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       } catch (e) {
         stats.errors.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
+      step('fast reports done')
     } else {
       // Full: P1/P2/P3 primeiro — ocupação/aquisição não pode morrer no timeout 300s
       // depois de agenda/atendimentos. Cada etapa isolada (403/WAF não derruba o resto).

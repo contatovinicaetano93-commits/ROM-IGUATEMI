@@ -143,7 +143,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
           ${input.avecClientId},
           ${input.status ?? 'novo'}
         )
-        on conflict (avec_client_id) do update set
+        on conflict (avec_client_id) where avec_client_id is not null do update set
           last_contact_at = now(),
           name = coalesce(excluded.name, contacts.name),
           email = coalesce(excluded.email, contacts.email),
@@ -206,7 +206,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       ${input.source},
       ${input.status ?? 'novo'}
     )
-    on conflict (phone) do update set
+    on conflict (phone) where phone is not null do update set
       last_contact_at = now(),
       name = coalesce(excluded.name, contacts.name),
       email = coalesce(excluded.email, contacts.email),

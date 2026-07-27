@@ -34,14 +34,43 @@ export interface AvecReportParams {
   [key: string]: string | number | undefined
 }
 
+/** Token puro — Avec rejeita "Bearer …" com 401; prefixo sobra em alguns envs. */
+export function normalizeAvecApiToken(raw: string): string {
+  return raw.trim().replace(/^Bearer\s+/i, '').trim()
+}
+
+/**
+ * Headers no estilo do admin.avec.beauty.
+ * Sem User-Agent/Origin o WAF da Avec às vezes devolve HTML 403 (não JSON 401).
+ */
+export function avecReportHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: normalizeAvecApiToken(token),
+    Accept: 'application/json',
+    Origin: 'https://admin.avec.beauty',
+    Referer: 'https://admin.avec.beauty/',
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15',
+  }
+}
+
+/** 403 com corpo HTML = WAF/edge — vale retry; 403 JSON = permissão. */
+export function isAvecWafForbiddenError(error: Error): boolean {
+  const status = (error as Error & { status?: number }).status
+  if (status !== 403) return false
+  return /<html|403 Forbidden|cloudflare|just a moment/i.test(error.message)
+}
+
 async function getAvecConfig() {
   const baseUrl = getAvecBaseUrl()
-  // Preferência: token renovado no Neon (cron 6h) → env Vercel.
+  if (cachedAvecToken) return { baseUrl, token: cachedAvecToken }
+  // Preferência: token renovado no DB (cron 6h) → env Vercel.
   const runtime = await loadRuntimeAvecApiToken()
-  const token = runtime ?? process.env.AVEC_API_TOKEN?.trim() ?? ''
+  const token = normalizeAvecApiToken(runtime ?? process.env.AVEC_API_TOKEN?.trim() ?? '')
   if (!token) {
     throw new Error('AVEC_API_TOKEN é obrigatório para sync com Avec')
   }
+  cachedAvecToken = token
   return { baseUrl, token }
 }
 
@@ -223,6 +252,8 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
 
 /** Uma renovação por invocação serverless — evita stampede em 401 paralelo. */
 let avecTokenRefreshInFlight: Promise<string | null> | null = null
+/** Cache do token na invocação — evita CREATE TABLE + SELECT a cada relatório. */
+let cachedAvecToken: string | null = null
 
 async function forceRefreshAvecToken(): Promise<string | null> {
   if (!isAvecLoginConfigured()) return null
@@ -235,8 +266,10 @@ async function forceRefreshAvecToken(): Promise<string | null> {
         } catch {
           // Persistência falhou — o JWT em memória ainda serve para o retry 401.
         }
-        process.env.AVEC_API_TOKEN = minted.token
-        return minted.token
+        const token = normalizeAvecApiToken(minted.token)
+        process.env.AVEC_API_TOKEN = token
+        cachedAvecToken = token
+        return token
       } catch {
         return null
       }
@@ -271,7 +304,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
   return retryWithBackoff(
     async () => {
       const res = await fetch(url, {
-        headers: { Authorization: token, Accept: 'application/json' },
+        headers: avecReportHeaders(token),
         cache: 'no-store',
         signal: AbortSignal.timeout(30_000),
       })
@@ -281,10 +314,10 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
       if (res.status === 401 && !refreshedFor401 && isAvecLoginConfigured()) {
         const next = await forceRefreshAvecToken()
         if (next) {
-          token = next
+          token = normalizeAvecApiToken(next)
           refreshedFor401 = true
           const retry = await fetch(url, {
-            headers: { Authorization: token, Accept: 'application/json' },
+            headers: avecReportHeaders(token),
             cache: 'no-store',
             signal: AbortSignal.timeout(30_000),
           })
@@ -319,12 +352,13 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
       return res.json()
     },
     {
-      maxAttempts: 3,
-      initialDelayMs: 1000,
-      // 4xx é erro de request (token/params) — repetir não resolve. Só vale retry em falha de rede ou 5xx.
+      maxAttempts: 4,
+      initialDelayMs: 1500,
+      // Rede/5xx e WAF HTML 403 — retry. 4xx JSON (token/params) não.
       shouldRetry: (e) => {
         const status = (e as Error & { status?: number }).status
-        return status === undefined || status >= 500
+        if (status === undefined || status >= 500) return true
+        return isAvecWafForbiddenError(e)
       },
     },
   )
