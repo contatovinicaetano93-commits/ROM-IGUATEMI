@@ -260,7 +260,7 @@ export default function HojePage() {
         <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4">
           <MessageCircle size={18} className="mt-0.5 shrink-0 text-warning" />
           <p className="text-sm">
-            <span className="font-semibold text-warning">{data!.leads.whatsapp_sem_resposta} lead(s) WhatsApp</span>
+            <span className="font-semibold text-warning">{data!.leads.whatsapp_sem_resposta} lead(s) WhatsApp hoje</span>
             {' '}aguardando resposta da equipe.
           </p>
         </div>
@@ -275,7 +275,7 @@ export default function HojePage() {
         <ChevronRight size={16} className="shrink-0 text-muted" />
       </Link>
 
-      {/* Agenda — hoje e próximos, por data/hora */}
+      {/* Agenda — só o dia (SP), alinhado ao Pipeline */}
       <section className="flex flex-col gap-2">
         <button
           type="button"
@@ -284,7 +284,7 @@ export default function HojePage() {
           className="flex w-full items-center justify-between gap-3 rounded-xl py-0.5 text-left active:opacity-90"
         >
           <h2 className="flex items-center gap-1.5 text-sm font-medium">
-            <Calendar size={15} className="text-sky-300" /> Agendamentos
+            <Calendar size={15} className="text-sky-300" /> Agendamentos de hoje
           </h2>
           <span className="flex items-center gap-2">
             <CountBadge value={loading ? '—' : String(data?.scheduleToday.length ?? 0)} tone="gold" />
@@ -308,7 +308,7 @@ export default function HojePage() {
 
             {!loading && data?.scheduleToday.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-                Nenhum agendamento próximo.
+                Nenhum agendamento aberto hoje.
               </div>
             )}
 
@@ -452,8 +452,8 @@ export default function HojePage() {
           <div className="flex items-center gap-3">
             <Users size={18} className="text-gold" />
             <div>
-              <p className="text-sm font-medium">{data!.leads.novos} contato(s) novo(s)</p>
-              <p className="text-xs text-muted">Ver lista completa</p>
+              <p className="text-sm font-medium">{data!.leads.novos} novo(s) lead(s) hoje</p>
+              <p className="text-xs text-muted">Funil WhatsApp/manual · ver Contatos</p>
             </div>
           </div>
           <ChevronRight size={16} className="text-muted" />

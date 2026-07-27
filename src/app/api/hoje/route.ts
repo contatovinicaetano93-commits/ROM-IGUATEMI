@@ -10,7 +10,7 @@ import {
   countOverdueServices,
   slicePlaybookForRole,
 } from '@/lib/salon/playbook'
-import { listUpcomingSchedules } from '@/lib/services'
+import { listTodaySchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { todayIso } from '@/lib/salon/format'
@@ -30,12 +30,19 @@ export async function GET(req: NextRequest) {
     const [salonRaw, playbookAll, scheduleRaw, leadRows, avecLast, reactivation] = await Promise.all([
       getSalonMetrics(day),
       listActionItems(),
-      // Hoje + próximos dias, ordenados por data/hora (mais próximo primeiro).
-      listUpcomingSchedules(7, 150),
+      // Só o dia (SP) — alinhado ao Pipeline; próximos dias ficam em /agenda.
+      listTodaySchedules(day, 150),
       sql`
         select
-          count(*) filter (where status = 'novo')::int as novos,
-          count(*) filter (where status = 'novo' and channel = 'whatsapp')::int as whatsapp_novos
+          count(*) filter (
+            where status = 'novo'
+              and (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+          )::int as novos,
+          count(*) filter (
+            where status = 'novo'
+              and channel = 'whatsapp'
+              and (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+          )::int as whatsapp_novos
         from contacts
       ` as unknown as Promise<{ novos: number; whatsapp_novos: number }[]>,
       getLastAvecSync(),

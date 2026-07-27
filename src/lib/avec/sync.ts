@@ -13,6 +13,9 @@ import {
   scheduleService,
   markServiceDone,
   patchServiceVisitMeta,
+  clearOrphanSchedulesForDay,
+  clearServiceSchedule,
+  ensureServiceCadence,
 } from '@/lib/services'
 import {
   fetchAllAvecReport,
@@ -24,6 +27,7 @@ import {
 import {
   formatAvecErrorList,
   formatAvecUserMessage,
+  hardAvecSyncWarnings,
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
@@ -32,9 +36,9 @@ import {
   normalizeAttendanceRow,
   normalizeRevenueRow,
   normalizeCancellationRow,
-  parseAvecDateTime,
   parseServiceTempoMinutes,
   guessServiceCategory,
+  defaultCadenceDaysForServiceName,
   isNailService,
   isHairService,
 } from '@/lib/avec/normalize'
@@ -133,11 +137,20 @@ export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null
 async function findOrCreateService(contactId: string, serviceName: string) {
   const services = await listServices(contactId)
   const match = services.find((s) => s.name.toLowerCase() === serviceName.toLowerCase())
-  if (match) return match
+  const cadenceDays = defaultCadenceDaysForServiceName(serviceName)
+  if (match) {
+    // Sync antigo criava serviços sem cadence — completa na próxima visita/agenda.
+    if (match.cadence_days == null) {
+      const patched = await ensureServiceCadence(match.id, cadenceDays)
+      return patched ?? match
+    }
+    return match
+  }
 
   const created = await addService(contactId, {
     name: serviceName,
     category: guessServiceCategory(serviceName),
+    cadenceDays,
   })
   return created
 }
@@ -203,22 +216,34 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
   const today = todayIso()
   const noShowsByDay = new Map<string, number>()
+  /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
+  const todayOpenServiceIds: string[] = []
+  let todayBooked = 0
+  let todayRows = 0
 
   for (const row of result.rows) {
     try {
       const appt = normalizeAppointmentRow(row)
       if (!appt) continue
 
-      if (mode === 'fast' && appt.scheduledAt) {
-        const day = toSalonDateIso(appt.scheduledAt)
-        if (day !== today) continue
-      }
+      const apptDay = appt.scheduledAt ? toSalonDateIso(appt.scheduledAt) : null
+      if (mode === 'fast' && apptDay && apptDay !== today) continue
 
       // No-show via status da agenda 0051 (fonte canônica: 0248 status=0.6).
+      // Inclui "não atendido" — senão /atendid/ em isPaid casa o substring de "atendido".
       const status = (appt.status ?? '').toLowerCase()
-      if (/falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu/.test(status) && appt.scheduledAt) {
-        const day = toSalonDateIso(appt.scheduledAt)
-        if (day) noShowsByDay.set(day, (noShowsByDay.get(day) ?? 0) + 1)
+      const isNoShow =
+        /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu|n[aã]o\s*atendid/.test(status)
+      const isPaid = !isNoShow && /pago|finaliz|conclu|atendid|realiz/.test(status)
+      const isCancelled = /cancel/.test(status)
+      if (isNoShow && appt.scheduledAt) {
+        if (apptDay) noShowsByDay.set(apptDay, (noShowsByDay.get(apptDay) ?? 0) + 1)
+      }
+
+      if (apptDay === today) {
+        todayRows++
+        // Agendados = abertos + pagos (não misturar faltas/no-shows).
+        if (!isCancelled && !isNoShow) todayBooked++
       }
 
       const contact = await upsertContact({
@@ -228,7 +253,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         phone: appt.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_appointments_fast' : 'avec_sync_appointments',
-        status: 'agendado',
+        status: isPaid ? 'convertido' : 'agendado',
       })
 
       if (appt.serviceName && appt.scheduledAt) {
@@ -236,14 +261,32 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         const had = existing.some((s) => s.name.toLowerCase() === appt.serviceName!.toLowerCase())
         const service = await findOrCreateService(contact.id, appt.serviceName)
         if (!had) stats.services_created++
-        if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
-          await scheduleService(service.id, appt.scheduledAt, appt.professional)
-          stats.services_scheduled++
-        } else if (appt.professional && !service.professional_name) {
-          await patchServiceVisitMeta(service.id, {
+
+        // 0051 status Pago = comanda fechada. Usa hora_ini do agendamento (único relógio
+        // estável que a Avec manda) — evita Concluídos todos com o mesmo horário inventado.
+        if (isPaid) {
+          await markServiceDone(service.id, {
+            doneAt: appt.scheduledAt,
             professionalName: appt.professional,
+            lastPrice: appt.price,
           })
+          stats.services_completed++
+        } else if (isNoShow || isCancelled) {
+          if (apptDay === today && service.scheduled_at) {
+            await clearServiceSchedule(service.id)
+          }
+        } else {
+          if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
+            await scheduleService(service.id, appt.scheduledAt, appt.professional)
+            stats.services_scheduled++
+          } else if (appt.professional && !service.professional_name) {
+            await patchServiceVisitMeta(service.id, {
+              professionalName: appt.professional,
+            })
+          }
+          if (apptDay === today) todayOpenServiceIds.push(service.id)
         }
+
         if (appt.professional && isNailService(appt.serviceName)) {
           await setPreferredManicurist(contact.id, appt.professional)
         } else if (appt.professional && isHairService(appt.serviceName)) {
@@ -254,6 +297,19 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       stats.appointments_synced++
     } catch (e) {
       stats.errors.push(`agendamento: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  // Reconcilia órfãos + KPI Agendados = abertos+pagos do dia (não só leftovers abertos).
+  if (todayRows > 0) {
+    try {
+      const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
+      if (cleared > 0) {
+        stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
+      }
+      await upsertSalonMetrics(today, { appointments: todayBooked })
+    } catch (e) {
+      stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -310,17 +366,28 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         const service = await findOrCreateService(contact.id, att.serviceName)
         const isNew = servicesCreatedRecently(service)
         if (isNew) stats.services_created++
-        await markServiceDone(service.id, {
-          doneAt: att.attendedAt,
-          professionalName: att.professional,
-          lastPrice: att.price,
-        })
+        // 0002 desta unidade só manda ultima_visita (data) — sem hora. Não sobrescrever
+        // o horário do 0051 Pago com meia-noite/placeholder.
+        const doneAt = att.endedAt ?? att.startedAt ?? null
+        if (doneAt) {
+          await markServiceDone(service.id, {
+            doneAt,
+            professionalName: att.professional,
+            lastPrice: att.price,
+          })
+          stats.services_completed++
+        } else if (att.professional || att.price != null) {
+          await patchServiceVisitMeta(service.id, {
+            professionalName: att.professional,
+            lastPrice: att.price,
+            allowLastPrice: true,
+          })
+        }
         if (att.professional && isNailService(att.serviceName)) {
           await setPreferredManicurist(contact.id, att.professional)
         } else if (att.professional && isHairService(att.serviceName)) {
           await setPreferredHairstylist(contact.id, att.professional)
         }
-        stats.services_completed++
       }
 
       stats.attendances_synced++
@@ -358,10 +425,22 @@ function listDaysInclusive(fromIso: string, toIso: string): string[] {
   return out
 }
 
+/** Janela de backfill diário: AVEC_REVENUE_DAYS_BACK override; senão fast=1, full=7. */
+function revenueDaysBack(mode: AvecSyncMode): number {
+  const raw = process.env.AVEC_REVENUE_DAYS_BACK?.trim()
+  if (raw) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n)
+  }
+  return mode === 'fast' ? 1 : 7
+}
+
 /**
  * Faturamento dia a dia.
  * Fast: hoje + ontem (corrige atraso do relatório).
  * Full: últimos 7 dias + hoje (mesmo padrão do 0081).
+ * Override: AVEC_REVENUE_DAYS_BACK=N (ex.: mês incompleto).
+ * Sempre grava a linha do dia (mesmo receita 0) para Relatórios não marcar gap.
  */
 async function syncRevenue(
   stats: AvecSyncStats,
@@ -379,7 +458,7 @@ async function syncRevenue(
   }
 
   const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
+  const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
   const days = listDaysInclusive(from, today)
 
@@ -408,13 +487,18 @@ async function syncRevenue(
         }
       }
 
-      if (revenue > 0 || attended > 0) {
-        const attendedInt = Math.round(attended)
+      const attendedInt = Math.round(attended)
+      const revenueRounded = Math.round(revenue * 100) / 100
+      if (revenueRounded > 0 || attendedInt > 0) {
         await upsertSalonMetrics(day, {
-          revenue: Math.round(revenue * 100) / 100,
+          revenue: revenueRounded,
+          // 0 → undefined: coalesce no upsert preserva attended já gravado.
           attended: attendedInt || undefined,
           ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
         })
+      } else {
+        // Garante linha do dia (Relatórios) sem clobber de métricas existentes.
+        await upsertSalonMetrics(day, {})
       }
     } catch (e) {
       stats.errors.push(`receita ${day}: ${e instanceof Error ? e.message : String(e)}`)
@@ -441,7 +525,7 @@ async function syncCancellations(
   }
 
   const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
+  const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
   const days = listDaysInclusive(from, today)
 
@@ -563,7 +647,9 @@ async function syncReturningFrom0002(
         returningByDay.set(day, (returningByDay.get(day) ?? 0) + 1)
       }
 
-      // Backfill last_done_at só p/ quem veio hoje (evita reescrever milhares no cron).
+      // Contato/serviço de quem veio hoje — NÃO inventar horário (antes usava 12:00 e
+      // apagava o last_done_at real → Pipeline Concluídos todos iguais).
+      // Só marca concluído se a Avec mandou hora real (fim ou início).
       if (att.lastVisitDay === today) {
         try {
           const contact = await upsertContact({
@@ -575,12 +661,18 @@ async function syncReturningFrom0002(
           })
           const serviceName = att.serviceName || 'Atendimento'
           const service = await findOrCreateService(contact.id, serviceName)
-          const doneAt = parseAvecDateTime(att.lastVisitDay, '12:00')
+          const doneAt = att.endedAt ?? att.startedAt ?? null
           if (doneAt) {
             await markServiceDone(service.id, {
               doneAt,
               professionalName: att.professional,
               lastPrice: att.price,
+            })
+          } else if (att.professional || att.price != null) {
+            await patchServiceVisitMeta(service.id, {
+              professionalName: att.professional,
+              lastPrice: att.price,
+              allowLastPrice: true,
             })
           }
         } catch (e) {
@@ -695,22 +787,27 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         stats.errors.push(`TM 0223 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
       try {
-        await syncPaymentMixRecent(stats, syncRunId, 0)
+        // Default fast: só hoje (0). Com AVEC_REVENUE_DAYS_BACK, alinha com receita.
+        const payDays = process.env.AVEC_REVENUE_DAYS_BACK?.trim()
+          ? revenueDaysBack(mode)
+          : 0
+        await syncPaymentMixRecent(stats, syncRunId, payDays)
       } catch (e) {
         stats.errors.push(`P2 0081 fast: ${e instanceof Error ? e.message : String(e)}`)
       }
     } else {
-      // Full: cada etapa isolada — 403/WAF num relatório não pode impedir P1/P2/P3.
+      // Full: P1/P2/P3 primeiro — ocupação/aquisição não pode morrer no timeout 300s
+      // depois de agenda/atendimentos. Cada etapa isolada (403/WAF não derruba o resto).
       for (const [label, fn] of [
+        ['P1', () => syncP1Kpis(stats, syncRunId)],
+        ['P2', () => syncP2Kpis(stats, syncRunId)],
+        ['P3', () => syncP3Kpis(stats, syncRunId)],
         ['appointments', () => syncAppointments(stats, mode, syncRunId)],
         ['attendances', () => syncAttendances(stats, mode, syncRunId)],
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],
         ['cancellations', () => syncCancellations(stats, mode, syncRunId)],
         ['no-shows-0248', () => syncNoShows0248(stats, mode, syncRunId)],
         ['tm-0223', () => syncDurationFrom0223(stats, syncRunId)],
-        ['P1', () => syncP1Kpis(stats, syncRunId)],
-        ['P2', () => syncP2Kpis(stats, syncRunId)],
-        ['P3', () => syncP3Kpis(stats, syncRunId)],
       ] as const) {
         try {
           await fn()
@@ -729,10 +826,19 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
 
     stats.errors = formatAvecErrorList(stats.errors)
 
+    // Truncamento / unit-id / órfãos ficam em warnings (UI), mas não impedem status ok.
+    const hardWarnings = hardAvecSyncWarnings(stats.warnings)
+    const hadCoreRows =
+      stats.clients_upserted +
+        stats.appointments_synced +
+        stats.attendances_synced +
+        stats.revenue_rows +
+        stats.cancellation_rows >
+      0
     const status: AvecSyncRun['status'] =
-      stats.errors.length > 0 && stats.clients_upserted + stats.appointments_synced === 0
+      stats.errors.length > 0 && !hadCoreRows
         ? 'error'
-        : stats.errors.length > 0 || stats.warnings.length > 0
+        : stats.errors.length > 0 || hardWarnings.length > 0
           ? 'partial'
           : 'ok'
 

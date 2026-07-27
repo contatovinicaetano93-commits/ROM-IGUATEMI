@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  defaultCadenceDaysForCategory,
+  defaultCadenceDaysForServiceName,
+  guessServiceCategory,
   isHairService,
   isNailService,
   normalize0011ReactivationRow,
@@ -135,6 +138,19 @@ describe('isNailService', () => {
     expect(isNailService('Pedicure spa')).toBe(true)
     expect(isNailService('Blindagem de unhas')).toBe(true)
     expect(isNailService('Corte feminino')).toBe(false)
+  })
+})
+
+
+describe('defaultCadenceDaysForCategory', () => {
+  it('retorna cadências estáveis por categoria / nome', () => {
+    expect(defaultCadenceDaysForCategory('corte')).toBe(35)
+    expect(defaultCadenceDaysForCategory('coloracao')).toBe(60)
+    expect(defaultCadenceDaysForCategory('tratamento')).toBe(45)
+    expect(defaultCadenceDaysForCategory('bem_estar')).toBe(28)
+    expect(defaultCadenceDaysForCategory('outro')).toBe(30)
+    expect(defaultCadenceDaysForServiceName('Corte feminino')).toBe(35)
+    expect(guessServiceCategory('Hidratação profunda')).toBe('tratamento')
   })
 })
 

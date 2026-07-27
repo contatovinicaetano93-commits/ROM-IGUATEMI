@@ -40,11 +40,22 @@ export function getDeploymentContext(): DeploymentContext {
   }
 }
 
+function deploymentHostHint(): string {
+  return (
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ??
+    process.env.VERCEL_URL ??
+    process.env.NEXT_PUBLIC_VERCEL_URL ??
+    ''
+  ).toLowerCase()
+}
+
 /** Detecta configuração perigosa antes de misturar Brasil e Iguatemi. */
 export function validateDeploymentEnv(): DeploymentValidation {
   const warnings: string[] = []
   const serverPanel = readServerPanel()
   const publicPanel = readPublicPanel()
+  const panel = serverPanel ?? publicPanel ?? getRomPanelId()
+  const host = deploymentHostHint()
 
   if (serverPanel && publicPanel && serverPanel !== publicPanel) {
     warnings.push(
@@ -56,8 +67,33 @@ export function validateDeploymentEnv(): DeploymentValidation {
     warnings.push('DATABASE_URL ausente — use um banco Neon dedicado por unidade (nunca compartilhe entre Brasil e Iguatemi).')
   }
 
+  // Host Vercel vs painel — evita deploy Iguatemi apontando para projeto Brasil (e vice-versa).
+  if (panel === 'iguatemi' && /rom-club(?!-iguatemi)|brasil/i.test(host)) {
+    warnings.push(
+      `Host (${host}) parece Brasil/rom-club, mas ROM_PANEL=iguatemi — confira o projeto Vercel e o Neon desta unidade.`
+    )
+  }
+  if (panel === 'brasil' && /iguatemi/i.test(host)) {
+    warnings.push(
+      `Host (${host}) parece Iguatemi, mas ROM_PANEL=brasil — confira o projeto Vercel e o Neon desta unidade.`
+    )
+  }
+
+  // Fingerprint opcional do Neon (ex.: ep-xxx) — defina ROM_EXPECTED_DB_HOST na Vercel.
+  const expectedDb = process.env.ROM_EXPECTED_DB_HOST?.trim().toLowerCase()
+  const dbUrl = process.env.DATABASE_URL?.trim().toLowerCase() ?? ''
+  if (expectedDb && dbUrl && !dbUrl.includes(expectedDb)) {
+    warnings.push(
+      `DATABASE_URL não contém ROM_EXPECTED_DB_HOST (${expectedDb}) — risco de banco da unidade errada.`
+    )
+  }
+
   if (!process.env.AVEC_API_TOKEN?.trim() && process.env.AVEC_MOCK !== '1' && process.env.AVEC_MOCK !== 'true') {
     warnings.push('AVEC_API_TOKEN ausente — cada unidade precisa do token Avec da própria loja.')
+  }
+
+  if (!process.env.AVEC_UNIT_ID?.trim() && process.env.AVEC_MOCK !== '1' && process.env.AVEC_MOCK !== 'true') {
+    warnings.push('AVEC_UNIT_ID ausente — sync sem filtro de site (risco de misturar unidades).')
   }
 
   return { ok: warnings.length === 0, warnings }
