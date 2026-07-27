@@ -1,6 +1,6 @@
 import type { MonthOverview } from '@/lib/salon/month-overview'
 import type { PeriodAnalytics } from '@/lib/salon/period-analytics'
-import { statusLabelPt } from '@/lib/salon/month-metrics'
+import { statusLabelPt } from '@/lib/salon/month-status'
 
 function csvEscape(value: string | number | null | undefined): string {
   const s = value == null ? '' : String(value)

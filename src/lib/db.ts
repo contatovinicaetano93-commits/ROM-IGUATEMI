@@ -1,3 +1,4 @@
+import 'server-only'
 import postgres, { type Sql as PostgresSql } from 'postgres'
 
 try {

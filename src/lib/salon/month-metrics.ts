@@ -1,9 +1,11 @@
 import { getSql } from '@/lib/db'
 import { todayIso } from '@/lib/salon/format'
+import { statusLabelPt, type MonthCloseStatus } from '@/lib/salon/month-status'
+
+export type { MonthCloseStatus }
+export { statusLabelPt }
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-
-export type MonthCloseStatus = 'complete' | 'in_progress' | 'incomplete'
 
 let monthMetricsTableReady: Promise<void> | null = null
 
@@ -178,12 +180,6 @@ export function computeMonthCompleteness(
     days_missing,
     status,
   }
-}
-
-export function statusLabelPt(status: MonthCloseStatus): string {
-  if (status === 'complete') return 'Completo'
-  if (status === 'in_progress') return 'Em andamento'
-  return 'INCOMPLETO'
 }
 
 async function listPresentDays(from: string, to: string): Promise<string[]> {
