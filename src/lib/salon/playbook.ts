@@ -41,6 +41,11 @@ export function countOverdueServices(items: ActionItem[]): number {
   return items.reduce((sum, item) => sum + item.overdue, 0)
 }
 
+/** Contatos do playbook com pelo menos um serviço atrasado (fila acionável do dia). */
+export function countOverdueContacts(items: ActionItem[]): number {
+  return items.filter((item) => item.overdue > 0).length
+}
+
 /**
  * Fatia e prioriza o playbook do dia por papel.
  * Staff (recepção): só ações de contato (atrasado / vencendo / agendado).

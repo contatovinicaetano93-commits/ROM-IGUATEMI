@@ -30,14 +30,12 @@ export async function GET(req: NextRequest) {
     const pendingOnly = searchParams.get('pending') === 'true'
     const sort = searchParams.get('sort') ?? 'urgency'
     const query = searchParams.get('q') ?? searchParams.get('query') ?? null
+    const status = searchParams.get('status')
 
     const rawLimit = Number(searchParams.get('limit') ?? 500)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 500
-    let items = await listContactsWithSummary({ limit, query })
-
-    if (pendingOnly) {
-      items = items.filter((c) => c.pending_actions > 0)
-    }
+    // pending/status filtrados na query (base inteira) — não só no top urgente em memória.
+    let items = await listContactsWithSummary({ limit, query, pendingOnly, status })
 
     if (sort === 'urgency') {
       // Mais tempo sem retorno (dias) primeiro; empate em ordem alfabética.

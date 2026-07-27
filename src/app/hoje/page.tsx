@@ -67,6 +67,9 @@ interface HojeData {
   playbook_audience?: 'staff' | 'admin'
   scheduleToday: ScheduleItem[]
   leads: { novos: number; whatsapp_sem_resposta: number }
+  /** Contatos do playbook com atraso (fila do dia). */
+  overdue_contacts?: number
+  /** Serviços atrasados nesses contatos do playbook. */
   overdue_total: number
   reactivation?: {
     window_days: number
@@ -238,13 +241,16 @@ export default function HojePage() {
         </div>
       )}
 
-      {!loading && (data?.overdue_total ?? 0) > 0 && (
+      {!loading && (data?.overdue_contacts ?? 0) > 0 && (
         <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-4">
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-danger" />
           <p className="text-sm">
             <span className="font-semibold text-danger">
-              {data!.overdue_total} serviço(s) atrasado(s) no foco de hoje
+              {data!.overdue_contacts} contato(s) com retorno atrasado no foco de hoje
             </span>
+            {data!.overdue_total > 0 ? (
+              <span className="text-muted"> · {data!.overdue_total} serviço(s)</span>
+            ) : null}
             {' — '}priorize reagendar.
           </p>
         </div>
