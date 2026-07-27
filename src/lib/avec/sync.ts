@@ -505,15 +505,13 @@ function revenueDaysBack(mode: AvecSyncMode): number {
 }
 
 /**
- * Faturamento dia a dia.
- * Fast: hoje + ontem (corrige atraso do relatório).
- * Full: últimos 7 dias + hoje (mesmo padrão do 0081).
- * Override: AVEC_REVENUE_DAYS_BACK=N (ex.: mês incompleto).
+ * Faturamento dia a dia no intervalo [from, to] (YYYY-MM-DD, inclusive).
  * Sempre grava a linha do dia (mesmo receita 0) para Relatórios não marcar gap.
  */
-async function syncRevenue(
+export async function syncRevenueDateRange(
   stats: AvecSyncStats,
-  mode: AvecSyncMode,
+  from: string,
+  to: string,
   syncRunId?: string,
 ) {
   const def = getDailyReports().find((r) => r.mapper === 'revenue')
@@ -526,10 +524,7 @@ async function syncRevenue(
     return
   }
 
-  const today = todayIso()
-  const daysBack = revenueDaysBack(mode)
-  const from = addCalendarDaysYmd(today, -daysBack)
-  const days = listDaysInclusive(from, today)
+  const days = listDaysInclusive(from, to)
 
   for (const day of days) {
     const params = {
@@ -583,11 +578,29 @@ async function syncRevenue(
 }
 
 /**
- * Cancelamentos / no-shows dia a dia (mesmo backfill do faturamento).
+ * Faturamento dia a dia.
+ * Fast: hoje + ontem (corrige atraso do relatório).
+ * Full: últimos 7 dias + hoje (mesmo padrão do 0081).
+ * Override: AVEC_REVENUE_DAYS_BACK=N (ex.: mês incompleto).
  */
-async function syncCancellations(
+async function syncRevenue(
   stats: AvecSyncStats,
   mode: AvecSyncMode,
+  syncRunId?: string,
+) {
+  const today = todayIso()
+  const daysBack = revenueDaysBack(mode)
+  const from = addCalendarDaysYmd(today, -daysBack)
+  await syncRevenueDateRange(stats, from, today, syncRunId)
+}
+
+/**
+ * Cancelamentos dia a dia no intervalo [from, to].
+ */
+export async function syncCancellationsDateRange(
+  stats: AvecSyncStats,
+  from: string,
+  to: string,
   syncRunId?: string,
 ) {
   const def = getDailyReports().find((r) => r.mapper === 'cancellations')
@@ -600,10 +613,7 @@ async function syncCancellations(
     return
   }
 
-  const today = todayIso()
-  const daysBack = revenueDaysBack(mode)
-  const from = addCalendarDaysYmd(today, -daysBack)
-  const days = listDaysInclusive(from, today)
+  const days = listDaysInclusive(from, to)
 
   for (const day of days) {
     const params = {
@@ -643,20 +653,31 @@ async function syncCancellations(
 }
 
 /**
- * No-shows oficiais — relatório 0248 com status=0.6 ("Faltou").
- * A agenda 0051 do dia costuma não listar Falta (só Cancelado/Pago/…); 0248 sim.
+ * Cancelamentos / no-shows dia a dia (mesmo backfill do faturamento).
  */
-async function syncNoShows0248(
+async function syncCancellations(
   stats: AvecSyncStats,
   mode: AvecSyncMode,
   syncRunId?: string,
 ) {
   const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
+  const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
+  await syncCancellationsDateRange(stats, from, today, syncRunId)
+}
+
+/**
+ * No-shows oficiais — relatório 0248 com status=0.6 ("Faltou") no intervalo.
+ */
+export async function syncNoShows0248DateRange(
+  stats: AvecSyncStats,
+  from: string,
+  to: string,
+  syncRunId?: string,
+) {
   const params = {
     inicio: isoToBr(from),
-    fim: isoToBr(today),
+    fim: isoToBr(to),
     status: '0.6',
     limit: 250,
   }
@@ -688,7 +709,7 @@ async function syncNoShows0248(
     }
 
     // Zera dias do intervalo sem falta (evita KPI stale após correção Avec).
-    for (const day of listDaysInclusive(from, today)) {
+    for (const day of listDaysInclusive(from, to)) {
       if (!byDay.has(day)) {
         await upsertSalonMetrics(day, { no_shows: 0 })
       }
@@ -696,6 +717,21 @@ async function syncNoShows0248(
   } catch (e) {
     stats.errors.push(`no-show 0248: ${e instanceof Error ? e.message : String(e)}`)
   }
+}
+
+/**
+ * No-shows oficiais — relatório 0248 com status=0.6 ("Faltou").
+ * A agenda 0051 do dia costuma não listar Falta (só Cancelado/Pago/…); 0248 sim.
+ */
+async function syncNoShows0248(
+  stats: AvecSyncStats,
+  mode: AvecSyncMode,
+  syncRunId?: string,
+) {
+  const today = todayIso()
+  const daysBack = mode === 'fast' ? 1 : 7
+  const from = addCalendarDaysYmd(today, -daysBack)
+  await syncNoShows0248DateRange(stats, from, today, syncRunId)
 }
 
 /**
@@ -954,5 +990,126 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
     return finishAvecSyncRun(run.id, 'error', stats, msg)
+  }
+}
+
+const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+export function isIsoDay(value: string): boolean {
+  return ISO_DAY_RE.test(value)
+}
+
+/** 1º de janeiro do ano do dia (fuso salão via YYYY-MM-DD já local). */
+export function yearStartIso(day = todayIso()): string {
+  return `${day.slice(0, 4)}-01-01`
+}
+
+export interface RevenueBackfillResult {
+  from: string
+  to: string
+  days: number
+  next_from: string | null
+  done: boolean
+  status: AvecSyncRun['status']
+  stats: AvecSyncStats
+  error?: string | null
+}
+
+/**
+ * Backfill de métricas diárias (receita 0088 + cancelamentos + no-shows 0248)
+ * para o Financeiro comparar meses anteriores sem ficar em R$ 0.
+ *
+ * Aceita chunk via `chunkDays` para caber no maxDuration 300s da Vercel.
+ */
+export async function runAvecRevenueBackfill(opts: {
+  from: string
+  to?: string
+  chunkDays?: number
+}): Promise<RevenueBackfillResult> {
+  if (!isAvecConfigured()) {
+    throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
+  }
+  if (!isIsoDay(opts.from)) {
+    throw new Error(`from inválido: ${opts.from}`)
+  }
+  const to = opts.to ?? todayIso()
+  if (!isIsoDay(to)) {
+    throw new Error(`to inválido: ${to}`)
+  }
+  if (opts.from > to) {
+    throw new Error(`from (${opts.from}) > to (${to})`)
+  }
+
+  const chunkDays = Math.max(1, Math.min(62, Math.floor(opts.chunkDays ?? 14)))
+  const chunkTo = (() => {
+    const end = addCalendarDaysYmd(opts.from, chunkDays - 1)
+    return end < to ? end : to
+  })()
+  const days = listDaysInclusive(opts.from, chunkTo).length
+  const next_from = chunkTo < to ? addCalendarDaysYmd(chunkTo, 1) : null
+
+  const deployment = getDeploymentContext()
+  const stats: AvecSyncStats = {
+    panel: deployment.panel,
+    deployment_host: deployment.host,
+    clients_upserted: 0,
+    appointments_synced: 0,
+    attendances_synced: 0,
+    services_created: 0,
+    services_scheduled: 0,
+    services_completed: 0,
+    revenue_rows: 0,
+    cancellation_rows: 0,
+    snapshots_saved: 0,
+    errors: [],
+    warnings: [],
+  }
+
+  const run = await beginAvecSyncRun(
+    `revenue-backfill:${opts.from}:${chunkTo}`,
+    stats,
+  )
+
+  try {
+    await syncRevenueDateRange(stats, opts.from, chunkTo, run.id)
+    await syncCancellationsDateRange(stats, opts.from, chunkTo, run.id)
+    await syncNoShows0248DateRange(stats, opts.from, chunkTo, run.id)
+
+    stats.errors = formatAvecErrorList(stats.errors)
+    const hardWarnings = hardAvecSyncWarnings(stats.warnings)
+    const hadRows = stats.revenue_rows + stats.cancellation_rows > 0
+    const status: AvecSyncRun['status'] =
+      stats.errors.length > 0 && !hadRows
+        ? 'error'
+        : stats.errors.length > 0 || hardWarnings.length > 0
+          ? 'partial'
+          : 'ok'
+
+    const finished = await finishAvecSyncRun(run.id, status, stats)
+    return {
+      from: opts.from,
+      to: chunkTo,
+      days,
+      next_from,
+      done: next_from == null,
+      status: finished.status,
+      stats,
+      error: finished.error,
+    }
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e)
+    const msg = formatAvecUserMessage(raw) ?? raw
+    stats.errors.push(msg)
+    const finished = await finishAvecSyncRun(run.id, 'error', stats, msg)
+    return {
+      from: opts.from,
+      to: chunkTo,
+      days,
+      next_from,
+      done: false,
+      status: finished.status,
+      stats,
+      error: finished.error,
+    }
   }
 }
