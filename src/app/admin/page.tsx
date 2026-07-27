@@ -218,6 +218,14 @@ export default function AdminPage() {
         setBackfillMsg(
           `Chunk ${chunks}: ${data.from} → ${data.to} (${data.status}) · linhas ${revenueRows}`,
         )
+        // Alinha ao script CLI: não avança pulando intervalo com falha total.
+        if (data.status === 'error' && (data.stats?.revenue_rows ?? 0) === 0) {
+          const detail = data.stats?.errors?.[0] ?? data.status
+          setBackfillMsg(
+            `Erro no chunk ${data.from} → ${data.to}: ${detail}. Rode de novo com from=${data.from}.`,
+          )
+          return
+        }
         if (data.done || !data.next_from) {
           setBackfillMsg(
             `Backfill concluído (${chunks} chunks, ${revenueRows} linhas de receita). Abra /financeiro e compare os meses.`,

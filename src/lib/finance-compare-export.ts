@@ -97,21 +97,25 @@ function svgGroupedBars(
   const padB = 48
   const chartW = width - padL - padR
   const chartH = height - padT - padB
-  const maxVal = Math.max(1, ...series.flatMap((s) => [s.current, s.previous]))
+  const maxVal = Math.max(
+    1,
+    ...series.flatMap((s) => [Math.abs(s.current), Math.abs(s.previous)]),
+  )
   const groupW = chartW / series.length
   const barW = Math.min(28, groupW * 0.32)
 
   const bars = series
     .map((s, i) => {
       const cx = padL + groupW * i + groupW / 2
-      const hCur = (s.current / maxVal) * chartH
-      const hPrev = (s.previous / maxVal) * chartH
+      const hCur = Math.max(0, (Math.abs(s.current) / maxVal) * chartH)
+      const hPrev = Math.max(0, (Math.abs(s.previous) / maxVal) * chartH)
       const yCur = padT + chartH - hCur
       const yPrev = padT + chartH - hPrev
       const labelY = height - 28
+      const fillCur = s.current < 0 ? '#b91c1c' : '#b45309'
       return `
         <rect x="${cx - barW - 2}" y="${yPrev}" width="${barW}" height="${hPrev}" fill="#9ca3af" rx="2"/>
-        <rect x="${cx + 2}" y="${yCur}" width="${barW}" height="${hCur}" fill="#b45309" rx="2"/>
+        <rect x="${cx + 2}" y="${yCur}" width="${barW}" height="${hCur}" fill="${fillCur}" rx="2"/>
         <text x="${cx}" y="${labelY}" text-anchor="middle" font-size="11" fill="#444">${escapeHtml(s.label)}</text>
       `
     })
