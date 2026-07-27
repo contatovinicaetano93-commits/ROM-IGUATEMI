@@ -122,8 +122,15 @@ export async function syncPaymentMixRecent(
       limit: 250,
     }
     try {
-      const rows = asRows(await fetchAllAvecReport(id0081, params))
+      const result = await fetchAllAvecReport(id0081, params)
+      const rows = asRows(result)
       await snapshotSafe(id0081, params, rows, stats, syncRunId)
+      if (result.truncated) {
+        stats.warnings?.push(
+          `P2 0081 ${day}: truncado — payment_mix não atualizado (evita undercount)`,
+        )
+        continue
+      }
       const payment_mix = aggregatePaymentMix(rows)
       stats.p2_rows = (stats.p2_rows ?? 0) + payment_mix.length
       await upsertSalonP2Daily(day, { payment_mix })

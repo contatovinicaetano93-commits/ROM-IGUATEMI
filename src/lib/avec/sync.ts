@@ -250,19 +250,18 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       if (mode === 'fast' && apptDay && apptDay !== today) continue
 
       // Status agenda 0051. No-show KPI: fonte canônica é 0248 (não gravar aqui).
-      // Inclui "não atendido" — senão /atendid/ em isPaid casa o substring de "atendido".
+      // "Em Atendimento" / "A Realizar" = aberto — NÃO marcar pago nem perdido.
       const status = (appt.status ?? '').toLowerCase()
       const isNoShow =
         /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu|n[aã]o\s*atendid/.test(status)
-      const isNegativeOutcome =
-        /n[aã]o\s*(realiz|conclu|finaliz|atendid)/.test(status) ||
-        /\b(a|por|para)\s+realizar\b/.test(status)
-      // "realizado/a" ≠ "a realizar"; pago/finalizado/concluído/atendido.
+      const isNegativeOutcome = /n[aã]o\s*(realiz|conclu|finaliz|atendid)/.test(status)
+      // pago / finalizado / concluído / atendido(a) / realizado(a) — nunca "atendimento" nem "a realizar".
       const isPaid =
         !isNoShow &&
         !isNegativeOutcome &&
         (/\bpago\b/.test(status) ||
-          /\b(finaliz|conclu|atendid)\w*\b/.test(status) ||
+          /\b(finaliz|conclu)\w*\b/.test(status) ||
+          /\batendid[oa]s?\b/.test(status) ||
           /\brealizad[oa]s?\b/.test(status))
       const isCancelled = /cancel/.test(status)
 
@@ -350,13 +349,14 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         stats.warnings.push(
           'agenda: reconcile de órfãos adiado — 0051 truncado (keep-set incompleto)',
         )
+        // Não grava appointments parcial — keep-set incompleto distorce o KPI.
       } else {
         const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
         if (cleared > 0) {
           stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
         }
+        await upsertSalonMetrics(today, { appointments: todayBooked })
       }
-      await upsertSalonMetrics(today, { appointments: todayBooked })
     } catch (e) {
       stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -601,6 +601,13 @@ async function syncCancellations(
       const result = await fetchAllAvecReport(reportId, params)
       warnIfTruncated(stats, reportId, result)
       await snapshotReport(reportId, params, result.rows, stats, syncRunId)
+
+      if (result.truncated) {
+        stats.warnings.push(
+          `cancelamentos ${day}: truncado — métrica não atualizada (evita undercount)`,
+        )
+        continue
+      }
 
       let cancelled = 0
       for (const row of result.rows) {

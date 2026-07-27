@@ -8,7 +8,13 @@ export interface LastVisitData {
   last_price: number | null
 }
 
-export function LastVisitCard({ visit }: { visit: LastVisitData | null | undefined }) {
+export function LastVisitCard({
+  visit,
+  showPrice = false,
+}: {
+  visit: LastVisitData | null | undefined
+  showPrice?: boolean
+}) {
   if (!visit) {
     return (
       <div className="rounded-2xl border border-border bg-card px-4 py-3">
@@ -31,10 +37,12 @@ export function LastVisitCard({ visit }: { visit: LastVisitData | null | undefin
           <UserRound size={12} className="text-muted" />
           {visit.professional_name ?? 'Profissional não informado'}
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <Scissors size={12} className="text-muted" />
-          Valor: {formatCurrency(visit.last_price)}
-        </span>
+        {showPrice && (
+          <span className="inline-flex items-center gap-1.5">
+            <Scissors size={12} className="text-muted" />
+            Valor: {formatCurrency(visit.last_price)}
+          </span>
+        )}
       </div>
     </div>
   )

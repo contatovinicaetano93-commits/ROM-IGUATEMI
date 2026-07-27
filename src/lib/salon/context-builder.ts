@@ -118,15 +118,14 @@ export function hashContactContext(contact: ContactRow, services: EnrichedServic
 }
 
 export function salonContextForAI(ctx: SalonContext) {
+  // Bot Telegram da equipe: sem faturamento/ticket (staff ≠ admin financeiro).
   return JSON.stringify({
     data: ctx.hoje,
     salon: ctx.salon
       ? {
-          faturamento: ctx.salon.revenue,
           agendamentos: ctx.salon.appointments,
           atendidos: ctx.salon.attended,
           no_shows: ctx.salon.no_shows,
-          ticket_medio: ctx.salon.ticket_avg,
           novos_clientes: ctx.salon.new_clients,
           retornos: ctx.salon.returning_clients,
         }

@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
         return {
           ...p,
           revenue: canViewRevenue ? p.revenue : (null as unknown as number),
+          ticket_avg: canViewRevenue ? p.ticket_avg : (null as unknown as number),
           delta: prev
             ? {
                 revenue: canViewRevenue ? p.revenue - prev.revenue : null,
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
       // Ranking por faturamento (KPI); empate A–Z. Staff: ordena por atendidos.
       .sort((a, b) =>
         canViewRevenue
-          ? b.revenue - a.revenue || compareByNamePtBr(a.name, b.name)
+          ? Number(b.revenue ?? 0) - Number(a.revenue ?? 0) || compareByNamePtBr(a.name, b.name)
           : b.attended - a.attended || compareByNamePtBr(a.name, b.name),
       )
 
