@@ -171,7 +171,7 @@ export default function HojePage() {
         )}
         <KpiCard
           icon={<Calendar size={16} />}
-          label="Agenda do dia"
+          label="Movimento do dia"
           value={loading ? '—' : String(salon?.appointments ?? 0)}
           loading={loading}
           source={formatKpiSources('rom', 'avec', ...(syncSource ? [syncSource] : []))}
@@ -284,7 +284,7 @@ export default function HojePage() {
           className="flex w-full items-center justify-between gap-3 rounded-xl py-0.5 text-left active:opacity-90"
         >
           <h2 className="flex items-center gap-1.5 text-sm font-medium">
-            <Calendar size={15} className="text-sky-300" /> Agendamentos de hoje
+            <Calendar size={15} className="text-sky-300" /> Agendamentos abertos hoje
           </h2>
           <span className="flex items-center gap-2">
             <CountBadge value={loading ? '—' : String(data?.scheduleToday.length ?? 0)} tone="gold" />

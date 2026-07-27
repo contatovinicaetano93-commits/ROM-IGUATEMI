@@ -36,7 +36,6 @@ import {
   normalizeRevenueRow,
   normalizeCancellationRow,
   parseAvecDateTime,
-  parseServiceTempoMinutes,
   guessServiceCategory,
   defaultCadenceDaysForServiceName,
   isNailService,
@@ -256,17 +255,21 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       const isNoShow =
         /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu|n[aã]o\s*atendid/.test(status)
       const isNegativeOutcome =
-        /n[aã]o\s*(realiz|conclu|finaliz|atendid)/.test(status)
+        /n[aã]o\s*(realiz|conclu|finaliz|atendid)/.test(status) ||
+        /\b(a|por|para)\s+realizar\b/.test(status)
+      // "realizado/a" ≠ "a realizar"; pago/finalizado/concluído/atendido.
       const isPaid =
         !isNoShow &&
         !isNegativeOutcome &&
-        /(?:^|[^a-zà-ú])(?:pago|finaliz|conclu|atendid|realiz)/.test(status)
+        (/\bpago\b/.test(status) ||
+          /\b(finaliz|conclu|atendid)\w*\b/.test(status) ||
+          /\brealizad[oa]s?\b/.test(status))
       const isCancelled = /cancel/.test(status)
 
       if (apptDay === today) {
         todayRows++
-        // Agendados = abertos + pagos (não misturar faltas/no-shows).
-        if (!isCancelled && !isNoShow) todayBooked++
+        // Agendados = abertos + pagos (não misturar faltas/no-shows/negativos).
+        if (!isCancelled && !isNoShow && !isNegativeOutcome) todayBooked++
       }
 
       if (!appt.avecClientId && !appt.phone) {
@@ -281,8 +284,13 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         phone: appt.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_appointments_fast' : 'avec_sync_appointments',
-        // Cancel/no-show → perdido (não deixar agendado no funil).
-        status: isPaid ? 'convertido' : isCancelled || isNoShow ? 'perdido' : 'agendado',
+        // Cancel/no-show/negativo → perdido (não deixar agendado no funil).
+        status:
+          isPaid
+            ? 'convertido'
+            : isCancelled || isNoShow || isNegativeOutcome
+              ? 'perdido'
+              : 'agendado',
       })
 
       if (appt.serviceName && appt.scheduledAt) {
@@ -300,7 +308,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             lastPrice: appt.price,
           })
           stats.services_completed++
-        } else if (isNoShow || isCancelled) {
+        } else if (isNoShow || isCancelled || isNegativeOutcome) {
           // Só limpa se o slot aberto for do mesmo dia do cancel/no-show (não apaga futuro).
           if (
             apptDay &&
@@ -520,6 +528,13 @@ async function syncRevenue(
       warnIfTruncated(stats, reportId, result)
       await snapshotReport(reportId, params, result.rows, stats, syncRunId)
 
+      if (result.truncated) {
+        stats.warnings.push(
+          `receita ${day}: truncado — métrica não atualizada (evita undercount/zero)`,
+        )
+        continue
+      }
+
       let revenue = 0
       let attended = 0
       for (const row of result.rows) {
@@ -628,6 +643,13 @@ async function syncNoShows0248(
     warnIfTruncated(stats, '0248', result)
     await snapshotReport('0248', params, result.rows, stats, syncRunId)
 
+    if (result.truncated) {
+      stats.warnings.push(
+        'no-show 0248: truncado — métricas não atualizadas (evita zerar dias incompletos)',
+      )
+      return
+    }
+
     const byDay = new Map<string, number>()
     for (const row of result.rows) {
       const appt = normalizeAppointmentRow(row)
@@ -677,6 +699,15 @@ async function syncReturningFrom0002(
     const result = await fetchAllAvecReport('0002', params)
     warnIfTruncated(stats, '0002', result)
     await snapshotReport('0002-returning', params, result.rows, stats, syncRunId)
+
+    if (result.truncated) {
+      stats.warnings.push(
+        'recorrentes 0002: truncado — métricas returning não atualizadas (evita zerar)',
+      )
+      // Ainda processa contatos de hoje abaixo? Better skip contact updates too for consistency
+      // when truncated — undercount contacts is less bad than wrong KPI zeros.
+      // Continue contact processing for today's rows we do have.
+    }
 
     const returningByDay = new Map<string, number>()
     for (const row of result.rows) {
@@ -733,9 +764,11 @@ async function syncReturningFrom0002(
       }
     }
 
-    const days = mode === 'fast' ? [today] : listDaysInclusive(addCalendarDaysYmd(today, -7), today)
-    for (const day of days) {
-      await upsertSalonMetrics(day, { returning_clients: returningByDay.get(day) ?? 0 })
+    if (!result.truncated) {
+      const days = mode === 'fast' ? [today] : listDaysInclusive(addCalendarDaysYmd(today, -7), today)
+      for (const day of days) {
+        await upsertSalonMetrics(day, { returning_clients: returningByDay.get(day) ?? 0 })
+      }
     }
   } catch (e) {
     stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
@@ -743,48 +776,16 @@ async function syncReturningFrom0002(
 }
 
 /**
- * TM atendimento — 0223 (`tempo`) quando a unidade preenche duração.
- * Só grava se 0002 ainda não preencheu o dia (0223 é catálogo sem filtro de data
- * e sobrescreveria o TM real de atendimentos).
+ * TM atendimento — 0223 (`tempo`) é catálogo sem filtro de data.
+ * Não grava como KPI do dia (só 0002 com duração real). Snapshot fica para auditoria.
  */
 async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
-  const today = todayIso()
   try {
-    const sql = getSql()
-    const existing = (await sql`
-      select service_duration_count
-      from salon_daily_metrics
-      where day = ${today}::date
-      limit 1
-    `) as { service_duration_count: number }[]
-    if ((existing[0]?.service_duration_count ?? 0) > 0) {
-      stats.warnings.push('TM 0223: ignorado — 0002 já preencheu duração do dia')
-      return
-    }
-
     const params = { profissional_id: '', limit: 250 }
     const result = await fetchAllAvecReport('0223', params)
     warnIfTruncated(stats, '0223', result)
     await snapshotReport('0223', params, result.rows, stats, syncRunId)
-
-    let sum = 0
-    let count = 0
-    for (const row of result.rows) {
-      const minutes = parseServiceTempoMinutes(
-        (row as Record<string, unknown>).tempo ??
-          (row as Record<string, unknown>).duracao ??
-          (row as Record<string, unknown>)['duração'],
-      )
-      if (minutes == null) continue
-      sum += minutes
-      count++
-    }
-    if (count > 0) {
-      await upsertSalonMetrics(today, {
-        service_duration_sum_minutes: sum,
-        service_duration_count: count,
-      })
-    }
+    stats.warnings.push('TM 0223: catálogo ignorado para KPI do dia (fonte: 0002)')
   } catch (e) {
     stats.errors.push(`TM 0223: ${e instanceof Error ? e.message : String(e)}`)
   }

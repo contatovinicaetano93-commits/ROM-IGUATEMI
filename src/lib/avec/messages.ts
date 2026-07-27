@@ -72,8 +72,10 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/AVEC_UNIT_ID vazio/i.test(warning)) return true
   // Reconcile de agenda: informativo (órfãos limpos), sync pode ficar ok.
   if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
-  // TM 0223 ignorado de propósito quando 0002 já preencheu.
-  if (/TM 0223:\s*ignorado/i.test(warning)) return true
+  // TM 0223 catálogo / ignorado de propósito — não marca sync partial.
+  if (/TM 0223:/i.test(warning)) return true
+  // Truncamento com skip de métricas (não zerar) — informativo.
+  if (/truncado — métricas/i.test(warning)) return true
   return false
 }
 
