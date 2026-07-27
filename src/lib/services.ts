@@ -143,15 +143,26 @@ export interface MarkServiceDoneOpts {
 }
 
 // Marca o serviço como realizado — reinicia o ciclo e limpa agendamento.
+// Não regride last_done_at (greatest) — evita aftercare duplicado quando 0051/0002
+// mandam horários diferentes no mesmo dia SP.
 export async function markServiceDone(
   serviceId: string,
   opts: MarkServiceDoneOpts = {}
 ): Promise<ClientService | null> {
   const sql = getSql()
   const doneAt = opts.doneAt ?? new Date().toISOString()
+  const before = (await sql`
+    select last_done_at from client_services where id = ${serviceId} limit 1
+  `) as { last_done_at: string | null }[]
+  const prevDone = before[0]?.last_done_at ?? null
+
   const rows = (await sql`
     update client_services set
-      last_done_at = ${doneAt}::timestamptz,
+      last_done_at = case
+        when last_done_at is null then ${doneAt}::timestamptz
+        when ${doneAt}::timestamptz > last_done_at then ${doneAt}::timestamptz
+        else last_done_at
+      end,
       scheduled_at = null,
       professional_name = coalesce(${opts.professionalName ?? null}, professional_name),
       last_price = coalesce(${opts.lastPrice ?? null}, last_price)
@@ -160,8 +171,12 @@ export async function markServiceDone(
   `) as ClientService[]
   const service = rows[0] ?? null
   if (service) {
-    // WhatsApp pós-visita (2h) — nunca falha a conclusão se a fila falhar.
-    await enqueueAftercare(service).catch(() => undefined)
+    const prevDay = prevDone ? toSalonDateIso(prevDone) : null
+    const newDay = toSalonDateIso(service.last_done_at)
+    // Aftercare no máx. 1× por dia SP do serviço.
+    if (prevDay !== newDay) {
+      await enqueueAftercare(service).catch(() => undefined)
+    }
   }
   return service
 }

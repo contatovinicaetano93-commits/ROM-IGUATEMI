@@ -31,6 +31,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const { id } = await ctx.params
     const contact = await getContactById(id)
     if (!contact) return err('Contato não encontrado', 404)
+    if (contact.anonymized_at) return err('Contato anonimizado', 410)
 
     const payload = schema.parse(await req.json())
     const service = await addService(id, payload)

@@ -105,6 +105,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
     const before = await getContactById(id)
     if (!before) return err('Contato não encontrado', 404)
+    if (before.anonymized_at) return err('Contato anonimizado', 410)
 
     const patch = {
       name: body.name,

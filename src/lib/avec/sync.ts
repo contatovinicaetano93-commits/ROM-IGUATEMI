@@ -260,6 +260,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         if (!isCancelled && !isNoShow) todayBooked++
       }
 
+      if (!appt.avecClientId && !appt.phone) {
+        stats.warnings.push('agenda: linha sem avec_client_id e sem telefone — ignorada')
+        continue
+      }
+
       const contact = await upsertContact({
         avecClientId: appt.avecClientId ?? undefined,
         name: appt.clientName,
@@ -267,8 +272,8 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         phone: appt.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_appointments_fast' : 'avec_sync_appointments',
-        // Cancel/no-show: não promover para agendado (só limpa agenda abaixo).
-        status: isPaid ? 'convertido' : isCancelled || isNoShow ? undefined : 'agendado',
+        // Cancel/no-show → perdido (não deixar agendado no funil).
+        status: isPaid ? 'convertido' : isCancelled || isNoShow ? 'perdido' : 'agendado',
       })
 
       if (appt.serviceName && appt.scheduledAt) {
@@ -386,6 +391,19 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         if (doneAt) {
           await markServiceDone(service.id, {
             doneAt,
+            professionalName: att.professional,
+            lastPrice: att.price,
+          })
+          stats.services_completed++
+        } else if (
+          service.scheduled_at &&
+          toSalonDateIso(service.scheduled_at) === today &&
+          att.attendedAt &&
+          toSalonDateIso(att.attendedAt) === today
+        ) {
+          // 0002 sem hora: conclui mantendo o wall-clock do 0051 (não inventa meia-noite).
+          await markServiceDone(service.id, {
+            doneAt: service.scheduled_at,
             professionalName: att.professional,
             lastPrice: att.price,
           })
@@ -611,9 +629,11 @@ async function syncNoShows0248(
       await upsertSalonMetrics(day, { no_shows })
     }
 
-    // Dias sem falta no intervalo: zera só o dia de hoje (evita manter stale do fast).
-    if (!byDay.has(today)) {
-      await upsertSalonMetrics(today, { no_shows: 0 })
+    // Zera dias do intervalo sem falta (evita KPI stale após correção Avec).
+    for (const day of listDaysInclusive(from, today)) {
+      if (!byDay.has(day)) {
+        await upsertSalonMetrics(day, { no_shows: 0 })
+      }
     }
   } catch (e) {
     stats.errors.push(`no-show 0248: ${e instanceof Error ? e.message : String(e)}`)
@@ -677,6 +697,15 @@ async function syncReturningFrom0002(
               professionalName: att.professional,
               lastPrice: att.price,
             })
+          } else if (
+            service.scheduled_at &&
+            toSalonDateIso(service.scheduled_at) === today
+          ) {
+            await markServiceDone(service.id, {
+              doneAt: service.scheduled_at,
+              professionalName: att.professional,
+              lastPrice: att.price,
+            })
           } else if (att.professional || att.price != null) {
             await patchServiceVisitMeta(service.id, {
               professionalName: att.professional,
@@ -701,12 +730,25 @@ async function syncReturningFrom0002(
 
 /**
  * TM atendimento — 0223 (`tempo`) quando a unidade preenche duração.
- * Se todos vierem null, não grava (UI continua "—").
+ * Só grava se 0002 ainda não preencheu o dia (0223 é catálogo sem filtro de data
+ * e sobrescreveria o TM real de atendimentos).
  */
 async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
   const today = todayIso()
-  const params = { profissional_id: '', limit: 250 }
   try {
+    const sql = getSql()
+    const existing = (await sql`
+      select service_duration_count
+      from salon_daily_metrics
+      where day = ${today}::date
+      limit 1
+    `) as { service_duration_count: number }[]
+    if ((existing[0]?.service_duration_count ?? 0) > 0) {
+      stats.warnings.push('TM 0223: ignorado — 0002 já preencheu duração do dia')
+      return
+    }
+
+    const params = { profissional_id: '', limit: 250 }
     const result = await fetchAllAvecReport('0223', params)
     warnIfTruncated(stats, '0223', result)
     await snapshotReport('0223', params, result.rows, stats, syncRunId)
