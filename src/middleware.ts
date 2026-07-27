@@ -78,6 +78,7 @@ export async function middleware(req: NextRequest) {
   const allowHeaderTokens =
     pathname === '/api/avec/sync' ||
     pathname === '/api/avec/sync/revenue-backfill' ||
+    pathname === '/api/avec/purge-snapshots' ||
     pathname === '/api/avec/refresh-token' ||
     pathname === '/api/estoque/sync' ||
     pathname === '/api/director-report' ||

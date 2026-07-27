@@ -89,7 +89,7 @@ async function snapshotSafe(
   syncRunId?: string,
 ) {
   try {
-    await saveReportSnapshot(reportId, params, rows, syncRunId)
+    await saveReportSnapshot(reportId, params, rows, syncRunId, { keepPayload: false, retain: 1 })
     stats.snapshots_saved++
   } catch (e) {
     stats.warnings?.push(`snapshot ${reportId}: ${e instanceof Error ? e.message : String(e)}`)

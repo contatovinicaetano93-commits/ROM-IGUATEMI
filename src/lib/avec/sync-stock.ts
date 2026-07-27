@@ -99,10 +99,11 @@ async function snapshotSafe(
   params: Record<string, unknown>,
   rows: Record<string, unknown>[],
   stats: StockSyncStats,
-  syncRunId: string
+  syncRunId: string,
+  keepPayload = false
 ) {
   try {
-    await saveReportSnapshot(id, params, rows, syncRunId)
+    await saveReportSnapshot(id, params, rows, syncRunId, { keepPayload, retain: 1 })
     stats.snapshots_saved++
   } catch (e) {
     stats.warnings.push(`snapshot ${id}: ${e instanceof Error ? e.message : String(e)}`)
@@ -221,7 +222,7 @@ async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string) {
   }
 }
 
-/** Valorização (0045/0242/0243/0142) — só snapshot bruto; normalização acontece na leitura (stock.ts). */
+/** Valorização (0045/0242/0243/0142) — snapshot com payload (único caso que a UI ainda lê). */
 async function syncValuation(stats: StockSyncStats, syncRunId: string) {
   const site = avecSiteParam()
   const jobs: { mapper: string; params: AvecReportParams }[] = [
@@ -236,7 +237,7 @@ async function syncValuation(stats: StockSyncStats, syncRunId: string) {
     try {
       const result = await fetchAllAvecReport(id, job.params)
       if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
-      await snapshotSafe(id, job.params, result.rows, stats, syncRunId)
+      await snapshotSafe(id, job.params, result.rows, stats, syncRunId, true)
     } catch (e) {
       stats.errors.push(`${id} (valorização): ${e instanceof Error ? e.message : String(e)}`)
     }

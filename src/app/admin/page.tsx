@@ -67,7 +67,12 @@ interface HealthStatus {
   ok: boolean
   deployment?: { panel: string; display_name: string; host: string | null; vercel_env: string | null }
   validation?: { ok: boolean; warnings: string[] }
-  database: { configured: boolean; connected: boolean; error: string | null }
+  database: {
+    configured: boolean
+    connected: boolean
+    error: string | null
+    neon_quota?: boolean
+  }
   claude: { configured: boolean; model?: string }
   avec: {
     configured: boolean
@@ -107,6 +112,8 @@ export default function AdminPage() {
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
   const [connMsg, setConnMsg] = useState<string | null>(null)
+  const [purging, setPurging] = useState(false)
+  const [purgeMsg, setPurgeMsg] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setState('loading')
@@ -182,6 +189,32 @@ export default function AdminPage() {
       setSyncMsg(String(e))
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function runPurgeSnapshots() {
+    setPurging(true)
+    setPurgeMsg(null)
+    try {
+      const res = await apiFetch('/api/avec/purge-snapshots', { method: 'POST', cache: 'no-store' })
+      const json = await res.json()
+      if (json.error) {
+        setPurgeMsg(`Erro: ${json.error}`)
+        return
+      }
+      const d = json.data as {
+        snapshots_deleted?: number
+        sync_runs_deleted?: number
+        payloads_cleared?: number
+      }
+      setPurgeMsg(
+        `Purge OK — payloads limpos ${d.payloads_cleared ?? 0}, snapshots ${d.snapshots_deleted ?? 0}, sync runs ${d.sync_runs_deleted ?? 0}`,
+      )
+      await load()
+    } catch (e) {
+      setPurgeMsg(String(e))
+    } finally {
+      setPurging(false)
     }
   }
 
@@ -333,6 +366,12 @@ export default function AdminPage() {
           {health ? (
             <div className="space-y-2 text-sm">
               <HealthRow label="Banco de dados" ok={health.database.connected} detail={health.database.error ?? undefined} />
+              {health.database.neon_quota && (
+                <p className="rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-foreground/90">
+                  Neon sem cota (transferência/tamanho). Use &quot;Liberar espaço Neon&quot; quando a cota
+                  voltar, ou upgrade / novo projeto Neon com DATABASE_URL novo.
+                </p>
+              )}
               <HealthRow
                 label="Claude (Anthropic)"
                 ok={health.claude.configured}
@@ -520,13 +559,22 @@ export default function AdminPage() {
               <p className="rounded-xl border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground/80">
                 <span className="font-semibold text-gold">Tempo real:</span> webhook{' '}
                 <code className="text-[0.7rem]">/api/webhooks/avec</code> (header{' '}
-                <code className="text-[0.7rem]">x-avec-secret</code>). Cron fast 5 min + full 10 min
-                como backup; webhook dispara sync em tempo real.
+                <code className="text-[0.7rem]">x-avec-secret</code>). Cron fast 30 min + full 6h +
+                purge diário; webhook dispara sync em tempo real.
               </p>
               <PrimaryButton type="button" onClick={runAvecSync} disabled={syncing || !avec.configured}>
                 {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
               </PrimaryButton>
               {syncMsg && <p className="text-xs text-muted">{syncMsg}</p>}
+              <button
+                type="button"
+                onClick={runPurgeSnapshots}
+                disabled={purging || syncing}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold text-foreground/90 lg:hover:bg-card"
+              >
+                {purging ? 'Limpando Neon…' : 'Liberar espaço Neon (purge snapshots)'}
+              </button>
+              {purgeMsg && <p className="text-xs text-muted">{purgeMsg}</p>}
               <PrimaryButton
                 type="button"
                 onClick={runRevenueYearBackfill}

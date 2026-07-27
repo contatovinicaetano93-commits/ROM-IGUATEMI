@@ -7,6 +7,7 @@ import { getBrand, getRomPanelId } from '@/lib/brand'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
+import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
 
 const logger = new Logger('Health')
 
@@ -17,14 +18,17 @@ function envOk(name: string) {
 async function probeDatabase() {
   let connected = false
   let error: string | null = null
+  let neon_quota = false
   try {
     const sql = getSql()
     await sql`select 1 as ok`
     connected = true
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
+    neon_quota = isNeonQuotaError(e)
+    if (neon_quota) error = neonQuotaUserMessage(e)
   }
-  return { connected, error }
+  return { connected, error, neon_quota }
 }
 
 async function probeKpiLayers() {
@@ -44,23 +48,32 @@ async function probeKpiLayers() {
 
 /** Resposta mínima — segura para monitoramento externo sem login. */
 export async function getPublicHealthStatus() {
-  const { connected } = await probeDatabase()
-  return { ok: connected }
+  const { connected, neon_quota } = await probeDatabase()
+  return { ok: connected, neon_quota }
 }
 
 export async function getHealthStatus() {
-  const { connected, error } = await probeDatabase()
+  const { connected, error, neon_quota } = await probeDatabase()
 
   const brand = getBrand()
   const deployment = getDeploymentContext()
   const validation = validateDeploymentEnv()
-  const [lastFast, lastFull, kpiLayers, stockLastFast, stockLastFull] = await Promise.all([
-    getLastAvecSync('fast'),
-    getLastAvecSync('full'),
-    probeKpiLayers(),
-    getLastStockSync('stock_fast'),
-    getLastStockSync('stock_full'),
-  ])
+
+  let lastFast: Awaited<ReturnType<typeof getLastAvecSync>> = null
+  let lastFull: Awaited<ReturnType<typeof getLastAvecSync>> = null
+  let kpiLayers: Record<string, number | null> = { p1: null, p2: null, p3: null }
+  let stockLastFast: Awaited<ReturnType<typeof getLastStockSync>> = null
+  let stockLastFull: Awaited<ReturnType<typeof getLastStockSync>> = null
+
+  if (connected) {
+    ;[lastFast, lastFull, kpiLayers, stockLastFast, stockLastFull] = await Promise.all([
+      getLastAvecSync('fast'),
+      getLastAvecSync('full'),
+      probeKpiLayers(),
+      getLastStockSync('stock_fast'),
+      getLastStockSync('stock_full'),
+    ])
+  }
 
   const awaitingToken = !isAvecConfigured() && !isAvecMock()
 
@@ -79,7 +92,7 @@ export async function getHealthStatus() {
       display_name: brand.displayName,
       seed_preset: process.env.ROM_SEED_PRESET?.trim() || getRomPanelId(),
     },
-    database: { configured: envOk('DATABASE_URL'), connected, error },
+    database: { configured: envOk('DATABASE_URL'), connected, error, neon_quota },
     claude: {
       configured: isAiConfigured(),
       model: process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-6',

@@ -7,6 +7,8 @@ import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 import { getDeploymentContext } from '@/lib/deployment'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
+import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
+import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
 
 /** Sync Avec pode demorar (vários relatórios). */
 export const maxDuration = 300
@@ -24,8 +26,8 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
   return cronFallback
 }
 
-const FAST_MIN_GAP_MS = 45_000
-const FULL_MIN_GAP_MS = 120_000
+const FAST_MIN_GAP_MS = 25 * 60_000
+const FULL_MIN_GAP_MS = 5 * 60 * 60_000
 
 async function executeSync(
   req: NextRequest,
@@ -48,24 +50,43 @@ async function executeSync(
 
   const minGap = mode === 'full' ? FULL_MIN_GAP_MS : FAST_MIN_GAP_MS
 
-  if (!opts?.force) {
-    const last = await getLastAvecSync(mode)
-    if (last?.created_at) {
-      const age = Date.now() - new Date(last.created_at).getTime()
-      if (age >= 0 && age < minGap) {
-        return ok({
-          skipped: true,
-          reason: 'sync_recente',
-          mode,
-          last,
-          schedule: mode === 'fast' ? 'intraday' : 'full',
-          note: `Último sync ${mode} há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
-        })
+  try {
+    // Best-effort: libera bloat antes de sync pesado (quando Neon ainda aceita escrita).
+    if (opts?.force || mode === 'full') {
+      try {
+        await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 3 })
+      } catch (purgeErr) {
+        if (isNeonQuotaError(purgeErr)) {
+          if (opts?.cron) {
+            return ok({
+              skipped: true,
+              reason: 'neon_quota',
+              mode,
+              note: neonQuotaUserMessage(purgeErr),
+            })
+          }
+          return err(neonQuotaUserMessage(purgeErr), 503)
+        }
       }
     }
-  }
 
-  try {
+    if (!opts?.force) {
+      const last = await getLastAvecSync(mode)
+      if (last?.created_at) {
+        const age = Date.now() - new Date(last.created_at).getTime()
+        if (age >= 0 && age < minGap) {
+          return ok({
+            skipped: true,
+            reason: 'sync_recente',
+            mode,
+            last,
+            schedule: mode === 'fast' ? 'intraday' : 'full',
+            note: `Último sync ${mode} há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
+          })
+        }
+      }
+    }
+
     const run = await runAvecSync(mode)
     return ok({
       ...run,
@@ -88,6 +109,17 @@ async function executeSync(
         expires_at: e.expiresAt,
         note: 'Outro sync Avec já está em execução (lock distribuído)',
       })
+    }
+    if (isNeonQuotaError(e)) {
+      if (opts?.cron) {
+        return ok({
+          skipped: true,
+          reason: 'neon_quota',
+          mode,
+          note: neonQuotaUserMessage(e),
+        })
+      }
+      return err(neonQuotaUserMessage(e), 503)
     }
     throw e
   }
@@ -120,10 +152,11 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '*/5 * * * *', mode: 'fast', path: '/api/avec/sync' },
-        full: { schedule: '*/10 * * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
+        fast: { schedule: '*/30 * * * *', mode: 'fast', path: '/api/avec/sync' },
+        full: { schedule: '0 */6 * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
+        purge: { schedule: '10 4 * * *', path: '/api/avec/purge-snapshots' },
         cadence:
-          'fast a cada 5 min + full a cada 10 min (backup) — tempo real via webhook Avec',
+          'fast a cada 30 min + full a cada 6h + purge diário — tempo real via webhook Avec',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),
