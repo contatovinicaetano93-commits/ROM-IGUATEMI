@@ -31,7 +31,13 @@ const FULL_MIN_GAP_MS = 5 * 60 * 60_000
 
 async function executeSync(
   req: NextRequest,
-  opts?: { force?: boolean; defaultMode?: AvecSyncMode; cron?: boolean },
+  opts?: {
+    force?: boolean
+    defaultMode?: AvecSyncMode
+    cron?: boolean
+    /** Webhook em tempo real — não aplica janela mínima dos crons. */
+    bypassMinGap?: boolean
+  },
 ) {
   const mode = parseMode(req, opts?.defaultMode ?? 'fast')
 
@@ -51,6 +57,24 @@ async function executeSync(
   const minGap = mode === 'full' ? FULL_MIN_GAP_MS : FAST_MIN_GAP_MS
 
   try {
+    // Gap antes do purge: sync_recente não deve gerar writes pesados no Neon.
+    if (!opts?.force && !opts?.bypassMinGap) {
+      const last = await getLastAvecSync(mode)
+      if (last?.created_at) {
+        const age = Date.now() - new Date(last.created_at).getTime()
+        if (age >= 0 && age < minGap) {
+          return ok({
+            skipped: true,
+            reason: 'sync_recente',
+            mode,
+            last,
+            schedule: mode === 'fast' ? 'intraday' : 'full',
+            note: `Último sync ${mode} há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
+          })
+        }
+      }
+    }
+
     // Best-effort: libera bloat antes de sync pesado (quando Neon ainda aceita escrita).
     if (opts?.force || mode === 'full') {
       try {
@@ -66,23 +90,6 @@ async function executeSync(
             })
           }
           return err(neonQuotaUserMessage(purgeErr), 503)
-        }
-      }
-    }
-
-    if (!opts?.force) {
-      const last = await getLastAvecSync(mode)
-      if (last?.created_at) {
-        const age = Date.now() - new Date(last.created_at).getTime()
-        if (age >= 0 && age < minGap) {
-          return ok({
-            skipped: true,
-            reason: 'sync_recente',
-            mode,
-            last,
-            schedule: mode === 'fast' ? 'intraday' : 'full',
-            note: `Último sync ${mode} há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
-          })
         }
       }
     }
@@ -129,7 +136,13 @@ export async function POST(req: NextRequest) {
   try {
     if (!(await authorize(req))) return err('Não autorizado', 401)
     const cron = isCronAuthorized(req)
-    return await executeSync(req, { force: !cron, defaultMode: 'full', cron })
+    const fromWebhook = req.nextUrl.searchParams.get('source') === 'webhook'
+    return await executeSync(req, {
+      force: !cron,
+      defaultMode: 'full',
+      cron,
+      bypassMinGap: fromWebhook,
+    })
   } catch (e) {
     return handleError(e)
   }

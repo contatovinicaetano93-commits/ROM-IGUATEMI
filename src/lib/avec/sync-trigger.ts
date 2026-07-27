@@ -26,7 +26,7 @@ async function postSync(mode: 'fast' | 'full', baseUrl: string) {
   const secret = process.env.CRON_SECRET?.trim()
   if (!secret) return
 
-  await fetch(`${baseUrl}/api/avec/sync?mode=${mode}`, {
+  await fetch(`${baseUrl}/api/avec/sync?mode=${mode}&source=webhook`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${secret}`,
