@@ -101,6 +101,7 @@ async function executeSync(
           }
           return err(neonQuotaUserMessage(purgeErr), 503)
         }
+        throw purgeErr
       }
     }
 
