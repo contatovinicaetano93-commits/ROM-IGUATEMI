@@ -62,6 +62,24 @@ export function formatAvecErrorList(errors: string[]): string[] {
   return errors.map((e) => formatAvecUserMessage(e) ?? e)
 }
 
+/**
+ * Avisos informativos que NÃO devem sozinhos marcar o sync como partial.
+ * Truncamento / unit id ausente ainda aparecem em stats.warnings na UI.
+ */
+export function isSoftAvecSyncWarning(warning: string): boolean {
+  if (/AVEC_SYNC_MAX_PAGES/i.test(warning)) return true
+  if (/atingiu o limite de \d+ páginas/i.test(warning)) return true
+  if (/AVEC_UNIT_ID vazio/i.test(warning)) return true
+  // Reconcile de agenda: informativo (órfãos limpos), sync pode ficar ok.
+  if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
+  return false
+}
+
+export function hardAvecSyncWarnings(warnings: string[]): string[] {
+  return warnings.filter((w) => !isSoftAvecSyncWarning(w))
+}
+
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
