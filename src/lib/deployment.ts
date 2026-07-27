@@ -1,4 +1,5 @@
 import { getBrand, getRomPanelId, type RomPanelId } from '@/lib/brand'
+import { peekResolvedDatabaseUrl } from '@/lib/db'
 
 export interface DeploymentContext {
   panel: RomPanelId
@@ -63,7 +64,8 @@ export function validateDeploymentEnv(): DeploymentValidation {
     )
   }
 
-  if (!process.env.DATABASE_URL?.trim()) {
+  const dbUrl = peekResolvedDatabaseUrl()?.toLowerCase() ?? ''
+  if (!dbUrl) {
     warnings.push(
       'DATABASE_URL ausente — use um Postgres dedicado por unidade (Supabase/Neon; nunca compartilhe entre Brasil e Iguatemi).'
     )
@@ -83,7 +85,6 @@ export function validateDeploymentEnv(): DeploymentValidation {
 
   // Fingerprint opcional do host DB (ex.: supabase.co / ep-xxx) — defina ROM_EXPECTED_DB_HOST na Vercel.
   const expectedDb = process.env.ROM_EXPECTED_DB_HOST?.trim().toLowerCase()
-  const dbUrl = process.env.DATABASE_URL?.trim().toLowerCase() ?? ''
   if (expectedDb && dbUrl && !dbUrl.includes(expectedDb)) {
     warnings.push(
       `DATABASE_URL não contém ROM_EXPECTED_DB_HOST (${expectedDb}) — risco de banco da unidade errada.`

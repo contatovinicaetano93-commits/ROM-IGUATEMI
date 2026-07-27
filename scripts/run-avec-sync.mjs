@@ -60,44 +60,22 @@ try {
   // ignore
 }
 
-const { default: postgres } = await import('postgres')
 if (!process.env.AVEC_API_TOKEN?.trim()) {
-  const sql = postgres(process.env.DATABASE_URL, {
-    ssl: 'require',
-    max: 1,
-    prepare: false,
-  })
-  try {
-    const rows = await sql`
-      select value from app_runtime_secrets where key = 'avec_api_token' limit 1
-    `
-    const token = rows[0]?.value?.trim()
-    if (!token) {
-      console.error('AVEC_API_TOKEN ausente e app_runtime_secrets vazio')
-      process.exit(1)
-    }
+  const { loadRuntimeAvecApiToken, saveAvecApiToken } = await import('../src/lib/avec/token-store.ts')
+  const { isAvecLoginConfigured, mintAvecApiToken } = await import('../src/lib/avec/refresh-token.ts')
+  let token = await loadRuntimeAvecApiToken()
+  if (token) {
     process.env.AVEC_API_TOKEN = token
     console.log('token: carregado de app_runtime_secrets')
-  } finally {
-    await sql.end({ timeout: 1 })
-  }
-}
-
-{
-  const sql = postgres(process.env.DATABASE_URL, {
-    ssl: 'require',
-    max: 1,
-    prepare: false,
-  })
-  try {
-    await sql`delete from sync_locks where key = 'avec_sync'`
-    await sql`
-      update avec_sync_runs
-      set status = 'error', error = coalesce(error, 'abandoned_partial')
-      where status = 'partial'
-    `
-  } finally {
-    await sql.end({ timeout: 1 })
+  } else if (isAvecLoginConfigured()) {
+    const minted = await mintAvecApiToken({ force: true })
+    token = minted.token
+    await saveAvecApiToken(token)
+    process.env.AVEC_API_TOKEN = token
+    console.log('token: renovado via Cognito')
+  } else {
+    console.error('AVEC_API_TOKEN ausente e app_runtime_secrets inválido/expirado')
+    process.exit(1)
   }
 }
 

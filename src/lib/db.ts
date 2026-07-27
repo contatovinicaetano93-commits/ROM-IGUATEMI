@@ -64,11 +64,16 @@ function readDeployOverlayUrl(): string | null {
   return null
 }
 
-function resolveDatabaseUrl(): string {
+/** URL efetiva (overlay secrets/… ou DATABASE_URL) — null se nenhuma. */
+export function peekResolvedDatabaseUrl(): string | null {
   const overlay = readDeployOverlayUrl()
   if (overlay) return overlay
-  const fromEnv = process.env.DATABASE_URL?.trim()
-  if (fromEnv) return fromEnv
+  return process.env.DATABASE_URL?.trim() || null
+}
+
+function resolveDatabaseUrl(): string {
+  const url = peekResolvedDatabaseUrl()
+  if (url) return url
   throw new Error('DATABASE_URL não configurada')
 }
 
