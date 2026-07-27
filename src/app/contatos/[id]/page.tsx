@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { Suspense, useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
   ChevronLeft,
@@ -176,6 +176,22 @@ function eventMeta(e: ContactEvent): { icon: React.ReactNode; title: string; det
 }
 
 export default function ContactDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6">
+          <div className="h-8 w-40 animate-pulse rounded-xl bg-card" />
+          <div className="h-24 w-full animate-pulse rounded-2xl bg-card" />
+          <div className="h-64 w-full animate-pulse rounded-2xl bg-card" />
+        </main>
+      }
+    >
+      <ContactDetailPageContent />
+    </Suspense>
+  )
+}
+
+function ContactDetailPageContent() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const searchParams = useSearchParams()

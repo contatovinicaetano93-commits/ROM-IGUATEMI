@@ -34,6 +34,7 @@ export async function listActionItems(): Promise<ActionItem[]> {
     from client_services cs
     join contacts c on c.id = cs.contact_id
     where cs.active = true
+      and c.anonymized_at is null
     order by cs.contact_id
   `) as (JoinedService & { contact_phone: string | null })[]
 
