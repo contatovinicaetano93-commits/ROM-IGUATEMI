@@ -26,6 +26,39 @@ export function toSalonDateIso(
   }).format(d)
 }
 
+/** Valor para `<input type="datetime-local">` no fuso do salão (não UTC). */
+export function toDatetimeLocalValue(
+  value: string | Date,
+  timeZone = SALON_TIMEZONE,
+): string {
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d)
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '00'
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
+}
+
+/**
+ * Interpreta `datetime-local` (parede SP) como instante ISO UTC.
+ * Brasil sem DST desde 2019 → offset fixo −03:00.
+ */
+export function fromDatetimeLocalValue(local: string): string {
+  const m = local.trim().match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/)
+  if (!m) return new Date(local).toISOString()
+  const iso = `${m[1]}T${m[2]}:${m[3]}:00-03:00`
+  const parsed = new Date(iso)
+  return Number.isNaN(parsed.getTime()) ? new Date(local).toISOString() : parsed.toISOString()
+}
+
 export function fmtSchedule(iso: string) {
   const d = new Date(iso)
   const timeOpts: Intl.DateTimeFormatOptions = {

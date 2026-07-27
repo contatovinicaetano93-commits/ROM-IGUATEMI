@@ -31,15 +31,17 @@ export async function GET(req: NextRequest) {
     const sort = searchParams.get('sort') ?? 'urgency'
     const query = searchParams.get('q') ?? searchParams.get('query') ?? null
     const status = searchParams.get('status')
+    const channel = searchParams.get('channel')
 
     const rawLimit = Number(searchParams.get('limit') ?? 500)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 500
-    // pending/status filtrados na query (base inteira) — não só no top urgente em memória.
+    // pending/status/channel filtrados na query (base inteira) — não só no top urgente.
     const { items: rawItems, total } = await listContactsWithSummary({
       limit,
       query,
       pendingOnly,
       status,
+      channel,
     })
     let items = rawItems
 
@@ -48,7 +50,13 @@ export async function GET(req: NextRequest) {
       items = [...items].sort(compareByOverdueThenName)
     }
 
-    return ok(items, { total, limit, status: status ?? 'all', pending: pendingOnly })
+    return ok(items, {
+      total,
+      limit,
+      status: status ?? 'all',
+      channel: channel ?? 'all',
+      pending: pendingOnly,
+    })
   } catch (e) {
     return handleError(e)
   }

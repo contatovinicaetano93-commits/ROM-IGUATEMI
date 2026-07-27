@@ -51,8 +51,6 @@ function resolveStatus(current: ContactStatus | string | undefined, incoming?: C
   return mergeContactStatus(current as ContactStatus, incoming)
 }
 
-/** SQL CASE compartilhado — upsert Avec/telefone alinhado ao mergeContactStatus. */
-
 function isPhoneUniqueViolation(error: unknown): boolean {
   const e = error as { code?: string; message?: string; constraint?: string }
   if (e?.code !== '23505') return false
