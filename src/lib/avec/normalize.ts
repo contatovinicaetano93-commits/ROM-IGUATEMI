@@ -140,16 +140,51 @@ export interface NormalizedAvecCancellation {
   noShow: number
 }
 
+/** Brasil sem horário de verão desde 2019 — wall-clock Avec = UTC−3. */
+const SALON_FIXED_OFFSET = '-03:00'
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+/** Monta instante UTC a partir de data/hora de parede em America/Sao_Paulo. */
+function saoPauloWallToIso(
+  year: number,
+  monthIndex: number,
+  day: number,
+  hh: number,
+  mm: number,
+  ss: number,
+): string | null {
+  const iso = `${year}-${pad2(monthIndex + 1)}-${pad2(day)}T${pad2(hh)}:${pad2(mm)}:${pad2(ss)}${SALON_FIXED_OFFSET}`
+  const parsed = new Date(iso)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
+
+function normalizeTimeParts(time: string): [number, number, number] {
+  const [hh, mm, ss] = time.split(':').map(Number)
+  return [hh || 0, mm || 0, ss || 0]
+}
+
 // Tenta parsear data/hora em formatos comuns BR + ISO.
+// Sem timezone explícito: interpreta como horário do salão (SP), não do servidor (UTC na Vercel).
 export function parseAvecDateTime(datePart: string | null, timePart?: string | null): string | null {
   if (!datePart) return null
   const d = datePart.trim()
   const t = timePart?.trim()
 
   if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
-    const iso = t ? `${d.split('T')[0]}T${t}` : d
-    const parsed = new Date(iso)
-    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+    const dateOnly = d.split('T')[0]!
+    // Já tem Z ou offset → respeita.
+    if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(d) && !t) {
+      const parsed = new Date(d)
+      return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+    }
+    const timeRaw = t ?? (d.includes('T') ? d.split('T')[1]?.replace(/[zZ]|[+-]\d{2}:?\d{2}$/, '') : null) ?? '00:00:00'
+    const time = timeRaw.length === 5 ? `${timeRaw}:00` : timeRaw
+    const [y, mo, day] = dateOnly.split('-').map(Number)
+    const [hh, mm, ss] = normalizeTimeParts(time)
+    return saoPauloWallToIso(y!, mo! - 1, day!, hh, mm, ss)
   }
 
   const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?/)
@@ -159,9 +194,8 @@ export function parseAvecDateTime(datePart: string | null, timePart?: string | n
     let year = Number(m[3])
     if (year < 100) year += 2000
     const time = t ?? m[4] ?? '10:00'
-    const [hh, mm, ss] = time.split(':').map(Number)
-    const parsed = new Date(year, month, day, hh || 10, mm || 0, ss || 0)
-    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+    const [hh, mm, ss] = normalizeTimeParts(time)
+    return saoPauloWallToIso(year, month, day, hh || 10, mm, ss)
   }
 
   const parsed = new Date(d)

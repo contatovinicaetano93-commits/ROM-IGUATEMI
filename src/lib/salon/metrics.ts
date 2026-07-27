@@ -111,6 +111,10 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
  * Retornos (`returning_clients`) vêm do relatório 0002 no sync Avec — não sobrescreve
  * aqui para não zerar o KPI quando `contacts.created_at` é recente (import/sync).
  *
+ * Agendados do dia = abertos (ainda com scheduled_at) + concluídos no dia
+ * (last_done_at). Alinha ao KPI Avec (abertos+pagos) — não contar só leftovers
+ * após markServiceDone limpar scheduled_at.
+ *
  * Novos do dia = contatos criados no ROM naquele dia, exceto importação em massa
  * da base Avec (`importado` / backfill 0004 / lake). Sync de agenda/atendimento
  * (primeira aparição no ROM) continua contando — não confundir com dump 0004.
@@ -122,8 +126,20 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
     sql`
       select count(*)::int as n from client_services
       where active = true
-        and scheduled_at is not null
-        and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+        and (
+          (
+            scheduled_at is not null
+            and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+            and (
+              last_done_at is null
+              or (last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
+            )
+          )
+          or (
+            last_done_at is not null
+            and (last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+          )
+        )
     ` as unknown as Promise<{ n: number }[]>,
     sql`
       select count(*)::int as n from contacts

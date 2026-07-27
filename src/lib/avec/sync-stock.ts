@@ -149,7 +149,7 @@ async function syncPositions(stats: StockSyncStats, syncRunId: string) {
 async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
   const id = reportId('stock_alert')
   if (!id) return
-  const params = { limit: 250 }
+  const params = { site: avecSiteParam(), limit: 250 }
   try {
     const result = await fetchAllAvecReport(id, params)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
@@ -182,7 +182,7 @@ async function syncMovements(stats: StockSyncStats, syncRunId: string) {
   // Janela com sobreposição (3 dias) — reprocessar não duplica (dedup por
   // produto+tipo+quantidade+data+origem em applyStockMovement).
   const { inicio, fim } = periodRange(3, 0)
-  const params = { inicio, fim, limit: 250 }
+  const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
   try {
     const result = await fetchAllAvecReport(id, params)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
@@ -204,7 +204,7 @@ async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string) {
   const id = reportId('stock_purchase')
   if (!id) return
   const { inicio, fim } = periodRange(3, 0)
-  const params = { inicio, fim, limit: 250 }
+  const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
   try {
     const result = await fetchAllAvecReport(id, params)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
@@ -223,11 +223,12 @@ async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string) {
 
 /** Valorização (0045/0242/0243/0142) — só snapshot bruto; normalização acontece na leitura (stock.ts). */
 async function syncValuation(stats: StockSyncStats, syncRunId: string) {
+  const site = avecSiteParam()
   const jobs: { mapper: string; params: AvecReportParams }[] = [
-    { mapper: 'stock_valuation_total', params: { tipo_produto: 'Todos', limit: 250 } },
-    { mapper: 'stock_valuation_category', params: { limit: 250 } },
-    { mapper: 'stock_valuation_brand', params: { limit: 250 } },
-    { mapper: 'stock_valuation_category_pct', params: { ...periodRange(30, 0), limit: 250 } },
+    { mapper: 'stock_valuation_total', params: { tipo_produto: 'Todos', site, limit: 250 } },
+    { mapper: 'stock_valuation_category', params: { site, limit: 250 } },
+    { mapper: 'stock_valuation_brand', params: { site, limit: 250 } },
+    { mapper: 'stock_valuation_category_pct', params: { ...periodRange(30, 0), site, limit: 250 } },
   ]
   for (const job of jobs) {
     const id = reportId(job.mapper)

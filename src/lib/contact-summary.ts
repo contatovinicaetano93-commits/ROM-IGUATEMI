@@ -106,16 +106,29 @@ export async function listContactsWithSummary(
     byContact.set(s.contact_id, list)
   }
 
-  // Status do funil (Novo lead / Importado / …): busca na base inteira, não no top urgente.
+  // Status do funil (Novo lead / Importado / …): busca na base, não no top urgente.
   if (status && !(q || qDigits.length >= 3)) {
+    if (pendingOnly) {
+      // Pendentes com status: cruza toda a base de serviços (não só top 2000 recentes).
+      const pendingIds = Array.from(byContact.keys())
+        .filter((id) => urgencyForServices(byContact.get(id) ?? []).pending_actions > 0)
+      if (pendingIds.length === 0) return []
+      const contacts = (await sql`
+        select * from contacts
+        where status = ${status}
+          and id = any(${pendingIds}::uuid[])
+      `) as ContactRow[]
+      const items = withUrgency(contacts, byContact)
+      items.sort(compareByOverdueThenName)
+      return items.slice(0, limit)
+    }
     const contacts = (await sql`
       select * from contacts
       where status = ${status}
       order by created_at desc
-      limit ${Math.min(limit * (pendingOnly ? 4 : 1), 2000)}
+      limit ${limit}
     `) as ContactRow[]
-    let items = withUrgency(contacts, byContact)
-    if (pendingOnly) items = items.filter((c) => c.pending_actions > 0)
+    const items = withUrgency(contacts, byContact)
     items.sort(compareByOverdueThenName)
     return items.slice(0, limit)
   }

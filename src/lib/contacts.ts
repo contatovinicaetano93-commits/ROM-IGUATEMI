@@ -92,6 +92,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         phone = coalesce(excluded.phone, contacts.phone),
         status = case
           when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
+          -- Dump 0004 / default 'novo' não demota quem já está importado.
+          when contacts.status = 'importado' and coalesce(excluded.status, 'novo') = 'novo' then 'importado'
           when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
           when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
           when contacts.status = 'convertido' then 'convertido'
@@ -121,6 +123,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       avec_client_id = coalesce(excluded.avec_client_id, contacts.avec_client_id),
       status = case
         when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
+        when contacts.status = 'importado' and coalesce(excluded.status, 'novo') = 'novo' then 'importado'
         when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
         when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
         when contacts.status = 'convertido' then 'convertido'

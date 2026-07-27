@@ -261,7 +261,7 @@ export default function HojePage() {
           <MessageCircle size={18} className="mt-0.5 shrink-0 text-warning" />
           <p className="text-sm">
             <span className="font-semibold text-warning">{data!.leads.whatsapp_sem_resposta} lead(s) WhatsApp hoje</span>
-            {' '}aguardando resposta da equipe.
+            {' '}com status novo no funil — priorize o primeiro contato.
           </p>
         </div>
       )}

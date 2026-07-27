@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
+import { todayIso } from '@/lib/salon/format'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
 
 export const SERVICE_CATEGORIES = ['corte', 'tratamento', 'coloracao', 'bem_estar', 'produto', 'outro'] as const
@@ -203,14 +204,24 @@ export async function ensureServiceCadence(
  * Remove agendamentos órfãos do dia — serviços ainda com scheduled_at hoje
  * que não estão na agenda aberta da Avec (0051). Evita KPI/lista inflados
  * depois que o status virou Pago/Cancelado.
+ *
+ * keepServiceIds vazio: limpa todos do dia (caller só invoca quando a Avec
+ * trouxe linhas do dia — senão dia 100% pago/cancel deixava órfãos).
  */
 export async function clearOrphanSchedulesForDay(
   day: string,
   keepServiceIds: string[],
 ): Promise<number> {
   const sql = getSql()
-  // Sem IDs abertos na Avec: não apagar a agenda inteira (preserva manuais/WhatsApp).
-  if (keepServiceIds.length === 0) return 0
+  if (keepServiceIds.length === 0) {
+    const rows = (await sql`
+      update client_services set scheduled_at = null
+      where scheduled_at is not null
+        and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      returning id
+    `) as { id: string }[]
+    return rows.length
+  }
   const rows = (await sql`
     update client_services set scheduled_at = null
     where scheduled_at is not null
@@ -328,8 +339,12 @@ export async function autoCompleteServicesOnConversion(contactId: string): Promi
 }
 
 /** Agenda do dia de um profissional específico — usado pelo bot Telegram de funcionários. */
-export async function listTodayScheduleForProfessional(professionalName: string): Promise<ScheduledServiceRow[]> {
+export async function listTodayScheduleForProfessional(
+  professionalName: string,
+  day?: string,
+): Promise<ScheduledServiceRow[]> {
   const sql = getSql()
+  const salonDay = day ?? todayIso()
   return (await sql`
     select cs.*, c.name as contact_name
     from client_services cs
@@ -337,8 +352,7 @@ export async function listTodayScheduleForProfessional(professionalName: string)
     where cs.active = true
       and cs.scheduled_at is not null
       and lower(cs.professional_name) = lower(${professionalName})
-      and cs.scheduled_at >= date_trunc('day', now())
-      and cs.scheduled_at < date_trunc('day', now()) + interval '1 day'
+      and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${salonDay}::date
     order by cs.scheduled_at asc
   `) as ScheduledServiceRow[]
 }

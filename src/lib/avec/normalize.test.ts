@@ -11,9 +11,23 @@ import {
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
   normalizePhone,
+  parseAvecDateTime,
   parseOptionalMoney,
   parseServiceTempoMinutes,
 } from '@/lib/avec/normalize'
+
+describe('parseAvecDateTime', () => {
+  it('interpreta hora BR como America/Sao_Paulo (não UTC do servidor)', () => {
+    const iso = parseAvecDateTime('10/03/2026', '14:00')
+    expect(iso).toBeTruthy()
+    // 14:00 BRT = 17:00 UTC
+    expect(iso).toBe('2026-03-10T17:00:00.000Z')
+  })
+
+  it('ISO sem offset também usa fuso do salão', () => {
+    expect(parseAvecDateTime('2026-03-10', '14:00')).toBe('2026-03-10T17:00:00.000Z')
+  })
+})
 
 describe('normalizePhone', () => {
   it('normaliza celular BR com DDD', () => {
@@ -116,10 +130,8 @@ describe('normalizeAppointmentRow 0051/0248', () => {
     })
     expect(row?.status).toBe('Faltou')
     expect(row?.professional).toBe('DIEGO')
-    expect(row?.scheduledAt).toBeTruthy()
-    const d = new Date(row!.scheduledAt!)
-    expect(d.getHours()).toBe(17)
-    expect(d.getMinutes()).toBe(0)
+    // 17:00 parede SP → 20:00 UTC (não depende do TZ do runner).
+    expect(row?.scheduledAt).toBe('2026-07-18T20:00:00.000Z')
   })
 })
 
