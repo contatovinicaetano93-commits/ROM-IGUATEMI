@@ -2,7 +2,6 @@ import { getSql } from '@/lib/db'
 import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 import {
   upsertContact,
-  updateContact,
   logEvent,
   setPreferredManicurist,
   setPreferredHairstylist,
@@ -215,7 +214,6 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   await snapshotReport('0051', params, result.rows, stats, syncRunId)
 
   const today = todayIso()
-  const noShowsByDay = new Map<string, number>()
   /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
   const todayOpenServiceIds: string[] = []
   let todayBooked = 0
@@ -229,16 +227,13 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       const apptDay = appt.scheduledAt ? toSalonDateIso(appt.scheduledAt) : null
       if (mode === 'fast' && apptDay && apptDay !== today) continue
 
-      // No-show via status da agenda 0051 (fonte canônica: 0248 status=0.6).
+      // Status agenda 0051. No-show KPI: fonte canônica é 0248 (não gravar aqui).
       // Inclui "não atendido" — senão /atendid/ em isPaid casa o substring de "atendido".
       const status = (appt.status ?? '').toLowerCase()
       const isNoShow =
         /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu|n[aã]o\s*atendid/.test(status)
       const isPaid = !isNoShow && /pago|finaliz|conclu|atendid|realiz/.test(status)
       const isCancelled = /cancel/.test(status)
-      if (isNoShow && appt.scheduledAt) {
-        if (apptDay) noShowsByDay.set(apptDay, (noShowsByDay.get(apptDay) ?? 0) + 1)
-      }
 
       if (apptDay === today) {
         todayRows++
@@ -313,13 +308,6 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
     }
   }
 
-  for (const [day, no_shows] of noShowsByDay) {
-    try {
-      await upsertSalonMetrics(day, { no_shows })
-    } catch (e) {
-      stats.errors.push(`no-show ${day}: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
 }
 
 function servicesCreatedRecently(service: { created_at: string }) {
@@ -358,9 +346,8 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         phone: att.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_attended_fast' : 'avec_sync_attended',
+        status: 'convertido',
       })
-
-      await updateContact(contact.id, { status: 'convertido' })
 
       if (att.serviceName) {
         const service = await findOrCreateService(contact.id, att.serviceName)
@@ -497,8 +484,8 @@ async function syncRevenue(
           ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
         })
       } else {
-        // Garante linha do dia (Relatórios) sem clobber de métricas existentes.
-        await upsertSalonMetrics(day, {})
+        // Relatório vazio = dia sem faturamento Avec — zera receita (não manter stale).
+        await upsertSalonMetrics(day, { revenue: 0, ticket_avg: null })
       }
     } catch (e) {
       stats.errors.push(`receita ${day}: ${e instanceof Error ? e.message : String(e)}`)
@@ -658,6 +645,8 @@ async function syncReturningFrom0002(
             phone: att.phone,
             channel: 'avec',
             source: 'avec_sync_returning_0002',
+            // Veio hoje no 0002 — não demotar importado → novo (default do upsert).
+            status: 'convertido',
           })
           const serviceName = att.serviceName || 'Atendimento'
           const service = await findOrCreateService(contact.id, serviceName)

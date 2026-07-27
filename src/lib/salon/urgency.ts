@@ -1,6 +1,7 @@
 import type { ClientService } from '@/lib/services'
 import { enrichServices, computeRecommendations } from '@/lib/recommendations'
 import { DAY_MS } from '@/lib/salon/constants'
+import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { compareByNamePtBr } from '@/lib/salon/sort'
 
 export interface UrgencySummary {
@@ -43,9 +44,10 @@ export function urgencyForServices(services: ClientService[]): UrgencySummary {
     const t = new Date(s.scheduled_at).getTime()
     return t >= now && t - now <= 7 * DAY_MS
   }).length
+  const salonToday = todayIso()
   const scheduled_today = enriched.filter((s) => {
     if (!s.scheduled_at) return false
-    return new Date(s.scheduled_at).toDateString() === new Date().toDateString()
+    return toSalonDateIso(s.scheduled_at) === salonToday
   }).length
 
   const urgentRecs = recommendations.filter((r) =>

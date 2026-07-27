@@ -4,7 +4,8 @@ import type { EnrichedService, Recommendation } from '@/lib/recommendations'
 import { fetchContactKpis } from '@/lib/salon/kpis'
 import { getSalonMetrics } from '@/lib/salon/metrics'
 import { listActionItems } from '@/lib/salon/recommendations'
-import { listUpcomingSchedules, pickLastVisit, type LastVisit } from '@/lib/services'
+import { todayIso } from '@/lib/salon/format'
+import { listTodaySchedules, pickLastVisit, type LastVisit } from '@/lib/services'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 
 function fmtService(s: EnrichedService) {
@@ -48,7 +49,7 @@ export interface SalonContext {
   salon: Awaited<ReturnType<typeof getSalonMetrics>>
   kpis_contato: Awaited<ReturnType<typeof fetchContactKpis>>
   playbook_top5: Awaited<ReturnType<typeof listActionItems>>
-  agendamentos_proximos: Awaited<ReturnType<typeof listUpcomingSchedules>>
+  agendamentos_proximos: Awaited<ReturnType<typeof listTodaySchedules>>
 }
 
 export function buildContactContext(
@@ -72,12 +73,12 @@ export function buildContactContext(
 }
 
 export async function buildSalonContext(): Promise<SalonContext> {
-  const day = new Date().toISOString().slice(0, 10)
+  const day = todayIso()
   const [salon, kpis_contato, playbook_top5, agendamentosRaw] = await Promise.all([
     getSalonMetrics(day),
     fetchContactKpis(7),
     listActionItems(),
-    listUpcomingSchedules(1, 20),
+    listTodaySchedules(day, 20),
   ])
 
   return {
