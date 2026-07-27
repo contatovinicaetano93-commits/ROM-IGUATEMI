@@ -393,6 +393,7 @@ export async function setPreferredManicurist(
     set preferred_manicurist = ${name}
     where id = ${contactId}
       and preferred_manicurist is null
+      and anonymized_at is null
   `
 }
 
@@ -412,6 +413,7 @@ export async function setPreferredHairstylist(
     set preferred_hairstylist = ${name}
     where id = ${contactId}
       and preferred_hairstylist is null
+      and anonymized_at is null
   `
 }
 
