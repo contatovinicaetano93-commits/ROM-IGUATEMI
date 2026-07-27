@@ -37,7 +37,11 @@ const STATUS_RANK: Record<ContactStatus, number> = {
  */
 export function mergeContactStatus(current: ContactStatus, incoming: ContactStatus): ContactStatus {
   if (incoming === 'perdido') return 'perdido'
-  if (current === 'perdido' && incoming !== 'convertido') return current
+  // Remarcação / retorno: perdido volta ao funil via agenda ou atendimento.
+  if (current === 'perdido' && (incoming === 'agendado' || incoming === 'convertido')) {
+    return incoming
+  }
+  if (current === 'perdido') return current
   // Base Avec: não demotar para lead do funil.
   if (current === 'importado' && incoming === 'novo') return 'importado'
   // Heal / PATCH explícito: dump Avec preso em "novo" → importado (rank 0 < 1).
@@ -163,7 +167,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
             when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
             when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
             when contacts.status = 'convertido' then 'convertido'
-            when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
+            when contacts.status = 'perdido' and excluded.status in ('agendado', 'convertido')
+              then excluded.status
             else contacts.status
           end
         returning *
@@ -212,7 +217,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
         when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
         when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
         when contacts.status = 'convertido' then 'convertido'
-        when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
+        when contacts.status = 'perdido' and excluded.status in ('agendado', 'convertido')
+          then excluded.status
         else contacts.status
       end
     where contacts.phone is not null

@@ -128,8 +128,12 @@ export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null
     `) as AvecSyncRun[]
     return rows[0] ?? null
   }
+  // Hoje/badge: só agenda Avec (fast/full) — não misturar stock_* .
   const rows = (await sql`
-    select * from avec_sync_runs order by created_at desc limit 1
+    select * from avec_sync_runs
+    where kind in ('fast', 'full')
+    order by created_at desc
+    limit 1
   `) as AvecSyncRun[]
   return rows[0] ?? null
 }
@@ -251,7 +255,12 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       const status = (appt.status ?? '').toLowerCase()
       const isNoShow =
         /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu|n[aã]o\s*atendid/.test(status)
-      const isPaid = !isNoShow && /pago|finaliz|conclu|atendid|realiz/.test(status)
+      const isNegativeOutcome =
+        /n[aã]o\s*(realiz|conclu|finaliz|atendid)/.test(status)
+      const isPaid =
+        !isNoShow &&
+        !isNegativeOutcome &&
+        /(?:^|[^a-zà-ú])(?:pago|finaliz|conclu|atendid|realiz)/.test(status)
       const isCancelled = /cancel/.test(status)
 
       if (apptDay === today) {
@@ -292,7 +301,12 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
           })
           stats.services_completed++
         } else if (isNoShow || isCancelled) {
-          if (apptDay === today && service.scheduled_at) {
+          // Só limpa se o slot aberto for do mesmo dia do cancel/no-show (não apaga futuro).
+          if (
+            apptDay &&
+            service.scheduled_at &&
+            toSalonDateIso(service.scheduled_at) === apptDay
+          ) {
             await clearServiceSchedule(service.id)
           }
         } else {

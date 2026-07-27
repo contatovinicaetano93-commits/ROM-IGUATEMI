@@ -20,6 +20,7 @@ import {
   parseOptionalMoney,
   parseAvecDateTime,
 } from '@/lib/avec/normalize'
+import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 
 const EVENT_ALIASES: Record<string, string> = {
   'client.upsert': 'client.upsert',
@@ -190,8 +191,23 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
     finalizado: 'convertido',
     atendido: 'convertido',
     cancelado: 'perdido',
+    faltou: 'perdido',
+    falta: 'perdido',
+    ausente: 'perdido',
+    noshow: 'perdido',
+    'no-show': 'perdido',
+    'no show': 'perdido',
   }
-  const status = statusRaw ? statusMap[statusRaw] : undefined
+  let status = statusRaw ? statusMap[statusRaw] : undefined
+  if (
+    !status &&
+    statusRaw &&
+    /falta|faltou|no[\s-]?show|noshow|ausente|n[aã]o compareceu|n[aã]o\s*atendid|cancel/.test(
+      statusRaw,
+    )
+  ) {
+    status = 'perdido'
+  }
 
   return {
     event,
@@ -237,14 +253,24 @@ export async function ingestAvecWebhook(rawBody: unknown) {
 
   if (isCancelledEvent) {
     const services = await listServices(contact.id)
+    const cancelDay =
+      (payload.scheduled_at ? toSalonDateIso(payload.scheduled_at) : null) ?? todayIso()
+    const clearIfSameDay = async (service: (typeof services)[number]) => {
+      if (
+        service.scheduled_at &&
+        toSalonDateIso(service.scheduled_at) === cancelDay
+      ) {
+        await clearServiceSchedule(service.id)
+      }
+    }
     if (payload.service_name) {
       const service = services.find(
         (s) => s.name.toLowerCase() === payload.service_name!.toLowerCase(),
       )
-      if (service?.scheduled_at) await clearServiceSchedule(service.id)
+      if (service) await clearIfSameDay(service)
     } else {
       for (const service of services) {
-        if (service.scheduled_at) await clearServiceSchedule(service.id)
+        await clearIfSameDay(service)
       }
     }
     await updateContact(contact.id, { status: 'perdido' })
