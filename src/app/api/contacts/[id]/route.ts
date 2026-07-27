@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireSession } from '@/lib/auth'
 import {
   getContactById,
   updateContact,
@@ -43,8 +43,11 @@ function isUnsetPreference(value: string | null | undefined) {
   return value == null
 }
 
-export async function GET(_req: NextRequest, ctx: Ctx) {
+export async function GET(req: NextRequest, ctx: Ctx) {
   try {
+    const auth = await requireSession(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+
     const { id } = await ctx.params
     let contact = await getContactById(id)
     if (!contact) return err('Contato não encontrado', 404)
@@ -74,13 +77,37 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       preferred_hairstylist: contact.preferred_hairstylist?.trim() || null,
     }
 
-    const services = enrichServices(rawServices)
+    const canViewRevenue = auth.session.can_view_revenue
+    const services = enrichServices(rawServices).map((s) =>
+      canViewRevenue ? s : { ...s, last_price: null },
+    )
     const recommendations = computeRecommendations(services)
     const events = await listEvents(id)
-    const last_visit = pickLastVisit(rawServices)
-    const client_stats = computeClientStats(rawServices)
+    const last_visitRaw = pickLastVisit(rawServices)
+    const last_visit = last_visitRaw
+      ? {
+          ...last_visitRaw,
+          last_price: canViewRevenue ? last_visitRaw.last_price : null,
+        }
+      : null
+    const client_statsRaw = computeClientStats(rawServices)
+    const client_stats = canViewRevenue
+      ? client_statsRaw
+      : {
+          ...client_statsRaw,
+          ticket_avg: null,
+          ltv_projection: null,
+        }
 
-    return ok({ contact: contactOut, services, recommendations, events, last_visit, client_stats })
+    return ok({
+      contact: contactOut,
+      services,
+      recommendations,
+      events,
+      last_visit,
+      client_stats,
+      can_view_revenue: canViewRevenue,
+    })
   } catch (e) {
     return handleError(e)
   }

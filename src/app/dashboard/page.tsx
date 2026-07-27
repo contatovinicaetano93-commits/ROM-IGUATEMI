@@ -363,8 +363,8 @@ export default function DashboardPage() {
             )}
             {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
               <p className="mt-4 text-xs text-muted">
-                Sem duração na Avec para esta unidade (relatório 0223 campo tempo, ou início/fim no
-                0002). Top serviços mostra faturamento — não inventamos TM a partir disso.
+                Sem duração na Avec para esta unidade (início/fim no 0002). Top serviços mostra
+                faturamento — não inventamos TM a partir do catálogo 0223.
               </p>
             )}
           </SectionCard>

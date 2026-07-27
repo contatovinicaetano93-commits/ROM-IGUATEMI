@@ -212,12 +212,15 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
   ) {
     status = 'perdido'
   }
-  if (
-    !status &&
-    statusRaw &&
-    /\b(pago|finaliz|conclu|atendid|realizad)\w*\b/.test(statusRaw)
-  ) {
-    status = 'convertido'
+  if (!status && statusRaw) {
+    const looksPaid =
+      /\bpago\b/.test(statusRaw) ||
+      /\b(finaliz|conclu)\w*\b/.test(statusRaw) ||
+      /\batendid[oa]s?\b/.test(statusRaw) ||
+      /\brealizad[oa]s?\b/.test(statusRaw)
+    const looksOpen =
+      /\batendimento\b/.test(statusRaw) || /\b(a|por|para)\s+realizar\b/.test(statusRaw)
+    if (looksPaid && !looksOpen) status = 'convertido'
   }
 
   return {

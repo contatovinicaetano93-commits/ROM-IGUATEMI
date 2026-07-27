@@ -487,19 +487,22 @@ function ContactDetailPageContent() {
         </div>
       </div>
 
-      <LastVisitCard visit={last_visit} />
+      <LastVisitCard visit={last_visit} showPrice={isAdmin} />
 
-      {/* Ficha do cliente (Sprint 3) */}
-      {(client_stats.ticket_avg != null ||
-        client_stats.cadence_avg_days != null ||
-        client_stats.completed_services_count > 0) && (
+      {/* Ficha do cliente (Sprint 3) — ticket/LTV só com can_view_revenue */}
+      {(client_stats.cadence_avg_days != null ||
+        client_stats.completed_services_count > 0 ||
+        (isAdmin &&
+          (client_stats.ticket_avg != null || client_stats.ltv_projection != null))) && (
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
-            <p className="text-[0.65rem] uppercase tracking-wide text-muted">Ticket médio</p>
-            <p className="mt-1 text-sm font-semibold tabular-nums">
-              {client_stats.ticket_avg != null ? formatCurrency(client_stats.ticket_avg) : '—'}
-            </p>
-          </div>
+          {isAdmin && (
+            <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted">Ticket médio</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums">
+                {client_stats.ticket_avg != null ? formatCurrency(client_stats.ticket_avg) : '—'}
+              </p>
+            </div>
+          )}
           <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
             <p className="text-[0.65rem] uppercase tracking-wide text-muted">Cadência esperada</p>
             <p className="mt-1 text-sm font-semibold tabular-nums">
@@ -510,17 +513,19 @@ function ContactDetailPageContent() {
             <p className="text-[0.65rem] uppercase tracking-wide text-muted">Serviços realizados</p>
             <p className="mt-1 text-sm font-semibold tabular-nums">{client_stats.completed_services_count}</p>
           </div>
-          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
-            <p className="text-[0.65rem] uppercase tracking-wide text-muted">
-              LTV projetado (2a)
-            </p>
-            <p className="mt-1 text-sm font-semibold tabular-nums">
-              {client_stats.ltv_projection != null ? formatCurrency(client_stats.ltv_projection) : '—'}
-            </p>
-          </div>
+          {isAdmin && (
+            <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted">
+                LTV projetado (2a)
+              </p>
+              <p className="mt-1 text-sm font-semibold tabular-nums">
+                {client_stats.ltv_projection != null ? formatCurrency(client_stats.ltv_projection) : '—'}
+              </p>
+            </div>
+          )}
         </div>
       )}
-      {client_stats.ltv_projection != null && (
+      {isAdmin && client_stats.ltv_projection != null && (
         <p className="-mt-3 text-[0.65rem] text-muted">
           LTV é projeção (ticket médio × frequência × 2 anos), não histórico real de gasto.
         </p>

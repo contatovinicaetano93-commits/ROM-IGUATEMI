@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       getSalonMetrics(day),
       listActionItems(),
       // Só o dia (SP) — alinhado ao Pipeline; próximos dias ficam em /agenda.
-      listTodaySchedules(day, 150),
+      listTodaySchedules(day, 400),
       sql`
         select
           -- Entrada do dia (não some quando WhatsApp promove novo → em_atendimento).
