@@ -446,14 +446,14 @@ export default function HojePage() {
 
       {!loading && (data?.leads.novos ?? 0) > 0 && (
         <Link
-          href="/contatos?status=novo"
+          href="/contatos"
           className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 active:bg-surface"
         >
           <div className="flex items-center gap-3">
             <Users size={18} className="text-gold" />
             <div>
               <p className="text-sm font-medium">{data!.leads.novos} entrada(s) no funil hoje</p>
-              <p className="text-xs text-muted">Exceto Importado Avec · ver Novo lead</p>
+              <p className="text-xs text-muted">Exceto Importado Avec · ver Contatos</p>
             </div>
           </div>
           <ChevronRight size={16} className="text-muted" />

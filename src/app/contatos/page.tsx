@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Plus, X, Phone, Search, ChevronRight, AlertTriangle, Clock, Calendar } from 'lucide-react'
 import {
   Avatar,
@@ -34,22 +35,25 @@ interface Contact {
 /** Status fixos do funil — sempre disponíveis no filtro (mesmo com lista vazia). */
 const FUNNEL_STATUS_OPTIONS = ['novo', 'importado', 'em_atendimento', 'agendado', 'convertido', 'perdido']
 
+function statusFromSearchParam(raw: string | null): string {
+  if (raw && FUNNEL_STATUS_OPTIONS.includes(raw)) return raw
+  return 'all'
+}
+
 export default function ContatosPage() {
+  const searchParams = useSearchParams()
   const [contacts, setContacts] = useState<Contact[]>([])
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [pendingOnly, setPendingOnly] = useState(false)
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState(() =>
+    statusFromSearchParam(searchParams.get('status')),
+  )
   const [channelFilter, setChannelFilter] = useState<string>('all')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
-
-  useEffect(() => {
-    const status = new URLSearchParams(window.location.search).get('status')
-    if (status && FUNNEL_STATUS_OPTIONS.includes(status)) setStatusFilter(status)
-  }, [])
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300)
@@ -96,13 +100,13 @@ export default function ContatosPage() {
   })
 
   const emptyNovoHint =
-    statusFilter === 'novo' && !loading && filtered.length === 0 && !debouncedQuery && !error
+    statusFilter === 'novo' && !loading && contacts.length === 0 && !debouncedQuery && !error
   const emptyImportadoHint =
-    statusFilter === 'importado' && !loading && filtered.length === 0 && !debouncedQuery && !error
+    statusFilter === 'importado' && !loading && contacts.length === 0 && !debouncedQuery && !error
 
   const subtitle = loading
     ? 'Todos os canais, em um só lugar'
-    : totalInBase != null && totalInBase > contacts.length
+    : totalInBase != null && totalInBase > contacts.length && channelFilter === 'all'
       ? `Mostrando ${filtered.length} de ${totalInBase} ${statusFilter === 'all' ? 'contatos' : (STATUS_LABEL[statusFilter] ?? statusFilter).toLowerCase()}`
       : `${filtered.length} de ${contacts.length} ${contacts.length === 1 ? 'contato' : 'contatos'}`
 

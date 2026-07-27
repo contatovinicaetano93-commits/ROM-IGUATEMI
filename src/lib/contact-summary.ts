@@ -53,7 +53,9 @@ async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
   const sql = getSql()
   // Neon: `IN ${array}` vira SQL inválido — usar ANY(uuid[]), igual ao restante do arquivo.
   return (await sql`
-    select * from contacts where id = any(${ids}::uuid[])
+    select * from contacts
+    where id = any(${ids}::uuid[])
+      and anonymized_at is null
   `) as ContactRow[]
 }
 
@@ -172,6 +174,19 @@ export async function listContactsWithSummary(
   if (q || qDigits.length >= 3) {
     const namePattern = q ? `%${q}%` : null
     const phonePattern = qDigits.length >= 3 ? `%${qDigits}%` : null
+    const countRows = (await sql`
+      select count(*)::int as n from contacts
+      where anonymized_at is null
+        and (${status}::text is null or status = ${status})
+        and (
+          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
+          or (
+            ${phonePattern}::text is not null
+            and regexp_replace(coalesce(phone, ''), '\D', '', 'g') like ${phonePattern}
+          )
+        )
+    `) as { n: number }[]
+    const total = countRows[0]?.n ?? 0
     const contacts = (await sql`
       select * from contacts
       where anonymized_at is null
@@ -188,7 +203,8 @@ export async function listContactsWithSummary(
     `) as ContactRow[]
     const withU = withUrgency(contacts, byContact)
     const items = pendingOnly ? withU.filter((c) => c.pending_actions > 0) : withU
-    return { items, total: items.length }
+    // pendingOnly filtra em memória na página; total completo só vale sem esse corte.
+    return { items, total: pendingOnly ? items.length : total }
   }
 
   // Contatos com urgência > 0 (atraso / vencendo / agendado) — prioridade.
