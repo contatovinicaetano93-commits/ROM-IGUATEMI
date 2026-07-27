@@ -1,6 +1,6 @@
 /** Agrega contatos CRM por dia e preenche a janela calendário (evita curva falsa). */
 
-import { todayIso } from '@/lib/salon/format'
+import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 
 export interface ContactDayRow {
   day: string
@@ -19,7 +19,7 @@ export interface ChartDayPoint {
 function toDayKey(raw: string | Date): string | null {
   if (raw instanceof Date) {
     if (Number.isNaN(raw.getTime())) return null
-    return raw.toISOString().slice(0, 10)
+    return toSalonDateIso(raw)
   }
   const s = String(raw ?? '').trim()
   if (!s) return null

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Plus, X, Phone, Search, ChevronRight, AlertTriangle, Clock, Calendar } from 'lucide-react'
 import {
   Avatar,
@@ -34,35 +35,46 @@ interface Contact {
 /** Status fixos do funil — sempre disponíveis no filtro (mesmo com lista vazia). */
 const FUNNEL_STATUS_OPTIONS = ['novo', 'importado', 'em_atendimento', 'agendado', 'convertido', 'perdido']
 
+/** Canais fixos — filtro server-side (não só os da página atual). */
+const CHANNEL_OPTIONS = ['whatsapp', 'avec', 'manual', 'telegram', 'instagram']
+
+function statusFromSearchParam(raw: string | null): string {
+  if (raw && FUNNEL_STATUS_OPTIONS.includes(raw)) return raw
+  return 'all'
+}
+
 export default function ContatosPage() {
+  const searchParams = useSearchParams()
   const [contacts, setContacts] = useState<Contact[]>([])
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [pendingOnly, setPendingOnly] = useState(false)
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState(() =>
+    statusFromSearchParam(searchParams.get('status')),
+  )
   const [channelFilter, setChannelFilter] = useState<string>('all')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
-
-  useEffect(() => {
-    const status = new URLSearchParams(window.location.search).get('status')
-    if (status && FUNNEL_STATUS_OPTIONS.includes(status)) setStatusFilter(status)
-  }, [])
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300)
     return () => window.clearTimeout(t)
   }, [query])
 
-  async function load(searchQ = debouncedQuery, status = statusFilter) {
+  async function load(
+    searchQ = debouncedQuery,
+    status = statusFilter,
+    channel = channelFilter,
+  ) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ sort: 'urgency' })
       if (pendingOnly) params.set('pending', 'true')
       if (searchQ) params.set('q', searchQ)
       if (status !== 'all') params.set('status', status)
+      if (channel !== 'all') params.set('channel', channel)
       const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) setError(json.error)
@@ -80,25 +92,21 @@ export default function ContatosPage() {
   }
 
   useEffect(() => {
-    void load(debouncedQuery, statusFilter)
+    void load(debouncedQuery, statusFilter, channelFilter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingOnly, debouncedQuery, statusFilter])
+  }, [pendingOnly, debouncedQuery, statusFilter, channelFilter])
 
   const statusFromData = Array.from(new Set(contacts.map((c) => c.status)))
   const statusOptions = Array.from(new Set([...FUNNEL_STATUS_OPTIONS, ...statusFromData]))
-  const channelOptions = Array.from(new Set(contacts.map((c) => c.channel)))
   const hasFilters = true
 
-  // Status já vem filtrado no servidor; canal continua client-side na página atual.
-  const filtered = contacts.filter((c) => {
-    if (channelFilter !== 'all' && c.channel !== channelFilter) return false
-    return true
-  })
+  // Status e canal já vêm filtrados no servidor.
+  const filtered = contacts
 
   const emptyNovoHint =
-    statusFilter === 'novo' && !loading && filtered.length === 0 && !debouncedQuery && !error
+    statusFilter === 'novo' && !loading && contacts.length === 0 && !debouncedQuery && !error
   const emptyImportadoHint =
-    statusFilter === 'importado' && !loading && filtered.length === 0 && !debouncedQuery && !error
+    statusFilter === 'importado' && !loading && contacts.length === 0 && !debouncedQuery && !error
 
   const subtitle = loading
     ? 'Todos os canais, em um só lugar'
@@ -171,14 +179,12 @@ export default function ContatosPage() {
             active={statusFilter}
             onSelect={setStatusFilter}
           />
-          {channelOptions.length > 0 && (
-            <FilterRow
-              label="Canal"
-              options={channelOptions.map((c) => ({ value: c, label: CHANNEL_LABEL[c] ?? c }))}
-              active={channelFilter}
-              onSelect={setChannelFilter}
-            />
-          )}
+          <FilterRow
+            label="Canal"
+            options={CHANNEL_OPTIONS.map((c) => ({ value: c, label: CHANNEL_LABEL[c] ?? c }))}
+            active={channelFilter}
+            onSelect={setChannelFilter}
+          />
           <p className="text-[0.7rem] leading-relaxed text-muted">
             <span className="font-medium text-foreground/80">Novo lead</span> = WhatsApp/manual.
             {' '}

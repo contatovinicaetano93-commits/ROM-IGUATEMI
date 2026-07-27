@@ -21,6 +21,8 @@ export interface ListContactsWithSummaryOpts {
   pendingOnly?: boolean
   /** Filtro de status do funil (ex.: novo, importado) — server-side, não só no top urgente. */
   status?: string | null
+  /** Canal (whatsapp/avec/manual/…) — server-side na base inteira. */
+  channel?: string | null
 }
 
 export interface ContactListResult {
@@ -53,13 +55,22 @@ async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
   const sql = getSql()
   // Neon: `IN ${array}` vira SQL inválido — usar ANY(uuid[]), igual ao restante do arquivo.
   return (await sql`
-    select * from contacts where id = any(${ids}::uuid[])
+    select * from contacts
+    where id = any(${ids}::uuid[])
+      and anonymized_at is null
   `) as ContactRow[]
 }
 
 function parseStatus(raw: string | null | undefined): ContactStatus | null {
   if (!raw || raw === 'all') return null
   return (CONTACT_STATUSES as readonly string[]).includes(raw) ? (raw as ContactStatus) : null
+}
+
+const CONTACT_CHANNELS = ['whatsapp', 'telegram', 'avec', 'instagram', 'manual'] as const
+
+function parseChannel(raw: string | null | undefined): string | null {
+  if (!raw || raw === 'all') return null
+  return (CONTACT_CHANNELS as readonly string[]).includes(raw) ? raw : null
 }
 
 async function orderContactsByUrgency(
@@ -96,6 +107,7 @@ export async function listContactsWithSummary(
   const qDigits = rawQuery.replace(/\D/g, '')
   const pendingOnly = opts.pendingOnly === true
   const status = parseStatus(opts.status)
+  const channel = parseChannel(opts.channel)
 
   const sql = getSql()
 
@@ -121,6 +133,7 @@ export async function listContactsWithSummary(
         select * from contacts
         where status = ${status}
           and anonymized_at is null
+          and (${channel}::text is null or channel = ${channel})
           and id = any(${pendingIds}::uuid[])
       `) as ContactRow[]
       const items = withUrgency(contacts, byContact)
@@ -131,6 +144,7 @@ export async function listContactsWithSummary(
       select id, name from contacts
       where status = ${status}
         and anonymized_at is null
+        and (${channel}::text is null or channel = ${channel})
     `) as { id: string; name: string | null }[]
     const total = idRows.length
     const ranked = idRows
@@ -149,6 +163,7 @@ export async function listContactsWithSummary(
   }
 
   if (pendingOnly && !(q || qDigits.length >= 3)) {
+    // Pendentes: filtra canal após carregar contatos (urgency vem de serviços).
     const pendingRanked = Array.from(byContact.keys())
       .map((id) => {
         const u = urgencyForServices(byContact.get(id) ?? [])
@@ -161,21 +176,41 @@ export async function listContactsWithSummary(
           { max_overdue_days: b.u.max_overdue_days, name: null },
         ),
       )
-    const total = pendingRanked.length
-    const ordered = await orderContactsByUrgency(
-      pendingRanked.slice(0, limit).map((x) => x.id),
+    const orderedAll = await orderContactsByUrgency(
+      pendingRanked.map((x) => x.id),
       byContact,
     )
-    return { items: withUrgency(ordered, byContact), total }
+    const channelFiltered = channel
+      ? orderedAll.filter((c) => c.channel === channel)
+      : orderedAll
+    return {
+      items: withUrgency(channelFiltered.slice(0, limit), byContact),
+      total: channelFiltered.length,
+    }
   }
 
   if (q || qDigits.length >= 3) {
     const namePattern = q ? `%${q}%` : null
     const phonePattern = qDigits.length >= 3 ? `%${qDigits}%` : null
+    const countRows = (await sql`
+      select count(*)::int as n from contacts
+      where anonymized_at is null
+        and (${status}::text is null or status = ${status})
+        and (${channel}::text is null or channel = ${channel})
+        and (
+          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
+          or (
+            ${phonePattern}::text is not null
+            and regexp_replace(coalesce(phone, ''), '\D', '', 'g') like ${phonePattern}
+          )
+        )
+    `) as { n: number }[]
+    const total = countRows[0]?.n ?? 0
     const contacts = (await sql`
       select * from contacts
       where anonymized_at is null
         and (${status}::text is null or status = ${status})
+        and (${channel}::text is null or channel = ${channel})
         and (
           (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
           or (
@@ -188,7 +223,8 @@ export async function listContactsWithSummary(
     `) as ContactRow[]
     const withU = withUrgency(contacts, byContact)
     const items = pendingOnly ? withU.filter((c) => c.pending_actions > 0) : withU
-    return { items, total: items.length }
+    // pendingOnly filtra em memória na página; total completo só vale sem esse corte.
+    return { items, total: pendingOnly ? items.length : total }
   }
 
   // Contatos com urgência > 0 (atraso / vencendo / agendado) — prioridade.
@@ -205,9 +241,14 @@ export async function listContactsWithSummary(
       ),
     )
 
-  const urgentIds = urgentRanked.slice(0, limit).map((x) => x.id)
-  const orderedUrgent = await orderContactsByUrgency(urgentIds, byContact)
-  let items = withUrgency(orderedUrgent, byContact)
+  const urgentOrdered = await orderContactsByUrgency(
+    urgentRanked.map((x) => x.id),
+    byContact,
+  )
+  const urgentChannel = channel
+    ? urgentOrdered.filter((c) => c.channel === channel)
+    : urgentOrdered
+  let items = withUrgency(urgentChannel.slice(0, limit), byContact)
 
   if (items.length < limit) {
     const exclude = items.map((c) => c.id)
@@ -216,12 +257,14 @@ export async function listContactsWithSummary(
         ? ((await sql`
             select * from contacts
             where anonymized_at is null
+              and (${channel}::text is null or channel = ${channel})
             order by created_at desc
             limit ${limit}
           `) as ContactRow[])
         : ((await sql`
             select * from contacts
             where anonymized_at is null
+              and (${channel}::text is null or channel = ${channel})
               and not (id = any(${exclude}::uuid[]))
             order by created_at desc
             limit ${limit - items.length}
@@ -230,7 +273,9 @@ export async function listContactsWithSummary(
   }
 
   const totalRows = (await sql`
-    select count(*)::int as n from contacts where anonymized_at is null
+    select count(*)::int as n from contacts
+    where anonymized_at is null
+      and (${channel}::text is null or channel = ${channel})
   `) as { n: number }[]
   return { items, total: totalRows[0]?.n ?? items.length }
 }

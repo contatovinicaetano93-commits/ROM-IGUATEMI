@@ -31,7 +31,7 @@ import {
   CHANNEL_LABEL,
   STATUS_LABEL,
 } from '../../_components/ui'
-import { fmtSchedule, whatsAppUrl, formatCurrency } from '@/lib/salon/format'
+import { fmtSchedule, whatsAppUrl, formatCurrency, toDatetimeLocalValue, fromDatetimeLocalValue } from '@/lib/salon/format'
 import { CATEGORY_LABEL } from '@/lib/salon/constants'
 import { apiFetch } from '@/lib/api-client'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
@@ -754,12 +754,12 @@ function ScheduleSheet({
   onScheduled: () => void
 }) {
   const defaultWhen = service.scheduled_at
-    ? new Date(service.scheduled_at).toISOString().slice(0, 16)
+    ? toDatetimeLocalValue(service.scheduled_at)
     : (() => {
         const d = new Date()
         d.setDate(d.getDate() + 1)
         d.setHours(10, 0, 0, 0)
-        return d.toISOString().slice(0, 16)
+        return toDatetimeLocalValue(d)
       })()
   const [when, setWhen] = useState(defaultWhen)
   const [submitting, setSubmitting] = useState(false)
@@ -773,7 +773,7 @@ function ScheduleSheet({
       const res = await apiFetch(`/api/services/${service.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'schedule', scheduledAt: new Date(when).toISOString() }),
+        body: JSON.stringify({ action: 'schedule', scheduledAt: fromDatetimeLocalValue(when) }),
       })
       const json = await res.json()
       if (!res.ok || json.error) {

@@ -51,8 +51,6 @@ function resolveStatus(current: ContactStatus | string | undefined, incoming?: C
   return mergeContactStatus(current as ContactStatus, incoming)
 }
 
-/** SQL CASE compartilhado — upsert Avec/telefone alinhado ao mergeContactStatus. */
-
 function isPhoneUniqueViolation(error: unknown): boolean {
   const e = error as { code?: string; message?: string; constraint?: string }
   if (e?.code !== '23505') return false
@@ -139,8 +137,9 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
           email = coalesce(excluded.email, contacts.email),
           phone = coalesce(excluded.phone, contacts.phone),
           source = case
-            when excluded.source like 'avec_sync_clients%' then excluded.source
-            else contacts.source
+            -- Dump 0004 não apaga origem real (whatsapp_bot/manual) — alinhado a mergeContactByPhone.
+            when excluded.source like 'avec_sync_clients%' then contacts.source
+            else coalesce(excluded.source, contacts.source)
           end,
           status = case
             -- Heal: dump 0004 ainda preso em "novo" → importado
@@ -152,6 +151,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
             when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
             -- Default/novo não demota importado
             when contacts.status = 'importado' and coalesce(excluded.status, 'novo') = 'novo' then 'importado'
+            -- Default/novo não demota em_atendimento (handoff WhatsApp) — alinhado a mergeContactStatus
+            when contacts.status = 'em_atendimento' and coalesce(excluded.status, 'novo') = 'novo' then 'em_atendimento'
             when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
             when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
             when contacts.status = 'convertido' then 'convertido'
@@ -193,6 +194,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
           then 'importado'
         when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
         when contacts.status = 'importado' and coalesce(excluded.status, 'novo') = 'novo' then 'importado'
+        -- Default/novo não demota em_atendimento (handoff WhatsApp) — alinhado a mergeContactStatus
+        when contacts.status = 'em_atendimento' and coalesce(excluded.status, 'novo') = 'novo' then 'em_atendimento'
         when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
         when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
         when contacts.status = 'convertido' then 'convertido'

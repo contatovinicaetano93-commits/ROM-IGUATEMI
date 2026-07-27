@@ -145,6 +145,7 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
       select count(*)::int as n from contacts
       where (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
         and status <> 'importado'
+        and anonymized_at is null
         and coalesce(source, '') not like 'avec_sync_clients%'
         and coalesce(source, '') not like 'avec_backfill%'
         and coalesce(source, '') not like 'avec_lake%'
