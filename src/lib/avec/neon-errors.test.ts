@@ -21,6 +21,14 @@ describe('isNeonQuotaError', () => {
     ).toBe(true)
   })
 
+  it('detecta 402 Payment Required genérico', () => {
+    expect(isNeonQuotaError(new Error('FetcherError: 402 Payment Required'))).toBe(true)
+  })
+
+  it('detecta http status 402 sem neon no texto', () => {
+    expect(isNeonQuotaError(new Error('Server error (HTTP status 402): blocked'))).toBe(true)
+  })
+
   it('ignora erros comuns', () => {
     expect(isNeonQuotaError(new Error('relation does not exist'))).toBe(false)
   })

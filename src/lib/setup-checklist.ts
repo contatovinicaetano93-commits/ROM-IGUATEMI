@@ -45,7 +45,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Gere um segredo: openssl rand -hex 32',
       'Vercel → CRON_SECRET = o valor gerado',
-      'Protege sync cron (fast 5 min + full 10 min) e disparo manual/webhook',
+      'Protege sync cron (fast 1h + full 3×/dia) e disparo manual/webhook',
       'Tempo real = webhook Avec (AVEC_WEBHOOK_SECRET) — cron é rede de segurança',
       'Redeploy',
     ],

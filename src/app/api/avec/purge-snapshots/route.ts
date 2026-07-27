@@ -5,6 +5,9 @@ import { isCronAuthorized } from '@/lib/cron-auth'
 import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
 import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
 
+/** Purge pode varrer muitas linhas de snapshot legado. */
+export const maxDuration = 300
+
 /** GET — cron diário ou admin: libera espaço no Neon (snapshots/sync runs). */
 export async function GET(req: NextRequest) {
   try {

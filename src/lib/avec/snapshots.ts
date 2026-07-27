@@ -67,8 +67,11 @@ export type PurgeSnapshotsResult = {
 }
 
 /**
- * Recupera espaço no Neon: zera payloads legados, apaga snapshots velhos e
- * histórico de sync. Seguro chamar em cron / Admin quando a cota permite escrita.
+ * Recupera espaço no Neon: DELETE primeiro (não UPDATE) — sob size-limit o UPDATE
+ * de jsonb enorme precisa de espaço livre e falha com "could not extend file".
+ * Depois zera payloads legados remanescentes e limpa sync runs velhos.
+ *
+ * Nota: no Neon free o espaço físico pode só cair após VACUUM no console.
  */
 export async function purgeAvecStorageBloat(opts?: {
   keepSnapshotDays?: number
@@ -78,20 +81,10 @@ export async function purgeAvecStorageBloat(opts?: {
   const keepSnapshotDays = Math.max(0, opts?.keepSnapshotDays ?? 0)
   const keepSyncRunDays = Math.max(1, opts?.keepSyncRunDays ?? 3)
 
-  // 1) Zera payloads enormes imediatamente (libera transfer em leituras futuras).
-  const cleared = (await sql`
-    update avec_report_snapshots
-    set payload = '[]'::jsonb
-    where payload is not null
-      and payload <> '[]'::jsonb
-      and report_id not in ('0045', '0242', '0243', '0142')
-    returning id
-  `) as { id: string }[]
-
-  // 2) Snapshots antigos (default: todos exceto o mais recente por report).
+  // 1) DELETE primeiro — libera linhas sem reescrever jsonb gigante.
   let snapshotsDeleted = 0
   if (keepSnapshotDays <= 0) {
-    const kept = (await sql`
+    const deleted = (await sql`
       delete from avec_report_snapshots
       where id not in (
         select distinct on (report_id) id
@@ -100,7 +93,7 @@ export async function purgeAvecStorageBloat(opts?: {
       )
       returning id
     `) as { id: string }[]
-    snapshotsDeleted = kept.length
+    snapshotsDeleted = deleted.length
   } else {
     const cutoff = new Date(Date.now() - keepSnapshotDays * 86_400_000).toISOString()
     const deleted = (await sql`
@@ -110,6 +103,16 @@ export async function purgeAvecStorageBloat(opts?: {
     `) as { id: string }[]
     snapshotsDeleted = deleted.length
   }
+
+  // 2) Zera payloads remanescentes (não-valorização) — após DELETE, bem menor.
+  const cleared = (await sql`
+    update avec_report_snapshots
+    set payload = '[]'::jsonb
+    where payload is not null
+      and payload <> '[]'::jsonb
+      and report_id not in ('0045', '0242', '0243', '0142')
+    returning id
+  `) as { id: string }[]
 
   const runsCutoff = new Date(Date.now() - keepSyncRunDays * 86_400_000).toISOString()
   const runs = (await sql`

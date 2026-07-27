@@ -29,6 +29,9 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
 /** Alinhado ao cron: fast 1h, full ~6h entre janelas (07/13/19 BRT). */
 const FAST_MIN_GAP_MS = 50 * 60_000
 const FULL_MIN_GAP_MS = 5 * 60 * 60_000
+/** Webhook: tempo real, mas evita rajada de full+purge no Neon. */
+const WEBHOOK_FAST_MIN_GAP_MS = 30_000
+const WEBHOOK_FULL_MIN_GAP_MS = 60_000
 
 async function executeSync(
   req: NextRequest,
@@ -36,7 +39,7 @@ async function executeSync(
     force?: boolean
     defaultMode?: AvecSyncMode
     cron?: boolean
-    /** Webhook em tempo real — não aplica janela mínima dos crons. */
+    /** Webhook em tempo real — usa gap curto, não o das janelas de cron. */
     bypassMinGap?: boolean
   },
 ) {
@@ -55,11 +58,17 @@ async function executeSync(
     return err('Avec não configurado (AVEC_API_TOKEN)', 503)
   }
 
-  const minGap = mode === 'full' ? FULL_MIN_GAP_MS : FAST_MIN_GAP_MS
+  const minGap = opts?.bypassMinGap
+    ? mode === 'full'
+      ? WEBHOOK_FULL_MIN_GAP_MS
+      : WEBHOOK_FAST_MIN_GAP_MS
+    : mode === 'full'
+      ? FULL_MIN_GAP_MS
+      : FAST_MIN_GAP_MS
 
   try {
     // Gap antes do purge: sync_recente não deve gerar writes pesados no Neon.
-    if (!opts?.force && !opts?.bypassMinGap) {
+    if (!opts?.force) {
       const last = await getLastAvecSync(mode)
       if (last?.created_at) {
         const age = Date.now() - new Date(last.created_at).getTime()
@@ -76,8 +85,8 @@ async function executeSync(
       }
     }
 
-    // Best-effort: libera bloat antes de sync pesado (quando Neon ainda aceita escrita).
-    if (opts?.force || mode === 'full') {
+    // Purge só em admin force ou cron full — nunca em cada webhook (queimaria Neon).
+    if ((opts?.force || (opts?.cron && mode === 'full')) && !opts?.bypassMinGap) {
       try {
         await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 3 })
       } catch (purgeErr) {

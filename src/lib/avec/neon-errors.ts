@@ -3,13 +3,19 @@
 export function isNeonQuotaError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e)
   const lower = msg.toLowerCase()
-  return (
+  if (
     lower.includes('data transfer quota') ||
     lower.includes('project size limit') ||
-    lower.includes('could not extend file') ||
-    (lower.includes('http status 402') && lower.includes('neon')) ||
-    (lower.includes('402') && lower.includes('quota'))
-  )
+    lower.includes('could not extend file')
+  ) {
+    return true
+  }
+  // 402 Payment Required / HTTP status 402 (com ou sem "neon"/"quota" no texto)
+  if (/\b402\b/.test(lower) && (lower.includes('payment required') || lower.includes('quota') || lower.includes('neon'))) {
+    return true
+  }
+  if (lower.includes('http status 402')) return true
+  return false
 }
 
 export function neonQuotaUserMessage(e?: unknown): string {
