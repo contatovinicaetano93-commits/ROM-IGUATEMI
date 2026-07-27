@@ -222,9 +222,28 @@ export async function listContactsWithSummary(
       limit ${limit}
     `) as ContactRow[]
     const withU = withUrgency(contacts, byContact)
-    const items = pendingOnly ? withU.filter((c) => c.pending_actions > 0) : withU
-    // pendingOnly filtra em memória na página; total completo só vale sem esse corte.
-    return { items, total: pendingOnly ? items.length : total }
+    if (!pendingOnly) return { items: withU, total }
+    const items = withU.filter((c) => c.pending_actions > 0)
+    // Com pending: total da página ≠ total real. Conta urgência na base filtrada sem limit.
+    if (contacts.length < limit) return { items, total: items.length }
+    const allMatch = (await sql`
+      select id from contacts
+      where anonymized_at is null
+        and (${status}::text is null or status = ${status})
+        and (${channel}::text is null or channel = ${channel})
+        and (
+          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
+          or (
+            ${phonePattern}::text is not null
+            and regexp_replace(coalesce(phone, ''), '\D', '', 'g') like ${phonePattern}
+          )
+        )
+    `) as { id: string }[]
+    const pendingTotal = allMatch.filter((r) => {
+      const u = urgencyForServices(byContact.get(r.id) ?? [])
+      return u.pending_actions > 0
+    }).length
+    return { items, total: pendingTotal }
   }
 
   // Contatos com urgência > 0 (atraso / vencendo / agendado) — prioridade.

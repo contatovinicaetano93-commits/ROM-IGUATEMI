@@ -160,9 +160,9 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
   const datePart = pickStr(data.data, pickNested(agendamento, ['data']))
   const timePart = pickStr(data.hora, pickNested(agendamento, ['hora']))
   const scheduled_at =
-    (scheduledRaw && !Number.isNaN(new Date(scheduledRaw).getTime())
-      ? new Date(scheduledRaw).toISOString()
-      : null) ?? parseAvecDateTime(datePart ?? null, timePart ?? null) ?? undefined
+    parseAvecDateTime(datePart ?? null, timePart ?? null) ??
+    (scheduledRaw ? parseAvecDateTime(scheduledRaw, null) : null) ??
+    undefined
 
   const completedRaw = pickStr(data.completed_at, data.attended_at, data.finalizado_em)
   const completed_at =

@@ -2,12 +2,14 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAuth } from '@/lib/auth'
-import { logEvent } from '@/lib/contacts'
+import { logEvent, updateContact } from '@/lib/contacts'
+import { getSql } from '@/lib/db'
 import {
   markServiceDone,
   deactivateService,
   scheduleService,
   clearServiceSchedule,
+  type ClientService,
 } from '@/lib/services'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -19,6 +21,14 @@ const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('unschedule') }),
 ])
 
+async function getServiceById(id: string): Promise<ClientService | null> {
+  const sql = getSql()
+  const rows = (await sql`
+    select * from client_services where id = ${id} limit 1
+  `) as ClientService[]
+  return rows[0] ?? null
+}
+
 // PATCH /api/services/[id] — fluxo guiado de recorrência e agendamento.
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   try {
@@ -28,13 +38,28 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const { id } = await ctx.params
     const body = schema.parse(await req.json())
 
-    let service
+    let service: ClientService | null
     if (body.action === 'done') service = await markServiceDone(id)
     else if (body.action === 'deactivate') service = await deactivateService(id)
-    else if (body.action === 'schedule') service = await scheduleService(id, body.scheduledAt)
-    else service = await clearServiceSchedule(id)
+    else if (body.action === 'schedule') {
+      service = await scheduleService(id, body.scheduledAt)
+      if (!service) {
+        const existing = await getServiceById(id)
+        if (!existing) return err('Serviço não encontrado', 404)
+        return err(
+          'Não foi possível remarcar: serviço já concluído neste dia (fuso SP).',
+          409,
+        )
+      }
+    } else service = await clearServiceSchedule(id)
 
     if (!service) return err('Serviço não encontrado', 404)
+
+    if (body.action === 'schedule') {
+      await updateContact(service.contact_id, { status: 'agendado' })
+    } else if (body.action === 'done') {
+      await updateContact(service.contact_id, { status: 'convertido' })
+    }
 
     await logEvent({
       contactId: service.contact_id,

@@ -35,4 +35,8 @@ describe('mergeContactStatus', () => {
   it('marca perdido quando explícito', () => {
     expect(mergeContactStatus('convertido', 'perdido')).toBe('perdido')
   })
+
+  it('permite heal/PATCH novo → importado (dump Avec)', () => {
+    expect(mergeContactStatus('novo', 'importado')).toBe('importado')
+  })
 })

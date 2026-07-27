@@ -40,6 +40,8 @@ export function mergeContactStatus(current: ContactStatus, incoming: ContactStat
   if (current === 'perdido' && incoming !== 'convertido') return current
   // Base Avec: não demotar para lead do funil.
   if (current === 'importado' && incoming === 'novo') return 'importado'
+  // Heal / PATCH explícito: dump Avec preso em "novo" → importado (rank 0 < 1).
+  if (incoming === 'importado' && current === 'novo') return 'importado'
   // Quem já está em atendimento+ não volta para "novo" (default omitido / clique errado).
   if (incoming === 'novo' && STATUS_RANK[current] >= STATUS_RANK.em_atendimento) return current
   return STATUS_RANK[incoming] > STATUS_RANK[current] ? incoming : current
@@ -83,6 +85,7 @@ async function mergeContactByPhone(
       status = ${nextStatus},
       source = case
         when ${input.source} like 'avec_sync_clients%' then contacts.source
+        when contacts.source like 'avec_sync_clients%' then contacts.source
         else coalesce(${input.source}, contacts.source)
       end
     where id = ${row.id}
@@ -139,13 +142,15 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
           source = case
             -- Dump 0004 não apaga origem real (whatsapp_bot/manual) — alinhado a mergeContactByPhone.
             when excluded.source like 'avec_sync_clients%' then contacts.source
+            -- Agenda/webhook não apaga linhagem do dump (heal / exclusões KPI).
+            when contacts.source like 'avec_sync_clients%' then contacts.source
             else coalesce(excluded.source, contacts.source)
           end,
           status = case
-            -- Heal: dump 0004 ainda preso em "novo" → importado
+            -- Heal: canal Avec preso em "novo" → importado (dump ou pós-overwrite de source)
             when excluded.status = 'importado'
               and contacts.status = 'novo'
-              and coalesce(contacts.source, '') like 'avec_sync_clients%'
+              and contacts.channel = 'avec'
               then 'importado'
             -- Dump não sobrescreve quem já avançou no funil
             when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
@@ -187,10 +192,15 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
       name = coalesce(excluded.name, contacts.name),
       email = coalesce(excluded.email, contacts.email),
       avec_client_id = coalesce(excluded.avec_client_id, contacts.avec_client_id),
+      source = case
+        when excluded.source like 'avec_sync_clients%' then contacts.source
+        when contacts.source like 'avec_sync_clients%' then contacts.source
+        else coalesce(excluded.source, contacts.source)
+      end,
       status = case
         when excluded.status = 'importado'
           and contacts.status = 'novo'
-          and coalesce(contacts.source, '') like 'avec_sync_clients%'
+          and contacts.channel = 'avec'
           then 'importado'
         when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
         when contacts.status = 'importado' and coalesce(excluded.status, 'novo') = 'novo' then 'importado'

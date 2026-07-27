@@ -174,22 +174,25 @@ function warnIfTruncated(stats: AvecSyncStats, reportId: string, result: Awaited
   if (result.truncated) stats.warnings.push(formatTruncationWarning(reportId, result))
 }
 
+/** Dump / sync Avec com canal avec preso em "novo" → importado (≠ lead WhatsApp). */
+async function healImportadoStatus(stats: AvecSyncStats) {
+  try {
+    const sql = getSql()
+    await sql`
+      update contacts
+      set status = 'importado'
+      where status = 'novo'
+        and channel = 'avec'
+        and anonymized_at is null
+    `
+  } catch (e) {
+    stats.warnings.push(`heal importado: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
   try {
-    // Heal one-shot: dump 0004 preso em "novo" antes do guard de upsert.
-    try {
-      const sql = getSql()
-      await sql`
-        update contacts
-        set status = 'importado'
-        where status = 'novo'
-          and channel = 'avec'
-          and coalesce(source, '') like 'avec_sync_clients%'
-          and anonymized_at is null
-      `
-    } catch (e) {
-      stats.warnings.push(`heal importado: ${e instanceof Error ? e.message : String(e)}`)
-    }
+    await healImportadoStatus(stats)
 
     const params = { limit: 250, site: avecSiteParam() }
     const result = await fetchAllAvecReport('0004', params)
@@ -264,7 +267,8 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         phone: appt.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_appointments_fast' : 'avec_sync_appointments',
-        status: isPaid ? 'convertido' : 'agendado',
+        // Cancel/no-show: não promover para agendado (só limpa agenda abaixo).
+        status: isPaid ? 'convertido' : isCancelled || isNoShow ? undefined : 'agendado',
       })
 
       if (appt.serviceName && appt.scheduledAt) {
@@ -312,11 +316,18 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   }
 
   // Reconcilia órfãos + KPI Agendados = abertos+pagos do dia (não só leftovers abertos).
+  // Truncado: keep-set incompleto — não limpar (risco de apagar slots reais / ROM manual).
   if (todayRows > 0) {
     try {
-      const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
-      if (cleared > 0) {
-        stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
+      if (result.truncated) {
+        stats.warnings.push(
+          'agenda: reconcile de órfãos adiado — 0051 truncado (keep-set incompleto)',
+        )
+      } else {
+        const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
+        if (cleared > 0) {
+          stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
+        }
       }
       await upsertSalonMetrics(today, { appointments: todayBooked })
     } catch (e) {
@@ -555,9 +566,7 @@ async function syncCancellations(
         }
       }
 
-      if (cancelled > 0) {
-        await upsertSalonMetrics(day, { cancelled })
-      }
+      await upsertSalonMetrics(day, { cancelled })
     } catch (e) {
       stats.errors.push(`cancelamentos ${day}: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -766,6 +775,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   const syncRunId = run.id
 
   try {
+    await healImportadoStatus(stats)
     // Fast: agenda/caixa do dia. Full: + catálogo + P1/P2/P3.
     if (mode === 'full') {
       await syncClients(stats, syncRunId)

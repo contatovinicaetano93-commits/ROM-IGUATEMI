@@ -1,6 +1,6 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
-import { todayIso } from '@/lib/salon/format'
+import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
 
 export const SERVICE_CATEGORIES = ['corte', 'tratamento', 'coloracao', 'bem_estar', 'produto', 'outro'] as const
@@ -212,8 +212,11 @@ export async function ensureServiceCadence(
  * que não estão na agenda aberta da Avec (0051). Evita KPI/lista inflados
  * depois que o status virou Pago/Cancelado.
  *
- * keepServiceIds vazio: limpa todos do dia (caller só invoca quando a Avec
- * trouxe linhas do dia — senão dia 100% pago/cancel deixava órfãos).
+ * Só toca contatos ligados à Avec (`avec_client_id`) — agenda ROM/manual pura
+ * não é apagada. Caller não deve invocar se 0051 veio truncado.
+ *
+ * keepServiceIds vazio: limpa todos do dia com avec_client_id (caller só invoca
+ * quando a Avec trouxe linhas do dia — senão dia 100% pago/cancel deixava órfãos).
  */
 export async function clearOrphanSchedulesForDay(
   day: string,
@@ -222,19 +225,29 @@ export async function clearOrphanSchedulesForDay(
   const sql = getSql()
   if (keepServiceIds.length === 0) {
     const rows = (await sql`
-      update client_services set scheduled_at = null
-      where scheduled_at is not null
-        and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-      returning id
+      update client_services cs
+      set scheduled_at = null
+      from contacts c
+      where cs.contact_id = c.id
+        and c.avec_client_id is not null
+        and c.anonymized_at is null
+        and cs.scheduled_at is not null
+        and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      returning cs.id
     `) as { id: string }[]
     return rows.length
   }
   const rows = (await sql`
-    update client_services set scheduled_at = null
-    where scheduled_at is not null
-      and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-      and not (id = any(${keepServiceIds}::uuid[]))
-    returning id
+    update client_services cs
+    set scheduled_at = null
+    from contacts c
+    where cs.contact_id = c.id
+      and c.avec_client_id is not null
+      and c.anonymized_at is null
+      and cs.scheduled_at is not null
+      and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      and not (cs.id = any(${keepServiceIds}::uuid[]))
+    returning cs.id
   `) as { id: string }[]
   return rows.length
 }
@@ -250,6 +263,7 @@ export async function listTodaySchedules(
     from client_services cs
     join contacts c on c.id = cs.contact_id
     where cs.active = true
+      and c.anonymized_at is null
       and cs.scheduled_at is not null
       and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
       and (
@@ -328,12 +342,14 @@ export async function deactivateService(serviceId: string): Promise<ClientServic
 // (atrasados, vencendo ou com agendamento até hoje) — não todos os do perfil.
 export async function autoCompleteServicesOnConversion(contactId: string): Promise<string[]> {
   const services = enrichServices(await listServices(contactId))
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
+  const today = todayIso()
 
   const toMark = services.filter((s) => {
     if (s.state === 'overdue' || s.state === 'due_soon') return true
-    if (s.scheduled_at) return new Date(s.scheduled_at).getTime() <= endOfToday.getTime()
+    if (s.scheduled_at) {
+      const day = toSalonDateIso(s.scheduled_at)
+      return day != null && day <= today
+    }
     return false
   })
 
@@ -357,6 +373,7 @@ export async function listTodayScheduleForProfessional(
     from client_services cs
     join contacts c on c.id = cs.contact_id
     where cs.active = true
+      and c.anonymized_at is null
       and cs.scheduled_at is not null
       and lower(cs.professional_name) = lower(${professionalName})
       and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${salonDay}::date
@@ -372,6 +389,7 @@ export async function listUpcomingSchedules(days = 7, limit = 20): Promise<Sched
     from client_services cs
     join contacts c on c.id = cs.contact_id
     where cs.active = true
+      and c.anonymized_at is null
       and cs.scheduled_at is not null
       and cs.scheduled_at >= now()
       and cs.scheduled_at < now() + (${days}::int || ' days')::interval
@@ -392,6 +410,7 @@ export async function listTodayPipeline(day: string): Promise<{
       from client_services cs
       join contacts c on c.id = cs.contact_id
       where cs.active = true
+        and c.anonymized_at is null
         and cs.scheduled_at is not null
         and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
         -- Já concluídos no dia saem de Agendados (ficam só em Concluídos).
@@ -406,6 +425,7 @@ export async function listTodayPipeline(day: string): Promise<{
       from client_services cs
       join contacts c on c.id = cs.contact_id
       where cs.active = true
+        and c.anonymized_at is null
         and cs.last_done_at is not null
         and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
       order by cs.last_done_at asc
