@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
   if (!webhook.ok) return err(webhook.reason, 401)
 
   const update = (await req.json().catch(() => null)) as TelegramUpdate | null
-  const chatId = update?.message?.chat.id
+  const chatId = update?.message?.chat?.id
   const text = update?.message?.text?.trim()
 
   if (!chatId || !text) return ok({ ignored: true })

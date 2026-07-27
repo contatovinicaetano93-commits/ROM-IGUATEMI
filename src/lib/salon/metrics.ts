@@ -124,20 +124,23 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
 
   const [apptRows, newRows] = await Promise.all([
     sql`
-      select count(*)::int as n from client_services
-      where active = true
+      select count(*)::int as n
+      from client_services cs
+      join contacts c on c.id = cs.contact_id
+      where cs.active = true
+        and c.anonymized_at is null
         and (
           (
-            scheduled_at is not null
-            and (scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+            cs.scheduled_at is not null
+            and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
             and (
-              last_done_at is null
-              or (last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
+              cs.last_done_at is null
+              or (cs.last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
             )
           )
           or (
-            last_done_at is not null
-            and (last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+            cs.last_done_at is not null
+            and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
           )
         )
     ` as unknown as Promise<{ n: number }[]>,

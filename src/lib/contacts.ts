@@ -154,6 +154,8 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
               then 'importado'
             -- Dump não sobrescreve quem já avançou no funil
             when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
+            -- Cancel/no-show/webhook: perdido sempre (alinhado a mergeContactStatus)
+            when excluded.status = 'perdido' then 'perdido'
             -- Default/novo não demota importado
             when contacts.status = 'importado' and coalesce(excluded.status, 'novo') = 'novo' then 'importado'
             -- Default/novo não demota em_atendimento (handoff WhatsApp) — alinhado a mergeContactStatus
@@ -203,6 +205,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<ContactR
           and contacts.channel = 'avec'
           then 'importado'
         when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
+        when excluded.status = 'perdido' then 'perdido'
         when contacts.status = 'importado' and coalesce(excluded.status, 'novo') = 'novo' then 'importado'
         -- Default/novo não demota em_atendimento (handoff WhatsApp) — alinhado a mergeContactStatus
         when contacts.status = 'em_atendimento' and coalesce(excluded.status, 'novo') = 'novo' then 'em_atendimento'
