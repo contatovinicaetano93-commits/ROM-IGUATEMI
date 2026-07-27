@@ -288,6 +288,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         // (evita um cancel demotar contato com outro horário ainda aberto).
         status: isPaid ? 'convertido' : isLostOutcome ? undefined : 'agendado',
       })
+      // Tombstone LGPD: upsert casa no id, mas não reescreve serviços/prefs/PII.
+      if (contact.anonymized_at) {
+        stats.appointments_synced++
+        continue
+      }
 
       if (appt.serviceName && appt.scheduledAt) {
         const existing = await listServices(contact.id)
@@ -408,6 +413,10 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         source: mode === 'fast' ? 'avec_sync_attended_fast' : 'avec_sync_attended',
         status: 'convertido',
       })
+      if (contact.anonymized_at) {
+        stats.attendances_synced++
+        continue
+      }
 
       if (att.serviceName) {
         const service = await findOrCreateService(contact.id, att.serviceName)
@@ -746,6 +755,7 @@ async function syncReturningFrom0002(
             // Veio hoje no 0002 — não demotar importado → novo (default do upsert).
             status: 'convertido',
           })
+          if (contact.anonymized_at) continue
           const serviceName = att.serviceName || 'Atendimento'
           const service = await findOrCreateService(contact.id, serviceName)
           const doneAt = att.endedAt ?? att.startedAt ?? null

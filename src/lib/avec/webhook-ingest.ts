@@ -261,6 +261,11 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     status: isCancelledEvent ? undefined : payload.status,
   })
 
+  // Tombstone LGPD: não reescreve serviços, prefs nem eventos com PII.
+  if (contact.anonymized_at) {
+    return { contact_id: contact.id, event, realtime: true as const, anonymized: true as const }
+  }
+
   if (payload.status && !isCancelledEvent) {
     await updateContact(contact.id, { status: payload.status })
   }
@@ -275,6 +280,13 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       if (service?.scheduled_at) {
         // Com data: só limpa se for o mesmo dia. Sem data: limpa o slot aberto desse serviço.
         if (!cancelDay || toSalonDateIso(service.scheduled_at) === cancelDay) {
+          await clearServiceSchedule(service.id)
+        }
+      }
+    } else if (cancelDay) {
+      // Sem service_name: limpa só slots abertos do mesmo dia (não apaga futuro).
+      for (const service of services) {
+        if (service.scheduled_at && toSalonDateIso(service.scheduled_at) === cancelDay) {
           await clearServiceSchedule(service.id)
         }
       }
