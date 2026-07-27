@@ -64,22 +64,24 @@ export function validateDeploymentEnv(): DeploymentValidation {
   }
 
   if (!process.env.DATABASE_URL?.trim()) {
-    warnings.push('DATABASE_URL ausente — use um banco Neon dedicado por unidade (nunca compartilhe entre Brasil e Iguatemi).')
+    warnings.push(
+      'DATABASE_URL ausente — use um Postgres dedicado por unidade (Supabase/Neon; nunca compartilhe entre Brasil e Iguatemi).'
+    )
   }
 
   // Host Vercel vs painel — evita deploy Iguatemi apontando para projeto Brasil (e vice-versa).
   if (panel === 'iguatemi' && /rom-club(?!-iguatemi)|brasil/i.test(host)) {
     warnings.push(
-      `Host (${host}) parece Brasil/rom-club, mas ROM_PANEL=iguatemi — confira o projeto Vercel e o Neon desta unidade.`
+      `Host (${host}) parece Brasil/rom-club, mas ROM_PANEL=iguatemi — confira o projeto Vercel e o DATABASE_URL desta unidade.`
     )
   }
   if (panel === 'brasil' && /iguatemi/i.test(host)) {
     warnings.push(
-      `Host (${host}) parece Iguatemi, mas ROM_PANEL=brasil — confira o projeto Vercel e o Neon desta unidade.`
+      `Host (${host}) parece Iguatemi, mas ROM_PANEL=brasil — confira o projeto Vercel e o DATABASE_URL desta unidade.`
     )
   }
 
-  // Fingerprint opcional do Neon (ex.: ep-xxx) — defina ROM_EXPECTED_DB_HOST na Vercel.
+  // Fingerprint opcional do host DB (ex.: supabase.co / ep-xxx) — defina ROM_EXPECTED_DB_HOST na Vercel.
   const expectedDb = process.env.ROM_EXPECTED_DB_HOST?.trim().toLowerCase()
   const dbUrl = process.env.DATABASE_URL?.trim().toLowerCase() ?? ''
   if (expectedDb && dbUrl && !dbUrl.includes(expectedDb)) {

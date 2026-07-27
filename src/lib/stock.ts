@@ -492,31 +492,31 @@ export async function createManualMovement(input: CreateManualMovementInput): Pr
   const sql = getSql()
   const delta = input.type === 'saida' ? -input.quantity : input.quantity
 
-  const results = await sql.transaction((txn) => [
-    txn`
+  const movement = await sql.begin(async (txn) => {
+    const movementRows = (await txn`
       insert into stock_movements (product_id, type, quantity, reason, source, occurred_at, created_by)
       values (${input.productId}, ${input.type}, ${input.quantity}, ${input.reason.trim()}, 'manual', now(), ${input.createdBy})
       returning id, product_id, type, quantity::float as quantity, cost::float as cost, reason, source, occurred_at, created_by
-    `,
-    txn`
+    `) as {
+      id: string
+      product_id: string
+      type: 'entrada' | 'saida' | 'ajuste_manual'
+      quantity: number
+      cost: number | null
+      reason: string | null
+      source: string
+      occurred_at: string
+      created_by: string | null
+    }[]
+
+    await txn`
       update stock_products
       set current_qty = greatest(current_qty + ${delta}, 0), updated_at = now()
       where id = ${input.productId}
-    `,
-  ])
+    `
 
-  const movementRows = results[0] as {
-    id: string
-    product_id: string
-    type: 'entrada' | 'saida' | 'ajuste_manual'
-    quantity: number
-    cost: number | null
-    reason: string | null
-    source: string
-    occurred_at: string
-    created_by: string | null
-  }[]
-  const movement = movementRows[0]!
+    return movementRows[0]!
+  })
 
   const product = await getProduct(input.productId)
   return { ...movement, product_name: product?.name ?? '—' }
