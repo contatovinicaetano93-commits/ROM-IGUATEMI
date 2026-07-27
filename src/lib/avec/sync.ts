@@ -176,6 +176,21 @@ function warnIfTruncated(stats: AvecSyncStats, reportId: string, result: Awaited
 
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
   try {
+    // Heal one-shot: dump 0004 preso em "novo" antes do guard de upsert.
+    try {
+      const sql = getSql()
+      await sql`
+        update contacts
+        set status = 'importado'
+        where status = 'novo'
+          and channel = 'avec'
+          and coalesce(source, '') like 'avec_sync_clients%'
+          and anonymized_at is null
+      `
+    } catch (e) {
+      stats.warnings.push(`heal importado: ${e instanceof Error ? e.message : String(e)}`)
+    }
+
     const params = { limit: 250, site: avecSiteParam() }
     const result = await fetchAllAvecReport('0004', params)
     warnIfTruncated(stats, '0004', result)

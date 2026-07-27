@@ -36,6 +36,7 @@ const FUNNEL_STATUS_OPTIONS = ['novo', 'importado', 'em_atendimento', 'agendado'
 
 export default function ContatosPage() {
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
@@ -44,6 +45,11 @@ export default function ContatosPage() {
   const [channelFilter, setChannelFilter] = useState<string>('all')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+
+  useEffect(() => {
+    const status = new URLSearchParams(window.location.search).get('status')
+    if (status && FUNNEL_STATUS_OPTIONS.includes(status)) setStatusFilter(status)
+  }, [])
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300)
@@ -63,6 +69,8 @@ export default function ContatosPage() {
       else {
         setError(null)
         setContacts(json.data ?? [])
+        const total = json.meta?.total
+        setTotalInBase(typeof total === 'number' ? total : null)
       }
     } catch (e) {
       setError(String(e))
@@ -89,6 +97,14 @@ export default function ContatosPage() {
 
   const emptyNovoHint =
     statusFilter === 'novo' && !loading && filtered.length === 0 && !debouncedQuery && !error
+  const emptyImportadoHint =
+    statusFilter === 'importado' && !loading && filtered.length === 0 && !debouncedQuery && !error
+
+  const subtitle = loading
+    ? 'Todos os canais, em um só lugar'
+    : totalInBase != null && totalInBase > contacts.length
+      ? `Mostrando ${filtered.length} de ${totalInBase} ${statusFilter === 'all' ? 'contatos' : (STATUS_LABEL[statusFilter] ?? statusFilter).toLowerCase()}`
+      : `${filtered.length} de ${contacts.length} ${contacts.length === 1 ? 'contato' : 'contatos'}`
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -96,11 +112,7 @@ export default function ContatosPage() {
         <div>
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold lg:hidden">Contatos</p>
           <h1 className="mt-1 text-xl font-semibold lg:mt-0 lg:text-2xl">Clientes & leads</h1>
-        <p className="mt-0.5 text-xs text-muted">
-          {loading
-            ? 'Todos os canais, em um só lugar'
-            : `${filtered.length} de ${contacts.length} ${contacts.length === 1 ? 'contato' : 'contatos'}`}
-        </p>
+        <p className="mt-0.5 text-xs text-muted">{subtitle}</p>
         </div>
         <div className="shrink-0 lg:w-72">
           <PrimaryButton onClick={() => setFormOpen(true)}>
@@ -194,7 +206,7 @@ export default function ContatosPage() {
             </div>
           ))}
 
-        {!loading && contacts.length === 0 && !error && !debouncedQuery && (
+        {!loading && contacts.length === 0 && !error && !debouncedQuery && !emptyNovoHint && !emptyImportadoHint && (
           <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato ainda. Toque em “Novo contato”.</p>
         )}
 
@@ -212,7 +224,22 @@ export default function ContatosPage() {
           </p>
         )}
 
-        {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && (
+        {!loading && emptyImportadoHint && (
+          <p className="px-4 py-12 text-center text-sm text-muted">
+            Nenhum contato Importado agora — rode o sync Avec (0004) ou confira se já foram
+            promovidos para Agendado/Convertido. Leads WhatsApp ficam em{' '}
+            <button
+              type="button"
+              className="text-gold underline-offset-2 hover:underline"
+              onClick={() => setStatusFilter('novo')}
+            >
+              Novo lead
+            </button>
+            .
+          </p>
+        )}
+
+        {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && !emptyImportadoHint && (
           <div className="space-y-2 px-4 py-12 text-center text-sm text-muted">
             <p>Nenhum contato encontrado com esses filtros.</p>
             {pendingOnly && statusFilter !== 'all' && (
