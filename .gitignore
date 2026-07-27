@@ -40,6 +40,10 @@ NOTES.md
 # vercel
 .vercel
 
+# connection strings injetadas no deploy (nunca no git)
+/secrets/
+/.secrets/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -1,4 +1,6 @@
 import 'server-only'
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import postgres, { type Sql as PostgresSql } from 'postgres'
 
 try {
@@ -15,6 +17,10 @@ try {
  * Preferir Transaction Pooler (6543) na Vercel:
  * postgresql://postgres.<ref>:<senha>@aws-0-<region>.pooler.supabase.com:6543/postgres
  * (senha URL-encoded: @ → %40)
+ *
+ * Overlay de deploy: `secrets/database-url.txt` (gitignore) tem prioridade sobre
+ * DATABASE_URL — usado no trade Neon→Supabase quando a API de env da Vercel
+ * não está disponível neste agente.
  */
 export type Sql = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,9 +47,33 @@ function wrap(sql: PostgresSql): Sql {
   return tagged
 }
 
+function readDeployOverlayUrl(): string | null {
+  const candidates = [
+    join(process.cwd(), 'secrets', 'database-url.txt'),
+    join(process.cwd(), '.secrets', 'database-url.txt'),
+  ]
+  for (const path of candidates) {
+    try {
+      if (!existsSync(path)) continue
+      const url = readFileSync(path, 'utf8').trim()
+      if (url.startsWith('postgres')) return url
+    } catch {
+      // ignore
+    }
+  }
+  return null
+}
+
+function resolveDatabaseUrl(): string {
+  const overlay = readDeployOverlayUrl()
+  if (overlay) return overlay
+  const fromEnv = process.env.DATABASE_URL?.trim()
+  if (fromEnv) return fromEnv
+  throw new Error('DATABASE_URL não configurada')
+}
+
 export function getSql(): Sql {
-  const url = process.env.DATABASE_URL?.trim()
-  if (!url) throw new Error('DATABASE_URL não configurada')
+  const url = resolveDatabaseUrl()
 
   if (!cached || cachedUrl !== url) {
     cached?.end({ timeout: 1 }).catch(() => {})
