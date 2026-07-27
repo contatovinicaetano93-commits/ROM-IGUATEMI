@@ -5,6 +5,7 @@ import {
   normalizeP3ReturnRateRow,
 } from '@/lib/avec/normalize'
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
+import { toSalonDateIso } from '@/lib/salon/format'
 import { matchDirectorProfessional } from './match-pro'
 import {
   aggregateQuarterRevenue,
@@ -70,7 +71,9 @@ function toReactivationClient(c: {
   lastVisit: string | null
 }): ReactivationClient {
   const last =
-    c.lastVisit ?? new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10)
+    c.lastVisit ??
+    toSalonDateIso(new Date(Date.now() - 60 * 86400000)) ??
+    new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10)
   const days = daysSince(last)
   return {
     name: c.name,

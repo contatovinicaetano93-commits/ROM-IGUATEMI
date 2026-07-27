@@ -1,4 +1,5 @@
 import daniFixture from './fixtures/0011-dani-mariniello.json'
+import { toSalonDateIso } from '@/lib/salon/format'
 import { aggregateQuarterRevenue } from './period'
 import type {
   DirectorProfessional,
@@ -139,7 +140,10 @@ function buildDaniReactivation(): ReactivationClient[] {
     gender: string | null
     last_visit: string | null
   }[]).map((c) => {
-    const last = c.last_visit ?? new Date(today - 60 * 86400000).toISOString().slice(0, 10)
+    const last =
+      c.last_visit ??
+      toSalonDateIso(new Date(today - 60 * 86400000)) ??
+      new Date(today - 60 * 86400000).toISOString().slice(0, 10)
     const days = daysSince(last)
     return {
       name: c.name,
@@ -181,7 +185,7 @@ function buildSyntheticReactivation(pro: DirectorProfessional): ReactivationClie
       phone: null,
       mobile: `119${String(80000000 + (hash(pro.id + String(i)) % 9999999)).padStart(8, '0')}`,
       gender: 'NAO ESPECIFICADO',
-      last_visit: d.toISOString().slice(0, 10),
+      last_visit: toSalonDateIso(d) ?? d.toISOString().slice(0, 10),
       days_since: days,
       suggested_action:
         days > 90
