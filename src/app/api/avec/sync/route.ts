@@ -26,7 +26,8 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
   return cronFallback
 }
 
-const FAST_MIN_GAP_MS = 25 * 60_000
+/** Alinhado ao cron: fast 1h, full ~6h entre janelas (07/13/19 BRT). */
+const FAST_MIN_GAP_MS = 50 * 60_000
 const FULL_MIN_GAP_MS = 5 * 60 * 60_000
 
 async function executeSync(
@@ -165,11 +166,22 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '*/30 * * * *', mode: 'fast', path: '/api/avec/sync' },
-        full: { schedule: '0 */6 * * *', mode: 'full', path: '/api/avec/sync?mode=full' },
-        purge: { schedule: '10 4 * * *', path: '/api/avec/purge-snapshots' },
+        fast: { schedule: '0 * * * *', mode: 'fast', path: '/api/avec/sync' },
+        full: {
+          schedule: '0 10,16,22 * * *',
+          mode: 'full',
+          path: '/api/avec/sync?mode=full',
+          note: '07:00 / 13:00 / 19:00 America/Sao_Paulo',
+        },
+        estoque_fast: { schedule: '20 */2 * * *', path: '/api/estoque/sync' },
+        estoque_full: { schedule: '40 11,23 * * *', path: '/api/estoque/sync?mode=full' },
+        purge: {
+          schedule: '10 7 * * *',
+          path: '/api/avec/purge-snapshots',
+          note: '04:10 America/Sao_Paulo',
+        },
         cadence:
-          'fast a cada 30 min + full a cada 6h + purge diário — tempo real via webhook Avec',
+          'fast 1h + full 3×/dia (07/13/19 BRT) + estoque 2h/2×dia + purge diário — tempo real via webhook Avec',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),
