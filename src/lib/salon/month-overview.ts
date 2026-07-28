@@ -216,24 +216,11 @@ export async function computeMonthOverview(opts?: {
 
     if (cached && Number(cached.revenue) > 0) {
       const current = stubFinanceFromRow(cached)
+      // Sem métricas do mês anterior materializadas, calcula o compare real
+      // (nunca stubar zeros — MoM ficaria artificialmente inflado).
       const previous = cachedPrev
         ? stubFinanceFromRow(cachedPrev)
-        : {
-            ...stubFinanceFromRow({
-              ...cached,
-              month: prevMonth,
-              revenue: 0,
-              attended: 0,
-              cancelled: 0,
-              no_shows: 0,
-              expenses: 0,
-              cmv: 0,
-              cash_flow: 0,
-              ticket_avg: null,
-            }),
-            label: labelMonthPt(prevMonth),
-            month: prevMonth,
-          }
+        : (await computeFinanceKpis({ month: prevMonth })).current
 
       return buildOverview({
         brand,

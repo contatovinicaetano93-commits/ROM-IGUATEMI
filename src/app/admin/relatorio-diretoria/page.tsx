@@ -167,6 +167,20 @@ export default function RelatorioDiretoriaPage() {
               ? { ...prev, return_blocks: [] }
               : null,
           )
+        } else if (stage === '0021') {
+          setData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  revenue_blocks: [],
+                  summary: {
+                    ...prev.summary,
+                    total_revenue_selected_month: 0,
+                    avg_ticket_selected_month: 0,
+                  },
+                }
+              : null,
+          )
         }
         return
       }

@@ -29,11 +29,14 @@ export default function RelatoriosOverviewPage() {
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState<'csv' | 'pdf' | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { materialize?: boolean }) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch(`/api/relatorios/overview?month=${month}`, {
+      const q = new URLSearchParams({ month })
+      // Leitura rápida por padrão; "Atualizar fechamento" rematerializa o mês.
+      if (opts?.materialize) q.set('materialize', '1')
+      const res = await apiFetch(`/api/relatorios/overview?${q}`, {
         cache: 'no-store',
         timeoutMs: 25_000,
       })
@@ -98,7 +101,7 @@ export default function RelatoriosOverviewPage() {
           </label>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void load({ materialize: true })}
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm text-muted hover:bg-card disabled:opacity-50"
           >

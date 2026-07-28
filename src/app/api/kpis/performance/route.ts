@@ -44,6 +44,16 @@ export async function GET(req: NextRequest) {
       }
 
       const refMonth = reference.day.slice(0, 7)
+      // Snapshot "near" pode ser de mês anterior — não rotular como o mês pedido.
+      if (month && /^\d{4}-\d{2}$/.test(month) && refMonth !== month) {
+        return {
+          reference_day: null as string | null,
+          compare_day: null as string | null,
+          professionals: [] as ProfessionalWithDelta[],
+          month,
+        }
+      }
+
       const [y, m] = refMonth.split('-').map(Number)
       const prevMonthDate = new Date(Date.UTC(y!, m! - 2, 1))
       const prevMonth = prevMonthDate.toISOString().slice(0, 7)
