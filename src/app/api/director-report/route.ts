@@ -157,7 +157,7 @@ export async function GET(req: NextRequest) {
       floorOnly: true,
       reactivationLimit:
         format === 'json' && slim ? (professionalId ? 80 : 8) : null,
-      maxPages0011: slim ? 24 : undefined,
+      maxPages0011: slim ? 12 : undefined,
     })
 
     if (format === 'json') {

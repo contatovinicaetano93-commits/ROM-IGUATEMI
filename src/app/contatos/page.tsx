@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Plus, X, Phone, Search, ChevronRight, AlertTriangle, Clock, Calendar } from 'lucide-react'
@@ -110,6 +110,40 @@ function ContatosPageContent() {
 
   // Status e canal já vêm filtrados no servidor.
   const filtered = contacts
+
+  /** Layout didático: leads → reativar → em fluxo (só na visão geral). */
+  const showLanes =
+    !loading &&
+    !error &&
+    !debouncedQuery &&
+    statusFilter === 'all' &&
+    channelFilter === 'all' &&
+    filtered.length > 0
+
+  const lanes = useMemo(() => {
+    const novos: Contact[] = []
+    const reativar: Contact[] = []
+    const fluxo: Contact[] = []
+    const seen = new Set<string>()
+    for (const c of filtered) {
+      if (c.status === 'novo') {
+        novos.push(c)
+        seen.add(c.id)
+      }
+    }
+    for (const c of filtered) {
+      if (seen.has(c.id)) continue
+      if (c.max_overdue_days > 0 || c.overdue > 0 || c.due_soon > 0) {
+        reativar.push(c)
+        seen.add(c.id)
+      }
+    }
+    for (const c of filtered) {
+      if (seen.has(c.id)) continue
+      fluxo.push(c)
+    }
+    return { novos, reativar, fluxo }
+  }, [filtered])
 
   const emptyNovoHint =
     statusFilter === 'novo' && !loading && contacts.length === 0 && !debouncedQuery && !error
@@ -228,9 +262,9 @@ function ContatosPageContent() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        {loading &&
-          Array.from({ length: 5 }).map((_, i) => (
+      {loading && (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
+          {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3 border-b border-border px-4 py-3.5 last:border-0">
               <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-border" />
               <div className="flex-1 space-y-2">
@@ -239,12 +273,17 @@ function ContatosPageContent() {
               </div>
             </div>
           ))}
+        </div>
+      )}
 
-        {!loading && contacts.length === 0 && !error && !debouncedQuery && !emptyNovoHint && !emptyImportadoHint && (
+      {!loading && contacts.length === 0 && !error && !debouncedQuery && !emptyNovoHint && !emptyImportadoHint && (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato ainda. Toque em “Novo contato”.</p>
-        )}
+        </div>
+      )}
 
-        {!loading && emptyNovoHint && (
+      {!loading && emptyNovoHint && (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <p className="px-4 py-12 text-center text-sm text-muted">
             Nenhum lead novo no momento — a base Avec aparece em{' '}
             <button
@@ -256,9 +295,11 @@ function ContatosPageContent() {
             </button>
             .
           </p>
-        )}
+        </div>
+      )}
 
-        {!loading && emptyImportadoHint && (
+      {!loading && emptyImportadoHint && (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <p className="px-4 py-12 text-center text-sm text-muted">
             Nenhum contato Importado agora — rode o sync Avec (0004) ou confira se já foram
             promovidos para Agendado/Convertido. Leads WhatsApp ficam em{' '}
@@ -271,9 +312,11 @@ function ContatosPageContent() {
             </button>
             .
           </p>
-        )}
+        </div>
+      )}
 
-        {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && !emptyImportadoHint && (
+      {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && !emptyImportadoHint && (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <div className="space-y-2 px-4 py-12 text-center text-sm text-muted">
             <p>Nenhum contato encontrado com esses filtros.</p>
             {pendingOnly && statusFilter !== 'all' && (
@@ -291,75 +334,50 @@ function ContatosPageContent() {
               </p>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-        {!loading && contacts.length === 0 && debouncedQuery && !error && (
+      {!loading && contacts.length === 0 && debouncedQuery && !error && (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato encontrado.</p>
-        )}
+        </div>
+      )}
 
-        {!loading &&
-          filtered.map((c) => (
-            <Link
-              key={c.id}
-              href={`/contatos/${c.id}`}
-              className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-0 active:bg-surface"
-            >
-              <Avatar name={c.name || c.phone || '?'} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{c.name || c.phone || 'Sem nome'}</p>
-                <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
-                  <span>{CHANNEL_LABEL[c.channel] ?? c.channel}</span>
-                  <span aria-hidden>·</span>
-                  <span>{timeAgo(c.created_at)}</span>
-                  {c.top_action && (
-                    <>
-                      <span aria-hidden>·</span>
-                      <span className="truncate text-gold">{c.top_action}</span>
-                    </>
-                  )}
-                  {c.phone && (
-                    <>
-                      <span aria-hidden>·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <Phone size={11} />
-                        {c.phone}
-                      </span>
-                    </>
-                  )}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                {(c.max_overdue_days > 0 || c.due_soon > 0 || c.scheduled_soon > 0) && (
-                  <div className="flex items-center gap-1">
-                    {c.max_overdue_days > 0 && (
-                      <span
-                        title={`${c.max_overdue_days} dia(s) sem retorno · ${c.overdue} serviço(s) atrasado(s)`}
-                        className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger"
-                      >
-                        <AlertTriangle size={10} />
-                        {c.max_overdue_days}
-                      </span>
-                    )}
-                    {c.due_soon > 0 && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning">
-                        <Clock size={10} />
-                        {c.due_soon}
-                      </span>
-                    )}
-                    {c.scheduled_soon > 0 && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-sky-300">
-                        <Calendar size={10} />
-                        {c.scheduled_soon}
-                      </span>
-                    )}
-                  </div>
-                )}
-                <StatusPill status={c.status} />
-              </div>
-              <ChevronRight size={16} className="shrink-0 text-muted" />
-            </Link>
+      {showLanes && (
+        <div className="flex flex-col gap-5">
+          <p className="text-[0.7rem] leading-relaxed text-muted">
+            Fluxo do dia: <span className="text-foreground/80">novos leads</span> →{' '}
+            <span className="text-foreground/80">reativar</span> →{' '}
+            <span className="text-foreground/80">em fluxo / convertidos</span>.
+          </p>
+          <ContactLane
+            title="1 · Novos leads"
+            hint="WhatsApp e cadastro manual — primeiro contato"
+            items={lanes.novos}
+            empty="Nenhum lead novo nesta lista."
+          />
+          <ContactLane
+            title="2 · Reativar"
+            hint="Retorno atrasado ou vencendo nos próximos dias"
+            items={lanes.reativar}
+            empty="Ninguém para reativar agora."
+          />
+          <ContactLane
+            title="3 · Em fluxo / convertidos"
+            hint="Agendados, em atendimento e já convertidos"
+            items={lanes.fluxo}
+            empty="Nenhum contato em fluxo nesta lista."
+          />
+        </div>
+      )}
+
+      {!loading && !showLanes && filtered.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
+          {filtered.map((c) => (
+            <ContactRow key={c.id} contact={c} />
           ))}
-      </div>
+        </div>
+      )}
 
       {formOpen && <NewContactSheet onClose={() => setFormOpen(false)} onCreated={load} />}
     </main>
@@ -379,6 +397,98 @@ export default function ContatosPage() {
     >
       <ContatosPageContent />
     </Suspense>
+  )
+}
+
+function ContactRow({ contact: c }: { contact: Contact }) {
+  return (
+    <Link
+      href={`/contatos/${c.id}`}
+      className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-0 active:bg-surface"
+    >
+      <Avatar name={c.name || c.phone || '?'} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{c.name || c.phone || 'Sem nome'}</p>
+        <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
+          <span>{CHANNEL_LABEL[c.channel] ?? c.channel}</span>
+          <span aria-hidden>·</span>
+          <span>{timeAgo(c.created_at)}</span>
+          {c.top_action && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="truncate text-gold">{c.top_action}</span>
+            </>
+          )}
+          {c.phone && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1">
+                <Phone size={11} />
+                {c.phone}
+              </span>
+            </>
+          )}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {(c.max_overdue_days > 0 || c.due_soon > 0 || c.scheduled_soon > 0) && (
+          <div className="flex items-center gap-1">
+            {c.max_overdue_days > 0 && (
+              <span
+                title={`${c.max_overdue_days} dia(s) sem retorno · ${c.overdue} serviço(s) atrasado(s)`}
+                className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger"
+              >
+                <AlertTriangle size={10} />
+                {c.max_overdue_days}
+              </span>
+            )}
+            {c.due_soon > 0 && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning">
+                <Clock size={10} />
+                {c.due_soon}
+              </span>
+            )}
+            {c.scheduled_soon > 0 && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-sky-300">
+                <Calendar size={10} />
+                {c.scheduled_soon}
+              </span>
+            )}
+          </div>
+        )}
+        <StatusPill status={c.status} />
+      </div>
+      <ChevronRight size={16} className="shrink-0 text-muted" />
+    </Link>
+  )
+}
+
+function ContactLane({
+  title,
+  hint,
+  items,
+  empty,
+}: {
+  title: string
+  hint: string
+  items: Contact[]
+  empty: string
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-end justify-between gap-3 border-b border-border px-4 py-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+          <p className="mt-0.5 text-[0.7rem] text-muted">{hint}</p>
+        </div>
+        <span className="shrink-0 text-xs tabular-nums text-muted">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="px-4 py-8 text-center text-sm text-muted">{empty}</p>
+      ) : (
+        items.map((c) => <ContactRow key={c.id} contact={c} />)
+      )}
+    </section>
   )
 }
 

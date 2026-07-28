@@ -1,4 +1,8 @@
-/** Detecta bloqueio de cota Neon (transferência / tamanho) — sync deve skipar, não 500. */
+/**
+ * Detecta bloqueio de cota / pagamento no Postgres gerenciado
+ * (legado Neon 402; também cobre mensagens genéricas de quota).
+ * BR e IG usam Supabase; só o Cérebro usa Neon.
+ */
 
 export function isNeonQuotaError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e)
@@ -21,7 +25,7 @@ export function isNeonQuotaError(e: unknown): boolean {
 export function neonQuotaUserMessage(e?: unknown): string {
   const msg = e instanceof Error ? e.message : e ? String(e) : ''
   if (msg.toLowerCase().includes('project size limit') || msg.toLowerCase().includes('could not extend file')) {
-    return 'Neon sem espaço (limite de tamanho). Purgue snapshots em /admin ou faça upgrade do plano.'
+    return 'Postgres sem espaço (limite de tamanho no projeto). Purgue dados antigos em /admin ou faça upgrade do plano Supabase.'
   }
-  return 'Neon sem cota de transferência (HTTP 402). Pare crons agressivos, purge snapshots ou faça upgrade.'
+  return 'Postgres sem cota de transferência (HTTP 402). Confira o DATABASE_URL (deve ser Supabase pooler nesta unidade), pause crons agressivos ou faça upgrade.'
 }
