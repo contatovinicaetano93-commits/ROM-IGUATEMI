@@ -32,6 +32,7 @@ import {
   loadStockProductNameIndex,
   resolveStaleStockAlerts,
   applyStockMovementsBatch,
+  seedLocalStockAlertsFromCatalog,
   enrichMovementWithPurchaseOrigin,
 } from '@/lib/stock'
 
@@ -41,6 +42,7 @@ export interface StockSyncStats {
   positions_synced: number
   alerts_active: number
   alerts_resolved: number
+  alerts_seeded_local: number
   movements_synced: number
   movements_skipped_duplicate: number
   purchases_enriched: number
@@ -179,8 +181,35 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
     if (active > 0 || result.rows.length === 0) {
       stats.alerts_resolved = await resolveStaleStockAlerts(seenAvecProductIds)
     }
+
+    // 0046 vazio/timeout recorrente no IG: materializa alertas do catálogo 0149
+    // (current_qty <= minimum_qty) para Cérebro/ROM Estoque não ficarem cegos.
+    if (active === 0) {
+      const seeded = await seedLocalStockAlertsFromCatalog()
+      stats.alerts_seeded_local = seeded
+      if (seeded > 0) {
+        stats.alerts_active = seeded
+        stats.warnings.push(
+          `0046 vazio — ${seeded} alertas locais a partir do catálogo (qty ≤ mínimo)`,
+        )
+      }
+    }
   } catch (e) {
     stats.errors.push(`0046 (alertas): ${e instanceof Error ? e.message : String(e)}`)
+    try {
+      const seeded = await seedLocalStockAlertsFromCatalog()
+      stats.alerts_seeded_local = seeded
+      if (seeded > 0) {
+        stats.alerts_active = seeded
+        stats.warnings.push(
+          `0046 falhou — ${seeded} alertas locais a partir do catálogo (qty ≤ mínimo)`,
+        )
+      }
+    } catch (seedErr) {
+      stats.warnings.push(
+        `seed alertas locais: ${seedErr instanceof Error ? seedErr.message : String(seedErr)}`,
+      )
+    }
   }
 }
 
@@ -267,6 +296,7 @@ function emptyStats(): StockSyncStats {
     positions_synced: 0,
     alerts_active: 0,
     alerts_resolved: 0,
+    alerts_seeded_local: 0,
     movements_synced: 0,
     movements_skipped_duplicate: 0,
     purchases_enriched: 0,
@@ -294,7 +324,8 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
   const run = await beginRun(kind, stats)
 
   try {
-    // Alertas (0046) primeiro — Cérebro lê stock_alerts; 0149 N+1 não pode matar o ciclo antes.
+    // Alertas (0046) + seed local antes de 0149 — Cérebro lê stock_alerts;
+    // posição é pesada e não pode matar o ciclo antes.
     await syncAlerts(stats, run.id)
     await syncPositions(stats, run.id)
 
@@ -308,8 +339,9 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
 
     const hadAnyData =
       stats.positions_synced > 0 ||
+      stats.movements_synced > 0 ||
       stats.alerts_active > 0 ||
-      stats.movements_synced > 0
+      stats.alerts_seeded_local > 0
     const status: StockSyncRun['status'] =
       stats.errors.length > 0 && !hadAnyData
         ? 'error'

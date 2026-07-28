@@ -357,6 +357,41 @@ export async function loadStockProductNameIndex(): Promise<Map<string, string>> 
 }
 
 /**
+ * Quando 0046 (Avec) vem vazio/timeout mas o catálogo 0149 já tem
+ * current_qty <= minimum_qty, materializa alertas locais para a fila/Cérebro
+ * não ficarem com "alertas ausentes" enquanto o sync Avec falha.
+ */
+export async function seedLocalStockAlertsFromCatalog(limit = 2000): Promise<number> {
+  const sql = getSql()
+  const low = (await sql`
+    select
+      id,
+      current_qty::float as current_qty,
+      minimum_qty::float as minimum_qty
+    from stock_products
+    where minimum_qty is not null
+      and current_qty <= minimum_qty
+      and not exists (
+        select 1 from stock_alerts sa
+        where sa.product_id = stock_products.id and sa.status = 'ativo'
+      )
+    order by (minimum_qty - current_qty) desc
+    limit ${limit}
+  `) as { id: string; current_qty: number; minimum_qty: number }[]
+
+  let inserted = 0
+  for (const p of low) {
+    const suggested = Math.max(0, Math.ceil(Number(p.minimum_qty) - Number(p.current_qty)))
+    await sql`
+      insert into stock_alerts (product_id, current_qty, minimum_qty, suggested_reposition)
+      values (${p.id}, ${p.current_qty}, ${p.minimum_qty}, ${suggested})
+    `
+    inserted++
+  }
+  return inserted
+}
+
+/**
  * Resolve (reconhece automaticamente) alertas ativos cujo produto não apareceu
  * mais no relatório 0046 do ciclo atual — significa que voltou a ficar acima
  * do mínimo. Evita alerta "fantasma" ficar ativo pra sempre.
