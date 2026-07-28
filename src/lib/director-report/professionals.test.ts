@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { listDirectorProfessionals } from './professionals'
+import { listDirectorProfessionals, DIRECTOR_FLOOR_ROLES } from './professionals'
 
 const ORIGINAL_PANEL = process.env.ROM_PANEL
 
@@ -23,6 +23,14 @@ describe('listDirectorProfessionals — roster por unidade', () => {
     expect(pros.length).toBeGreaterThan(200)
     expect(pros.every((p) => p.active)).toBe(true)
     expect(pros.some((p) => p.name.includes('Beto Fortes'))).toBe(true)
+  })
+
+  it('floorOnly roles reduz o roster Iguatemi aos profissionais de piso', () => {
+    process.env.ROM_PANEL = 'iguatemi'
+    const floor = listDirectorProfessionals(true, { roles: DIRECTOR_FLOOR_ROLES })
+    expect(floor.length).toBeGreaterThan(40)
+    expect(floor.length).toBeLessThan(120)
+    expect(floor.every((p) => DIRECTOR_FLOOR_ROLES.includes(p.role))).toBe(true)
   })
 
   it('cada painel devolve só o próprio roster (ids não se misturam)', () => {

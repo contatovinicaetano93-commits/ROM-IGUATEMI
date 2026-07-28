@@ -136,6 +136,13 @@ export async function GET(req: NextRequest) {
     }
 
     const compareMonthsParam = searchParams.get('compare_months')
+    const stageParam = searchParams.get('stage')
+    const stages =
+      stageParam === '0011' || stageParam === '0021' || stageParam === 'all'
+        ? stageParam
+        : 'all'
+    const slim = searchParams.get('slim') === '1'
+    const professionalId = searchParams.get('professional_id') ?? undefined
     const report = await buildDirectorReport({
       selectedMonth: asMonth(searchParams.get('month')),
       selectedQuarter0021: asQuarter(searchParams.get('quarter_0021')),
@@ -143,8 +150,14 @@ export async function GET(req: NextRequest) {
       compareMonths: compareMonthsParam === null ? false : compareMonthsParam !== '0',
       selectedQuarter: asQuarter(searchParams.get('quarter')),
       compareQuarter: asQuarter(searchParams.get('compare')),
-      professionalId: searchParams.get('professional_id') ?? undefined,
+      professionalId,
       forceMock: searchParams.get('mock') === '1',
+      stages,
+      // CSV/e-mail: roster piso + lista completa. UI slim: corta reativação.
+      floorOnly: true,
+      reactivationLimit:
+        format === 'json' && slim ? (professionalId ? 80 : 8) : null,
+      maxPages0011: slim ? 24 : undefined,
     })
 
     if (format === 'json') {

@@ -1,5 +1,5 @@
 import { isAvecConfigured, isAvecMock } from '@/lib/avec/client'
-import { fetchLiveDirectorBlocks } from './avec-live'
+import { fetchLiveDirectorBlocks, type LiveDirectorStage } from './avec-live'
 import {
   buildMockReturnBlocks,
   buildMockRevenueBlocks,
@@ -16,7 +16,7 @@ import {
   reportPeriodLabel,
   reportReferenceDate,
 } from './period'
-import { listDirectorProfessionals } from './professionals'
+import { DIRECTOR_FLOOR_ROLES, listDirectorProfessionals } from './professionals'
 import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
 export interface BuildDirectorReportOptions {
@@ -31,6 +31,20 @@ export interface BuildDirectorReportOptions {
   compareQuarter?: QuarterKey
   professionalId?: string
   forceMock?: boolean
+  /** Qual etapa buscar na Avec (UI carrega 0011/0021 separado). */
+  stages?: LiveDirectorStage
+  /**
+   * true (default na UI): só hairstylist/makeup — evita roster de 200+ staff.
+   * false: roster ativo completo (envio/cron).
+   */
+  floorOnly?: boolean
+  /** Cap de páginas Avec 0011 (default 40 na live). */
+  maxPages0011?: number
+  /**
+   * Limita clientes de reativação por profissional na resposta JSON (UI).
+   * null/undefined = sem corte (CSV/e-mail).
+   */
+  reactivationLimit?: number | null
 }
 
 function comparisonMonthSet(
@@ -55,16 +69,29 @@ export async function buildDirectorReport(
     : null
   const selectedQuarter = opts.selectedQuarter ?? defaultSelectedQuarter()
   const compareQuarter = opts.compareQuarter ?? defaultCompareQuarter()
+  const stages: LiveDirectorStage = opts.stages ?? 'all'
+  const want0011 = stages === '0011' || stages === 'all'
+  const want0021 = stages === '0021' || stages === 'all'
+  const floorOnly = opts.floorOnly !== false
 
-  let professionals = listDirectorProfessionals(true)
+  let professionals = listDirectorProfessionals(
+    true,
+    floorOnly ? { roles: DIRECTOR_FLOOR_ROLES } : undefined,
+  )
   if (opts.professionalId) {
-    professionals = professionals.filter((p) => p.id === opts.professionalId)
+    // Busca no roster completo se o filtro floor esconder o id pedido.
+    const all = listDirectorProfessionals(true)
+    professionals = all.filter((p) => p.id === opts.professionalId)
   }
 
   const avecReady = isAvecConfigured() && !isAvecMock() && !opts.forceMock
   let source: 'mock' | 'avec' | 'partial' = 'mock'
-  let return_blocks = buildMockReturnBlocks(professionals, selectedQuarter, compareQuarter)
-  let revenue_blocks = buildMockRevenueBlocks(professionals, selectedMonth)
+  let return_blocks = want0011
+    ? buildMockReturnBlocks(professionals, selectedQuarter, compareQuarter)
+    : []
+  let revenue_blocks = want0021
+    ? buildMockRevenueBlocks(professionals, selectedMonth)
+    : []
   let liveNote: string | null = null
 
   if (avecReady) {
@@ -76,31 +103,38 @@ export async function buildDirectorReport(
         compareQuarter0021,
         selectedQuarter,
         compareQuarter,
+        { stages, maxPages0011: opts.maxPages0011 },
       )
       // Cada etapa cai pro mock de forma independente — uma falhar não deve
       // jogar fora o dado real da outra que funcionou.
-      if (live.return_blocks) {
+      if (want0011 && live.return_blocks) {
         return_blocks = live.return_blocks
       }
-      if (live.revenue_blocks) {
+      if (want0021 && live.revenue_blocks) {
         revenue_blocks = live.revenue_blocks
       }
-      if (live.return_blocks && live.revenue_blocks) {
+      if (want0011 && want0021) {
+        if (live.return_blocks && live.revenue_blocks) {
+          source = 'avec'
+        } else if (live.return_blocks || live.revenue_blocks) {
+          source = 'partial'
+          const missing = [
+            !live.return_blocks ? '0011' : null,
+            !live.revenue_blocks ? '0021' : null,
+          ]
+            .filter(Boolean)
+            .join('+')
+          liveNote = [
+            liveNote,
+            `Etapa ${missing} em demo — outra etapa Avec live.`,
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        }
+      } else if (want0011 && live.return_blocks) {
         source = 'avec'
-      } else if (live.return_blocks || live.revenue_blocks) {
-        source = 'partial'
-        const missing = [
-          !live.return_blocks ? '0011' : null,
-          !live.revenue_blocks ? '0021' : null,
-        ]
-          .filter(Boolean)
-          .join('+')
-        liveNote = [
-          liveNote,
-          `Etapa ${missing} em demo — outra etapa Avec live.`,
-        ]
-          .filter(Boolean)
-          .join(' · ')
+      } else if (want0021 && live.revenue_blocks) {
+        source = 'avec'
       }
       if (live.warnings.length) {
         liveNote = [liveNote, live.warnings.slice(0, 3).join(' · ')].filter(Boolean).join(' · ')
@@ -109,6 +143,19 @@ export async function buildDirectorReport(
       liveNote = `Avec live falhou — usando fixture: ${e instanceof Error ? e.message : String(e)}`
       console.warn('[director-report]', liveNote)
     }
+  }
+
+  const reactivationLimit = opts.reactivationLimit
+  if (
+    want0011 &&
+    reactivationLimit != null &&
+    Number.isFinite(reactivationLimit) &&
+    reactivationLimit >= 0
+  ) {
+    return_blocks = return_blocks.map((b) => ({
+      ...b,
+      reactivation: b.reactivation.slice(0, reactivationLimit),
+    }))
   }
 
   if (compareMonths && compareQuarter0021) {

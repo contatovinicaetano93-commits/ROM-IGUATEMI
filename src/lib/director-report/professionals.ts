@@ -8,7 +8,18 @@ const ROSTERS: Record<string, DirectorProfessional[]> = {
   iguatemi: IGUATEMI_DIRECTOR_PROFESSIONALS,
 }
 
-export function listDirectorProfessionals(activeOnly = true): DirectorProfessional[] {
+/** Profissionais de piso (atendimento) — exclui marketing/contábil/almoxarifado etc. */
+export const DIRECTOR_FLOOR_ROLES: DirectorProfessional['role'][] = ['hairstylist', 'makeup']
+
+export function listDirectorProfessionals(
+  activeOnly = true,
+  opts?: { roles?: DirectorProfessional['role'][] },
+): DirectorProfessional[] {
   const roster = ROSTERS[getRomPanelId()] ?? []
-  return roster.filter((p) => (activeOnly ? p.active : true))
+  const roles = opts?.roles
+  return roster.filter((p) => {
+    if (activeOnly && !p.active) return false
+    if (roles && roles.length > 0 && !roles.includes(p.role)) return false
+    return true
+  })
 }

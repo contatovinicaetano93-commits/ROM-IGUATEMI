@@ -136,12 +136,16 @@ export default function RelatorioDiretoriaPage() {
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState<string | null>(null)
 
-  /** Carrega base completa — filtros de profissional são só na UI/envio de cada etapa. */
+  /** Carrega só a etapa da aba ativa — 0011 não espera 0021 (causa do timeout). */
   const load = useCallback(async () => {
+    if (tab === 'estoque') return
+    const stage = tab === '0021' ? '0021' : '0011'
     setLoading(true)
     setError(null)
     try {
       const q = new URLSearchParams({
+        stage,
+        slim: '1',
         month,
         quarter_0021: quarter0021,
         compare_0021: compareQuarter0021,
@@ -152,26 +156,76 @@ export default function RelatorioDiretoriaPage() {
       if (forceDemo) q.set('mock', '1')
       const res = await apiFetch(`/api/director-report?${q}`, {
         cache: 'no-store',
-        timeoutMs: 45_000,
+        timeoutMs: 120_000,
       })
       const json = await res.json()
       if (!res.ok || json.error) {
         setError(json.error ?? 'Não autorizado — entre com o login de gerência')
-        setData(null)
+        if (stage === '0011') {
+          setData((prev) =>
+            prev
+              ? { ...prev, return_blocks: [] }
+              : null,
+          )
+        }
         return
       }
-      setData(json.data)
+      const next = json.data as DirectorReport
+      setData((prev) => {
+        if (!prev) return next
+        return {
+          ...next,
+          return_blocks: stage === '0011' ? next.return_blocks : prev.return_blocks,
+          revenue_blocks: stage === '0021' ? next.revenue_blocks : prev.revenue_blocks,
+          summary: {
+            ...prev.summary,
+            ...next.summary,
+            avg_return_rate:
+              stage === '0011' ? next.summary.avg_return_rate : prev.summary.avg_return_rate,
+            total_revenue_selected_month:
+              stage === '0021'
+                ? next.summary.total_revenue_selected_month
+                : prev.summary.total_revenue_selected_month,
+            avg_ticket_selected_month:
+              stage === '0021'
+                ? next.summary.avg_ticket_selected_month
+                : prev.summary.avg_ticket_selected_month,
+          },
+          period: {
+            ...prev.period,
+            ...next.period,
+            label_0011: stage === '0011' ? next.period.label_0011 : prev.period.label_0011,
+            label_0021: stage === '0021' ? next.period.label_0021 : prev.period.label_0021,
+          },
+          source:
+            prev.source === 'avec' && next.source === 'avec'
+              ? 'avec'
+              : prev.source === 'mock' && next.source === 'mock'
+                ? 'mock'
+                : 'partial',
+          schedule_note: next.schedule_note || prev.schedule_note,
+        }
+      })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(
         msg === 'Timeout' || (e instanceof DOMException && e.name === 'AbortError')
-          ? 'Relatório demorou demais (Avec). Tente de novo ou use DEMO se a API estiver lenta.'
+          ? 'Relatório demorou demais (Avec). Tente de novo ou marque “Forçar demo”.'
           : msg,
       )
     } finally {
       setLoading(false)
     }
-  }, [month, quarter0021, compareQuarter0021, compareMonths, quarter, compare, forceDemo])
+  }, [
+    tab,
+    month,
+    quarter0021,
+    compareQuarter0021,
+    compareMonths,
+    quarter,
+    compare,
+    forceDemo,
+  ])
 
   useEffect(() => {
     load()
