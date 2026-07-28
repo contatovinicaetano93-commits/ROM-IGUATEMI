@@ -26,7 +26,6 @@ try {
 export type Sql = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (strings: TemplateStringsArray, ...values: any[]): Promise<any[]>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   begin: <T>(fn: (sql: Sql) => Promise<T>) => Promise<T>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   unsafe: (query: string, params?: any[]) => Promise<any[]>
@@ -94,10 +93,34 @@ export function peekDatabaseHost(): string | null {
   }
 }
 
-function resolveDatabaseUrl(): string {
-  const url = peekResolvedDatabaseUrl()
-  if (url) return url
-  throw new Error('DATABASE_URL não configurada')
+/**
+ * Session pooler (5432) no Supabase tem poucas slots (EMAXCONNSESSION).
+ * Em serverless (Vercel), transaction mode (6543) libera a conexão a cada query.
+ */
+export function resolveDatabaseUrl(raw?: string): string {
+  const url = raw ?? peekResolvedDatabaseUrl()
+  if (!url) throw new Error('DATABASE_URL não configurada')
+  const trimmed = url.trim()
+  try {
+    const u = new URL(trimmed)
+    const isSupabasePooler =
+      u.hostname.includes('pooler.supabase.com') || u.hostname.includes('.pooler.supabase.')
+    const port = u.port || '5432'
+    if (isSupabasePooler && port === '5432') {
+      u.port = '6543'
+      return u.toString()
+    }
+  } catch {
+    // URL inválida — deixa o postgres.js falhar com a string original.
+  }
+  return trimmed
+}
+
+export function isDbPoolExhaustedError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /EMAXCONNSESSION|max clients reached|remaining connection slots|too many connections/i.test(
+    msg,
+  )
 }
 
 export function getSql(): Sql {
@@ -107,13 +130,14 @@ export function getSql(): Sql {
     cached?.end({ timeout: 1 }).catch(() => {})
     cached = postgres(url, {
       ssl: 'require',
-      // Transaction pooler (6543): 8 conexões permitem Promise.all real nos painéis
-      // sem estourar o pooler (cada isolate serverless tem o próprio pool).
-      max: 8,
+      // 2 conexões por isolate serverless — evita estourar slots do pooler Supabase.
+      // Promise.all de 6 queries paralelas num único isolate com max:8 competia consigo
+      // mesmo e com outros isolates, causando EMAXCONNSESSION em produção.
+      max: 2,
       prepare: false,
-      idle_timeout: 15,
-      max_lifetime: 60 * 5,
-      connect_timeout: 15,
+      idle_timeout: 5,
+      max_lifetime: 60 * 2,
+      connect_timeout: 10,
     })
     cachedUrl = url
   }

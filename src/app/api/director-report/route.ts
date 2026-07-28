@@ -206,7 +206,9 @@ export async function GET(req: NextRequest) {
               `mock=${forceMock ? 1 : 0}`,
             ].join(':'),
             () => buildForUi(buildOpts),
-            forceMock ? 60 : 180,
+            // Demo mock não deve ficar em cache: UI_DEADLINE já é um estado degradado;
+            // manter por 180s haria o próximo usuário ver demo mesmo após Avec recuperar.
+            forceMock ? 0 : 180,
           )
         : await buildDirectorReport({ ...buildOpts, interactive: false })
 

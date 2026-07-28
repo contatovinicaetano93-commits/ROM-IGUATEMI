@@ -104,7 +104,15 @@ export default function HojePage() {
         if (json.error) setError(json.error)
         else setData(json.data)
       })
-      .catch((e) => setError(String(e)))
+      .catch((e: unknown) => {
+        const isAbort =
+          e instanceof DOMException && e.name === 'AbortError'
+        setError(
+          isAbort
+            ? 'Tempo de resposta esgotado (25s). Toque Atualizar para tentar novamente.'
+            : String(e),
+        )
+      })
       .finally(() => setLoading(false))
   }, [])
 

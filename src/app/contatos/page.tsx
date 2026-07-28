@@ -84,8 +84,14 @@ function ContatosPageContent() {
         const total = json.meta?.total
         setTotalInBase(typeof total === 'number' ? total : null)
       }
-    } catch (e) {
-      setError(String(e))
+    } catch (e: unknown) {
+      const isAbort =
+        e instanceof DOMException && e.name === 'AbortError'
+      setError(
+        isAbort
+          ? 'Tempo de resposta esgotado (20s). Toque Atualizar para tentar novamente.'
+          : String(e),
+      )
     } finally {
       setLoading(false)
     }
