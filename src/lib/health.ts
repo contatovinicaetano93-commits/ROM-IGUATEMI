@@ -64,7 +64,7 @@ export async function getHealthStatus() {
 
   const brand = getBrand()
   const deployment = getDeploymentContext()
-  const validation = validateDeploymentEnv()
+  const validation = validateDeploymentEnv(peekResolvedDatabaseUrl())
 
   let lastFast: Awaited<ReturnType<typeof getLastAvecSync>> = null
   let lastFull: Awaited<ReturnType<typeof getLastAvecSync>> = null

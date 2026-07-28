@@ -55,7 +55,6 @@ export async function listActionItems(): Promise<ActionItem[]> {
         )
       )
     order by cs.contact_id
-    limit 2500
   `) as (JoinedService & { contact_phone: string | null })[]
 
   const byContact = new Map<string, (JoinedService & { contact_phone: string | null })[]>()

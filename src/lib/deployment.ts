@@ -1,4 +1,5 @@
 import { getBrand, getRomPanelId, type RomPanelId } from '@/lib/brand'
+import { DEPLOY_DATABASE_URL } from '@/lib/db-url.generated'
 
 export interface DeploymentContext {
   panel: RomPanelId
@@ -49,8 +50,11 @@ function deploymentHostHint(): string {
   ).toLowerCase()
 }
 
-/** Detecta configuração perigosa antes de misturar Brasil e Iguatemi. */
-export function validateDeploymentEnv(): DeploymentValidation {
+/**
+ * Detecta configuração perigosa antes de misturar Brasil e Iguatemi.
+ * @param resolvedDatabaseUrl URL efetiva do servidor (bake/overlay/env via db.ts) — evita falso negativo no health.
+ */
+export function validateDeploymentEnv(resolvedDatabaseUrl?: string | null): DeploymentValidation {
   const warnings: string[] = []
   const serverPanel = readServerPanel()
   const publicPanel = readPublicPanel()
@@ -63,8 +67,14 @@ export function validateDeploymentEnv(): DeploymentValidation {
     )
   }
 
-  // Só env — não importar db.ts aqui (admin client bundle). Overlay secrets/ fica no servidor.
-  const dbUrl = process.env.DATABASE_URL?.trim().toLowerCase() ?? ''
+  // Não importar db.ts (admin client bundle). Preferir URL resolvida no servidor; senão bake + env.
+  const baked = typeof DEPLOY_DATABASE_URL === 'string' ? DEPLOY_DATABASE_URL.trim() : ''
+  const dbUrl = (
+    resolvedDatabaseUrl?.trim() ||
+    (baked.startsWith('postgres') ? baked : '') ||
+    process.env.DATABASE_URL?.trim() ||
+    ''
+  ).toLowerCase()
   if (!dbUrl) {
     warnings.push(
       'DATABASE_URL ausente — use um Postgres dedicado por unidade (Supabase pooler; nunca compartilhe entre Brasil e Iguatemi).'

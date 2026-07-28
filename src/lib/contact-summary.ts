@@ -78,7 +78,6 @@ async function loadActiveServices(contactIds?: string[]): Promise<Map<string, Cl
             last_done_at, last_price, scheduled_at, active, notes, created_at
           from client_services
           where active = true
-          limit 5000
         `
   ) as ClientService[]
   return mapServices(rows)
@@ -178,7 +177,29 @@ export async function listContactsWithSummary(
     const byContact = await loadActiveServices(contacts.map((c) => c.id))
     const withU = withUrgency(contacts, byContact)
     if (!pendingOnly) return { items: withU, total }
-    return { items: withU.filter((c) => c.pending_actions > 0), total }
+    const items = withU.filter((c) => c.pending_actions > 0)
+    // Página incompleta: todos os matches cabem — total = pendentes desta página.
+    if (contacts.length < limit) return { items, total: items.length }
+    // Conta pendentes em todos os matches (não só na página SQL).
+    const allMatch = (await sql`
+      select id from contacts
+      where anonymized_at is null
+        and (${status}::text is null or status = ${status})
+        and (${channel}::text is null or channel = ${channel})
+        and (
+          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
+          or (
+            ${phonePattern}::text is not null
+            and regexp_replace(coalesce(phone, ''), '\\D', '', 'g') like ${phonePattern}
+          )
+        )
+    `) as { id: string }[]
+    const allServices = await loadActiveServices(allMatch.map((r) => r.id))
+    const pendingTotal = allMatch.filter((r) => {
+      const u = urgencyForServices(allServices.get(r.id) ?? [])
+      return u.pending_actions > 0
+    }).length
+    return { items, total: pendingTotal }
   }
 
   // Filtro de status do funil: página por created_at (não ranqueia 40k importados).
