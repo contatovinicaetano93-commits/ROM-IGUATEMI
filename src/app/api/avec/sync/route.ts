@@ -26,12 +26,12 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
   return cronFallback
 }
 
-/** Alinhado ao cron: fast 1h, full ~6h entre janelas (07/13/19 BRT). */
-const FAST_MIN_GAP_MS = 50 * 60_000
-const FULL_MIN_GAP_MS = 5 * 60 * 60_000
-/** Webhook: tempo real, mas evita rajada de full+purge no Neon. */
-const WEBHOOK_FAST_MIN_GAP_MS = 30_000
-const WEBHOOK_FULL_MIN_GAP_MS = 60_000
+/** Alinhado ao cron leve: fast 2h, full 2×/dia (09/19 BRT). */
+const FAST_MIN_GAP_MS = 100 * 60_000
+const FULL_MIN_GAP_MS = 9 * 60 * 60_000
+/** Webhook: tempo real, mas evita rajada de full+purge. */
+const WEBHOOK_FAST_MIN_GAP_MS = 60_000
+const WEBHOOK_FULL_MIN_GAP_MS = 5 * 60_000
 
 async function executeSync(
   req: NextRequest,
@@ -88,7 +88,7 @@ async function executeSync(
     // Purge só em admin force ou cron full — nunca em cada webhook (queimaria Neon).
     if ((opts?.force || (opts?.cron && mode === 'full')) && !opts?.bypassMinGap) {
       try {
-        await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 3 })
+        await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
       } catch (purgeErr) {
         if (isNeonQuotaError(purgeErr)) {
           if (opts?.cron) {
@@ -176,22 +176,22 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '0 * * * *', mode: 'fast', path: '/api/avec/sync' },
+        fast: { schedule: '15 */2 * * *', mode: 'fast', path: '/api/avec/sync' },
         full: {
-          schedule: '0 10,16,22 * * *',
+          schedule: '0 12,22 * * *',
           mode: 'full',
           path: '/api/avec/sync?mode=full',
-          note: '07:00 / 13:00 / 19:00 America/Sao_Paulo',
+          note: '09:00 / 19:00 America/Sao_Paulo — catálogo 0004 só 1×/dia',
         },
-        estoque_fast: { schedule: '20 */2 * * *', path: '/api/estoque/sync' },
-        estoque_full: { schedule: '40 11,23 * * *', path: '/api/estoque/sync?mode=full' },
+        estoque_fast: { schedule: '45 */4 * * *', path: '/api/estoque/sync' },
+        estoque_full: { schedule: '50 23 * * *', path: '/api/estoque/sync?mode=full' },
         purge: {
           schedule: '10 7 * * *',
           path: '/api/avec/purge-snapshots',
           note: '04:10 America/Sao_Paulo',
         },
         cadence:
-          'fast 1h + full 3×/dia (07/13/19 BRT) + estoque 2h/2×dia + purge diário — tempo real via webhook Avec',
+          'fast 2h + full 2×/dia (09/19 BRT) + estoque 4h/1×dia + purge diário — tempo real via webhook Avec',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),

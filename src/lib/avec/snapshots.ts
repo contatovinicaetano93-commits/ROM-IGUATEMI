@@ -79,7 +79,7 @@ export async function purgeAvecStorageBloat(opts?: {
 }): Promise<PurgeSnapshotsResult> {
   const sql = getSql()
   const keepSnapshotDays = Math.max(0, opts?.keepSnapshotDays ?? 0)
-  const keepSyncRunDays = Math.max(1, opts?.keepSyncRunDays ?? 3)
+  const keepSyncRunDays = Math.max(1, opts?.keepSyncRunDays ?? 2)
 
   // 1) DELETE primeiro — libera linhas sem reescrever jsonb gigante.
   let snapshotsDeleted = 0

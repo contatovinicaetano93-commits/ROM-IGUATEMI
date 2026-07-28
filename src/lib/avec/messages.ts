@@ -82,7 +82,11 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   // TM 0223 catálogo / ignorado de propósito — não marca sync partial.
   if (/TM 0223:/i.test(warning)) return true
   // Truncamento com skip de métricas (não zerar) — informativo.
-  if (/truncado — métricas/i.test(warning)) return true
+  if (/truncado/i.test(warning)) return true
+  // Catálogo 0004 adiado de propósito (ritmo leve).
+  if (/Catálogo 0004 adiado/i.test(warning)) return true
+  // P3 sem taxa explícita — informativo.
+  if (/sem retorno|retorno local indisponível/i.test(warning)) return true
   return false
 }
 

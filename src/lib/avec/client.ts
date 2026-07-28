@@ -374,8 +374,8 @@ export interface AvecReportFetchResult {
 }
 
 export const AVEC_PAGE_LIMIT = 250
-/** Padrão: 200 páginas × 250 linhas = até 50.000 registros por relatório. */
-export const AVEC_SYNC_MAX_PAGES_DEFAULT = 200
+/** Padrão leve: 80 páginas × 250 = até 20.000 regs — evita estourar tempo/DB no full. */
+export const AVEC_SYNC_MAX_PAGES_DEFAULT = 80
 
 export function getAvecSyncMaxPages() {
   const raw = process.env.AVEC_SYNC_MAX_PAGES?.trim()

@@ -144,6 +144,62 @@ export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null
   return rows[0] ?? null
 }
 
+/** Fecha runs `partial` órfãos (timeout Vercel / lock expirado) — evita gap falso. */
+export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<number> {
+  const sql = getSql()
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString()
+  const rows = (await sql`
+    update avec_sync_runs
+    set
+      status = case
+        when coalesce((stats->>'clients_upserted')::int, 0)
+          + coalesce((stats->>'appointments_synced')::int, 0)
+          + coalesce((stats->>'attendances_synced')::int, 0)
+          + coalesce((stats->>'revenue_rows')::int, 0) > 0
+        then 'ok'
+        else 'error'
+      end,
+      error = case
+        when coalesce((stats->>'clients_upserted')::int, 0)
+          + coalesce((stats->>'appointments_synced')::int, 0)
+          + coalesce((stats->>'attendances_synced')::int, 0)
+          + coalesce((stats->>'revenue_rows')::int, 0) > 0
+        then null
+        else coalesce(error, 'abandoned_partial_timeout')
+      end
+    where status = 'partial'
+      and created_at < ${cutoff}::timestamptz
+    returning id
+  `) as { id: string }[]
+  return rows.length
+}
+
+/** Catálogo 0004 é pesado (~50k upserts) — no máximo 1×/dia no cron. */
+const CLIENT_DUMP_MIN_GAP_MS = 20 * 60 * 60_000
+
+async function shouldSyncClientCatalog(): Promise<boolean> {
+  if (process.env.AVEC_SYNC_CLIENTS === '1' || process.env.AVEC_SYNC_CLIENTS === 'true') {
+    return true
+  }
+  if (process.env.AVEC_SYNC_CLIENTS === '0' || process.env.AVEC_SYNC_CLIENTS === 'false') {
+    return false
+  }
+  const sql = getSql()
+  const rows = (await sql`
+    select created_at, stats
+    from avec_sync_runs
+    where kind = 'full'
+      and status in ('ok', 'partial')
+      and coalesce((stats->>'clients_upserted')::int, 0) > 0
+    order by created_at desc
+    limit 1
+  `) as { created_at: string; stats: AvecSyncStats | string }[]
+  const last = rows[0]
+  if (!last?.created_at) return true
+  const age = Date.now() - new Date(last.created_at).getTime()
+  return age >= CLIENT_DUMP_MIN_GAP_MS
+}
+
 async function findOrCreateService(contactId: string, serviceName: string) {
   const services = await listServices(contactId)
   const match = services.find((s) => s.name.toLowerCase() === serviceName.toLowerCase())
@@ -893,6 +949,12 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     )
   }
 
+  try {
+    await abandonStaleAvecSyncRuns()
+  } catch {
+    // best-effort — não bloqueia o sync
+  }
+
   const run = await beginAvecSyncRun(mode, stats)
   const syncRunId = run.id
   step(`begin ${run.id}`)
@@ -900,11 +962,19 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   try {
     await healImportadoStatus(stats)
     step('healed')
-    // Fast: agenda/caixa do dia. Full: + catálogo + P1/P2/P3.
+    // Fast: agenda/caixa do dia. Full: + catálogo (1×/dia) + P1/P2/P3.
     if (mode === 'full') {
-      step('clients…')
-      await syncClients(stats, syncRunId)
-      step(`clients done upserted=${stats.clients_upserted}`)
+      const dumpClients = await shouldSyncClientCatalog()
+      if (dumpClients) {
+        step('clients…')
+        await syncClients(stats, syncRunId)
+        step(`clients done upserted=${stats.clients_upserted}`)
+      } else {
+        stats.warnings.push(
+          'Catálogo 0004 adiado — já sincronizado nas últimas 20h (DB leve; force com AVEC_SYNC_CLIENTS=1)',
+        )
+        step('clients skipped (recent dump)')
+      }
     }
     if (mode === 'fast') {
       // KPI do dia primeiro (0088 + 0052 + 0248); depois agenda → atendidos em sequência

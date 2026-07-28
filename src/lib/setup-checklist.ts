@@ -86,7 +86,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Pedir token ao suporte Avec (relatórios 0004, 0051, 0002) — um token por unidade',
       'Vercel → AVEC_API_TOKEN = token recebido (sem Bearer)',
-      'Opcional: AVEC_SYNC_MAX_PAGES (padrão 200 páginas ≈ 50 mil clientes)',
+      'Opcional: AVEC_SYNC_MAX_PAGES (padrão 80 páginas ≈ 20 mil linhas/relatório)',
       'Remova AVEC_MOCK da Vercel (se existir)',
       'Redeploy → Admin → Testar conexão → Rodar sync full',
       'Cérebro (Waltter) passa a mostrar receita/atendidos assim que o sync popular o Neon',
