@@ -200,7 +200,7 @@ export async function syncMovementsDateRange(
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
     if (syncRunId) await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
-    const normalized = []
+    const normalized: NormalizedStockMovement[] = []
     for (const row of result.rows) {
       const mv = normalizeStockMovementRow(row)
       if (mv) normalized.push(mv)
