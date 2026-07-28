@@ -51,6 +51,8 @@ describe('period-analytics', () => {
     sqlMock
       .mockResolvedValueOnce([{ revenue: 10000, attended: 50 }])
       .mockResolvedValueOnce([{ cancelled: 2, no_shows: 3 }])
+      .mockResolvedValueOnce([{ revenue: 8000, attended: 40 }])
+      .mockResolvedValueOnce([{ cancelled: 1, no_shows: 1 }])
     getSalonP1DailyNear.mockResolvedValue({
       day: '2026-07-31',
       professionals: [
@@ -84,11 +86,16 @@ describe('period-analytics', () => {
     const result = await computePeriodAnalytics({ month: '2026-07' })
 
     expect(result.label).toBe('Jul/2026')
+    expect(result.revenue).toBe(10000)
+    expect(result.attended).toBe(50)
     expect(result.occupancy_avg).toBe(0.7)
     expect(result.lost_revenue).toBe(1000)
     expect(result.packages_revenue).toBe(800)
     expect(result.booking_channels[0]?.channel).toBe('WhatsApp')
     expect(result.new_clients_period).toBe(18)
     expect(result.return_rate).toBe(0.42)
+    expect(result.previous.month).toBe('2026-06')
+    expect(result.previous.revenue).toBe(8000)
+    expect(result.previous.attended).toBe(40)
   })
 })

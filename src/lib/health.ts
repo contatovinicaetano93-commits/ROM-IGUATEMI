@@ -46,9 +46,49 @@ async function probeKpiLayers() {
   }
 }
 
+/** Contagem YTD de métricas diárias — prova que o acumulado/comparativo tem base. */
+async function probeDailyMetricsYtd() {
+  try {
+    const sql = getSql()
+    const year = new Date().getUTCFullYear()
+    const from = `${year}-01-01`
+    const rows = (await sql`
+      select
+        count(*)::int as days,
+        min(day)::text as from_day,
+        max(day)::text as to_day,
+        coalesce(sum(revenue), 0)::float as revenue,
+        coalesce(sum(attended), 0)::int as attended
+      from salon_daily_metrics
+      where day >= ${from}::date
+    `) as {
+      days: number
+      from_day: string | null
+      to_day: string | null
+      revenue: number
+      attended: number
+    }[]
+    const r = rows[0]
+    return {
+      year,
+      days: Number(r?.days ?? 0) || 0,
+      from: r?.from_day ?? null,
+      to: r?.to_day ?? null,
+      revenue: Math.round(Number(r?.revenue ?? 0) * 100) / 100,
+      attended: Number(r?.attended ?? 0) || 0,
+    }
+  } catch (e) {
+    logger.warn('Failed to probe daily metrics YTD', {
+      error: e instanceof Error ? e.message : String(e),
+    })
+    return { year: new Date().getUTCFullYear(), days: 0, from: null, to: null, revenue: 0, attended: 0 }
+  }
+}
+
 /** Resposta mínima — segura para monitoramento externo sem login. */
 export async function getPublicHealthStatus() {
   const { connected, neon_quota } = await probeDatabase()
+  const metrics_ytd = connected ? await probeDailyMetricsYtd() : null
   return {
     ok: connected,
     neon_quota,
@@ -56,6 +96,7 @@ export async function getPublicHealthStatus() {
       host: peekDatabaseHost(),
       source: peekDatabaseUrlSource(),
     },
+    metrics_ytd,
   }
 }
 

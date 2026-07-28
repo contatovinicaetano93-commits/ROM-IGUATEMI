@@ -11,7 +11,6 @@ import {
   Clock,
   Trophy,
   Percent,
-  Package,
   AlertTriangle,
   Download,
   FileText,
@@ -202,8 +201,8 @@ export default function DashboardPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
           <p className="mt-1 text-xs text-muted">
-            Funil CRM real (sem dump Avec) + mês acumulado local + snapshots Avec ~30 dias. Operação do
-            dia em Hoje · dinheiro em Financeiro · fechamento em Relatórios.
+            Acumulado ROM do mês (receita/cancel desde jan.) + snapshots Avec ~30d. Operação do dia em
+            Hoje · dinheiro/comparativo em Financeiro · fechamento em Relatórios.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -244,6 +243,16 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <MiniStat
+          icon={<TrendingUp size={15} />}
+          label={`Receita · mês acum. · ${period?.label ?? '—'}`}
+          value={loading || !period ? '—' : formatCurrency(period.revenue)}
+        />
+        <MiniStat
+          icon={<Users size={15} />}
+          label="Atendidos · mês acum."
+          value={loading || !period ? '—' : String(period.attended ?? 0)}
+        />
+        <MiniStat
           icon={<Percent size={15} />}
           label={`Ocupação · Avec 30d · ${period?.label ?? '—'}`}
           value={
@@ -260,7 +269,7 @@ export default function DashboardPage() {
           value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
         />
         <MiniStat
-          icon={<Users size={15} />}
+          icon={<AlertTriangle size={15} />}
           label="Cancel. + no-show · mês acum."
           value={
             loading || !period
@@ -269,27 +278,30 @@ export default function DashboardPage() {
           }
         />
         <MiniStat
-          icon={<Package size={15} />}
-          label="Pacotes · Avec 30d"
-          value={loading || !period ? '—' : formatCurrency(period.packages_revenue)}
-        />
-        <MiniStat
           icon={<Sparkles size={15} />}
-          label="Novos · Avec 30d"
-          value={loading || !period ? '—' : String(period.new_clients_period)}
-        />
-        <MiniStat
-          icon={<TrendingUp size={15} />}
-          label="Retorno · Avec 30d"
+          label={
+            period?.previous
+              ? `vs ${period.previous.label}`
+              : 'Comparativo mês ant.'
+          }
           value={
-            loading || !period
+            loading || !period?.previous
               ? '—'
-              : period.return_rate != null
-                ? formatPercentPoints(period.return_rate * 100, 0)
+              : period.revenue != null && period.previous.revenue != null
+                ? formatCurrency(period.revenue - period.previous.revenue)
                 : '—'
           }
         />
       </div>
+
+      {period?.previous && !loading && (
+        <p className="text-xs text-muted">
+          Comparativo MTD: {period.label} {formatCurrency(period.revenue)} ·{' '}
+          {period.attended} atend. vs {period.previous.label}{' '}
+          {formatCurrency(period.previous.revenue)} · {period.previous.attended} atend. Pacotes/
+          retorno/canais vêm do snapshot Avec ~30d (não do acumulado diário).
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
         <div className="flex flex-col gap-6 lg:col-span-8 lg:gap-8">

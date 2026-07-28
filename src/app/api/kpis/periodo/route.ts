@@ -18,12 +18,18 @@ export async function GET(req: NextRequest) {
     if (!auth.session.can_view_revenue) {
       return ok({
         ...data,
+        revenue: null,
         ticket_avg: null,
         lost_revenue: null,
         packages_revenue: null,
         packages: data.packages.map((p) => ({ ...p, revenue: null })),
         top_professionals: data.top_professionals.map((p) => ({ ...p, revenue: null })),
         top_services: data.top_services.map((s) => ({ ...s, revenue: null })),
+        previous: {
+          ...data.previous,
+          revenue: null,
+          ticket_avg: null,
+        },
         can_view_revenue: false,
       })
     }

@@ -40,6 +40,27 @@ function labelMonthPt(monthKey: string): string {
   return `${MONTH_PT[idx] ?? m}/${y}`
 }
 
+function previousMonthKey(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number)
+  const d = new Date(Date.UTC(y!, m! - 1, 1))
+  d.setUTCMonth(d.getUTCMonth() - 1)
+  return d.toISOString().slice(0, 7)
+}
+
+/** Espelha o recorte MTD do mês atual no mês comparado (ex.: Jul 1–27 → Jun 1–27). */
+function compareMonthToDateRange(
+  currentMonth: string,
+  compareMonth: string,
+  referenceDay = todayIso(),
+): { from: string; to: string } {
+  const range = monthRange(compareMonth)
+  if (currentMonth !== currentMonthKey(referenceDay)) return range
+  const dayNum = Number(referenceDay.slice(8, 10))
+  const last = Number(range.to.slice(8, 10))
+  const capped = Math.min(dayNum, last)
+  return { from: range.from, to: `${compareMonth}-${String(capped).padStart(2, '0')}` }
+}
+
 /**
  * Coerce ocupação para fração (≥0), sem clipar overbooking.
  * Snapshot já vem de parsePct (0.8 / 1.063); só corrige legado em pontos (ex.: 67.79).
@@ -128,6 +149,16 @@ async function sumAttendanceLoss(
   }
 }
 
+export interface PeriodCompareBucket {
+  month: string
+  label: string
+  revenue: number
+  attended: number
+  cancelled: number
+  no_shows: number
+  ticket_avg: number | null
+}
+
 export interface PeriodAnalytics {
   month: string
   label: string
@@ -135,6 +166,9 @@ export interface PeriodAnalytics {
   to: string
   /** Snapshot P1 day used for rankings / occupancy / acquisition. */
   snapshot_day: string | null
+  /** Soma de salon_daily_metrics no mês (acumulado ROM / Avec 0088). */
+  revenue: number
+  attended: number
   occupancy_avg: number | null
   cancelled: number
   no_shows: number
@@ -149,6 +183,8 @@ export interface PeriodAnalytics {
   new_clients_period: number
   top_professionals: P1ProfessionalRow[]
   top_services: P1ServiceRow[]
+  /** Mês anterior (mesmo recorte MTD quando aplicável) — comparativo na Visão. */
+  previous: PeriodCompareBucket
 }
 
 /**
@@ -160,15 +196,23 @@ export async function computePeriodAnalytics(opts?: {
 }): Promise<PeriodAnalytics> {
   const month = opts?.month ?? currentMonthKey(todayIso())
   const { from, to } = monthToDateRange(month)
-  const [totals, loss, p1, p2, p3] = await Promise.all([
+  const prevMonth = previousMonthKey(month)
+  const prevRange = compareMonthToDateRange(month, prevMonth)
+  const [totals, loss, prevTotals, prevLoss, p1, p2, p3] = await Promise.all([
     sumRevenueAndAttended(from, to),
     sumAttendanceLoss(from, to),
+    sumRevenueAndAttended(prevRange.from, prevRange.to),
+    sumAttendanceLoss(prevRange.from, prevRange.to),
     getSalonP1DailyNear(to),
     getSalonP2DailyNear(to),
     getSalonP3DailyNear(to),
   ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
+  const prev_ticket_avg =
+    prevTotals.attended > 0
+      ? Math.round((prevTotals.revenue / prevTotals.attended) * 100) / 100
+      : null
   const professionals = p1?.professionals ?? []
   const allPackages = p2?.packages ?? []
   const packages_revenue =
@@ -180,6 +224,8 @@ export async function computePeriodAnalytics(opts?: {
     from,
     to,
     snapshot_day: p1?.day ?? p2?.day ?? p3?.day ?? null,
+    revenue: totals.revenue,
+    attended: totals.attended,
     occupancy_avg: averageOccupancy(professionals),
     cancelled: loss.cancelled,
     no_shows: loss.no_shows,
@@ -194,5 +240,14 @@ export async function computePeriodAnalytics(opts?: {
     new_clients_period: Number(p3?.new_clients_period ?? 0) || 0,
     top_professionals: professionals.slice(0, 8),
     top_services: (p1?.services ?? []).slice(0, 8),
+    previous: {
+      month: prevMonth,
+      label: labelMonthPt(prevMonth),
+      revenue: prevTotals.revenue,
+      attended: prevTotals.attended,
+      cancelled: prevLoss.cancelled,
+      no_shows: prevLoss.no_shows,
+      ticket_avg: prev_ticket_avg,
+    },
   }
 }
