@@ -8,6 +8,8 @@ import { compareByOverdueThenName } from '@/lib/salon/urgency'
 import { requireAuth } from '@/lib/auth'
 import { z } from 'zod'
 
+export const maxDuration = 25
+
 const serviceSchema = z.object({
   name: z.string().min(1),
   category: z.enum(SERVICE_CATEGORIES),

@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { getSql } from '@/lib/db'
-import { getSalonMetrics, recomputeSalonMetricsFromRom } from '@/lib/salon/metrics'
+import { getSalonMetrics } from '@/lib/salon/metrics'
 import { computeSalonIntelligence } from '@/lib/salon/intelligence'
 import { listActionItems } from '@/lib/salon/recommendations'
 import {
@@ -17,12 +17,13 @@ import { todayIso } from '@/lib/salon/format'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 import { getReactivationKpis } from '@/lib/salon/reactivation-kpi'
 
+/** Painel Hoje — curto; métricas vêm do sync, não de recompute no GET. */
+export const maxDuration = 30
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
-
-    await recomputeSalonMetricsFromRom().catch(() => {})
 
     const day = todayIso()
     const sql = getSql()
@@ -30,26 +31,23 @@ export async function GET(req: NextRequest) {
     const [salonRaw, playbookAll, scheduleRaw, leadRows, avecLast, reactivation] = await Promise.all([
       getSalonMetrics(day),
       listActionItems(),
-      // Só o dia (SP) — alinhado ao Pipeline; próximos dias ficam em /agenda.
-      listTodaySchedules(day, 400),
+      listTodaySchedules(day, 200),
+      // Range em timestamptz (usa índice) em vez de cast ::date na coluna inteira.
       sql`
         select
-          -- Entrada do dia (não some quando WhatsApp promove novo → em_atendimento).
           count(*) filter (
             where status <> 'importado'
               and coalesce(source, '') not like 'avec_sync_clients%'
               and coalesce(source, '') not like 'avec_backfill%'
               and coalesce(source, '') not like 'avec_lake%'
-              and anonymized_at is null
-              and (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
           )::int as novos,
           count(*) filter (
-            where channel = 'whatsapp'
-              and status = 'novo'
-              and anonymized_at is null
-              and (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+            where channel = 'whatsapp' and status = 'novo'
           )::int as whatsapp_novos
         from contacts
+        where anonymized_at is null
+          and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+          and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       ` as unknown as Promise<{ novos: number; whatsapp_novos: number }[]>,
       getLastAvecSync(),
       getReactivationKpis().catch(() => ({
@@ -64,7 +62,7 @@ export async function GET(req: NextRequest) {
     const playbook = playbookSlice.items
 
     const scheduleToday = [...scheduleRaw].sort(compareScheduleByTimeThenName)
-    const leads = leadRows[0]
+    const leads = leadRows[0] ?? { novos: 0, whatsapp_novos: 0 }
     const salonBase = salonRaw ?? {
       day,
       revenue: 0,
@@ -80,10 +78,10 @@ export async function GET(req: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
-    // TM (Sprint 1) — null enquanto a Avec não mandar início/fim reais do atendimento.
     const tmTodayMinutes =
       salonBase.service_duration_count > 0
-        ? Math.round((salonBase.service_duration_sum_minutes / salonBase.service_duration_count) * 10) / 10
+        ? Math.round((salonBase.service_duration_sum_minutes / salonBase.service_duration_count) * 10) /
+          10
         : null
 
     const salon = auth.session.can_view_revenue
@@ -94,7 +92,6 @@ export async function GET(req: NextRequest) {
           ticket_avg: null,
         }
 
-    // KPI de meta/risco depende de faturamento — mesma regra de visibilidade do staff.
     const intelligence = auth.session.can_view_revenue
       ? computeSalonIntelligence(salonBase)
       : null
@@ -114,7 +111,6 @@ export async function GET(req: NextRequest) {
         novos: leads.novos,
         whatsapp_sem_resposta: leads.whatsapp_novos,
       },
-      // Foco do playbook (até 8 contatos): contatos e serviços atrasados acionáveis hoje.
       overdue_contacts: countOverdueContacts(playbook),
       overdue_total: countOverdueServices(playbook),
       reactivation,

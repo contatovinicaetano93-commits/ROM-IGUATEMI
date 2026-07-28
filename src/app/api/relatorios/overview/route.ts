@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
     }
 
     const format = req.nextUrl.searchParams.get('format')
-    const materialize = req.nextUrl.searchParams.get('materialize') !== '0'
+    // UI: só lê. Materializa no cron/export explícito (?materialize=1).
+    const materialize = req.nextUrl.searchParams.get('materialize') === '1'
     const overview = await computeMonthOverview({ month, materialize })
 
     if (format === 'csv') {

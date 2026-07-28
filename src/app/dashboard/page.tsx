@@ -94,13 +94,9 @@ export default function DashboardPage() {
     async function loadDashboard() {
       try {
         setLoading(true)
-        const kpisRes = await apiFetch('/api/kpis', { cache: 'no-store' })
-        const kpisJson = await kpisRes.json()
-        if (cancelled) return
-        if (kpisJson.error) setError(kpisJson.error)
-        else setData(kpisJson.data)
-
-        const [tmRes, perfRes, periodRes] = await Promise.all([
+        setWarn(null)
+        const [kpisRes, tmRes, perfRes, periodRes] = await Promise.all([
+          apiFetch('/api/kpis', { cache: 'no-store' }),
           apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
           apiFetch('/api/kpis/performance', { cache: 'no-store' }),
           apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store' }),
@@ -110,29 +106,47 @@ export default function DashboardPage() {
         const warnings: string[] = []
 
         try {
-          const tmJson = await tmRes.json()
-          if (tmJson.data) setTm(tmJson.data)
+          const kpisJson = await kpisRes.json()
+          if (kpisJson.error) setError(kpisJson.error)
+          else {
+            setError(null)
+            setData(kpisJson.data)
+          }
         } catch {
-          // opcional
+          setError('Falha ao carregar KPIs do funil')
+        }
+
+        try {
+          const tmJson = await tmRes.json()
+          if (tmJson.error) warnings.push(`Tempo médio: ${tmJson.error}`)
+          else if (tmJson.data) setTm(tmJson.data)
+          else setTm(null)
+        } catch {
+          warnings.push('Tempo médio indisponível')
+          setTm(null)
         }
 
         try {
           const perfJson = await perfRes.json()
-          if (perfJson.data) setPerformance(perfJson.data)
+          if (perfJson.error) warnings.push(`Performance: ${perfJson.error}`)
+          else if (perfJson.data) setPerformance(perfJson.data)
+          else setPerformance(null)
         } catch {
-          // opcional
+          warnings.push('Performance indisponível')
+          setPerformance(null)
         }
 
         try {
           const periodJson = await periodRes.json()
           if (periodJson.error) warnings.push(`Período: ${periodJson.error}`)
           else if (periodJson.data) setPeriod(periodJson.data)
+          else setPeriod(null)
         } catch {
           warnings.push('Analytics de período indisponível')
+          setPeriod(null)
         }
 
         if (warnings.length) setWarn(warnings.join(' · '))
-        else setWarn(null)
       } catch (e) {
         if (!cancelled) setError(String(e))
       } finally {
@@ -353,15 +367,17 @@ export default function DashboardPage() {
           </SectionCard>
 
           <SectionCard title="Tempo Médio de atendimento (TM)" badge={<Clock size={15} className="text-muted" />}>
-            {tm ? (
+            {loading ? (
+              <div className="h-16 animate-pulse rounded-2xl bg-card" />
+            ) : tm ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <TmCompareCol title="Mês" current={tm.month.current} previous={tm.month.previous} />
                 <TmCompareCol title="Trimestre" current={tm.quarter.current} previous={tm.quarter.previous} />
               </div>
             ) : (
-              <div className="h-16 animate-pulse rounded-2xl bg-card" />
+              <p className="text-xs text-muted">TM indisponível neste carregamento.</p>
             )}
-            {tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
+            {!loading && tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
               <p className="mt-4 text-xs text-muted">
                 Sem duração na Avec para esta unidade (início/fim no 0002). Top serviços mostra
                 faturamento — não inventamos TM a partir do catálogo 0223.

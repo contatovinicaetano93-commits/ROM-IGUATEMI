@@ -157,10 +157,13 @@ export interface ListProductsFilter {
   brandId?: string
   locationId?: string
   lowStockOnly?: boolean
+  /** Cap de linhas na UI (default 400). */
+  limit?: number
 }
 
 export async function listProducts(filter: ListProductsFilter = {}): Promise<StockProduct[]> {
   const sql = getSql()
+  const limit = Math.min(Math.max(1, filter.limit ?? 400), 1000)
   const rows = (await sql`
     select
       sp.id, sp.avec_product_id, sp.sku, sp.name,
@@ -181,6 +184,7 @@ export async function listProducts(filter: ListProductsFilter = {}): Promise<Sto
       and (${filter.locationId ?? null}::uuid is null or sp.location_id = ${filter.locationId ?? null}::uuid)
       and (${filter.lowStockOnly ?? false} = false or sp.minimum_qty is not null and sp.current_qty <= sp.minimum_qty)
     order by sp.name asc
+    limit ${limit}
   `) as StockProduct[]
   return rows
 }

@@ -17,11 +17,11 @@ export interface ListContactsWithSummaryOpts {
   limit?: number
   /** Busca server-side por nome (ilike) ou telefone (dígitos). */
   query?: string | null
-  /** Só contatos com pending_actions > 0 (calcula sobre toda a base de serviços). */
+  /** Só contatos com pending_actions > 0. */
   pendingOnly?: boolean
-  /** Filtro de status do funil (ex.: novo, importado) — server-side, não só no top urgente. */
+  /** Filtro de status do funil (ex.: novo, importado). */
   status?: string | null
-  /** Canal (whatsapp/avec/manual/…) — server-side na base inteira. */
+  /** Canal (whatsapp/avec/manual/…). */
   channel?: string | null
 }
 
@@ -50,10 +50,43 @@ function withUrgency(
   })
 }
 
+function mapServices(rows: ClientService[]): Map<string, ClientService[]> {
+  const byContact = new Map<string, ClientService[]>()
+  for (const s of rows) {
+    const list = byContact.get(s.contact_id) ?? []
+    list.push(s)
+    byContact.set(s.contact_id, list)
+  }
+  return byContact
+}
+
+async function loadActiveServices(contactIds?: string[]): Promise<Map<string, ClientService[]>> {
+  const sql = getSql()
+  if (contactIds && contactIds.length === 0) return new Map()
+  const rows = (
+    contactIds
+      ? await sql`
+          select
+            id, contact_id, name, category, product, professional_name, cadence_days,
+            last_done_at, last_price, scheduled_at, active, notes, created_at
+          from client_services
+          where active = true and contact_id = any(${contactIds}::uuid[])
+        `
+      : await sql`
+          select
+            id, contact_id, name, category, product, professional_name, cadence_days,
+            last_done_at, last_price, scheduled_at, active, notes, created_at
+          from client_services
+          where active = true
+          limit 5000
+        `
+  ) as ClientService[]
+  return mapServices(rows)
+}
+
 async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
   if (ids.length === 0) return []
   const sql = getSql()
-  // Neon: `IN ${array}` vira SQL inválido — usar ANY(uuid[]), igual ao restante do arquivo.
   return (await sql`
     select * from contacts
     where id = any(${ids}::uuid[])
@@ -93,8 +126,7 @@ async function orderContactsByUrgency(
 
 /**
  * Lista contatos com resumo de urgência.
- * Com status: funil real (Novo lead / Importado) na base inteira + total.
- * Sem busca: prioriza atraso/pendente; completa com recentes até o limit.
+ * Evita varrer 40k+ IDs: paginação SQL primeiro; serviços só dos candidatos.
  */
 export async function listContactsWithSummary(
   limitOrOpts: number | ListContactsWithSummaryOpts = 500,
@@ -108,23 +140,59 @@ export async function listContactsWithSummary(
   const pendingOnly = opts.pendingOnly === true
   const status = parseStatus(opts.status)
   const channel = parseChannel(opts.channel)
-
   const sql = getSql()
 
-  const services = (await sql`
-    select * from client_services where active = true
-  `) as ClientService[]
-
-  const byContact = new Map<string, ClientService[]>()
-  for (const s of services) {
-    const list = byContact.get(s.contact_id) ?? []
-    list.push(s)
-    byContact.set(s.contact_id, list)
+  // Busca por nome/telefone — SQL limit + serviços só dos hits.
+  if (q || qDigits.length >= 3) {
+    const namePattern = q ? `%${q}%` : null
+    const phonePattern = qDigits.length >= 3 ? `%${qDigits}%` : null
+    const countRows = (await sql`
+      select count(*)::int as n from contacts
+      where anonymized_at is null
+        and (${status}::text is null or status = ${status})
+        and (${channel}::text is null or channel = ${channel})
+        and (
+          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
+          or (
+            ${phonePattern}::text is not null
+            and regexp_replace(coalesce(phone, ''), '\\D', '', 'g') like ${phonePattern}
+          )
+        )
+    `) as { n: number }[]
+    const total = countRows[0]?.n ?? 0
+    const contacts = (await sql`
+      select * from contacts
+      where anonymized_at is null
+        and (${status}::text is null or status = ${status})
+        and (${channel}::text is null or channel = ${channel})
+        and (
+          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
+          or (
+            ${phonePattern}::text is not null
+            and regexp_replace(coalesce(phone, ''), '\\D', '', 'g') like ${phonePattern}
+          )
+        )
+      order by created_at desc
+      limit ${limit}
+    `) as ContactRow[]
+    const byContact = await loadActiveServices(contacts.map((c) => c.id))
+    const withU = withUrgency(contacts, byContact)
+    if (!pendingOnly) return { items: withU, total }
+    return { items: withU.filter((c) => c.pending_actions > 0), total }
   }
 
-  // Status do funil (Novo lead / Importado / …): busca na base, não no top urgente.
-  if (status && !(q || qDigits.length >= 3)) {
+  // Filtro de status do funil: página por created_at (não ranqueia 40k importados).
+  if (status) {
+    const countRows = (await sql`
+      select count(*)::int as n from contacts
+      where status = ${status}
+        and anonymized_at is null
+        and (${channel}::text is null or channel = ${channel})
+    `) as { n: number }[]
+    const total = countRows[0]?.n ?? 0
+
     if (pendingOnly) {
+      const byContact = await loadActiveServices()
       const pendingIds = Array.from(byContact.keys()).filter(
         (id) => urgencyForServices(byContact.get(id) ?? []).pending_actions > 0,
       )
@@ -140,30 +208,23 @@ export async function listContactsWithSummary(
       items.sort(compareByOverdueThenName)
       return { items: items.slice(0, limit), total: items.length }
     }
-    const idRows = (await sql`
-      select id, name from contacts
+
+    const contacts = (await sql`
+      select * from contacts
       where status = ${status}
         and anonymized_at is null
         and (${channel}::text is null or channel = ${channel})
-    `) as { id: string; name: string | null }[]
-    const total = idRows.length
-    const ranked = idRows
-      .map((r) => {
-        const u = urgencyForServices(byContact.get(r.id) ?? [])
-        return { id: r.id, name: r.name, max_overdue_days: u.max_overdue_days }
-      })
-      .sort(compareByOverdueThenName)
-      .slice(0, limit)
-    if (ranked.length === 0) return { items: [], total }
-    const ordered = await orderContactsByUrgency(
-      ranked.map((r) => r.id),
-      byContact,
-    )
-    return { items: withUrgency(ordered, byContact), total }
+      order by created_at desc
+      limit ${limit}
+    `) as ContactRow[]
+    const byContact = await loadActiveServices(contacts.map((c) => c.id))
+    return { items: withUrgency(contacts, byContact), total }
   }
 
-  if (pendingOnly && !(q || qDigits.length >= 3)) {
-    // Pendentes: filtra canal após carregar contatos (urgency vem de serviços).
+  // Default / pending: ranqueia urgência a partir dos serviços ativos (centenas, não dezenas de mil).
+  const byContact = await loadActiveServices()
+
+  if (pendingOnly) {
     const pendingRanked = Array.from(byContact.keys())
       .map((id) => {
         const u = urgencyForServices(byContact.get(id) ?? [])
@@ -189,64 +250,6 @@ export async function listContactsWithSummary(
     }
   }
 
-  if (q || qDigits.length >= 3) {
-    const namePattern = q ? `%${q}%` : null
-    const phonePattern = qDigits.length >= 3 ? `%${qDigits}%` : null
-    const countRows = (await sql`
-      select count(*)::int as n from contacts
-      where anonymized_at is null
-        and (${status}::text is null or status = ${status})
-        and (${channel}::text is null or channel = ${channel})
-        and (
-          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
-          or (
-            ${phonePattern}::text is not null
-            and regexp_replace(coalesce(phone, ''), '\D', '', 'g') like ${phonePattern}
-          )
-        )
-    `) as { n: number }[]
-    const total = countRows[0]?.n ?? 0
-    const contacts = (await sql`
-      select * from contacts
-      where anonymized_at is null
-        and (${status}::text is null or status = ${status})
-        and (${channel}::text is null or channel = ${channel})
-        and (
-          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
-          or (
-            ${phonePattern}::text is not null
-            and regexp_replace(coalesce(phone, ''), '\D', '', 'g') like ${phonePattern}
-          )
-        )
-      order by created_at desc
-      limit ${limit}
-    `) as ContactRow[]
-    const withU = withUrgency(contacts, byContact)
-    if (!pendingOnly) return { items: withU, total }
-    const items = withU.filter((c) => c.pending_actions > 0)
-    // Com pending: total da página ≠ total real. Conta urgência na base filtrada sem limit.
-    if (contacts.length < limit) return { items, total: items.length }
-    const allMatch = (await sql`
-      select id from contacts
-      where anonymized_at is null
-        and (${status}::text is null or status = ${status})
-        and (${channel}::text is null or channel = ${channel})
-        and (
-          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
-          or (
-            ${phonePattern}::text is not null
-            and regexp_replace(coalesce(phone, ''), '\D', '', 'g') like ${phonePattern}
-          )
-        )
-    `) as { id: string }[]
-    const pendingTotal = allMatch.filter((r) => {
-      const u = urgencyForServices(byContact.get(r.id) ?? [])
-      return u.pending_actions > 0
-    }).length
-    return { items, total: pendingTotal }
-  }
-
-  // Contatos com urgência > 0 (atraso / vencendo / agendado) — prioridade.
   const urgentRanked = Array.from(byContact.keys())
     .map((id) => {
       const u = urgencyForServices(byContact.get(id) ?? [])
@@ -288,6 +291,8 @@ export async function listContactsWithSummary(
             order by created_at desc
             limit ${limit - items.length}
           `) as ContactRow[])
+    const recentServices = await loadActiveServices(recent.map((c) => c.id))
+    for (const [id, list] of recentServices) byContact.set(id, list)
     items = [...items, ...withUrgency(recent, byContact)]
   }
 

@@ -287,10 +287,12 @@ export async function listTodaySchedules(
     where cs.active = true
       and c.anonymized_at is null
       and cs.scheduled_at is not null
-      and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+      and cs.scheduled_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+      and cs.scheduled_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       and (
         cs.last_done_at is null
-        or (cs.last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
+        or cs.last_done_at < (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+        or cs.last_done_at >= ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       )
     order by cs.scheduled_at asc
     limit ${limit}
@@ -438,13 +440,15 @@ export async function listTodayPipeline(day: string): Promise<{
       where cs.active = true
         and c.anonymized_at is null
         and cs.scheduled_at is not null
-        and (cs.scheduled_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-        -- Já concluídos no dia saem de Agendados (ficam só em Concluídos).
+        and cs.scheduled_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+        and cs.scheduled_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
         and (
           cs.last_done_at is null
-          or (cs.last_done_at at time zone 'America/Sao_Paulo')::date <> ${day}::date
+          or cs.last_done_at < (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+          or cs.last_done_at >= ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
         )
       order by cs.scheduled_at asc
+      limit 400
     `,
     sql`
       select cs.*, c.name as contact_name
@@ -453,8 +457,10 @@ export async function listTodayPipeline(day: string): Promise<{
       where cs.active = true
         and c.anonymized_at is null
         and cs.last_done_at is not null
-        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
+        and cs.last_done_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+        and cs.last_done_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       order by cs.last_done_at asc
+      limit 400
     `,
   ])
   return {

@@ -4,6 +4,8 @@ import { requireSession } from '@/lib/auth'
 import { listTodayPipeline } from '@/lib/services'
 import { todayIso } from '@/lib/salon/format'
 
+export const maxDuration = 20
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireSession(req)

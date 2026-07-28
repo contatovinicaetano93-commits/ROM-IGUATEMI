@@ -3,6 +3,8 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { computePeriodAnalytics } from '@/lib/salon/period-analytics'
 
+export const maxDuration = 20
+
 /** KPIs comerciais/operacionais do período — Visão analítica (não Financeiro). */
 export async function GET(req: NextRequest) {
   try {

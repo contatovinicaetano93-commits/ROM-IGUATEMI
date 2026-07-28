@@ -27,15 +27,35 @@ export async function getContactRecommendations(contactId: string) {
   return urgencyForServices(services)
 }
 
+/**
+ * Playbook do dia — só candidatos acionáveis (atraso / vencendo / agenda próxima).
+ * Evita varrer a base inteira de serviços quando o painel só mostra ~8 itens.
+ */
 export async function listActionItems(): Promise<ActionItem[]> {
   const sql = getSql()
+  // Candidatos: agenda nos próximos 7d OU recorrência com chance de overdue/due_soon
+  // (cadence conhecida e last_done/created há até cadence+30 dias além do ciclo).
   const rows = (await sql`
     select cs.*, c.name as contact_name, c.status as contact_status, c.phone as contact_phone
     from client_services cs
     join contacts c on c.id = cs.contact_id
     where cs.active = true
       and c.anonymized_at is null
+      and (
+        (
+          cs.scheduled_at is not null
+          and cs.scheduled_at >= now() - interval '1 day'
+          and cs.scheduled_at <= now() + interval '7 days'
+        )
+        or (
+          cs.cadence_days is not null
+          and cs.cadence_days > 0
+          and coalesce(cs.last_done_at, cs.created_at)
+            <= now() - ((greatest(cs.cadence_days, 1) - 7) || ' days')::interval
+        )
+      )
     order by cs.contact_id
+    limit 2500
   `) as (JoinedService & { contact_phone: string | null })[]
 
   const byContact = new Map<string, (JoinedService & { contact_phone: string | null })[]>()
@@ -50,9 +70,9 @@ export async function listActionItems(): Promise<ActionItem[]> {
       const u = urgencyForServices(services)
       return {
         contact_id: contactId,
-        contact_name: services[0].contact_name,
-        contact_status: services[0].contact_status,
-        contact_phone: services[0].contact_phone,
+        contact_name: services[0]?.contact_name ?? null,
+        contact_status: services[0]?.contact_status ?? 'novo',
+        contact_phone: services[0]?.contact_phone ?? null,
         overdue: u.overdue,
         max_overdue_days: u.max_overdue_days,
         due_soon: u.due_soon,
