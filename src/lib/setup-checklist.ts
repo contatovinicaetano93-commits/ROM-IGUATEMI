@@ -18,7 +18,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Use DOIS projetos Vercel (Brasil e Iguatemi) — nunca um banco compartilhado',
       'ROM_PANEL e NEXT_PUBLIC_ROM_PANEL com o MESMO valor (brasil ou iguatemi)',
-      'DATABASE_URL = Neon dedicado só desta unidade',
+      'DATABASE_URL = Postgres dedicado só desta unidade (Supabase pooler :6543)',
       'Redeploy após alterar NEXT_PUBLIC_ROM_PANEL (valor vai no build)',
       'Admin → Diagnóstico: confira deployment.display_name e validation.warnings',
     ],
@@ -45,7 +45,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Gere um segredo: openssl rand -hex 32',
       'Vercel → CRON_SECRET = o valor gerado',
-      'Protege sync cron (fast 1h + full 3×/dia) e disparo manual/webhook',
+      'Protege sync cron (fast 2h + full 2×/dia) e disparo manual/webhook',
       'Tempo real = webhook Avec (AVEC_WEBHOOK_SECRET) — cron é rede de segurança',
       'Redeploy',
     ],

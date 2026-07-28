@@ -1,5 +1,4 @@
 import { getBrand, getRomPanelId, type RomPanelId } from '@/lib/brand'
-import { peekResolvedDatabaseUrl } from '@/lib/db'
 
 export interface DeploymentContext {
   panel: RomPanelId
@@ -64,10 +63,11 @@ export function validateDeploymentEnv(): DeploymentValidation {
     )
   }
 
-  const dbUrl = peekResolvedDatabaseUrl()?.toLowerCase() ?? ''
+  // Só env — não importar db.ts aqui (admin client bundle). Overlay secrets/ fica no servidor.
+  const dbUrl = process.env.DATABASE_URL?.trim().toLowerCase() ?? ''
   if (!dbUrl) {
     warnings.push(
-      'DATABASE_URL ausente — use um Postgres dedicado por unidade (Supabase/Neon; nunca compartilhe entre Brasil e Iguatemi).'
+      'DATABASE_URL ausente — use um Postgres dedicado por unidade (Supabase pooler; nunca compartilhe entre Brasil e Iguatemi).'
     )
   }
 
