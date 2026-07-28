@@ -64,9 +64,17 @@ export function getDefaultSeedPreset(): RomSeedPreset {
   return parseSeedPreset(process.env.ROM_SEED_PRESET) ?? getRomPanelId()
 }
 
+/** IDs conhecidos por painel — fallback se AVEC_UNIT_ID faltar no deploy (0011 exige salao_id). */
+const KNOWN_AVEC_UNIT_IDS: Record<RomPanelId, string> = {
+  brasil: '40613',
+  iguatemi: '99801',
+}
+
 /** ID da unidade no Avec (quando configurado) — escopa o sync pra não misturar unidades. */
 export function getAvecUnitId(): string | null {
-  return process.env.AVEC_UNIT_ID?.trim() || null
+  const fromEnv = process.env.AVEC_UNIT_ID?.trim()
+  if (fromEnv) return fromEnv
+  return KNOWN_AVEC_UNIT_IDS[getRomPanelId()] ?? null
 }
 
 /** Valor do param `site` nos relatórios Avec (omitido se não configurado). */

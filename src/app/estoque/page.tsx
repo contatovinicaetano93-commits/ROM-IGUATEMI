@@ -131,6 +131,8 @@ function SyncBadge({ status }: { status: SyncStatus | null }) {
   const ui = deriveAvecSyncUi({
     configured: status.configured,
     last: run,
+    // Cron estoque IG = a cada 4h — não marcar stale antes disso.
+    staleAfterMs: 5 * 60 * 60 * 1000,
   })
   return <CountBadge value={ui.label} tone={ui.tone} />
 }
