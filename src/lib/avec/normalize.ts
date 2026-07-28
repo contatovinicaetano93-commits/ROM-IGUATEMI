@@ -659,23 +659,38 @@ export function normalizeP1AcquisitionRow(
 
 /** 0056 — agendamentos por canal */
 export function normalizeP2ChannelRow(row: Record<string, unknown>): NormalizedP2Channel | null {
-  const channel = pick(row, [
+  const channelRaw = pick(row, [
     'tipoAgendamento',
     'tipo_agendamento',
+    'tipo de agendamento',
     'canal',
+    'canal_agendamento',
+    'canalAgendamento',
     'origem',
     'fonte',
     'meio',
     'tipo',
     'descricao',
+    'descrição',
     'nome',
     'channel',
+    'label',
   ])
-  if (!channel) return null
-  const count =
-    Number(pick(row, ['quantidade', 'qtd', 'agendamentos', 'total', 'count', 'clientes']) ?? 0) || 0
+  const countRaw = pickRaw(row, [
+    'quantidade',
+    'qtd',
+    'agendamentos',
+    'qtd_agendamentos',
+    'total',
+    'count',
+    'clientes',
+    'qtd_clientes',
+    'valor',
+  ])
+  const count = Number(countRaw ?? 0) || 0
   if (count <= 0) return null
-  return { channel, count }
+  // Comme 0003: canal vazio ainda conta (Avec manda só totais).
+  return { channel: channelRaw ?? 'Não informado', count }
 }
 
 /** 0061 — pacotes vendidos */

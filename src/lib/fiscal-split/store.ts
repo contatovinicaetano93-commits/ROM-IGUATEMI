@@ -76,7 +76,7 @@ export async function upsertFiscalSplit(
       ${settlement.status},
       ${source},
       ${settlement.settledAt}::date,
-      ${JSON.stringify(settlement.rawPayload)}::jsonb
+      ${settlement.rawPayload ?? {}}
     )
     on conflict (operation_id) do update set
       arrangement = excluded.arrangement,

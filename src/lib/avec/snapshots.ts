@@ -1,4 +1,14 @@
 import { getSql } from '@/lib/db'
+import { asJsonArray, asJsonObject } from '@/lib/jsonb'
+
+function mapSnapshotRow<T extends { params?: unknown; payload?: unknown }>(row: T | null | undefined) {
+  if (!row) return null
+  return {
+    ...row,
+    params: asJsonObject(row.params) ?? {},
+    payload: asJsonArray(row.payload),
+  }
+}
 
 /** Relatórios de valorização de estoque — UI lê o payload (stock.ts). Demais: só metadados. */
 export const SNAPSHOT_PAYLOAD_REPORT_IDS = new Set(['0045', '0242', '0243', '0142'])
@@ -27,9 +37,9 @@ export async function saveReportSnapshot(
     insert into avec_report_snapshots (report_id, params, row_count, payload, sync_run_id)
     values (
       ${reportId},
-      ${JSON.stringify(params)}::jsonb,
+      ${params},
       ${rows.length},
-      ${JSON.stringify(stored)}::jsonb,
+      ${stored},
       ${syncRunId ?? null}
     )
   `
@@ -56,8 +66,14 @@ export async function getLatestSnapshot(reportId: string) {
     where report_id = ${reportId}
     order by fetched_at desc
     limit 1
-  `) as { report_id: string; payload: unknown; fetched_at: string; row_count: number }[]
-  return rows[0] ?? null
+  `) as {
+    report_id: string
+    params: unknown
+    payload: unknown
+    fetched_at: string
+    row_count: number
+  }[]
+  return mapSnapshotRow(rows[0])
 }
 
 export type PurgeSnapshotsResult = {

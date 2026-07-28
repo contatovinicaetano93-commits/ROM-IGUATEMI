@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { asJsonArray } from '@/lib/jsonb'
 
 export interface P3CurvePoint {
   day: string
@@ -54,7 +55,7 @@ export async function upsertSalonP3Daily(
       ${day}::date,
       ${return_rate},
       ${new_clients_period},
-      ${JSON.stringify(revenue_curve)}::jsonb,
+      ${revenue_curve},
       now()
     )
     on conflict (day) do update set
@@ -84,8 +85,28 @@ export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Dai
       order by day desc
       limit 1
     `) as SalonP3Daily[]
-    return rows[0] ?? null
+    const row = rows[0]
+    if (!row) return null
+    return {
+      ...row,
+      revenue_curve: asJsonArray<P3CurvePoint>(row.revenue_curve),
+    }
   } catch {
     return null
   }
+}
+
+/** Corrige jsonb legado gravado como string (JSON.stringify + postgres.js). */
+export async function repairSalonP3JsonbEncoding(): Promise<number> {
+  const sql = getSql()
+  const rows = (await sql`
+    update salon_p3_daily set
+      revenue_curve = case
+        when jsonb_typeof(revenue_curve) = 'string' then (revenue_curve #>> '{}')::jsonb
+        else revenue_curve
+      end
+    where jsonb_typeof(revenue_curve) = 'string'
+    returning day
+  `) as { day: string }[]
+  return rows.length
 }

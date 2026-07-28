@@ -437,7 +437,7 @@ export async function logEvent(input: LogEventInput) {
       ${input.channel},
       ${input.direction},
       ${input.handledBy},
-      ${JSON.stringify(input.payload)}::jsonb,
+      ${input.payload ?? {}},
       ${input.error ?? null}
     )
   `

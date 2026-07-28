@@ -64,7 +64,7 @@ async function beginRun(kind: string, stats: StockSyncStats): Promise<StockSyncR
   const sql = getSql()
   const rows = (await sql`
     insert into avec_sync_runs (kind, status, stats)
-    values (${kind}, 'partial', ${JSON.stringify(stats)}::jsonb)
+    values (${kind}, 'partial', ${stats})
     returning *
   `) as StockSyncRun[]
   return rows[0]!
@@ -79,7 +79,7 @@ async function finishRun(
   const sql = getSql()
   const rows = (await sql`
     update avec_sync_runs
-    set status = ${status}, stats = ${JSON.stringify(stats)}::jsonb, error = ${error ?? null}
+    set status = ${status}, stats = ${stats}, error = ${error ?? null}
     where id = ${id}::uuid
     returning *
   `) as StockSyncRun[]

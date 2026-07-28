@@ -10,6 +10,7 @@ import {
   normalizeAttendanceRow,
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
+  normalizeP2ChannelRow,
   normalizePhone,
   parseAvecDateTime,
   parseOptionalMoney,
@@ -239,5 +240,20 @@ describe('normalizeP1AcquisitionRow 0003', () => {
 
   it('descarta linha sem clientes', () => {
     expect(normalizeP1AcquisitionRow({ como_conheceu: 'Instagram', qtd_clientes: 0 })).toBeNull()
+  })
+})
+
+describe('normalizeP2ChannelRow 0056', () => {
+  it('usa Não informado quando canal vazio mas há quantidade', () => {
+    expect(normalizeP2ChannelRow({ quantidade: 40 })).toEqual({
+      channel: 'Não informado',
+      count: 40,
+    })
+  })
+
+  it('lê tipoAgendamento', () => {
+    expect(
+      normalizeP2ChannelRow({ tipoAgendamento: 'Online', quantidade: 12 }),
+    ).toEqual({ channel: 'Online', count: 12 })
   })
 })

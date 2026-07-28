@@ -163,6 +163,12 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
       }
       booking_channels.sort((a, b) => b.count - a.count)
       bookingChannelsOk = true
+      if (rows.length > 0 && booking_channels.length === 0) {
+        const sample = rows[0] && typeof rows[0] === 'object' ? Object.keys(rows[0] as object) : []
+        ;(stats.warnings ??= []).push(
+          `P2 0056: ${rows.length} linhas sem mapear (keys: ${sample.join(',')})`,
+        )
+      }
     } catch (e) {
       stats.errors.push(`P2 0056: ${e instanceof Error ? e.message : String(e)}`)
     }

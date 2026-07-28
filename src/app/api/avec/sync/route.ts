@@ -9,6 +9,9 @@ import { getDeploymentContext } from '@/lib/deployment'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
 import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
 import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
+import { repairSalonP1JsonbEncoding } from '@/lib/salon/p1-metrics'
+import { repairSalonP2JsonbEncoding } from '@/lib/salon/p2-metrics'
+import { repairSalonP3JsonbEncoding } from '@/lib/salon/p3-metrics'
 
 /** Sync Avec pode demorar (vários relatórios). */
 export const maxDuration = 300
@@ -103,6 +106,17 @@ async function executeSync(
         }
         throw purgeErr
       }
+    }
+
+    // One-shot: desfaz jsonb duplo legado (JSON.stringify + postgres.js) que zera a Visão.
+    try {
+      await Promise.all([
+        repairSalonP1JsonbEncoding(),
+        repairSalonP2JsonbEncoding(),
+        repairSalonP3JsonbEncoding(),
+      ])
+    } catch {
+      // não bloqueia sync
     }
 
     const run = await runAvecSync(mode)
