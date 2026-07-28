@@ -102,12 +102,21 @@ function resolveId(mapper: string): string | null {
   return resolveReportId(def)
 }
 
+export type OpsPeriodOpts = {
+  asOf?: string
+  inicio?: string
+  fim?: string
+}
+
 /**
  * P3 — sync full: 0007, 0088, 0017 → salon_p3_daily
+ * Com `opts`, grava snapshot do período (mês) em `asOf`.
  */
-export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
-  const day = todayIsoLocal()
-  const { inicio, fim } = periodRange(30, 0)
+export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?: OpsPeriodOpts) {
+  const day = opts?.asOf ?? todayIsoLocal()
+  const rolling = periodRange(30, 0)
+  const inicio = opts?.inicio ?? rolling.inicio
+  const fim = opts?.fim ?? rolling.fim
   const params = { inicio, fim, limit: 250 }
 
   let return_rate = 0

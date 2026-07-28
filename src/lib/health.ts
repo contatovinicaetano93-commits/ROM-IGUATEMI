@@ -85,10 +85,71 @@ async function probeDailyMetricsYtd() {
   }
 }
 
+/** Cobertura operacional (payment mix + snapshots mensais P1/P2/P3). */
+async function probeOpsCoverageYtd() {
+  try {
+    const sql = getSql()
+    const year = new Date().getUTCFullYear()
+    const from = `${year}-01-01`
+    const [pay, p1, p2snap, p3] = await Promise.all([
+      sql`
+        select count(*)::int as days
+        from salon_p2_daily
+        where day >= ${from}::date
+          and jsonb_typeof(payment_mix) = 'array'
+          and jsonb_array_length(payment_mix) > 0
+      `,
+      sql`
+        select count(*)::int as n, min(day)::text as from_day, max(day)::text as to_day
+        from salon_p1_daily
+        where day >= ${from}::date
+          and jsonb_typeof(professionals) = 'array'
+          and jsonb_array_length(professionals) > 0
+      `,
+      sql`
+        select count(*)::int as n
+        from salon_p2_daily
+        where day >= ${from}::date
+          and (
+            (jsonb_typeof(packages) = 'array' and jsonb_array_length(packages) > 0)
+            or (jsonb_typeof(booking_channels) = 'array' and jsonb_array_length(booking_channels) > 0)
+          )
+      `,
+      sql`
+        select count(*)::int as n
+        from salon_p3_daily
+        where day >= ${from}::date
+      `,
+    ])
+    return {
+      payment_mix_days: Number(pay[0]?.days ?? 0) || 0,
+      p1_snapshots: Number(p1[0]?.n ?? 0) || 0,
+      p1_from: p1[0]?.from_day ?? null,
+      p1_to: p1[0]?.to_day ?? null,
+      p2_commerce_snapshots: Number(p2snap[0]?.n ?? 0) || 0,
+      p3_snapshots: Number(p3[0]?.n ?? 0) || 0,
+    }
+  } catch (e) {
+    logger.warn('Failed to probe ops coverage', {
+      error: e instanceof Error ? e.message : String(e),
+    })
+    return {
+      payment_mix_days: 0,
+      p1_snapshots: 0,
+      p1_from: null,
+      p1_to: null,
+      p2_commerce_snapshots: 0,
+      p3_snapshots: 0,
+    }
+  }
+}
+
 /** Resposta mínima — segura para monitoramento externo sem login. */
 export async function getPublicHealthStatus() {
   const { connected, neon_quota } = await probeDatabase()
-  const metrics_ytd = connected ? await probeDailyMetricsYtd() : null
+  const [metrics_ytd, ops_ytd] = connected
+    ? await Promise.all([probeDailyMetricsYtd(), probeOpsCoverageYtd()])
+    : [null, null]
   return {
     ok: connected,
     neon_quota,
@@ -97,6 +158,7 @@ export async function getPublicHealthStatus() {
       source: peekDatabaseUrlSource(),
     },
     metrics_ytd,
+    ops_ytd,
   }
 }
 

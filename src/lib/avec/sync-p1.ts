@@ -103,13 +103,24 @@ function applyOccupancy(
   cur.occupancy = occupancy
 }
 
+export type OpsPeriodOpts = {
+  /** Dia em que o snapshot é gravado (ex.: fim do mês). Default: hoje. */
+  asOf?: string
+  /** início/fim BR (dd/mm/yyyy). Default: janela rolante 30d. */
+  inicio?: string
+  fim?: string
+}
+
 /**
  * P1 — sync diário (full): 0021, 0126, 0032, 0107, 0003 → salon_p1_daily
  * Não roda no fast (evita custo/API).
+ * Com `opts`, grava snapshot histórico (mês fechado) para a Visão/Relatórios sem gaps.
  */
-export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
-  const day = todayIsoLocal()
-  const { inicio, fim } = periodRange(30, 0)
+export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?: OpsPeriodOpts) {
+  const day = opts?.asOf ?? todayIsoLocal()
+  const rolling = periodRange(30, 0)
+  const inicio = opts?.inicio ?? rolling.inicio
+  const fim = opts?.fim ?? rolling.fim
   const params = { inicio, fim, limit: 250 }
 
   // professionals é alimentado por DOIS relatórios independentes (0021 revenue +
@@ -222,7 +233,9 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string) {
 
   let reactivation_count = 0
   let reactivationOk = false
-  const id0107 = resolveId('reactivation')
+  // 0107 = lista “sem retorno” (90d) — não é métrica do mês; no backfill histórico
+  // só atrasa (paginação 5k+) e não entra no comparativo mensal.
+  const id0107 = opts?.asOf ? null : resolveId('reactivation')
   if (id0107) {
     try {
       const reportParams = withRequiredAvecReportParams(id0107, { limit: 250 })

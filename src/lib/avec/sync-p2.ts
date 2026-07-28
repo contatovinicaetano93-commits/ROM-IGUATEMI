@@ -101,18 +101,17 @@ function aggregatePaymentMix(rows: Record<string, unknown>[]): P2PaymentRow[] {
 }
 
 /**
- * Sync 0081 (formas de pagamento) dia a dia.
- * Fast: só hoje. Full (via syncP2): últimos `daysBack` dias + hoje.
+ * Sync 0081 (formas de pagamento) dia a dia em intervalo inclusivo.
+ * Usado pelo backfill YTD do Financeiro (reconciliação por mês).
  */
-export async function syncPaymentMixRecent(
+export async function syncPaymentMixRange(
   stats: SyncStatsLike,
+  fromIso: string,
+  toIso: string,
   syncRunId?: string,
-  daysBack = 0,
 ) {
   const id0081 = resolveId('payment_mix') ?? '0081'
-  const today = todayIsoLocal()
-  const from = addCalendarDays(today, -Math.max(0, daysBack))
-  const days = listDaysInclusive(from, today)
+  const days = listDaysInclusive(fromIso, toIso)
 
   for (const day of days) {
     const params = {
@@ -141,11 +140,36 @@ export async function syncPaymentMixRecent(
 }
 
 /**
- * C — sync full: 0056, 0061, 0104, 0001, 0081 → salon_p2_daily
+ * Sync 0081 (formas de pagamento) dia a dia.
+ * Fast: só hoje. Full (via syncP2): últimos `daysBack` dias + hoje.
  */
-export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
-  const day = todayIsoLocal()
-  const { inicio, fim } = periodRange(30, 0)
+export async function syncPaymentMixRecent(
+  stats: SyncStatsLike,
+  syncRunId?: string,
+  daysBack = 0,
+) {
+  const today = todayIsoLocal()
+  const from = addCalendarDays(today, -Math.max(0, daysBack))
+  await syncPaymentMixRange(stats, from, today, syncRunId)
+}
+
+export type OpsPeriodOpts = {
+  asOf?: string
+  inicio?: string
+  fim?: string
+  /** Se false, não roda 0081 dos últimos 7 dias (backfill usa syncPaymentMixRange). Default true. */
+  includePaymentMix?: boolean
+}
+
+/**
+ * C — sync full: 0056, 0061, 0104, 0001, 0081 → salon_p2_daily
+ * Com `opts`, grava snapshot do período (mês) em `asOf` para Visão/Relatórios.
+ */
+export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?: OpsPeriodOpts) {
+  const day = opts?.asOf ?? todayIsoLocal()
+  const rolling = periodRange(30, 0)
+  const inicio = opts?.inicio ?? rolling.inicio
+  const fim = opts?.fim ?? rolling.fim
   const params = { inicio, fim, limit: 250 }
 
   const booking_channels: { channel: string; count: number }[] = []
@@ -230,8 +254,12 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const id0001 = resolveId('birthdays')
   if (id0001) {
     try {
-      // Aniversariantes do mês corrente (sem período longo)
-      const reportParams = withRequiredAvecReportParams(id0001, { limit: 250 })
+      // Aniversariantes do mês do snapshot (histórico) ou corrente.
+      const reportParams = withRequiredAvecReportParams(id0001, {
+        limit: 250,
+        inicio,
+        fim,
+      })
       const rows = asRows(await fetchAllAvecReport(id0001, reportParams))
       await snapshotSafe(id0001, reportParams, rows, stats, syncRunId)
       let counted = 0
@@ -276,5 +304,8 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string) {
   }
 
   // 0081: últimos 7 dias (full) — dia a dia para o Financeiro somar o mês sem double-count.
-  await syncPaymentMixRecent(stats, syncRunId, 7)
+  // No backfill histórico pulamos aqui (usa syncPaymentMixRange no script).
+  if (opts?.includePaymentMix !== false && !opts?.asOf) {
+    await syncPaymentMixRecent(stats, syncRunId, 7)
+  }
 }
