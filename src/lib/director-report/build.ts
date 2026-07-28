@@ -107,20 +107,21 @@ export async function buildDirectorReport(
       )
       // Cada etapa cai pro mock de forma independente — uma falhar não deve
       // jogar fora o dado real da outra que funcionou.
-      if (want0011 && live.return_blocks) {
+      // null = falha ao montar; [] = Avec OK mas período sem dados (não usar mock).
+      if (want0011 && live.return_blocks !== null) {
         return_blocks = live.return_blocks
       }
-      if (want0021 && live.revenue_blocks) {
+      if (want0021 && live.revenue_blocks !== null) {
         revenue_blocks = live.revenue_blocks
       }
       if (want0011 && want0021) {
-        if (live.return_blocks && live.revenue_blocks) {
+        if (live.return_blocks !== null && live.revenue_blocks !== null) {
           source = 'avec'
-        } else if (live.return_blocks || live.revenue_blocks) {
+        } else if (live.return_blocks !== null || live.revenue_blocks !== null) {
           source = 'partial'
           const missing = [
-            !live.return_blocks ? '0011' : null,
-            !live.revenue_blocks ? '0021' : null,
+            live.return_blocks === null ? '0011' : null,
+            live.revenue_blocks === null ? '0021' : null,
           ]
             .filter(Boolean)
             .join('+')
@@ -131,10 +132,18 @@ export async function buildDirectorReport(
             .filter(Boolean)
             .join(' · ')
         }
-      } else if (want0011 && live.return_blocks) {
+      } else if (want0011 && live.return_blocks !== null) {
         source = 'avec'
-      } else if (want0021 && live.revenue_blocks) {
+      } else if (want0021 && live.revenue_blocks !== null) {
         source = 'avec'
+      }
+      if (want0011 && live.return_blocks !== null && live.return_blocks.length === 0) {
+        liveNote = [
+          liveNote,
+          '0011 sem retorno/reativação neste trimestre (Avec). O padrão agora é o trimestre fechado anterior.',
+        ]
+          .filter(Boolean)
+          .join(' · ')
       }
       if (live.warnings.length) {
         liveNote = [liveNote, live.warnings.slice(0, 3).join(' · ')].filter(Boolean).join(' · ')

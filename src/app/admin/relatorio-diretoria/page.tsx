@@ -91,6 +91,15 @@ function defaultQuarterKey() {
   return `${year}-Q${Math.ceil(month / 3)}`
 }
 
+/**
+ * 0011 (retorno) precisa de trimestre fechado.
+ * No trimestre corrente (ainda em aberto) o padrão é o anterior —
+ * evita tela cheia de 0% (Avec sem lista/taxa do tri atual).
+ */
+function defaultQuarterKey0011() {
+  return previousQuarterKey(defaultQuarterKey())
+}
+
 function previousQuarterKey(key: string) {
   const [y, qStr] = key.split('-Q')
   const year = Number(y)
@@ -113,10 +122,10 @@ export default function RelatorioDiretoriaPage() {
       .catch(() => setCanViewRevenue(false))
   }, [])
 
-  // Estado independente por etapa — defaults = período corrente (SP)
+  // Estado independente por etapa — 0011 default = trimestre fechado anterior
   const [proId0011, setProId0011] = useState('')
-  const [quarter, setQuarter] = useState(defaultQuarterKey)
-  const [compare, setCompare] = useState(() => previousQuarterKey(defaultQuarterKey()))
+  const [quarter, setQuarter] = useState(defaultQuarterKey0011)
+  const [compare, setCompare] = useState(() => previousQuarterKey(defaultQuarterKey0011()))
 
   const [proId0021, setProId0021] = useState('')
   const [month, setMonth] = useState(defaultMonthKey)
@@ -555,6 +564,21 @@ export default function RelatorioDiretoriaPage() {
             storageKey="relatorios.section.0011-comparativo.open"
             badge={<CountBadge value={String(selectedReturn.length)} tone="gold" />}
           >
+            {!loading &&
+              data?.source !== 'mock' &&
+              (selectedReturn.length === 0 ||
+                selectedReturn.every(
+                  (r) =>
+                    (r.sel?.return_rate ?? 0) === 0 &&
+                    (r.cmp?.return_rate ?? 0) === 0 &&
+                    (r.reactivation?.length ?? 0) === 0,
+                )) && (
+                <p className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                  Sem taxa/lista Avec neste comparativo ({quarter} vs {compare}). Trimestres em
+                  aberto costumam vir zerados — selecione um trimestre já fechado (ex.: 2º tri vs
+                  1º tri).
+                </p>
+              )}
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead>
@@ -577,7 +601,7 @@ export default function RelatorioDiretoriaPage() {
                   {!loading && selectedReturn.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-6 text-muted">
-                        Nenhum profissional neste filtro.
+                        Sem dados 0011 neste período (ou filtro sem profissional).
                       </td>
                     </tr>
                   )}

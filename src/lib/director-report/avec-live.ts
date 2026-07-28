@@ -559,11 +559,22 @@ export async function fetchLiveDirectorBlocks(
     )
   }
 
-  if (want0021 && !hasAnyRevenue) {
-    warnings.push('0021 sem faturamento casado aos profissionais do portfólio')
+  /**
+   * Roster 100% zerado NÃO é live útil (ex.: trimestre em aberto).
+   * - `[]` = Avec respondeu, sem retorno/receita no período → UI honesta, sem mock.
+   * - `null` = etapa falhou ao montar (exceção) → build cai no mock dessa etapa.
+   */
+  if (want0021 && revenue_blocks != null && !hasAnyRevenue) {
+    warnings.push(
+      '0021 sem faturamento casado aos profissionais do portfólio neste período',
+    )
+    revenue_blocks = []
   }
-  if (want0011 && !hasAnyReturn) {
-    warnings.push('0011 sem lista/taxa casada aos profissionais do portfólio')
+  if (want0011 && return_blocks != null && !hasAnyReturn) {
+    warnings.push(
+      '0011 sem lista/taxa no período — trimestre em aberto ou matching sem hit; use um trimestre já fechado',
+    )
+    return_blocks = []
   }
 
   return { return_blocks, revenue_blocks, warnings }
