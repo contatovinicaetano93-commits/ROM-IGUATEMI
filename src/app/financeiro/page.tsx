@@ -735,12 +735,14 @@ export default function FinanceiroPage() {
               ? '—'
               : kpis.current.cmv_coverage.saidas_total > 0
                 ? `${kpis.current.cmv_coverage.with_movement_cost}/${kpis.current.cmv_coverage.with_product_fallback}/${kpis.current.cmv_coverage.with_zero}`
-                : '—'
+                : 'sem saídas'
           }
           delta={
             kpis?.current.cmv_coverage.any_cost_pct != null
               ? `${formatPercentPoints(kpis.current.cmv_coverage.any_cost_pct)} com custo · ${formatPercentPoints(kpis.current.cmv_coverage.movement_cost_pct)} na saída`
-              : null
+              : kpis && kpis.current.cmv_coverage.saidas_total === 0
+                ? 'Aguardando backfill 0044 do estoque'
+                : null
           }
           compareLabel="saídas (movimento/produto/zero)"
           positive={

@@ -27,17 +27,17 @@ function todayIsoLocal() {
 }
 
 /**
- * Taxa de retorno local: clientes com visita nos 45 dias antes do mês corrente
- * que também tiveram visita no mês corrente.
+ * Taxa de retorno local: cohort visitou nos 45d antes do mês de `asOf`
+ * e retornou no mês até `asOf`.
  */
-async function computeLocalReturnRate(): Promise<number | null> {
+async function computeLocalReturnRate(asOfIso = todayIsoLocal()): Promise<number | null> {
   const sql = getSql()
   const rows = (await sql`
     with bounds as (
       select
-        (date_trunc('month', timezone('America/Sao_Paulo', now()))::date - 45) as p1_start,
-        (date_trunc('month', timezone('America/Sao_Paulo', now()))::date) as month_start,
-        timezone('America/Sao_Paulo', now())::date as today
+        (date_trunc('month', ${asOfIso}::date)::date - 45) as p1_start,
+        date_trunc('month', ${asOfIso}::date)::date as month_start,
+        ${asOfIso}::date as as_of
     ),
     visited_p1 as (
       select distinct cs.contact_id
@@ -55,7 +55,7 @@ async function computeLocalReturnRate(): Promise<number | null> {
       where cs.active = true
         and cs.last_done_at is not null
         and (cs.last_done_at at time zone 'America/Sao_Paulo')::date >= b.month_start
-        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date <= b.today
+        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date <= b.as_of
     )
     select
       (select count(*)::int from visited_p1) as cohort,
@@ -119,13 +119,13 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const fim = opts?.fim ?? rolling.fim
   const params = { inicio, fim, limit: 250 }
 
-  let return_rate = 0
+  let return_rate: number | null = null
   let returnRateOk = false
   const id0007 = resolveId('return_rate')
   if (id0007) {
     try {
-      // 0007 exige inicio1/fim1/inicio2/fim2 (mês corrente + 45d antes) — não passar inicio/fim rolantes.
-      const reportParams = withRequiredAvecReportParams(id0007, { limit: 250 })
+      // 0007 usa inicio1/fim1/inicio2/fim2 derivados de inicio/fim do mês do snapshot.
+      const reportParams = withRequiredAvecReportParams(id0007, { inicio, fim, limit: 250 })
       const rows = asRows(await fetchAllAvecReport(id0007, reportParams))
       await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
       let sum = 0
@@ -145,16 +145,15 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
         return_rate = Math.round((sum / n) * 10000) / 10000
         returnRateOk = true
       } else if (nonReturners > 0) {
-        // Lista 0007 = sem retorno. Taxa ≈ retornaram / (retornaram + lista),
-        // usando cohort local (visitas no período 1 implícito via ROM).
-        const local = await computeLocalReturnRate()
+        // Lista 0007 = sem retorno. Só grava taxa se houver cohort local no ROM.
+        const local = await computeLocalReturnRate(day)
         if (local != null) {
           return_rate = local
           returnRateOk = true
           stats.p3_rows = (stats.p3_rows ?? 0) + nonReturners
         } else {
           stats.warnings?.push(
-            `P3 0007: ${nonReturners} clientes sem retorno, sem taxa explícita — retorno local indisponível`,
+            `P3 0007: ${nonReturners} sem retorno em ${inicio}–${fim}, sem cohort local — taxa omitida (não zerar)`,
           )
         }
       }
@@ -166,7 +165,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   // Fallback ROM se 0007 falhou/vazio
   if (!returnRateOk) {
     try {
-      const local = await computeLocalReturnRate()
+      const local = await computeLocalReturnRate(day)
       if (local != null) {
         return_rate = local
         returnRateOk = true
@@ -228,11 +227,13 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   // Só escreve os campos cujo relatório teve sucesso — evita apagar dados
   // válidos do dia quando outro relatório falha parcialmente.
   const patch: {
-    return_rate?: number
+    return_rate?: number | null
     new_clients_period?: number
     revenue_curve?: { day: string; revenue: number }[]
+    clear_return_rate?: boolean
   } = {}
-  if (returnRateOk) patch.return_rate = return_rate
+  if (returnRateOk && return_rate != null) patch.return_rate = return_rate
+  else if (opts?.asOf) patch.clear_return_rate = true
   if (newClientsOk) patch.new_clients_period = new_clients_period
   if (revenueCurveOk) patch.revenue_curve = revenue_curve.slice(-30)
 

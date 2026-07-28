@@ -203,7 +203,8 @@ export default function RelatoriosOverviewPage() {
                   </span>
                 </li>
                 <li className="text-xs text-muted">
-                  Snapshot ops: {data.analytics.snapshot_day ?? '—'} (Avec P1–P3, não soma diária)
+                  Snapshot ops: {data.analytics.snapshot_day ?? '—'} (Avec P1–P3 do mês, não soma
+                  diária). Retorno — = sem cohort confiável no ROM para o mês.
                 </li>
               </ul>
             </SectionCard>

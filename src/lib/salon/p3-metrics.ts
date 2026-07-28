@@ -8,7 +8,8 @@ export interface P3CurvePoint {
 
 export interface SalonP3Daily {
   day: string
-  return_rate: number
+  /** null = ainda sem taxa confiável (não confundir com 0%). */
+  return_rate: number | null
   new_clients_period: number
   revenue_curve: P3CurvePoint[]
   updated_at: string
@@ -19,20 +20,24 @@ export async function ensureSalonP3Table() {
   await sql`
     create table if not exists salon_p3_daily (
       day date primary key,
-      return_rate numeric(6,4) not null default 0,
+      return_rate numeric(6,4),
       new_clients_period int not null default 0,
       revenue_curve jsonb not null default '[]',
       updated_at timestamptz not null default now()
     )
   `
+  // Legado: NOT NULL DEFAULT 0 — libera null para “taxa desconhecida”.
+  await sql`alter table salon_p3_daily alter column return_rate drop not null`.catch(() => undefined)
 }
 
 export async function upsertSalonP3Daily(
   day: string,
   patch: {
-    return_rate?: number
+    return_rate?: number | null
     new_clients_period?: number
     revenue_curve?: P3CurvePoint[]
+    /** Se true e return_rate omitido, grava null (apaga 0 falso). */
+    clear_return_rate?: boolean
   },
 ) {
   await ensureSalonP3Table()
@@ -42,7 +47,14 @@ export async function upsertSalonP3Daily(
   `) as SalonP3Daily[]
   const cur = mapSalonP3Row(existing[0])
 
-  const return_rate = patch.return_rate ?? Number(cur?.return_rate ?? 0)
+  const return_rate =
+    patch.return_rate !== undefined
+      ? patch.return_rate
+      : patch.clear_return_rate
+        ? null
+        : cur?.return_rate != null
+          ? Number(cur.return_rate)
+          : null
   const new_clients_period = patch.new_clients_period ?? Number(cur?.new_clients_period ?? 0)
   const revenue_curve = patch.revenue_curve ?? cur?.revenue_curve ?? []
 

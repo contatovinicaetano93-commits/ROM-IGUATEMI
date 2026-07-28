@@ -97,7 +97,7 @@ export default function DashboardPage() {
         const [kpisRes, tmRes, perfRes, periodRes] = await Promise.all([
           apiFetch('/api/kpis', { cache: 'no-store' }),
           apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
-          apiFetch('/api/kpis/performance', { cache: 'no-store' }),
+          apiFetch(`/api/kpis/performance?month=${month}`, { cache: 'no-store' }),
           apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store' }),
         ])
         if (cancelled) return
@@ -191,8 +191,8 @@ export default function DashboardPage() {
   const novos = data?.byStatus.find((s) => s.status === 'novo')?.contacts_count ?? 0
   const topChannel = channelData[0]
   const snapshotHint = period?.snapshot_day
-    ? `Avec snapshot ${period.snapshot_day} · janela ~30 dias`
-    : 'Avec · janela ~30 dias'
+    ? `Snapshot do mês · Avec ${period.snapshot_day}`
+    : 'Snapshot Avec do mês selecionado'
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
@@ -201,8 +201,8 @@ export default function DashboardPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
           <p className="mt-1 text-xs text-muted">
-            Acumulado ROM do mês (receita/cancel desde jan.) + snapshots Avec ~30d. Operação do dia em
-            Hoje · dinheiro/comparativo em Financeiro · fechamento em Relatórios.
+            Acumulado ROM do mês (receita/cancel desde jan.) + snapshot Avec do mês selecionado. Operação
+            do dia em Hoje · dinheiro/comparativo em Financeiro · fechamento em Relatórios.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -254,7 +254,7 @@ export default function DashboardPage() {
         />
         <MiniStat
           icon={<Percent size={15} />}
-          label={`Ocupação · Avec 30d · ${period?.label ?? '—'}`}
+          label={`Ocupação · ${period?.label ?? '—'}`}
           value={
             loading || !period
               ? '—'
@@ -269,19 +269,15 @@ export default function DashboardPage() {
           value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
         />
         <MiniStat
-          icon={<AlertTriangle size={15} />}
-          label="Cancel. + no-show · mês acum."
-          value={
-            loading || !period
-              ? '—'
-              : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
-          }
+          icon={<Sparkles size={15} />}
+          label={`Novos · ${period?.label ?? '—'}`}
+          value={loading || !period ? '—' : String(period.new_clients_period ?? 0)}
         />
         <MiniStat
-          icon={<Sparkles size={15} />}
+          icon={<TrendingUp size={15} />}
           label={
             period?.previous
-              ? `vs ${period.previous.label}`
+              ? `Δ receita vs ${period.previous.label}`
               : 'Comparativo mês ant.'
           }
           value={
@@ -296,10 +292,13 @@ export default function DashboardPage() {
 
       {period?.previous && !loading && (
         <p className="text-xs text-muted">
-          Comparativo MTD: {period.label} {formatCurrency(period.revenue)} ·{' '}
-          {period.attended} atend. vs {period.previous.label}{' '}
-          {formatCurrency(period.previous.revenue)} · {period.previous.attended} atend. Pacotes/
-          retorno/canais vêm do snapshot Avec ~30d (não do acumulado diário).
+          Comparativo MTD: {period.label} {formatCurrency(period.revenue)} · {period.attended} atend.
+          vs {period.previous.label} {formatCurrency(period.previous.revenue)} ·{' '}
+          {period.previous.attended} atend.
+          {period.return_rate != null
+            ? ` · Retorno ${formatPercentPoints(period.return_rate * 100, 0)}`
+            : ' · Retorno — (sem cohort confiável no ROM)'}
+          . Canais/pacotes/tops vêm do snapshot Avec do mês.
         </p>
       )}
 
@@ -391,8 +390,8 @@ export default function DashboardPage() {
             )}
             {!loading && tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
               <p className="mt-4 text-xs text-muted">
-                Sem duração na Avec para esta unidade (início/fim no 0002). Top serviços mostra
-                faturamento — não inventamos TM a partir do catálogo 0223.
+                TM histórico indisponível: a Avec 0002 desta unidade não envia início/fim do
+                atendimento nos dias passados (só data). Não inventamos TM pelo catálogo 0223.
               </p>
             )}
           </SectionCard>
@@ -556,12 +555,12 @@ export default function DashboardPage() {
       </div>
 
       <SectionCard
-        title="Ranking de profissionais (snapshot · 30 dias)"
+        title={`Ranking de profissionais · ${period?.label ?? 'mês'}`}
         badge={<Trophy size={15} className="text-muted" />}
       >
         {!performance || performance.professionals.length === 0 ? (
           <p className="text-xs text-muted">
-            Sem dado ainda — depende da Avec (0021 + 0126). Detalhe em Relatórios.
+            Sem dado ainda — depende da Avec (0021 + 0126) no snapshot do mês. Detalhe em Relatórios.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -602,8 +601,8 @@ export default function DashboardPage() {
             </table>
             {performance.compare_day && (
               <p className="mt-3 text-[0.65rem] text-muted">
-                Comparação: janela de 30 dias até {performance.reference_day} vs até{' '}
-                {performance.compare_day}
+                Comparação: snapshot {performance.reference_day} vs mês anterior (
+                {performance.compare_day})
               </p>
             )}
           </div>

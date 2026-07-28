@@ -3,11 +3,12 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { getLatestSalonP1Daily, getSalonP1DailyNear, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
 import { compareByNamePtBr } from '@/lib/salon/sort'
+import { todayIso } from '@/lib/salon/format'
 
-function addDays(day: string, delta: number): string {
-  const d = new Date(`${day}T12:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + delta)
-  return d.toISOString().slice(0, 10)
+function monthLastDay(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number)
+  const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
+  return `${monthKey}-${String(last).padStart(2, '0')}`
 }
 
 interface ProfessionalWithDelta extends P1ProfessionalRow {
@@ -19,18 +20,30 @@ export async function GET(req: NextRequest) {
     const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
-    const latest = await getLatestSalonP1Daily()
+    const url = new URL(req.url)
+    const month = url.searchParams.get('month')?.trim() || null
+    const today = todayIso()
+    const currentMonth = today.slice(0, 7)
 
-    if (!latest) {
-      return ok({ reference_day: null, compare_day: null, professionals: [] })
+    let reference =
+      month && /^\d{4}-\d{2}$/.test(month)
+        ? await getSalonP1DailyNear(month === currentMonth ? today : monthLastDay(month))
+        : await getLatestSalonP1Daily()
+
+    if (!reference) {
+      return ok({ reference_day: null, compare_day: null, professionals: [], month: month ?? null })
     }
 
-    const compareTarget = addDays(latest.day, -30)
-    const compare = await getSalonP1DailyNear(compareTarget)
+    // Compara com o snapshot do mês anterior (fim do mês), não “−30 dias” genérico.
+    const refMonth = reference.day.slice(0, 7)
+    const [y, m] = refMonth.split('-').map(Number)
+    const prevMonthDate = new Date(Date.UTC(y!, m! - 2, 1))
+    const prevMonth = prevMonthDate.toISOString().slice(0, 7)
+    const compare = await getSalonP1DailyNear(monthLastDay(prevMonth))
     const compareByName = new Map((compare?.professionals ?? []).map((p) => [p.name, p]))
     const canViewRevenue = auth.session.can_view_revenue
 
-    const professionals: ProfessionalWithDelta[] = latest.professionals
+    const professionals: ProfessionalWithDelta[] = reference.professionals
       .map((p) => {
         const prev = compareByName.get(p.name)
         return {
@@ -47,7 +60,6 @@ export async function GET(req: NextRequest) {
             : null,
         }
       })
-      // Ranking por faturamento (KPI); empate A–Z. Staff: ordena por atendidos.
       .sort((a, b) =>
         canViewRevenue
           ? Number(b.revenue ?? 0) - Number(a.revenue ?? 0) || compareByNamePtBr(a.name, b.name)
@@ -55,8 +67,9 @@ export async function GET(req: NextRequest) {
       )
 
     return ok({
-      reference_day: latest.day,
-      compare_day: compare && compare.day !== latest.day ? compare.day : null,
+      reference_day: reference.day,
+      compare_day: compare && compare.day !== reference.day ? compare.day : null,
+      month: month ?? refMonth,
       professionals,
       can_view_revenue: canViewRevenue,
     })

@@ -178,16 +178,26 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
 }
 
 async function syncMovements(stats: StockSyncStats, syncRunId: string) {
+  const { inicio, fim } = periodRange(3, 0)
+  await syncMovementsDateRange(stats, syncRunId, inicio, fim)
+}
+
+/**
+ * 0044 movimentos em intervalo BR (dd/mm/yyyy) — backfill CMV do Financeiro.
+ */
+export async function syncMovementsDateRange(
+  stats: StockSyncStats,
+  syncRunId: string | undefined,
+  inicioBr: string,
+  fimBr: string,
+) {
   const id = reportId('stock_movement')
   if (!id) return
-  // Janela com sobreposição (3 dias) — reprocessar não duplica (dedup por
-  // produto+tipo+quantidade+data+origem em applyStockMovement).
-  const { inicio, fim } = periodRange(3, 0)
-  const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
+  const params = { inicio: inicioBr, fim: fimBr, site: avecSiteParam(), limit: 250 }
   try {
     const result = await fetchAllAvecReport(id, params)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
-    await snapshotSafe(id, params, result.rows, stats, syncRunId)
+    if (syncRunId) await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
     for (const row of result.rows) {
       const mv = normalizeStockMovementRow(row)
@@ -197,7 +207,7 @@ async function syncMovements(stats: StockSyncStats, syncRunId: string) {
       else stats.movements_skipped_duplicate++
     }
   } catch (e) {
-    stats.errors.push(`0044 (movimentos): ${e instanceof Error ? e.message : String(e)}`)
+    stats.errors.push(`0044 (movimentos ${inicioBr}–${fimBr}): ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
