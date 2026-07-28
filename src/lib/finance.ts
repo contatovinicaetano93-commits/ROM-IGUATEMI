@@ -7,6 +7,9 @@ import {
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
 
+/** true após o 1º ensureFiscalSplitTable bem-sucedido neste isolate. */
+let fiscalTableReady = false
+
 export interface FinanceCategory {
   id: string
   name: string
@@ -391,7 +394,11 @@ export async function computeFinanceKpis(opts?: {
   month?: string
   compareMonth?: string
 }): Promise<FinanceKpis> {
-  await ensureFiscalSplitTable().catch(() => undefined)
+  // Tabela fiscal: ensure só na 1ª leitura deste isolate (evita DDL a cada GET).
+  if (!fiscalTableReady) {
+    await ensureFiscalSplitTable().catch(() => undefined)
+    fiscalTableReady = true
+  }
   const current = opts?.month ?? currentMonthKey(todayIso())
   const compare = opts?.compareMonth ?? previousMonthKey(current)
   const [currentBucket, previousBucket] = await Promise.all([

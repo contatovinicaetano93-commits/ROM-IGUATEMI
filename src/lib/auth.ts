@@ -131,6 +131,26 @@ export async function createSessionToken(user: string, role: AuthRole) {
     .join('')
 }
 
+type ExpectedToken = { user: string; role: AuthRole; token: string }
+let expectedTokenCache: { at: number; tokens: ExpectedToken[] } | null = null
+
+async function listExpectedSessionTokens(): Promise<ExpectedToken[]> {
+  const now = Date.now()
+  if (expectedTokenCache && now - expectedTokenCache.at < 60_000) {
+    return expectedTokenCache.tokens
+  }
+  const accounts = listAccounts()
+  const tokens = await Promise.all(
+    accounts.map(async (account) => ({
+      user: account.user,
+      role: account.role,
+      token: await createSessionToken(account.user, account.role),
+    })),
+  )
+  expectedTokenCache = { at: now, tokens: tokens.filter((t) => Boolean(t.token)) }
+  return expectedTokenCache.tokens
+}
+
 export function validateCredentials(
   username: string,
   password: string
@@ -155,13 +175,12 @@ export async function getSession(req: NextRequest): Promise<AuthSession | null> 
 
   const cookie = req.cookies.get(AUTH_COOKIE)?.value
   if (cookie) {
-    for (const account of listAccounts()) {
-      const expected = await createSessionToken(account.user, account.role)
-      if (expected && timingSafeEqual(cookie, expected)) {
+    for (const expected of await listExpectedSessionTokens()) {
+      if (timingSafeEqual(cookie, expected.token)) {
         return {
-          user: account.user,
-          role: account.role,
-          can_view_revenue: canViewRevenue(account.role),
+          user: expected.user,
+          role: expected.role,
+          can_view_revenue: canViewRevenue(expected.role),
         }
       }
     }

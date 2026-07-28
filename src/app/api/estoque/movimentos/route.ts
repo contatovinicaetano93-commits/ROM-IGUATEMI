@@ -10,9 +10,13 @@ export async function GET(req: NextRequest) {
     if (!auth.ok) return err(auth.message, auth.status)
 
     const sp = req.nextUrl.searchParams
+    // Default: últimos 30 dias — evita varrer histórico inteiro (50k+ linhas).
+    const from =
+      sp.get('from') ??
+      new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
     const movements = await listMovements({
       productId: sp.get('productId') ?? undefined,
-      from: sp.get('from') ?? undefined,
+      from,
       to: sp.get('to') ?? undefined,
     })
     return ok(movements)

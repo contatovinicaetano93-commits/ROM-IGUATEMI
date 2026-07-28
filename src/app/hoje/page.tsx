@@ -98,7 +98,7 @@ export default function HojePage() {
   const [playbookOpen, setPlaybookOpen] = usePersistedBool(HOJE_OPEN_PLAYBOOK_KEY, false)
 
   useEffect(() => {
-    apiFetch('/api/hoje', { cache: 'no-store' })
+    apiFetch('/api/hoje', { cache: 'no-store', timeoutMs: 25_000 })
       .then((r) => r.json())
       .then((json) => {
         if (json.error) setError(json.error)

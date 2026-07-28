@@ -111,7 +111,7 @@ export default function PipelinePage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/pipeline', { cache: 'no-store' })
+      const res = await apiFetch('/api/pipeline', { cache: 'no-store', timeoutMs: 25_000 })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setData(json.data)

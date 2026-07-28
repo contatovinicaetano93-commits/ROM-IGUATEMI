@@ -96,11 +96,25 @@ export default function DashboardPage() {
       try {
         setLoading(true)
         setWarn(null)
-        const [kpisRes, tmRes, perfRes, periodRes] = await Promise.all([
+        // Período primeiro (cards principais da Visão); resto em paralelo depois.
+        const periodRes = await apiFetch(`/api/kpis/periodo?month=${month}`, {
+          cache: 'no-store',
+          timeoutMs: 25_000,
+        })
+        if (cancelled) return
+        try {
+          const periodJson = await periodRes.json()
+          if (periodJson.error) setWarn(`Período: ${periodJson.error}`)
+          else if (periodJson.data) setPeriod(periodJson.data)
+        } catch {
+          setWarn('Analytics de período indisponível')
+        }
+        if (!cancelled) setLoading(false)
+
+        const [kpisRes, tmRes, perfRes] = await Promise.all([
           apiFetch('/api/kpis', { cache: 'no-store', timeoutMs: 20_000 }),
           apiFetch('/api/kpis/tempo-medio', { cache: 'no-store', timeoutMs: 15_000 }),
           apiFetch(`/api/kpis/performance?month=${month}`, { cache: 'no-store', timeoutMs: 25_000 }),
-          apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store', timeoutMs: 25_000 }),
         ])
         if (cancelled) return
 
@@ -137,20 +151,9 @@ export default function DashboardPage() {
           setPerformance(null)
         }
 
-        try {
-          const periodJson = await periodRes.json()
-          if (periodJson.error) warnings.push(`Período: ${periodJson.error}`)
-          else if (periodJson.data) setPeriod(periodJson.data)
-          else setPeriod(null)
-        } catch {
-          warnings.push('Analytics de período indisponível')
-          setPeriod(null)
-        }
-
-        if (warnings.length) setWarn(warnings.join(' · '))
+        if (warnings.length) setWarn((prev) => [prev, ...warnings].filter(Boolean).join(' · '))
       } catch (e) {
         if (!cancelled) setError(String(e))
-      } finally {
         if (!cancelled) setLoading(false)
       }
     }

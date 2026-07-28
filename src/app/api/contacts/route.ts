@@ -35,8 +35,8 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status')
     const channel = searchParams.get('channel')
 
-    const rawLimit = Number(searchParams.get('limit') ?? 500)
-    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 500
+    const rawLimit = Number(searchParams.get('limit') ?? 100)
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 100
     // pending/status/channel filtrados na query (base inteira) — não só no top urgente.
     const { items: rawItems, total } = await listContactsWithSummary({
       limit,

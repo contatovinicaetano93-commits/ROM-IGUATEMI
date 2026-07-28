@@ -70,12 +70,12 @@ function ContatosPageContent() {
   ) {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ sort: 'urgency' })
+      const params = new URLSearchParams({ sort: 'urgency', limit: '100' })
       if (pendingOnly) params.set('pending', 'true')
       if (searchQ) params.set('q', searchQ)
       if (status !== 'all') params.set('status', status)
       if (channel !== 'all') params.set('channel', channel)
-      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
+      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store', timeoutMs: 20_000 })
       const json = await res.json()
       if (json.error) setError(json.error)
       else {

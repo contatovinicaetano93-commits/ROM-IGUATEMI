@@ -213,19 +213,35 @@ export async function listContactsWithSummary(
     const total = countRows[0]?.n ?? 0
 
     if (pendingOnly) {
-      const byContact = await loadActiveServices()
-      const pendingIds = Array.from(byContact.keys()).filter(
-        (id) => urgencyForServices(byContact.get(id) ?? []).pending_actions > 0,
-      )
+      // Candidatos por status + serviços urgentes (evita full scan de client_services).
+      const pendingCandidates = (await sql`
+        select cs.contact_id
+        from client_services cs
+        join contacts c on c.id = cs.contact_id
+        where cs.active = true
+          and c.status = ${status}
+          and c.anonymized_at is null
+          and (${channel}::text is null or c.channel = ${channel})
+          and (
+            (
+              cs.last_done_at is not null
+              and cs.cadence_days is not null
+              and (cs.last_done_at::date + cs.cadence_days)
+                <= (now() at time zone 'America/Sao_Paulo')::date + 7
+            )
+            or (
+              cs.scheduled_at is not null
+              and cs.scheduled_at <= (now() at time zone 'America/Sao_Paulo') + interval '14 days'
+            )
+          )
+        group by cs.contact_id
+        limit ${Math.min(limit * 5, 400)}
+      `) as { contact_id: string }[]
+      const pendingIds = pendingCandidates.map((r) => r.contact_id)
       if (pendingIds.length === 0) return { items: [], total: 0 }
-      const contacts = (await sql`
-        select * from contacts
-        where status = ${status}
-          and anonymized_at is null
-          and (${channel}::text is null or channel = ${channel})
-          and id = any(${pendingIds}::uuid[])
-      `) as ContactRow[]
-      const items = withUrgency(contacts, byContact)
+      const byContact = await loadActiveServices(pendingIds)
+      const contacts = await fetchContactsByIds(pendingIds)
+      const items = withUrgency(contacts, byContact).filter((c) => c.pending_actions > 0)
       items.sort(compareByOverdueThenName)
       return { items: items.slice(0, limit), total: items.length }
     }
@@ -242,8 +258,29 @@ export async function listContactsWithSummary(
     return { items: withUrgency(contacts, byContact), total }
   }
 
-  // Default / pending: ranqueia urgência a partir dos serviços ativos (centenas, não dezenas de mil).
-  const byContact = await loadActiveServices()
+  // Default / pending: não carrega TODOS os serviços ativos (pode ser dezenas de mil).
+  // Candidatos via SQL (atrasados / próximos / agendados) e só então carrega serviços.
+  const candidateCap = Math.min(Math.max(limit * 4, 120), 400)
+  const candidateRows = (await sql`
+    select contact_id
+    from client_services
+    where active = true
+      and (
+        (
+          last_done_at is not null
+          and cadence_days is not null
+          and (last_done_at::date + cadence_days) <= (now() at time zone 'America/Sao_Paulo')::date + 7
+        )
+        or (
+          scheduled_at is not null
+          and scheduled_at <= (now() at time zone 'America/Sao_Paulo') + interval '14 days'
+        )
+      )
+    group by contact_id
+    limit ${candidateCap}
+  `) as { contact_id: string }[]
+  const candidateIds = candidateRows.map((r) => r.contact_id)
+  const byContact = await loadActiveServices(candidateIds)
 
   if (pendingOnly) {
     const pendingRanked = Array.from(byContact.keys())

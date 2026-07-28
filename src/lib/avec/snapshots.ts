@@ -62,7 +62,8 @@ export async function saveReportSnapshot(
 export async function getLatestSnapshot(reportId: string) {
   const sql = getSql()
   const rows = (await sql`
-    select * from avec_report_snapshots
+    select report_id, params, payload, fetched_at, row_count
+    from avec_report_snapshots
     where report_id = ${reportId}
     order by fetched_at desc
     limit 1

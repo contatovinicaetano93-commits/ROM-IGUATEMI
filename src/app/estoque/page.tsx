@@ -279,7 +279,28 @@ export default function EstoquePage() {
 
   useEffect(() => {
     load()
-    const interval = setInterval(load, 60_000)
+    // Poll leve: só KPIs/alertas/status a cada 90s (não recarrega catálogo inteiro).
+    const interval = setInterval(() => {
+      void (async () => {
+        try {
+          const [kpisRes, alertsRes, statusRes] = await Promise.all([
+            apiFetch('/api/estoque/kpis', { cache: 'no-store', timeoutMs: 20_000 }),
+            apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store', timeoutMs: 15_000 }),
+            apiFetch('/api/estoque/sync/status', { cache: 'no-store', timeoutMs: 10_000 }),
+          ])
+          const [kpisJson, alertsJson, statusJson] = await Promise.all([
+            kpisRes.json(),
+            alertsRes.json(),
+            statusRes.json(),
+          ])
+          if (!kpisJson.error) setKpis(kpisJson.data)
+          setAlerts(alertsJson.data ?? [])
+          setSyncStatus(statusJson.data ?? null)
+        } catch {
+          // silencioso no poll
+        }
+      })()
+    }, 90_000)
     return () => clearInterval(interval)
   }, [load])
 

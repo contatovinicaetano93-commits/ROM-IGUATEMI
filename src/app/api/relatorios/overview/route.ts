@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server'
-import { ok, err, handleError } from '@/lib/api-response'
+import { ok, okCached, err, handleError } from '@/lib/api-response'
 import { requireFinance } from '@/lib/auth'
 import { computeMonthOverview } from '@/lib/salon/month-overview'
 import { buildMonthOverviewCsv } from '@/lib/salon/month-overview-export'
+import { ttlGetOrSet } from '@/lib/ttl-cache'
 
 /** Evita hang eterno no serverless quando o pool DB satura. */
 export const maxDuration = 30
@@ -21,7 +22,10 @@ export async function GET(req: NextRequest) {
     const format = req.nextUrl.searchParams.get('format')
     // UI: só lê (cache salon_month_metrics quando existir). Materializa com ?materialize=1.
     const materialize = req.nextUrl.searchParams.get('materialize') === '1'
-    const overview = await computeMonthOverview({ month, materialize })
+    const cacheKey = `relatorios:overview:${month ?? 'cur'}:mat=${materialize ? 1 : 0}`
+    const overview = materialize
+      ? await computeMonthOverview({ month, materialize })
+      : await ttlGetOrSet(cacheKey, 60_000, () => computeMonthOverview({ month, materialize: false }))
 
     if (format === 'csv') {
       const csv = buildMonthOverviewCsv(overview)
@@ -36,7 +40,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return ok(overview)
+    return materialize ? ok(overview) : okCached(overview, 45)
   } catch (e) {
     return handleError(e)
   }

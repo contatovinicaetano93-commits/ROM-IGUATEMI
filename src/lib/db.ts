@@ -107,12 +107,13 @@ export function getSql(): Sql {
     cached?.end({ timeout: 1 }).catch(() => {})
     cached = postgres(url, {
       ssl: 'require',
-      // Transaction pooler (6543): 3 conexões permitem Promise.all real nos painéis.
-      max: 3,
+      // Transaction pooler (6543): 8 conexões permitem Promise.all real nos painéis
+      // sem estourar o pooler (cada isolate serverless tem o próprio pool).
+      max: 8,
       prepare: false,
-      idle_timeout: 20,
+      idle_timeout: 15,
       max_lifetime: 60 * 5,
-      connect_timeout: 10,
+      connect_timeout: 15,
     })
     cachedUrl = url
   }
