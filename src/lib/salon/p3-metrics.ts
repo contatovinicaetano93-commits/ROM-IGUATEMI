@@ -40,12 +40,11 @@ export async function upsertSalonP3Daily(
   const existing = (await sql`
     select * from salon_p3_daily where day = ${day}::date limit 1
   `) as SalonP3Daily[]
-  const cur = existing[0]
+  const cur = mapSalonP3Row(existing[0])
 
   const return_rate = patch.return_rate ?? Number(cur?.return_rate ?? 0)
   const new_clients_period = patch.new_clients_period ?? Number(cur?.new_clients_period ?? 0)
-  const revenue_curve =
-    patch.revenue_curve ?? (cur?.revenue_curve as P3CurvePoint[] | undefined) ?? []
+  const revenue_curve = patch.revenue_curve ?? cur?.revenue_curve ?? []
 
   await sql`
     insert into salon_p3_daily (
@@ -64,6 +63,14 @@ export async function upsertSalonP3Daily(
       revenue_curve = excluded.revenue_curve,
       updated_at = now()
   `
+}
+
+function mapSalonP3Row(row: SalonP3Daily | undefined): SalonP3Daily | null {
+  if (!row) return null
+  return {
+    ...row,
+    revenue_curve: asJsonArray<P3CurvePoint>(row.revenue_curve),
+  }
 }
 
 /**
@@ -85,12 +92,7 @@ export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Dai
       order by day desc
       limit 1
     `) as SalonP3Daily[]
-    const row = rows[0]
-    if (!row) return null
-    return {
-      ...row,
-      revenue_curve: asJsonArray<P3CurvePoint>(row.revenue_curve),
-    }
+    return mapSalonP3Row(rows[0])
   } catch {
     return null
   }
