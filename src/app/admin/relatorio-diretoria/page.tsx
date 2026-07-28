@@ -150,7 +150,10 @@ export default function RelatorioDiretoriaPage() {
         compare,
       })
       if (forceDemo) q.set('mock', '1')
-      const res = await apiFetch(`/api/director-report?${q}`, { cache: 'no-store' })
+      const res = await apiFetch(`/api/director-report?${q}`, {
+        cache: 'no-store',
+        timeoutMs: 45_000,
+      })
       const json = await res.json()
       if (!res.ok || json.error) {
         setError(json.error ?? 'Não autorizado — entre com o login de gerência')
@@ -159,7 +162,12 @@ export default function RelatorioDiretoriaPage() {
       }
       setData(json.data)
     } catch (e) {
-      setError(String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(
+        msg === 'Timeout' || (e instanceof DOMException && e.name === 'AbortError')
+          ? 'Relatório demorou demais (Avec). Tente de novo ou use DEMO se a API estiver lenta.'
+          : msg,
+      )
     } finally {
       setLoading(false)
     }
@@ -294,7 +302,9 @@ export default function RelatorioDiretoriaPage() {
           quarter,
           compare,
           professional_id: proId0011 || undefined,
+          mock: forceDemo ? 1 : undefined,
         }),
+        timeoutMs: 60_000,
       })
       const json = await res.json()
       alert(json.error ?? json.data?.note ?? 'Enviado')
@@ -316,7 +326,9 @@ export default function RelatorioDiretoriaPage() {
           compare_0021: compareQuarter0021,
           compare_months: compareMonths,
           professional_id: proId0021 || undefined,
+          mock: forceDemo ? 1 : undefined,
         }),
+        timeoutMs: 60_000,
       })
       const json = await res.json()
       alert(json.error ?? json.data?.note ?? 'Enviado')
@@ -342,8 +354,22 @@ export default function RelatorioDiretoriaPage() {
           </p>
           <p className="mt-2 text-xs text-muted">
             Fonte:{' '}
-            <span className={data?.source === 'avec' ? 'text-foreground' : 'text-warning'}>
-              {loading ? '…' : data?.source === 'avec' ? 'Avec live' : 'demo / fixture'}
+            <span
+              className={
+                data?.source === 'avec'
+                  ? 'text-foreground'
+                  : data?.source === 'partial'
+                    ? 'text-warning'
+                    : 'text-warning'
+              }
+            >
+              {loading
+                ? '…'
+                : data?.source === 'avec'
+                  ? 'Avec live'
+                  : data?.source === 'partial'
+                    ? 'parcial (Avec + demo)'
+                    : 'demo / fixture'}
             </span>
             {data?.schedule_note ? ` · ${data.schedule_note}` : ''}
           </p>
@@ -490,6 +516,13 @@ export default function RelatorioDiretoriaPage() {
                     <tr>
                       <td colSpan={5} className="py-6 text-muted">
                         Carregando…
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && selectedReturn.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-muted">
+                        Nenhum profissional neste filtro.
                       </td>
                     </tr>
                   )}
@@ -806,7 +839,10 @@ export default function RelatorioDiretoriaPage() {
                     )}
                     {!loading &&
                       selectedRevenue.map(({ pro, older, newer }) => {
-                        const delta = (newer?.revenue ?? 0) - (older?.revenue ?? 0)
+                        const delta =
+                          older != null && newer != null
+                            ? newer.revenue - older.revenue
+                            : null
                         return (
                           <tr key={pro.id} className="border-b border-border/60">
                             <td className="py-3 pr-3 font-medium">{pro.name}</td>
@@ -824,14 +860,25 @@ export default function RelatorioDiretoriaPage() {
                             </td>
                             <td
                               className={`py-3 tabular-nums ${
-                                delta < 0 ? 'text-danger' : 'text-success'
+                                delta == null
+                                  ? 'text-muted'
+                                  : delta < 0
+                                    ? 'text-danger'
+                                    : 'text-success'
                               }`}
                             >
-                              {formatCurrency(delta)}
+                              {delta == null ? '—' : formatCurrency(delta)}
                             </td>
                           </tr>
                         )
                       })}
+                    {!loading && selectedRevenue.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-muted">
+                          Nenhum profissional neste filtro.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               ) : (
@@ -867,6 +914,13 @@ export default function RelatorioDiretoriaPage() {
                           </td>
                         </tr>
                       ))}
+                    {!loading && selectedRevenue.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-muted">
+                          Nenhum profissional neste filtro.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               )}

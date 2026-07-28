@@ -1,14 +1,17 @@
-import { computeFinanceKpis, type FinanceKpis } from '@/lib/finance'
+import { computeFinanceKpis, type FinanceKpis, EMPTY_CMV_COVERAGE } from '@/lib/finance'
 import { getBrand } from '@/lib/brand'
 import { computePeriodAnalytics, type PeriodAnalytics } from '@/lib/salon/period-analytics'
 import {
   getMonthCompleteness,
+  getSalonMonthMetrics,
   labelMonthPt,
   materializeSalonMonthMetrics,
   monthKeyFromDay,
+  monthRange,
   statusLabelPt,
   type MonthCloseStatus,
   type MonthCompleteness,
+  type SalonMonthMetricsRow,
 } from '@/lib/salon/month-metrics'
 import { todayIso } from '@/lib/salon/format'
 
@@ -58,6 +61,8 @@ export interface MonthOverview {
     occupancy_avg: number | null
   }
   source_notes: MonthOverviewSourceNote[]
+  /** true quando fechamento veio de salon_month_metrics (leitura rápida). */
+  from_cache?: boolean
 }
 
 const SOURCE_NOTES: MonthOverviewSourceNote[] = [
@@ -83,38 +88,67 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
   },
 ]
 
-export async function computeMonthOverview(opts?: {
-  month?: string
-  materialize?: boolean
-}): Promise<MonthOverview> {
-  const month = opts?.month ?? monthKeyFromDay(todayIso())
-  const brand = getBrand()
+function previousMonthKey(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number)
+  const d = new Date(Date.UTC(y!, m! - 2, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
 
-  const [finance, analytics, completeness] = await Promise.all([
-    computeFinanceKpis({ month }),
-    computePeriodAnalytics({ month }),
-    getMonthCompleteness(month),
-  ])
-
-  let materializedAt: string | null = null
-  if (opts?.materialize !== false) {
-    try {
-      const row = await materializeSalonMonthMetrics(month, {
-        analytics,
-        finance: {
-          revenue: finance.current.revenue,
-          expenses: finance.current.expenses,
-          cmv: finance.current.cmv,
-          payment_mix: finance.current.payment_mix,
-        },
-      })
-      materializedAt = row.materialized_at
-    } catch {
-      // Tabela ainda não migrada — overview continua com dados ao vivo.
-      materializedAt = null
-    }
+function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
+  const revenue = Number(row.revenue) || 0
+  const expenses = Number(row.expenses) || 0
+  const cmv = Number(row.cmv) || 0
+  const attended = Number(row.attended) || 0
+  const gross_margin =
+    revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
+  const margin_after_cmv =
+    revenue > 0 ? Math.round(((revenue - expenses - cmv) / revenue) * 1000) / 10 : null
+  const range = monthRange(row.month)
+  return {
+    month: row.month,
+    label: labelMonthPt(row.month),
+    from: range.from,
+    to: range.to,
+    revenue,
+    expenses,
+    attended,
+    ticket_avg: row.ticket_avg != null ? Number(row.ticket_avg) : null,
+    daily: [],
+    cmv,
+    cmv_coverage: { ...EMPTY_CMV_COVERAGE, cmv },
+    margin_after_cmv,
+    gross_margin,
+    cash_flow: Number(row.cash_flow) || 0,
+    payment_mix: [],
+    payment_reconciliation: {
+      revenue,
+      payments_total: 0,
+      delta: -revenue,
+      tolerance: Math.max(1, Math.round(revenue * 0.01 * 100) / 100),
+      status: revenue > 0 ? 'missing_payments' : 'aligned',
+    },
+    fiscal_split: {
+      gross_paid: 0,
+      cbs_retained: 0,
+      ibs_retained: 0,
+      net_received: 0,
+      pending_count: 0,
+      settled_count: 0,
+      configured: false,
+    },
   }
+}
 
+function buildOverview(args: {
+  brand: ReturnType<typeof getBrand>
+  month: string
+  finance: FinanceKpis
+  analytics: PeriodAnalytics
+  completeness: MonthCompleteness
+  materializedAt: string | null
+  fromCache?: boolean
+}): MonthOverview {
+  const { brand, month, finance, analytics, completeness, materializedAt, fromCache } = args
   return {
     unit: brand.displayName,
     panel: brand.panel,
@@ -154,5 +188,96 @@ export async function computeMonthOverview(opts?: {
       occupancy_avg: analytics.previous.occupancy_avg,
     },
     source_notes: SOURCE_NOTES,
+    from_cache: fromCache,
   }
+}
+
+/**
+ * Overview do mês.
+ * UI (`materialize=false`): tenta leitura rápida de `salon_month_metrics` + analytics;
+ * só recalcula finance completo se o cache mensal não existir.
+ */
+export async function computeMonthOverview(opts?: {
+  month?: string
+  materialize?: boolean
+}): Promise<MonthOverview> {
+  const month = opts?.month ?? monthKeyFromDay(todayIso())
+  const brand = getBrand()
+  const wantMaterialize = opts?.materialize !== false
+  const prevMonth = previousMonthKey(month)
+
+  if (!wantMaterialize) {
+    const [cached, cachedPrev, analytics, completeness] = await Promise.all([
+      getSalonMonthMetrics(month),
+      getSalonMonthMetrics(prevMonth),
+      computePeriodAnalytics({ month }),
+      getMonthCompleteness(month),
+    ])
+
+    if (cached && Number(cached.revenue) > 0) {
+      const current = stubFinanceFromRow(cached)
+      const previous = cachedPrev
+        ? stubFinanceFromRow(cachedPrev)
+        : {
+            ...stubFinanceFromRow({
+              ...cached,
+              month: prevMonth,
+              revenue: 0,
+              attended: 0,
+              cancelled: 0,
+              no_shows: 0,
+              expenses: 0,
+              cmv: 0,
+              cash_flow: 0,
+              ticket_avg: null,
+            }),
+            label: labelMonthPt(prevMonth),
+            month: prevMonth,
+          }
+
+      return buildOverview({
+        brand,
+        month,
+        finance: { current, previous },
+        analytics,
+        completeness,
+        materializedAt: cached.materialized_at,
+        fromCache: true,
+      })
+    }
+  }
+
+  const [finance, analytics, completeness] = await Promise.all([
+    computeFinanceKpis({ month }),
+    computePeriodAnalytics({ month }),
+    getMonthCompleteness(month),
+  ])
+
+  let materializedAt: string | null = null
+  if (wantMaterialize) {
+    try {
+      const row = await materializeSalonMonthMetrics(month, {
+        analytics,
+        finance: {
+          revenue: finance.current.revenue,
+          expenses: finance.current.expenses,
+          cmv: finance.current.cmv,
+          payment_mix: finance.current.payment_mix,
+        },
+      })
+      materializedAt = row.materialized_at
+    } catch {
+      materializedAt = null
+    }
+  }
+
+  return buildOverview({
+    brand,
+    month,
+    finance,
+    analytics,
+    completeness,
+    materializedAt,
+    fromCache: false,
+  })
 }

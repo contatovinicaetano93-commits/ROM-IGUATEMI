@@ -207,7 +207,10 @@ export default function EstoquePage() {
   const [kpis, setKpis] = useState<StockKpis | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  /** Catálogo / movimentos — fase 2 (evita “vazio” falso após KPIs). */
+  const [detailLoading, setDetailLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [detailError, setDetailError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showBrands, setShowBrands] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -220,39 +223,57 @@ export default function EstoquePage() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    setDetailLoading(true)
     setError(null)
+    setDetailError(null)
     try {
-      const [kpisRes, alertsRes, movRes, prodRes, statusRes, catRes, brandRes] = await Promise.all([
-        apiFetch('/api/estoque/kpis', { cache: 'no-store' }),
-        apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store' }),
-        apiFetch('/api/estoque/movimentos', { cache: 'no-store' }),
-        apiFetch('/api/estoque/produtos', { cache: 'no-store' }),
-        apiFetch('/api/estoque/sync/status', { cache: 'no-store' }),
-        apiFetch('/api/estoque/categorias', { cache: 'no-store' }),
-        apiFetch('/api/estoque/marcas', { cache: 'no-store' }),
+      // KPIs + alertas + status primeiro (acima da dobra); catálogo/movimentos depois.
+      const [kpisRes, alertsRes, statusRes] = await Promise.all([
+        apiFetch('/api/estoque/kpis', { cache: 'no-store', timeoutMs: 20_000 }),
+        apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store', timeoutMs: 15_000 }),
+        apiFetch('/api/estoque/sync/status', { cache: 'no-store', timeoutMs: 10_000 }),
       ])
-      const [kpisJson, alertsJson, movJson, prodJson, statusJson, catJson, brandJson] =
-        await Promise.all([
-          kpisRes.json(),
-          alertsRes.json(),
-          movRes.json(),
-          prodRes.json(),
-          statusRes.json(),
-          catRes.json(),
-          brandRes.json(),
-        ])
+      const [kpisJson, alertsJson, statusJson] = await Promise.all([
+        kpisRes.json(),
+        alertsRes.json(),
+        statusRes.json(),
+      ])
       if (kpisJson.error) throw new Error(kpisJson.error)
       setKpis(kpisJson.data)
       setAlerts(alertsJson.data ?? [])
-      setMovements(movJson.data ?? [])
-      setProducts(prodJson.data ?? [])
       setSyncStatus(statusJson.data ?? null)
-      setCategories(catJson.data ?? [])
-      setBrands(brandJson.data ?? [])
+      setLoading(false)
+
+      try {
+        const [movRes, prodRes, catRes, brandRes] = await Promise.all([
+          apiFetch('/api/estoque/movimentos', { cache: 'no-store', timeoutMs: 20_000 }),
+          apiFetch('/api/estoque/produtos', { cache: 'no-store', timeoutMs: 25_000 }),
+          apiFetch('/api/estoque/categorias', { cache: 'no-store', timeoutMs: 10_000 }),
+          apiFetch('/api/estoque/marcas', { cache: 'no-store', timeoutMs: 10_000 }),
+        ])
+        const [movJson, prodJson, catJson, brandJson] = await Promise.all([
+          movRes.json(),
+          prodRes.json(),
+          catRes.json(),
+          brandRes.json(),
+        ])
+        const detailErrs = [movJson.error, prodJson.error, catJson.error, brandJson.error].filter(
+          Boolean,
+        )
+        if (detailErrs.length) setDetailError(String(detailErrs[0]))
+        setMovements(movJson.data ?? [])
+        setProducts(prodJson.data ?? [])
+        setCategories(catJson.data ?? [])
+        setBrands(brandJson.data ?? [])
+      } catch (e) {
+        setDetailError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setDetailLoading(false)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
       setLoading(false)
+      setDetailLoading(false)
     }
   }, [])
 
@@ -544,11 +565,14 @@ export default function EstoquePage() {
             </button>
           ))}
         </div>
-        {loading && <div className="h-16 animate-pulse rounded-2xl bg-surface" />}
-        {!loading && catalogProducts.length === 0 && (
+        {detailLoading && <div className="h-16 animate-pulse rounded-2xl bg-surface" />}
+        {!detailLoading && detailError && (
+          <p className="text-xs text-warning">{detailError}</p>
+        )}
+        {!detailLoading && !detailError && catalogProducts.length === 0 && (
           <p className="text-xs text-muted">Nenhum produto com esses filtros.</p>
         )}
-        {!loading && catalogProducts.length > 0 && (
+        {!detailLoading && catalogProducts.length > 0 && (
           <div className="max-h-96 overflow-y-auto">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 bg-card text-[0.65rem] uppercase tracking-wide text-muted">
@@ -643,7 +667,7 @@ export default function EstoquePage() {
             </button>
           ))}
         </div>
-        {loading ? (
+        {loading || detailLoading ? (
           <div className="h-16 animate-pulse rounded-2xl bg-surface" />
         ) : (
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -674,13 +698,13 @@ export default function EstoquePage() {
         <p className="mb-3 text-xs text-muted">
           Avec 0323 · entradas enriquecidas como pedido de compra.
         </p>
-        {loading && <div className="h-16 animate-pulse rounded-2xl bg-surface" />}
-        {!loading && purchaseEntries.length === 0 && (
+        {detailLoading && <div className="h-16 animate-pulse rounded-2xl bg-surface" />}
+        {!detailLoading && purchaseEntries.length === 0 && (
           <p className="text-xs text-muted">
             Nenhuma entrada marcada como pedido ainda. Rode o sync full para enriquecer com 0323.
           </p>
         )}
-        {!loading && purchaseEntries.length > 0 && (
+        {!detailLoading && purchaseEntries.length > 0 && (
           <ul className="flex flex-col gap-2">
             {purchaseEntries.map((m) => (
               <li
@@ -707,7 +731,7 @@ export default function EstoquePage() {
       <div className="flex flex-col gap-2">
         <SectionToggleHeader
           title="Movimentações recentes"
-          badge={<CountBadge value={loading ? '—' : String(movements.length)} />}
+          badge={<CountBadge value={detailLoading ? '—' : String(movements.length)} />}
           open={movementsOpen}
           onToggle={() => setMovementsOpen((v) => !v)}
           aside={
@@ -722,18 +746,25 @@ export default function EstoquePage() {
         />
 
         <CollapsibleBody open={movementsOpen} className="flex flex-col gap-2">
-          {loading &&
+          {detailLoading &&
             Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="h-14 animate-pulse rounded-2xl bg-card" />
             ))}
 
-          {!loading && movements.length === 0 && (
+          {!detailLoading && movements.length === 0 && (
             <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
               Nenhuma movimentação sincronizada ainda.
             </div>
           )}
 
-          {!loading &&
+          {!detailLoading &&
+            movements.length >= 500 && (
+              <p className="text-[0.7rem] text-muted">
+                Lista limitada às 500 movimentações mais recentes.
+              </p>
+            )}
+
+          {!detailLoading &&
             movements.map((m) => {
               const outflowBucket: OutflowReasonBucket | null =
                 m.type === 'saida' ? classifyOutflowReason(m.reason) : null

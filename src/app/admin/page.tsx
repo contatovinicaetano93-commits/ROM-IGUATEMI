@@ -119,12 +119,25 @@ export default function AdminPage() {
     setState('loading')
     setError(null)
     try {
-      const [k, c, s, a, h] = await Promise.all([
-        apiFetch('/api/kpis', { cache: 'no-store' }).then((r) => r.json()),
-        apiFetch('/api/contacts?sort=urgency', { cache: 'no-store' }).then((r) => r.json()),
-        apiFetch('/api/schedule', { cache: 'no-store' }).then((r) => r.json()),
-        apiFetch('/api/avec/sync', { cache: 'no-store' }).then((r) => r.json()),
-        apiFetch('/api/health', { cache: 'no-store' }).then((r) => r.json()),
+      // Health primeiro — desbloqueia a página de diagnóstico sem esperar KPIs/contatos.
+      const h = await apiFetch('/api/health', { cache: 'no-store', timeoutMs: 10_000 }).then((r) =>
+        r.json(),
+      )
+      if (h.error) {
+        setError(`Health: ${h.error}`)
+        setState('error')
+      } else {
+        setHealth(h.data)
+        setState('ok')
+      }
+
+      const [k, c, s, a] = await Promise.all([
+        apiFetch('/api/kpis', { cache: 'no-store', timeoutMs: 20_000 }).then((r) => r.json()),
+        apiFetch('/api/contacts?sort=urgency&limit=50', { cache: 'no-store', timeoutMs: 20_000 }).then(
+          (r) => r.json(),
+        ),
+        apiFetch('/api/schedule', { cache: 'no-store', timeoutMs: 15_000 }).then((r) => r.json()),
+        apiFetch('/api/avec/sync', { cache: 'no-store', timeoutMs: 15_000 }).then((r) => r.json()),
       ])
 
       const errs: string[] = []
@@ -140,18 +153,12 @@ export default function AdminPage() {
       if (a.error) errs.push(`Avec: ${a.error}`)
       else setAvec(a.data)
 
-      if (h.error) errs.push(`Health: ${h.error}`)
-      else setHealth(h.data)
-
       if (errs.length) {
-        setError(errs.join(' · '))
-        setState('error')
-      } else {
-        setState('ok')
+        setError((prev) => [prev, ...errs].filter(Boolean).join(' · '))
       }
     } catch (e) {
       setError(String(e))
-      setState('error')
+      setState((prev) => (prev === 'ok' ? 'ok' : 'error'))
     }
   }, [])
 

@@ -24,7 +24,9 @@ export async function deliverDirectorReport(
       const lines = [
         report.source === 'mock'
           ? `${unitName} · Relatório diretoria [DEMO / mock — não usar para decisão]`
-          : `${unitName} · Relatório diretoria`,
+          : report.source === 'partial'
+            ? `${unitName} · Relatório diretoria [PARCIAL — Avec + demo]`
+            : `${unitName} · Relatório diretoria`,
         stage === 'all' ? 'Etapas: 0011 + 0021' : `Etapa: ${stage}`,
       ]
       if (stage === '0011' || stage === 'all') {

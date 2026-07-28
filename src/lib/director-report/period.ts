@@ -118,7 +118,7 @@ export function reportReferenceDate(report: DirectorReport): string {
 }
 
 function subjectPrefix(report: DirectorReport) {
-  return report.source === 'mock' ? '[DEMO] ' : ''
+  return report.source === 'mock' ? '[DEMO] ' : report.source === 'partial' ? '[PARCIAL] ' : ''
 }
 
 export function reportSubject0011(report: DirectorReport): string {

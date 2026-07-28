@@ -32,7 +32,10 @@ function toBase64(text: string) {
 }
 
 function mockBanner(report: DirectorReport) {
-  if (report.source !== 'mock') return ''
+  if (report.source === 'avec') return ''
+  if (report.source === 'partial') {
+    return `<p style="margin:0 0 16px;padding:10px 12px;background:#fff4ce;border:1px solid #e6c200;border-radius:8px;font-size:13px;color:#5c4b00"><b>DADOS PARCIAIS</b> — uma etapa veio do Avec live e a outra caiu em demo/fixture. Confira a nota do relatório antes de decidir.</p>`
+  }
   return `<p style="margin:0 0 16px;padding:10px 12px;background:#fff4ce;border:1px solid #e6c200;border-radius:8px;font-size:13px;color:#5c4b00"><b>DADOS DE DEMONSTRAÇÃO (mock)</b> — não usar para decisão financeira até o mapper Avec 0011/0021 estar ativo. Fonte interna: fixture / série sintética.</p>`
 }
 

@@ -47,8 +47,19 @@ export interface OutflowReasonSummary {
   count: number
 }
 
+function isoDaySp(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+}
+
 function inDateRange(iso: string, fromIsoDay: string | null, toIsoDay: string | null): boolean {
-  const day = iso.slice(0, 10)
+  const day = isoDaySp(iso)
   if (fromIsoDay && day < fromIsoDay) return false
   if (toIsoDay && day > toIsoDay) return false
   return true

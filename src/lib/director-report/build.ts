@@ -62,7 +62,7 @@ export async function buildDirectorReport(
   }
 
   const avecReady = isAvecConfigured() && !isAvecMock() && !opts.forceMock
-  let source: 'mock' | 'avec' = 'mock'
+  let source: 'mock' | 'avec' | 'partial' = 'mock'
   let return_blocks = buildMockReturnBlocks(professionals, selectedQuarter, compareQuarter)
   let revenue_blocks = buildMockRevenueBlocks(professionals, selectedMonth)
   let liveNote: string | null = null
@@ -87,9 +87,23 @@ export async function buildDirectorReport(
       }
       if (live.return_blocks && live.revenue_blocks) {
         source = 'avec'
+      } else if (live.return_blocks || live.revenue_blocks) {
+        source = 'partial'
+        const missing = [
+          !live.return_blocks ? '0011' : null,
+          !live.revenue_blocks ? '0021' : null,
+        ]
+          .filter(Boolean)
+          .join('+')
+        liveNote = [
+          liveNote,
+          `Etapa ${missing} em demo — outra etapa Avec live.`,
+        ]
+          .filter(Boolean)
+          .join(' · ')
       }
       if (live.warnings.length) {
-        liveNote = live.warnings.slice(0, 3).join(' · ')
+        liveNote = [liveNote, live.warnings.slice(0, 3).join(' · ')].filter(Boolean).join(' · ')
       }
     } catch (e) {
       liveNote = `Avec live falhou — usando fixture: ${e instanceof Error ? e.message : String(e)}`

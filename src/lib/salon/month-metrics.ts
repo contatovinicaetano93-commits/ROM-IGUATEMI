@@ -275,8 +275,8 @@ async function sumStockCogs(from: string, to: string): Promise<number> {
       from stock_movements sm
       left join stock_products sp on sp.id = sm.product_id
       where sm.type = 'saida'
-        and (sm.occurred_at at time zone 'America/Sao_Paulo')::date >= ${from}::date
-        and (sm.occurred_at at time zone 'America/Sao_Paulo')::date <= ${to}::date
+        and sm.occurred_at >= (${from}::timestamp AT TIME ZONE 'America/Sao_Paulo')
+        and sm.occurred_at < ((${to}::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
     `) as { cmv: number }[]
     return Math.round(Number(rows[0]?.cmv ?? 0) * 100) / 100
   } catch {

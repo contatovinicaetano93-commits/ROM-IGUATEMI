@@ -207,6 +207,8 @@ export interface CmvCoverage {
    * Null se não houver saídas.
    */
   any_cost_pct: number | null
+  /** true se a query de CMV falhou (não confundir com CMV zerado legítimo). */
+  query_failed?: boolean
 }
 
 export const EMPTY_CMV_COVERAGE: CmvCoverage = {
@@ -217,6 +219,7 @@ export const EMPTY_CMV_COVERAGE: CmvCoverage = {
   with_zero: 0,
   movement_cost_pct: null,
   any_cost_pct: null,
+  query_failed: false,
 }
 
 async function sumStockCogs(from: string, to: string): Promise<CmvCoverage> {
@@ -246,8 +249,8 @@ async function sumStockCogs(from: string, to: string): Promise<CmvCoverage> {
       from stock_movements sm
       left join stock_products sp on sp.id = sm.product_id
       where sm.type = 'saida'
-        and (sm.occurred_at at time zone 'America/Sao_Paulo')::date >= ${from}::date
-        and (sm.occurred_at at time zone 'America/Sao_Paulo')::date <= ${to}::date
+        and sm.occurred_at >= (${from}::timestamp AT TIME ZONE 'America/Sao_Paulo')
+        and sm.occurred_at < ((${to}::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
     `) as {
       cmv: number
       saidas_total: number
@@ -273,8 +276,9 @@ async function sumStockCogs(from: string, to: string): Promise<CmvCoverage> {
       movement_cost_pct: pct(with_movement_cost),
       any_cost_pct: pct(with_movement_cost + with_product_fallback),
     }
-  } catch {
-    return { ...EMPTY_CMV_COVERAGE }
+  } catch (e) {
+    console.error('[finance] sumStockCogs failed', e)
+    return { ...EMPTY_CMV_COVERAGE, query_failed: true }
   }
 }
 

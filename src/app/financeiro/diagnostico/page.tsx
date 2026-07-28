@@ -50,12 +50,17 @@ export default function FinanceiroDiagnosticoPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/health', { cache: 'no-store' })
+      const res = await apiFetch('/api/health', { cache: 'no-store', timeoutMs: 10_000 })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setHealth(json.data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(
+        msg === 'Timeout' || (e instanceof DOMException && e.name === 'AbortError')
+          ? 'Health demorou demais — tente Atualizar.'
+          : msg,
+      )
     } finally {
       setLoading(false)
     }

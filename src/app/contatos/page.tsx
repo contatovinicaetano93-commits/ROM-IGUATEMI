@@ -96,6 +96,14 @@ function ContatosPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOnly, debouncedQuery, statusFilter, channelFilter])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (statusFilter === 'all') url.searchParams.delete('status')
+    else url.searchParams.set('status', statusFilter)
+    window.history.replaceState(null, '', `${url.pathname}${url.search}`)
+  }, [statusFilter])
+
   const statusFromData = Array.from(new Set(contacts.map((c) => c.status)))
   const statusOptions = Array.from(new Set([...FUNNEL_STATUS_OPTIONS, ...statusFromData]))
   const hasFilters = true
@@ -107,6 +115,12 @@ function ContatosPageContent() {
     statusFilter === 'novo' && !loading && contacts.length === 0 && !debouncedQuery && !error
   const emptyImportadoHint =
     statusFilter === 'importado' && !loading && contacts.length === 0 && !debouncedQuery && !error
+  const truncatedHint =
+    !loading &&
+    totalInBase != null &&
+    totalInBase > contacts.length &&
+    contacts.length > 0 &&
+    !debouncedQuery
 
   const subtitle = loading
     ? 'Todos os canais, em um só lugar'
@@ -145,6 +159,19 @@ function ContatosPageContent() {
           {pendingOnly ? 'Mostrando só pendentes' : 'Só ações pendentes'}
         </button>
         <UrgencyBadgeLegend />
+        {truncatedHint && (
+          <p className="rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted">
+            Lista limitada a {contacts.length} de {totalInBase}. Use a busca ou o filtro{' '}
+            <button
+              type="button"
+              className="text-gold underline-offset-2 hover:underline"
+              onClick={() => setStatusFilter('importado')}
+            >
+              Importado
+            </button>{' '}
+            / status para achar um contato específico.
+          </p>
+        )}
       </div>
 
       <div className="relative">
@@ -189,7 +216,8 @@ function ContatosPageContent() {
             <span className="font-medium text-foreground/80">Novo lead</span> = WhatsApp/manual.
             {' '}
             <span className="font-medium text-foreground/80">Importado</span> = base Avec (0004), não
-            é lead novo do funil.
+            é lead novo do funil. Lista limitada a 500 por consulta — use busca por nome/telefone
+            para achar além do topo.
           </p>
         </div>
       )}

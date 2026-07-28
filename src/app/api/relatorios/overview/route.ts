@@ -4,6 +4,9 @@ import { requireFinance } from '@/lib/auth'
 import { computeMonthOverview } from '@/lib/salon/month-overview'
 import { buildMonthOverviewCsv } from '@/lib/salon/month-overview-export'
 
+/** Evita hang eterno no serverless quando o pool DB satura. */
+export const maxDuration = 30
+
 /** Overview do mês — fechamento ROM (admin + financeiro). */
 export async function GET(req: NextRequest) {
   try {
@@ -16,7 +19,7 @@ export async function GET(req: NextRequest) {
     }
 
     const format = req.nextUrl.searchParams.get('format')
-    // UI: só lê. Materializa no cron/export explícito (?materialize=1).
+    // UI: só lê (cache salon_month_metrics quando existir). Materializa com ?materialize=1.
     const materialize = req.nextUrl.searchParams.get('materialize') === '1'
     const overview = await computeMonthOverview({ month, materialize })
 

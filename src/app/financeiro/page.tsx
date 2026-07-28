@@ -47,6 +47,7 @@ interface CmvCoverage {
   with_zero: number
   movement_cost_pct: number | null
   any_cost_pct: number | null
+  query_failed?: boolean
 }
 interface FinanceKpiBucket {
   month: string
@@ -357,9 +358,9 @@ export default function FinanceiroPage() {
     try {
       const kpisParams = new URLSearchParams({ month, ...(compareMonth ? { compare: compareMonth } : {}) })
       const [kpisRes, catRes, expRes] = await Promise.all([
-        apiFetch(`/api/financeiro/kpis?${kpisParams}`, { cache: 'no-store' }),
-        apiFetch('/api/financeiro/categorias', { cache: 'no-store' }),
-        apiFetch(`/api/financeiro/despesas?month=${month}`, { cache: 'no-store' }),
+        apiFetch(`/api/financeiro/kpis?${kpisParams}`, { cache: 'no-store', timeoutMs: 30_000 }),
+        apiFetch('/api/financeiro/categorias', { cache: 'no-store', timeoutMs: 15_000 }),
+        apiFetch(`/api/financeiro/despesas?month=${month}`, { cache: 'no-store', timeoutMs: 15_000 }),
       ])
       const [kpisJson, catJson, expJson] = await Promise.all([kpisRes.json(), catRes.json(), expRes.json()])
       if (kpisJson.error) throw new Error(kpisJson.error)
@@ -368,10 +369,19 @@ export default function FinanceiroPage() {
         current: normalizeKpiBucket(raw.current),
         previous: normalizeKpiBucket(raw.previous),
       })
+      const sideErrors = [catJson.error, expJson.error].filter(Boolean)
+      if (sideErrors.length) {
+        setError(`KPIs ok; listas: ${String(sideErrors[0])}`)
+      }
       setCategories(catJson.data ?? [])
       setExpenses(expJson.data?.expenses ?? [])
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(
+        msg === 'Timeout' || (e instanceof DOMException && e.name === 'AbortError')
+          ? 'Financeiro demorou demais para responder. Tente de novo.'
+          : msg,
+      )
     } finally {
       setLoading(false)
     }
@@ -549,8 +559,17 @@ export default function FinanceiroPage() {
 
   async function removeExpense(id: string) {
     if (!confirm('Excluir essa despesa?')) return
-    await apiFetch(`/api/financeiro/despesas/${id}`, { method: 'DELETE' })
-    load()
+    try {
+      const res = await apiFetch(`/api/financeiro/despesas/${id}`, {
+        method: 'DELETE',
+        timeoutMs: 15_000,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.error) throw new Error(json.error ?? `Falha ao excluir (${res.status})`)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
   }
 
   async function importFiscalSettlements() {
@@ -733,22 +752,28 @@ export default function FinanceiroPage() {
           value={
             loading || !kpis
               ? '—'
-              : kpis.current.cmv_coverage.saidas_total > 0
-                ? `${kpis.current.cmv_coverage.with_movement_cost}/${kpis.current.cmv_coverage.with_product_fallback}/${kpis.current.cmv_coverage.with_zero}`
-                : 'sem saídas'
+              : kpis.current.cmv_coverage.query_failed
+                ? 'falha na query'
+                : kpis.current.cmv_coverage.saidas_total > 0
+                  ? `${kpis.current.cmv_coverage.with_movement_cost}/${kpis.current.cmv_coverage.with_product_fallback}/${kpis.current.cmv_coverage.with_zero}`
+                  : 'sem saídas'
           }
           delta={
-            kpis?.current.cmv_coverage.any_cost_pct != null
-              ? `${formatPercentPoints(kpis.current.cmv_coverage.any_cost_pct)} com custo · ${formatPercentPoints(kpis.current.cmv_coverage.movement_cost_pct)} na saída`
-              : kpis && kpis.current.cmv_coverage.saidas_total === 0
-                ? 'Aguardando backfill 0044 do estoque'
-                : null
+            kpis?.current.cmv_coverage.query_failed
+              ? 'Não foi possível ler saídas do estoque — CMV pode estar zerado por erro'
+              : kpis?.current.cmv_coverage.any_cost_pct != null
+                ? `${formatPercentPoints(kpis.current.cmv_coverage.any_cost_pct)} com custo · ${formatPercentPoints(kpis.current.cmv_coverage.movement_cost_pct)} na saída`
+                : kpis && kpis.current.cmv_coverage.saidas_total === 0
+                  ? 'Aguardando backfill 0044 do estoque'
+                  : null
           }
           compareLabel="saídas (movimento/produto/zero)"
           positive={
-            kpis?.current.cmv_coverage.movement_cost_pct != null
-              ? kpis.current.cmv_coverage.movement_cost_pct >= 50
-              : null
+            kpis?.current.cmv_coverage.query_failed
+              ? false
+              : kpis?.current.cmv_coverage.movement_cost_pct != null
+                ? kpis.current.cmv_coverage.movement_cost_pct >= 50
+                : null
           }
           loading={loading}
           source={formatKpiSources('proxy', 'rom')}

@@ -33,13 +33,21 @@ export default function RelatoriosOverviewPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch(`/api/relatorios/overview?month=${month}`, { cache: 'no-store' })
+      const res = await apiFetch(`/api/relatorios/overview?month=${month}`, {
+        cache: 'no-store',
+        timeoutMs: 25_000,
+      })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setData(json.data as MonthOverview)
     } catch (e) {
       setData(null)
-      setError(e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(
+        msg === 'Timeout' || (e instanceof DOMException && e.name === 'AbortError')
+          ? 'Overview demorou demais — tente Atualizar fechamento ou outro mês.'
+          : msg,
+      )
     } finally {
       setLoading(false)
     }

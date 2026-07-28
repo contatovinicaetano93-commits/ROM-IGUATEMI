@@ -97,10 +97,10 @@ export default function DashboardPage() {
         setLoading(true)
         setWarn(null)
         const [kpisRes, tmRes, perfRes, periodRes] = await Promise.all([
-          apiFetch('/api/kpis', { cache: 'no-store' }),
-          apiFetch('/api/kpis/tempo-medio', { cache: 'no-store' }),
-          apiFetch(`/api/kpis/performance?month=${month}`, { cache: 'no-store' }),
-          apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store' }),
+          apiFetch('/api/kpis', { cache: 'no-store', timeoutMs: 20_000 }),
+          apiFetch('/api/kpis/tempo-medio', { cache: 'no-store', timeoutMs: 15_000 }),
+          apiFetch(`/api/kpis/performance?month=${month}`, { cache: 'no-store', timeoutMs: 25_000 }),
+          apiFetch(`/api/kpis/periodo?month=${month}`, { cache: 'no-store', timeoutMs: 25_000 }),
         ])
         if (cancelled) return
 
@@ -720,18 +720,20 @@ function InsightCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border p-4 ${
+      className={`min-w-0 overflow-hidden rounded-2xl border p-4 ${
         emphasize ? 'border-gold/30 bg-gradient-to-b from-gold/10 to-card' : 'border-border bg-card'
       }`}
     >
-      <div className="mb-2 flex items-center gap-1.5 text-muted">
-        {icon}
-        <span className="text-[0.65rem] uppercase tracking-wide">{label}</span>
+      <div className="mb-2 flex min-w-0 items-center gap-1.5 text-muted">
+        <span className="shrink-0">{icon}</span>
+        <span className="truncate text-[0.65rem] uppercase tracking-wide">{label}</span>
       </div>
-      <p className="text-2xl font-semibold tabular-nums leading-tight">{value}</p>
+      <p className="break-words text-[clamp(1rem,2.8vw,1.5rem)] font-semibold leading-tight tabular-nums">
+        {value}
+      </p>
       {compare ? (
         <p
-          className={`mt-1.5 text-[0.7rem] leading-snug ${
+          className={`mt-1.5 break-words text-[0.7rem] leading-snug ${
             compare.muted
               ? 'text-muted'
               : compare.positive

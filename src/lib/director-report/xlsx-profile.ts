@@ -32,7 +32,7 @@ export interface ProfessionalProfileResult {
   buffer: Buffer
   filename: string
   professionalName: string
-  source: 'mock' | 'avec'
+  source: 'mock' | 'avec' | 'partial'
 }
 
 /**
