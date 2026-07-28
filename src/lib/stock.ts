@@ -449,18 +449,20 @@ export async function applyStockMovementsBatch(
   const missing = avecIds.filter((id) => !productByAvec.has(id))
   for (let i = 0; i < missing.length; i += CHUNK) {
     const slice = missing.slice(i, i + CHUNK)
-    const payload = slice.map((avec_product_id) => ({
-      avec_product_id,
-      name: nameByAvec.get(avec_product_id) ?? avec_product_id,
-      current_qty: 0,
-    }))
-    const inserted = (await sql`
-      insert into stock_products ${sql(payload, 'avec_product_id', 'name', 'current_qty')}
-      on conflict (avec_product_id) do update set name = excluded.name
-      returning id, avec_product_id,
-        unit_cost::float as unit_cost, avg_cost::float as avg_cost
-    `) as ProductCostRow[]
-    for (const row of inserted) productByAvec.set(row.avec_product_id, row)
+    // Inserts individuais — o wrapper Sql do painel não expõe sql(rows, cols) do postgres.js.
+    await Promise.all(
+      slice.map(async (avec_product_id) => {
+        const name = nameByAvec.get(avec_product_id) ?? avec_product_id
+        const rows = (await sql`
+          insert into stock_products (avec_product_id, name, current_qty)
+          values (${avec_product_id}, ${name}, 0)
+          on conflict (avec_product_id) do update set name = excluded.name
+          returning id, avec_product_id,
+            unit_cost::float as unit_cost, avg_cost::float as avg_cost
+        `) as ProductCostRow[]
+        if (rows[0]) productByAvec.set(rows[0].avec_product_id, rows[0])
+      }),
+    )
   }
 
   let minAt = valid[0]!.occurredAt!
@@ -540,8 +542,25 @@ export async function applyStockMovementsBatch(
   let synced = 0
   for (let i = 0; i < toInsert.length; i += CHUNK) {
     const slice = toInsert.slice(i, i + CHUNK)
+    const productIds = slice.map((r) => r.product_id)
+    const types = slice.map((r) => r.type)
+    const quantities = slice.map((r) => r.quantity)
+    const costs = slice.map((r) => r.cost)
+    const reasons = slice.map((r) => r.reason)
+    const sources = slice.map((r) => r.source)
+    const occurredAts = slice.map((r) => r.occurred_at)
     await sql`
-      insert into stock_movements ${sql(slice, 'product_id', 'type', 'quantity', 'cost', 'reason', 'source', 'occurred_at')}
+      insert into stock_movements (product_id, type, quantity, cost, reason, source, occurred_at)
+      select *
+      from unnest(
+        ${productIds}::uuid[],
+        ${types}::text[],
+        ${quantities}::float8[],
+        ${costs}::float8[],
+        ${reasons}::text[],
+        ${sources}::text[],
+        ${occurredAts}::timestamptz[]
+      ) as t(product_id, type, quantity, cost, reason, source, occurred_at)
     `
     synced += slice.length
   }
