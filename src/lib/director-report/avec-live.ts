@@ -1,4 +1,4 @@
-import { fetchAllAvecReport, fmtAvecDate } from '@/lib/avec/client'
+import { fetchAllAvecReport, fmtAvecDate, getAvecSyncMaxPages } from '@/lib/avec/client'
 import {
   normalize0011ReactivationRow,
   normalizeP1ProfessionalRevenueRow,
@@ -97,12 +97,39 @@ function emptyMonthRow(month: MonthKey): MonthRevenueRow {
   }
 }
 
+/** Budget interativo: caber no abort ~90–120s do browser. */
+export const DIRECTOR_UI_BUDGET_MS = 45_000
+export const DIRECTOR_UI_MAX_PAGES = 8
+export const DIRECTOR_UI_SLIM_MAX_PAGES = 6
+
+export type DirectorFetchBudget = {
+  deadlineAt: number | null
+  maxPages: number
+}
+
+export function directorUiBudget(now = Date.now(), maxPages = DIRECTOR_UI_MAX_PAGES): DirectorFetchBudget {
+  return {
+    deadlineAt: now + DIRECTOR_UI_BUDGET_MS,
+    maxPages,
+  }
+}
+
+export function directorFullBudget(): DirectorFetchBudget {
+  return { deadlineAt: null, maxPages: getAvecSyncMaxPages() }
+}
+
 async function fetch0021Month(
   month: MonthKey,
+  budget: DirectorFetchBudget = directorFullBudget(),
 ): Promise<Map<string, { revenue: number; attended: number; ticketAvg: number }>> {
   const id = resolveMapperId('professionals_revenue') ?? '0021'
   const { inicio, fim } = monthRangeBr(month)
-  const { rows } = await fetchAllAvecReport(id, { inicio, fim, limit: 250 })
+  const { rows } = await fetchAllAvecReport(
+    id,
+    { inicio, fim, limit: 250 },
+    Math.min(budget.maxPages, 20),
+    { deadlineAt: budget.deadlineAt },
+  )
   const byName = new Map<string, { revenue: number; attended: number; ticketAvg: number }>()
 
   for (const row of rows) {
@@ -179,22 +206,25 @@ type QuarterAgg = {
 
 async function fetch0011Quarter(
   quarter: QuarterKey,
-  maxPages?: number,
+  budget: DirectorFetchBudget,
 ): Promise<{
   byPro: Map<string, QuarterAgg>
   salonRates: number[]
+  truncated: boolean
 }> {
   const id = resolveMapperId('director_return') ?? '0011'
   const { inicio, fim } = quarterRangeBr(quarter)
-  // UI/relatório: cap de páginas evita timeout (default Avec sync = 80 × 250 = 20k linhas).
-  const { rows, truncated } = await fetchAllAvecReport(
+  // UI/relatório: cap de páginas + deadline evita timeout no browser.
+  const result = await fetchAllAvecReport(
     id,
     { inicio, fim, limit: 250 },
-    maxPages ?? 40,
+    budget.maxPages,
+    { deadlineAt: budget.deadlineAt },
   )
-  if (truncated) {
-    console.warn(`[director-report] 0011 ${quarter} truncado em ${maxPages ?? 40} páginas`)
+  if (result.truncated) {
+    console.warn(`[director-report] 0011 ${quarter} truncado em ${budget.maxPages} páginas / budget`)
   }
+  const rows = result.rows
 
   const byPro = new Map<string, QuarterAgg>()
   const salonRates: number[] = []
@@ -241,12 +271,19 @@ async function fetch0011Quarter(
     byPro.set(proName, agg)
   }
 
-  // Fallback: 0007 no mesmo período (taxa salão) se 0011 não trouxe taxa
-  if (salonRates.length === 0) {
+  // Fallback 0007 só se ainda houver tempo no budget.
+  const timeLeft =
+    budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
+  if (salonRates.length === 0 && timeLeft > 12_000) {
     const id0007 = resolveMapperId('return_rate')
     if (id0007) {
       try {
-        const { rows: r7 } = await fetchAllAvecReport(id0007, { inicio, fim, limit: 250 })
+        const { rows: r7 } = await fetchAllAvecReport(
+          id0007,
+          { inicio, fim, limit: 250 },
+          Math.min(4, budget.maxPages),
+          { deadlineAt: budget.deadlineAt },
+        )
         for (const row of r7) {
           const rate = normalizeP3ReturnRateRow(row)
           if (rate != null) salonRates.push(rate)
@@ -257,7 +294,7 @@ async function fetch0011Quarter(
     }
   }
 
-  return { byPro, salonRates }
+  return { byPro, salonRates, truncated: result.truncated }
 }
 
 function avg(nums: number[]): number | null {
@@ -319,12 +356,21 @@ export async function fetchLiveDirectorBlocks(
   compareQuarter0021: QuarterKey | null,
   selectedQuarter: QuarterKey,
   compareQuarter: QuarterKey,
-  opts?: { stages?: LiveDirectorStage; maxPages0011?: number },
+  opts?: {
+    stages?: LiveDirectorStage
+    maxPages0011?: number
+    budget?: DirectorFetchBudget
+  },
 ): Promise<LiveDirectorBlocks> {
   const warnings: string[] = []
   const stages = opts?.stages ?? 'all'
   const want0011 = stages === '0011' || stages === 'all'
   const want0021 = stages === '0021' || stages === 'all'
+  const budget =
+    opts?.budget ??
+    (opts?.maxPages0011 != null
+      ? directorUiBudget(Date.now(), opts.maxPages0011)
+      : directorFullBudget())
 
   const monthsNeeded = new Set<MonthKey>(want0021 ? [selectedMonth] : [])
   if (want0021 && compareQuarter0021) {
@@ -355,7 +401,7 @@ export async function fetchLiveDirectorBlocks(
     await Promise.all(
       [...monthsNeeded].map(async (m) => {
         try {
-          monthMaps.set(m, await fetch0021Month(m))
+          monthMaps.set(m, await fetch0021Month(m, budget))
         } catch (e) {
           warnings.push(`0021 ${m}: ${e instanceof Error ? e.message : String(e)}`)
           monthMaps.set(m, new Map())
@@ -367,25 +413,30 @@ export async function fetchLiveDirectorBlocks(
   let selectedQ: Awaited<ReturnType<typeof fetch0011Quarter>> = {
     byPro: new Map(),
     salonRates: [],
+    truncated: false,
   }
   let compareQ: Awaited<ReturnType<typeof fetch0011Quarter>> = {
     byPro: new Map(),
     salonRates: [],
+    truncated: false,
   }
 
   if (want0011) {
-    const maxPages = opts?.maxPages0011
     const [selResult, cmpResult] = await Promise.allSettled([
-      fetch0011Quarter(selectedQuarter, maxPages),
-      fetch0011Quarter(compareQuarter, maxPages),
+      fetch0011Quarter(selectedQuarter, budget),
+      fetch0011Quarter(compareQuarter, budget),
     ])
-    if (selResult.status === 'fulfilled') selectedQ = selResult.value
-    else
+    if (selResult.status === 'fulfilled') {
+      selectedQ = selResult.value
+      if (selectedQ.truncated) warnings.push(`0011 ${selectedQuarter}: parcial (budget UI)`)
+    } else
       warnings.push(
         `0011 ${selectedQuarter}: ${selResult.reason instanceof Error ? selResult.reason.message : String(selResult.reason)}`,
       )
-    if (cmpResult.status === 'fulfilled') compareQ = cmpResult.value
-    else
+    if (cmpResult.status === 'fulfilled') {
+      compareQ = cmpResult.value
+      if (compareQ.truncated) warnings.push(`0011 ${compareQuarter}: parcial (budget UI)`)
+    } else
       warnings.push(
         `0011 ${compareQuarter}: ${cmpResult.reason instanceof Error ? cmpResult.reason.message : String(cmpResult.reason)}`,
       )

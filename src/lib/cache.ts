@@ -1,0 +1,86 @@
+export interface CacheEntry<T> {
+  value: T
+  expiresAt: number
+}
+
+const inflight = new Map<string, Promise<unknown>>()
+
+export class MemoryCache {
+  private static cache = new Map<string, CacheEntry<any>>()
+  private static maxSize = 1000
+
+  static get<T>(key: string): T | null {
+    const entry = this.cache.get(key)
+    if (!entry) return null
+
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key)
+      return null
+    }
+
+    return entry.value as T
+  }
+
+  static set<T>(key: string, value: T, ttlSeconds: number = 300): void {
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value
+      if (firstKey) this.cache.delete(firstKey)
+    }
+
+    this.cache.set(key, {
+      value,
+      expiresAt: Date.now() + ttlSeconds * 1000,
+    })
+  }
+
+  static delete(key: string): void {
+    this.cache.delete(key)
+  }
+
+  static deletePrefix(prefix: string): void {
+    for (const key of [...this.cache.keys()]) {
+      if (key.startsWith(prefix)) this.cache.delete(key)
+    }
+  }
+
+  static clear(): void {
+    this.cache.clear()
+  }
+
+  static size(): number {
+    return this.cache.size
+  }
+}
+
+export async function cachedFetch<T>(
+  key: string,
+  fn: () => Promise<T>,
+  ttlSeconds: number = 300,
+): Promise<T> {
+  const cached = MemoryCache.get<T>(key)
+  if (cached) return cached
+
+  const existing = inflight.get(key) as Promise<T> | undefined
+  if (existing) return existing
+
+  const pending = (async () => {
+    try {
+      const value = await fn()
+      MemoryCache.set(key, value, ttlSeconds)
+      return value
+    } finally {
+      inflight.delete(key)
+    }
+  })()
+
+  inflight.set(key, pending)
+  return pending
+}
+
+export function createCachedFunction<T>(
+  key: string,
+  fn: () => Promise<T>,
+  ttlSeconds: number = 300,
+): () => Promise<T> {
+  return () => cachedFetch(key, fn, ttlSeconds)
+}

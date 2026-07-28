@@ -161,7 +161,7 @@ export default function RelatorioDiretoriaPage() {
       if (forceDemo) q.set('mock', '1')
       const res = await apiFetch(`/api/director-report?${q}`, {
         cache: 'no-store',
-        timeoutMs: 120_000,
+        timeoutMs: 90_000,
       })
       const json = await res.json()
       if (!res.ok || json.error) {

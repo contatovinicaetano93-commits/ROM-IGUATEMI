@@ -259,6 +259,19 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
   return []
 }
 
+/** Timeout/abort de página Avec — não vale retry (só queima o orçamento do relatório). */
+export function isAvecFetchAbortError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false
+  const err = e as Error & { name?: string; message?: string }
+  const name = err.name ?? ''
+  const msg = err.message ?? String(e)
+  return (
+    name === 'AbortError' ||
+    name === 'TimeoutError' ||
+    /aborted|timeout|TimeoutError|AbortError/i.test(msg)
+  )
+}
+
 /** Uma renovação por invocação serverless — evita stampede em 401 paralelo. */
 let avecTokenRefreshInFlight: Promise<string | null> | null = null
 /** Cache do token na invocação — evita CREATE TABLE + SELECT a cada relatório. */
@@ -364,7 +377,9 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
       maxAttempts: 4,
       initialDelayMs: 1500,
       // Rede/5xx e WAF HTML 403 — retry. 4xx JSON (token/params) não.
+      // Timeout/abort também não: 4×30s queima o Relatório gerência (>120s no browser).
       shouldRetry: (e) => {
+        if (isAvecFetchAbortError(e)) return false
         const status = (e as Error & { status?: number }).status
         if (status === undefined || status >= 500) return true
         return isAvecWafForbiddenError(e)
@@ -416,15 +431,31 @@ export function formatTruncationWarning(reportId: string, result: AvecReportFetc
 export async function fetchAllAvecReport(
   reportId: string,
   params: AvecReportParams = {},
-  maxPages = getAvecSyncMaxPages()
+  maxPages = getAvecSyncMaxPages(),
+  opts?: { deadlineAt?: number | null },
 ): Promise<AvecReportFetchResult> {
   const limit = params.limit ?? AVEC_PAGE_LIMIT
   const all: Record<string, unknown>[] = []
   let pagesFetched = 0
   let truncated = false
+  const deadlineAt = opts?.deadlineAt ?? null
 
   for (let page = 1; page <= maxPages; page++) {
-    const payload = await fetchAvecReport(reportId, { ...params, page, limit })
+    if (deadlineAt != null && Date.now() >= deadlineAt) {
+      truncated = true
+      break
+    }
+    let payload: unknown
+    try {
+      payload = await fetchAvecReport(reportId, { ...params, page, limit })
+    } catch (e) {
+      // Com deadline: abort limpo — devolve o que já veio em vez de matar o relatório.
+      if (deadlineAt != null && isAvecFetchAbortError(e)) {
+        truncated = true
+        break
+      }
+      throw e
+    }
     const rows = extractRows(payload)
     pagesFetched = page
     if (rows.length === 0) break
