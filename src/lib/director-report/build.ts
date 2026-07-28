@@ -27,8 +27,13 @@ import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
 /** Evita jogar JSON bruto de validação Avec na UI (HTTP 400 salao_id etc.). */
 function shortenAvecWarning(w: string): string {
-  if (/n[aã]o suportado/i.test(w) || /usando taxa\/lista do 0007/i.test(w)) {
-    return '0011 indisponível neste salão — usando taxa de retorno 0007'
+  if (
+    /n[aã]o suportado/i.test(w) ||
+    /usando taxa\/lista/i.test(w) ||
+    /via 0007/i.test(w) ||
+    /n[aã]o dispon[ií]vel neste sal[aã]o/i.test(w)
+  ) {
+    return '0011 via 0007 (taxa do salão Avec)'
   }
   if (/salao_id/i.test(w) && !/99801|AVEC_UNIT_ID já/i.test(w)) {
     return '0011: Avec exige salao_id — confira AVEC_UNIT_ID'

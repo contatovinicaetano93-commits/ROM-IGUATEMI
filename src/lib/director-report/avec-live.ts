@@ -13,7 +13,16 @@ import {
   normalizeP3ReturnRateRow,
 } from '@/lib/avec/normalize'
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
+import { getRomPanelId } from '@/lib/brand'
 import { toSalonDateIso } from '@/lib/salon/format'
+
+/** Iguatemi: Avec devolve 400 "não suportado" no 0011 — vai direto no 0007. */
+function shouldSkipAvec0011(): boolean {
+  if (process.env.AVEC_SKIP_REPORT_0011 === '1' || process.env.AVEC_SKIP_REPORT_0011 === 'true') {
+    return true
+  }
+  return getRomPanelId() === 'iguatemi'
+}
 import { matchDirectorProfessional } from './match-pro'
 import {
   aggregateQuarterRevenue,
@@ -229,108 +238,113 @@ async function fetch0011Quarter(
   let truncated = false
   let source: '0011' | '0007' | 'none' = 'none'
   let note: string | null = null
+  const skip0011 = shouldSkipAvec0011() || id === '0007'
 
-  // 1) Tenta 0011 — em alguns salões Avec devolve "Tipo de relatório não suportado".
-  try {
-    const result = await fetchAllAvecReport(
-      id,
-      { inicio, fim, limit: 250 },
-      budget.maxPages,
-      { deadlineAt: budget.deadlineAt },
-    )
-    if (result.truncated) {
-      console.warn(`[director-report] 0011 ${quarter} truncado em ${budget.maxPages} páginas / budget`)
-    }
-    truncated = result.truncated
-    source = '0011'
+  // 1) Tenta 0011 — Iguatemi/skip: Avec devolve 400 "não suportado", não gasta budget.
+  if (!skip0011) {
+    try {
+      const result = await fetchAllAvecReport(
+        id,
+        { inicio, fim, limit: 250 },
+        budget.maxPages,
+        { deadlineAt: budget.deadlineAt },
+      )
+      if (result.truncated) {
+        console.warn(`[director-report] 0011 ${quarter} truncado em ${budget.maxPages} páginas / budget`)
+      }
+      truncated = result.truncated
+      source = '0011'
 
-    for (const row of result.rows) {
-      const c = normalize0011ReactivationRow(row)
-      if (!c) continue
+      for (const row of result.rows) {
+        const c = normalize0011ReactivationRow(row)
+        if (!c) continue
 
-      if (c.returnRate != null && (!c.lastVisit || c.name === '—')) {
-        salonRates.push(c.returnRate)
-        if (c.professional) {
-          const agg = byPro.get(c.professional) ?? {
-            clients: [],
-            returnRates: [],
-            clientsTotalHint: 0,
-            clientsReturnedHint: 0,
+        if (c.returnRate != null && (!c.lastVisit || c.name === '—')) {
+          salonRates.push(c.returnRate)
+          if (c.professional) {
+            const agg = byPro.get(c.professional) ?? {
+              clients: [],
+              returnRates: [],
+              clientsTotalHint: 0,
+              clientsReturnedHint: 0,
+            }
+            agg.returnRates.push(c.returnRate)
+            byPro.set(c.professional, agg)
           }
-          agg.returnRates.push(c.returnRate)
-          byPro.set(c.professional, agg)
+          continue
         }
-        continue
-      }
 
-      const proName = c.professional ?? '_unassigned'
-      const agg = byPro.get(proName) ?? {
-        clients: [],
-        returnRates: [],
-        clientsTotalHint: 0,
-        clientsReturnedHint: 0,
+        const proName = c.professional ?? '_unassigned'
+        const agg = byPro.get(proName) ?? {
+          clients: [],
+          returnRates: [],
+          clientsTotalHint: 0,
+          clientsReturnedHint: 0,
+        }
+        if (c.returnRate != null) agg.returnRates.push(c.returnRate)
+        if (c.name && c.name !== '—') {
+          agg.clients.push(
+            toReactivationClient({
+              name: c.name,
+              email: c.email,
+              phone: c.phone,
+              mobile: c.mobile,
+              gender: c.gender,
+              lastVisit: c.lastVisit,
+            }),
+          )
+        }
+        byPro.set(proName, agg)
       }
-      if (c.returnRate != null) agg.returnRates.push(c.returnRate)
-      if (c.name && c.name !== '—') {
-        agg.clients.push(
-          toReactivationClient({
-            name: c.name,
-            email: c.email,
-            phone: c.phone,
-            mobile: c.mobile,
-            gender: c.gender,
-            lastVisit: c.lastVisit,
-          }),
-        )
-      }
-      byPro.set(proName, agg)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      note = `0011 indisponível (${msg.slice(0, 120)})`
+      console.warn(`[director-report] 0011 ${quarter}: ${msg}`)
     }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    note = `0011 indisponível (${msg.slice(0, 120)})`
-    console.warn(`[director-report] 0011 ${quarter}: ${msg}`)
+  } else {
+    note = '0011 não disponível neste salão — usando taxa/lista 0007'
   }
 
   const hasUseful0011 =
     salonRates.length > 0 ||
     [...byPro.values()].some((a) => a.clients.length > 0 || a.returnRates.length > 0)
 
-  // 2) Fallback 0007: taxa no total do relatório + lista de não-retornados (sem profissional).
+  // 2) Fallback / caminho principal 0007: taxa em report.total + não-retornados (sem profissional).
   const timeLeft =
     budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
-  if (!hasUseful0011 && timeLeft > 12_000) {
-    const id0007 = resolveMapperId('return_rate')
-    if (id0007) {
-      try {
-        const fallback = await fetch0007QuarterFallback(id0007, inicio, fim, budget)
-        truncated = truncated || fallback.truncated
-        if (fallback.salonRate != null) salonRates.push(fallback.salonRate)
+  // No Iguatemi sempre precisa do 0007; noutros salões só se 0011 veio vazio e ainda há budget.
+  const need0007 = !hasUseful0011 && (skip0011 || timeLeft > 8_000)
+  if (need0007) {
+    const id0007 = resolveMapperId('return_rate') ?? '0007'
+    try {
+      const fallback = await fetch0007QuarterFallback(id0007, inicio, fim, budget)
+      truncated = truncated || fallback.truncated
+      if (fallback.salonRate != null) salonRates.push(fallback.salonRate)
 
-        const agg = byPro.get('_unassigned') ?? {
-          clients: [],
-          returnRates: [],
-          clientsTotalHint: 0,
-          clientsReturnedHint: 0,
-        }
-        if (fallback.salonRate != null) {
-          agg.returnRates.push(fallback.salonRate)
-          if (fallback.clientsTotalHint > 0) {
-            agg.clientsTotalHint = fallback.clientsTotalHint
-            agg.clientsReturnedHint = fallback.clientsReturnedHint
-          }
-        }
-        for (const c of fallback.clients) {
-          agg.clients.push(c)
-        }
-        byPro.set('_unassigned', agg)
-        source = '0007'
-        note =
-          '0011 não suportado neste salão Avec — usando taxa/lista do 0007 (sem coluna profissional)'
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        note = note ?? `0007 fallback falhou: ${msg.slice(0, 120)}`
-        console.warn(`[director-report] 0007 fallback ${quarter}: ${msg}`)
+      const agg = byPro.get('_unassigned') ?? {
+        clients: [],
+        returnRates: [],
+        clientsTotalHint: 0,
+        clientsReturnedHint: 0,
       }
+      if (fallback.salonRate != null) {
+        agg.returnRates.push(fallback.salonRate)
+        if (fallback.clientsTotalHint > 0) {
+          agg.clientsTotalHint = fallback.clientsTotalHint
+          agg.clientsReturnedHint = fallback.clientsReturnedHint
+        }
+      }
+      for (const c of fallback.clients) {
+        agg.clients.push(c)
+      }
+      byPro.set('_unassigned', agg)
+      source = '0007'
+      note =
+        'Etapa 0011 via 0007 (taxa do salão; lista sem profissional — filtre 1 pro para ver clientes)'
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      note = `0007 falhou: ${msg.slice(0, 140)}`
+      console.warn(`[director-report] 0007 ${quarter}: ${msg}`)
     }
   }
 
