@@ -91,7 +91,7 @@ async function probeOpsCoverageYtd() {
     const sql = getSql()
     const year = new Date().getUTCFullYear()
     const from = `${year}-01-01`
-    const [pay, p1, p2snap, p3] = await Promise.all([
+    const [pay, p1, p2snap, p3, stock] = await Promise.all([
       sql`
         select count(*)::int as days
         from salon_p2_daily
@@ -120,6 +120,15 @@ async function probeOpsCoverageYtd() {
         from salon_p3_daily
         where day >= ${from}::date
       `,
+      sql`
+        select
+          count(*)::int as movements,
+          count(*) filter (where type = 'saida')::int as saidas,
+          min((occurred_at at time zone 'America/Sao_Paulo')::date)::text as from_day,
+          max((occurred_at at time zone 'America/Sao_Paulo')::date)::text as to_day
+        from stock_movements
+        where occurred_at >= ${from}::timestamptz
+      `,
     ])
     return {
       payment_mix_days: Number(pay[0]?.days ?? 0) || 0,
@@ -128,6 +137,10 @@ async function probeOpsCoverageYtd() {
       p1_to: p1[0]?.to_day ?? null,
       p2_commerce_snapshots: Number(p2snap[0]?.n ?? 0) || 0,
       p3_snapshots: Number(p3[0]?.n ?? 0) || 0,
+      stock_movements: Number(stock[0]?.movements ?? 0) || 0,
+      stock_saidas: Number(stock[0]?.saidas ?? 0) || 0,
+      stock_from: stock[0]?.from_day ?? null,
+      stock_to: stock[0]?.to_day ?? null,
     }
   } catch (e) {
     logger.warn('Failed to probe ops coverage', {
@@ -140,6 +153,10 @@ async function probeOpsCoverageYtd() {
       p1_to: null,
       p2_commerce_snapshots: 0,
       p3_snapshots: 0,
+      stock_movements: 0,
+      stock_saidas: 0,
+      stock_from: null,
+      stock_to: null,
     }
   }
 }

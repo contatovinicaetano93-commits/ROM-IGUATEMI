@@ -391,40 +391,162 @@ export async function acknowledgeAlert(id: string, user: string): Promise<void> 
 // fallback, sempre marcado como tal (nunca confundido com o dado oficial).
 // ---------------------------------------------------------------------------
 
+function movementDedupKey(
+  productId: string,
+  type: string,
+  quantity: number,
+  occurredAt: string,
+  source: string,
+): string {
+  return `${productId}|${type}|${quantity}|${occurredAt}|${source}`
+}
+
 /** Aplica uma linha de 0044. Dedup por produto+tipo+quantidade+data+origem (idempotente entre syncs). */
 export async function applyStockMovement(
   mv: NormalizedStockMovement,
   source: 'avec_0044'
 ): Promise<boolean> {
-  if (!mv.occurredAt) return false
+  const result = await applyStockMovementsBatch([mv], source)
+  return result.synced > 0
+}
+
+/**
+ * Upsert em lote de 0044 — evita N selects por movimento (backfill YTD / sync).
+ * Dedup idêntico a `applyStockMovement`.
+ */
+export async function applyStockMovementsBatch(
+  movements: NormalizedStockMovement[],
+  source: 'avec_0044' = 'avec_0044',
+): Promise<{ synced: number; skipped: number }> {
+  const valid = movements.filter((m) => Boolean(m.occurredAt))
+  if (valid.length === 0) return { synced: 0, skipped: movements.length }
+
   const sql = getSql()
-  const productId = await ensureProductExists(mv.avecProductId, mv.name)
+  const nameByAvec = new Map<string, string>()
+  for (const mv of valid) nameByAvec.set(mv.avecProductId, mv.name)
+  const avecIds = [...nameByAvec.keys()]
 
-  const existing = (await sql`
-    select id from stock_movements
-    where product_id = ${productId} and type = ${mv.type} and quantity = ${mv.quantity}
-      and occurred_at = ${mv.occurredAt}::timestamptz and source = ${source}
-    limit 1
-  `) as { id: string }[]
-  if (existing[0]) return false
+  type ProductCostRow = {
+    id: string
+    avec_product_id: string
+    unit_cost: number | null
+    avg_cost: number | null
+  }
+  const productByAvec = new Map<string, ProductCostRow>()
 
-  let cost = mv.cost
-  if (cost == null || !(cost > 0)) {
-    const costs = (await sql`
-      select unit_cost::float as unit_cost, avg_cost::float as avg_cost
-      from stock_products where id = ${productId} limit 1
-    `) as { unit_cost: number | null; avg_cost: number | null }[]
-    const unit = costs[0]?.unit_cost ?? costs[0]?.avg_cost ?? null
-    if (unit != null && unit > 0) {
-      cost = Math.round(mv.quantity * unit * 100) / 100
-    }
+  const CHUNK = 400
+  for (let i = 0; i < avecIds.length; i += CHUNK) {
+    const slice = avecIds.slice(i, i + CHUNK)
+    const rows = (await sql`
+      select id, avec_product_id,
+        unit_cost::float as unit_cost, avg_cost::float as avg_cost
+      from stock_products
+      where avec_product_id = any(${slice}::text[])
+    `) as ProductCostRow[]
+    for (const row of rows) productByAvec.set(row.avec_product_id, row)
   }
 
-  await sql`
-    insert into stock_movements (product_id, type, quantity, cost, reason, source, occurred_at)
-    values (${productId}, ${mv.type}, ${mv.quantity}, ${cost}, ${mv.reason}, ${source}, ${mv.occurredAt}::timestamptz)
-  `
-  return true
+  const missing = avecIds.filter((id) => !productByAvec.has(id))
+  for (let i = 0; i < missing.length; i += CHUNK) {
+    const slice = missing.slice(i, i + CHUNK)
+    const payload = slice.map((avec_product_id) => ({
+      avec_product_id,
+      name: nameByAvec.get(avec_product_id) ?? avec_product_id,
+      current_qty: 0,
+    }))
+    const inserted = (await sql`
+      insert into stock_products ${sql(payload, 'avec_product_id', 'name', 'current_qty')}
+      on conflict (avec_product_id) do update set name = excluded.name
+      returning id, avec_product_id,
+        unit_cost::float as unit_cost, avg_cost::float as avg_cost
+    `) as ProductCostRow[]
+    for (const row of inserted) productByAvec.set(row.avec_product_id, row)
+  }
+
+  let minAt = valid[0]!.occurredAt!
+  let maxAt = minAt
+  for (const mv of valid) {
+    const at = mv.occurredAt!
+    if (at < minAt) minAt = at
+    if (at > maxAt) maxAt = at
+  }
+
+  const existingKeys = new Set<string>()
+  const existingRows = (await sql`
+    select product_id, type, quantity::float as quantity, occurred_at, source
+    from stock_movements
+    where source = ${source}
+      and occurred_at >= ${minAt}::timestamptz
+      and occurred_at <= ${maxAt}::timestamptz
+  `) as {
+    product_id: string
+    type: string
+    quantity: number
+    occurred_at: string
+    source: string
+  }[]
+  for (const row of existingRows) {
+    const at = new Date(row.occurred_at).toISOString()
+    existingKeys.add(
+      movementDedupKey(row.product_id, row.type, Number(row.quantity), at, row.source),
+    )
+  }
+
+  type InsertRow = {
+    product_id: string
+    type: string
+    quantity: number
+    cost: number | null
+    reason: string | null
+    source: string
+    occurred_at: string
+  }
+  const toInsert: InsertRow[] = []
+  let skipped = movements.length - valid.length
+
+  for (const mv of valid) {
+    const product = productByAvec.get(mv.avecProductId)
+    if (!product) {
+      skipped += 1
+      continue
+    }
+    const occurredAt = new Date(mv.occurredAt!).toISOString()
+    const key = movementDedupKey(product.id, mv.type, mv.quantity, occurredAt, source)
+    if (existingKeys.has(key)) {
+      skipped += 1
+      continue
+    }
+
+    let cost = mv.cost
+    if (cost == null || !(cost > 0)) {
+      const unit = product.unit_cost ?? product.avg_cost ?? null
+      if (unit != null && unit > 0) {
+        cost = Math.round(mv.quantity * unit * 100) / 100
+      }
+    }
+
+    existingKeys.add(key)
+    toInsert.push({
+      product_id: product.id,
+      type: mv.type,
+      quantity: mv.quantity,
+      cost,
+      reason: mv.reason,
+      source,
+      occurred_at: occurredAt,
+    })
+  }
+
+  let synced = 0
+  for (let i = 0; i < toInsert.length; i += CHUNK) {
+    const slice = toInsert.slice(i, i + CHUNK)
+    await sql`
+      insert into stock_movements ${sql(slice, 'product_id', 'type', 'quantity', 'cost', 'reason', 'source', 'occurred_at')}
+    `
+    synced += slice.length
+  }
+
+  return { synced, skipped }
 }
 
 /**

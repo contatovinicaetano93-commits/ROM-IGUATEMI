@@ -59,8 +59,8 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
   },
   {
     field: 'CMV',
-    source: 'rom_manual',
-    note: 'Custo das saídas de estoque no mês (ROM).',
+    source: 'rom_daily',
+    note: 'Proxy: custo das saídas de estoque no mês (Avec 0044 → stock_movements).',
   },
   {
     field: 'ocupação / top serviços / aquisição / canais / pacotes / retorno / novos',

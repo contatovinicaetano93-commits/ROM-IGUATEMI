@@ -21,6 +21,7 @@ import {
   normalizeStockAlertRow,
   normalizeStockMovementRow,
   normalizeStockPurchaseRow,
+  type NormalizedStockMovement,
 } from '@/lib/avec/normalize'
 import { getStockReports, getFastStockReports, getFullStockReports } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
@@ -28,7 +29,7 @@ import {
   upsertStockProductFromPosition,
   applyStockAlert,
   resolveStaleStockAlerts,
-  applyStockMovement,
+  applyStockMovementsBatch,
   enrichMovementWithPurchaseOrigin,
 } from '@/lib/stock'
 
@@ -199,13 +200,14 @@ export async function syncMovementsDateRange(
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
     if (syncRunId) await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
+    const normalized = []
     for (const row of result.rows) {
       const mv = normalizeStockMovementRow(row)
-      if (!mv) continue
-      const inserted = await applyStockMovement(mv, 'avec_0044')
-      if (inserted) stats.movements_synced++
-      else stats.movements_skipped_duplicate++
+      if (mv) normalized.push(mv)
     }
+    const applied = await applyStockMovementsBatch(normalized, 'avec_0044')
+    stats.movements_synced += applied.synced
+    stats.movements_skipped_duplicate += applied.skipped
   } catch (e) {
     stats.errors.push(`0044 (movimentos ${inicioBr}–${fimBr}): ${e instanceof Error ? e.message : String(e)}`)
   }
