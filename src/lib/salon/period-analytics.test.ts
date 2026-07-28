@@ -98,5 +98,6 @@ describe('period-analytics', () => {
     expect(result.previous.revenue).toBe(8000)
     expect(result.previous.attended).toBe(40)
     expect(result.previous.lost_revenue).toBe(400)
+    expect(result.previous.occupancy_avg).toBe(0.7)
   })
 })

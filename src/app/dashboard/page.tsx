@@ -19,6 +19,7 @@ import {
 import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL } from '../_components/ui'
 import { MonthYearField } from '../_components/MonthYearField'
 import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/lib/salon/format'
+import { fmtSignedCurrency, fmtSignedNumber, momCompareLine } from '@/lib/salon/mom-delta'
 
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
@@ -278,6 +279,22 @@ export default function DashboardPage() {
               : period.occupancy_avg != null
                 ? formatPercentPoints(period.occupancy_avg * 100)
                 : '—'
+          }
+          compare={
+            !loading &&
+            period?.previous &&
+            period.occupancy_avg != null &&
+            period.previous.occupancy_avg != null
+              ? (() => {
+                  const line = momCompareLine(
+                    period.occupancy_avg * 100,
+                    period.previous.occupancy_avg * 100,
+                    period.previous.label,
+                    { kind: 'points' },
+                  )
+                  return line
+                })()
+              : null
           }
         />
         <InsightCard
@@ -686,19 +703,6 @@ export default function DashboardPage() {
       </SectionCard>
     </main>
   )
-}
-
-function fmtSignedCurrency(diff: number): string {
-  const rounded = Math.round(diff * 100) / 100
-  if (rounded === 0) return formatCurrency(0)
-  const sign = rounded > 0 ? '+' : '−'
-  return `${sign}${formatCurrency(Math.abs(rounded))}`
-}
-
-function fmtSignedNumber(diff: number): string {
-  if (diff === 0) return '0'
-  const sign = diff > 0 ? '+' : '−'
-  return `${sign}${Math.abs(diff)}`
 }
 
 function InsightCard({

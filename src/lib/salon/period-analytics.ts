@@ -158,6 +158,8 @@ export interface PeriodCompareBucket {
   no_shows: number
   ticket_avg: number | null
   lost_revenue: number
+  /** Ocupação média do snapshot P1 do fim da janela comparável (null se sem dados). */
+  occupancy_avg: number | null
 }
 
 export interface PeriodAnalytics {
@@ -199,7 +201,7 @@ export async function computePeriodAnalytics(opts?: {
   const { from, to } = monthToDateRange(month)
   const prevMonth = previousMonthKey(month)
   const prevRange = compareMonthToDateRange(month, prevMonth)
-  const [totals, loss, prevTotals, prevLoss, p1, p2, p3] = await Promise.all([
+  const [totals, loss, prevTotals, prevLoss, p1, p2, p3, prevP1] = await Promise.all([
     sumRevenueAndAttended(from, to),
     sumAttendanceLoss(from, to),
     sumRevenueAndAttended(prevRange.from, prevRange.to),
@@ -207,6 +209,7 @@ export async function computePeriodAnalytics(opts?: {
     getSalonP1DailyNear(to),
     getSalonP2DailyNear(to),
     getSalonP3DailyNear(to),
+    getSalonP1DailyNear(prevRange.to),
   ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
@@ -250,6 +253,7 @@ export async function computePeriodAnalytics(opts?: {
       no_shows: prevLoss.no_shows,
       ticket_avg: prev_ticket_avg,
       lost_revenue: estimateLostRevenue(prevLoss.cancelled, prevLoss.no_shows, prev_ticket_avg),
+      occupancy_avg: averageOccupancy(prevP1?.professionals ?? []),
     },
   }
 }

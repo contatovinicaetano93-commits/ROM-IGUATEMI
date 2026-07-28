@@ -43,6 +43,20 @@ export interface MonthOverview {
     status: MonthCloseStatus
     materialized_at: string | null
   }
+  /** Totais do mês comparado (MTD alinhado) — para deltas nos cards de Relatórios. */
+  previous_label: string
+  previous_closing: {
+    revenue: number
+    attended: number
+    cancelled: number
+    no_shows: number
+    ticket_avg: number | null
+    expenses: number
+    cmv: number
+    cash_flow: number
+    lost_revenue: number
+    occupancy_avg: number | null
+  }
   source_notes: MonthOverviewSourceNote[]
 }
 
@@ -125,6 +139,19 @@ export async function computeMonthOverview(opts?: {
       days_missing: completeness.days_missing,
       status: completeness.status,
       materialized_at: materializedAt,
+    },
+    previous_label: finance.previous.label,
+    previous_closing: {
+      revenue: finance.previous.revenue,
+      attended: finance.previous.attended,
+      cancelled: analytics.previous.cancelled,
+      no_shows: analytics.previous.no_shows,
+      ticket_avg: finance.previous.ticket_avg,
+      expenses: finance.previous.expenses,
+      cmv: finance.previous.cmv,
+      cash_flow: finance.previous.cash_flow,
+      lost_revenue: analytics.previous.lost_revenue,
+      occupancy_avg: analytics.previous.occupancy_avg,
     },
     source_notes: SOURCE_NOTES,
   }

@@ -8,6 +8,7 @@ import { SectionCard } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { formatCurrency, formatPercentPoints, todayIso } from '@/lib/salon/format'
+import { momCompareLine } from '@/lib/salon/mom-delta'
 import {
   buildMonthOverviewCsv,
   buildMonthOverviewPrintHtml,
@@ -155,37 +156,167 @@ export default function RelatoriosOverviewPage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { label: 'Receita', value: formatCurrency(data.closing.revenue) },
-              { label: 'Atendidos', value: String(data.closing.attended) },
-              { label: 'Ticket', value: formatCurrency(data.closing.ticket_avg) },
-              { label: 'Fluxo', value: formatCurrency(data.closing.cash_flow) },
-              { label: 'Despesas', value: formatCurrency(data.closing.expenses) },
-              { label: 'CMV', value: formatCurrency(data.closing.cmv) },
-              { label: 'Cancelamentos', value: String(data.closing.cancelled) },
-              { label: 'No-shows', value: String(data.closing.no_shows) },
-            ].map((kpi) => (
+            {([
+              {
+                label: 'Receita',
+                value: formatCurrency(data.closing.revenue),
+                compare: momCompareLine(
+                  data.closing.revenue,
+                  data.previous_closing.revenue,
+                  data.previous_label,
+                ),
+              },
+              {
+                label: 'Atendidos',
+                value: String(data.closing.attended),
+                compare: momCompareLine(
+                  data.closing.attended,
+                  data.previous_closing.attended,
+                  data.previous_label,
+                  { kind: 'number' },
+                ),
+              },
+              {
+                label: 'Ticket',
+                value:
+                  data.closing.ticket_avg != null
+                    ? formatCurrency(data.closing.ticket_avg)
+                    : '—',
+                compare:
+                  data.closing.ticket_avg != null && data.previous_closing.ticket_avg != null
+                    ? momCompareLine(
+                        data.closing.ticket_avg,
+                        data.previous_closing.ticket_avg,
+                        data.previous_label,
+                      )
+                    : null,
+              },
+              {
+                label: 'Fluxo',
+                value: formatCurrency(data.closing.cash_flow),
+                compare: momCompareLine(
+                  data.closing.cash_flow,
+                  data.previous_closing.cash_flow,
+                  data.previous_label,
+                ),
+              },
+              {
+                label: 'Despesas',
+                value: formatCurrency(data.closing.expenses),
+                compare: momCompareLine(
+                  data.closing.expenses,
+                  data.previous_closing.expenses,
+                  data.previous_label,
+                  { invertGood: true },
+                ),
+              },
+              {
+                label: 'CMV',
+                value: formatCurrency(data.closing.cmv),
+                compare: momCompareLine(
+                  data.closing.cmv,
+                  data.previous_closing.cmv,
+                  data.previous_label,
+                  { invertGood: true },
+                ),
+              },
+              {
+                label: 'Cancelamentos',
+                value: String(data.closing.cancelled),
+                compare: momCompareLine(
+                  data.closing.cancelled,
+                  data.previous_closing.cancelled,
+                  data.previous_label,
+                  { kind: 'number', invertGood: true },
+                ),
+              },
+              {
+                label: 'No-shows',
+                value: String(data.closing.no_shows),
+                compare: momCompareLine(
+                  data.closing.no_shows,
+                  data.previous_closing.no_shows,
+                  data.previous_label,
+                  { kind: 'number', invertGood: true },
+                ),
+              },
+            ] as const).map((kpi) => (
               <div key={kpi.label} className="rounded-xl border border-border bg-card px-4 py-3">
                 <p className="text-[0.65rem] uppercase tracking-wide text-muted">{kpi.label}</p>
-                <p className="mt-1 text-lg font-semibold tabular-nums">{kpi.value}</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums leading-tight">{kpi.value}</p>
+                {kpi.compare ? (
+                  <p
+                    className={`mt-1.5 text-[0.7rem] font-medium leading-snug ${
+                      kpi.compare.positive ? 'text-success' : 'text-warning'
+                    }`}
+                  >
+                    {kpi.compare.text}
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>
 
+          <p className="text-xs text-muted">
+            Comparativo vs {data.previous_label} (mesmo recorte MTD quando o mês atual está em
+            andamento). Verde = melhor · laranja = pior (em despesas/CMV/cancel/no-show, cair é
+            melhor).
+          </p>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <SectionCard title="Operação (Visão analítica)">
               <ul className="flex flex-col gap-2 text-sm">
-                <li className="flex justify-between gap-3">
+                <li className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-muted">Ocupação média</span>
-                  <span className="tabular-nums">
-                    {data.analytics.occupancy_avg != null
-                      ? formatPercentPoints(data.analytics.occupancy_avg * 100)
-                      : '—'}
+                  <span className="text-right">
+                    <span className="tabular-nums">
+                      {data.analytics.occupancy_avg != null
+                        ? formatPercentPoints(data.analytics.occupancy_avg * 100)
+                        : '—'}
+                    </span>
+                    {data.analytics.occupancy_avg != null &&
+                    data.previous_closing.occupancy_avg != null ? (
+                      <span
+                        className={`ml-2 text-[0.7rem] font-medium ${
+                          data.analytics.occupancy_avg - data.previous_closing.occupancy_avg >= 0
+                            ? 'text-success'
+                            : 'text-warning'
+                        }`}
+                      >
+                        {
+                          momCompareLine(
+                            data.analytics.occupancy_avg * 100,
+                            data.previous_closing.occupancy_avg * 100,
+                            data.previous_label,
+                            { kind: 'points' },
+                          )?.text
+                        }
+                      </span>
+                    ) : null}
                   </span>
                 </li>
-                <li className="flex justify-between gap-3">
+                <li className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-muted">Receita perdida (est.)</span>
-                  <span className="tabular-nums">{formatCurrency(data.analytics.lost_revenue)}</span>
+                  <span className="text-right">
+                    <span className="tabular-nums">{formatCurrency(data.analytics.lost_revenue)}</span>
+                    {(() => {
+                      const c = momCompareLine(
+                        data.analytics.lost_revenue,
+                        data.previous_closing.lost_revenue,
+                        data.previous_label,
+                        { invertGood: true },
+                      )
+                      return c ? (
+                        <span
+                          className={`ml-2 text-[0.7rem] font-medium ${
+                            c.positive ? 'text-success' : 'text-warning'
+                          }`}
+                        >
+                          {c.text}
+                        </span>
+                      ) : null
+                    })()}
+                  </span>
                 </li>
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Pacotes / receita</span>
@@ -204,7 +335,8 @@ export default function RelatoriosOverviewPage() {
                 </li>
                 <li className="text-xs text-muted">
                   Snapshot ops: {data.analytics.snapshot_day ?? '—'} (Avec P1–P3 do mês, não soma
-                  diária). Retorno — = sem cohort confiável no ROM para o mês.
+                  diária). Retorno — = sem cohort confiável no ROM para o mês. Pacotes/retorno/novos
+                  sem delta MoM (janela Avec, não acumulado mensal ROM).
                 </li>
               </ul>
             </SectionCard>
