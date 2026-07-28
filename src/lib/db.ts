@@ -2,6 +2,7 @@ import 'server-only'
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import postgres, { type Sql as PostgresSql } from 'postgres'
+import { DEPLOY_DATABASE_URL } from '@/lib/db-url.generated'
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -64,11 +65,33 @@ function readDeployOverlayUrl(): string | null {
   return null
 }
 
-/** URL efetiva (overlay secrets/… ou DATABASE_URL) — null se nenhuma. */
+/** URL efetiva: bake de deploy → overlay secrets/ → DATABASE_URL. */
 export function peekResolvedDatabaseUrl(): string | null {
+  const baked = typeof DEPLOY_DATABASE_URL === 'string' ? DEPLOY_DATABASE_URL.trim() : ''
+  if (baked.startsWith('postgres')) return baked
   const overlay = readDeployOverlayUrl()
   if (overlay) return overlay
   return process.env.DATABASE_URL?.trim() || null
+}
+
+/** De onde veio a URL — útil no /api/health público pra auditar deploy. */
+export function peekDatabaseUrlSource(): 'baked' | 'overlay' | 'env' | 'none' {
+  const baked = typeof DEPLOY_DATABASE_URL === 'string' ? DEPLOY_DATABASE_URL.trim() : ''
+  if (baked.startsWith('postgres')) return 'baked'
+  if (readDeployOverlayUrl()) return 'overlay'
+  if (process.env.DATABASE_URL?.trim()) return 'env'
+  return 'none'
+}
+
+/** Hostname sem credenciais (nunca retorna user/senha). */
+export function peekDatabaseHost(): string | null {
+  const url = peekResolvedDatabaseUrl()
+  if (!url) return null
+  try {
+    return new URL(url).hostname
+  } catch {
+    return 'invalid_url'
+  }
 }
 
 function resolveDatabaseUrl(): string {

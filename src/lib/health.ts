@@ -1,4 +1,4 @@
-import { getSql, peekResolvedDatabaseUrl } from '@/lib/db'
+import { getSql, peekResolvedDatabaseUrl, peekDatabaseUrlSource, peekDatabaseHost } from '@/lib/db'
 import { Logger } from '@/lib/logger'
 import { isAvecConfigured, isAvecMock, getAvecBaseUrl } from '@/lib/avec/client'
 import { isAuthEnabled, isFinanceAuthConfigured, isStockAuthConfigured } from '@/lib/auth'
@@ -49,7 +49,14 @@ async function probeKpiLayers() {
 /** Resposta mínima — segura para monitoramento externo sem login. */
 export async function getPublicHealthStatus() {
   const { connected, neon_quota } = await probeDatabase()
-  return { ok: connected, neon_quota }
+  return {
+    ok: connected,
+    neon_quota,
+    database: {
+      host: peekDatabaseHost(),
+      source: peekDatabaseUrlSource(),
+    },
+  }
 }
 
 export async function getHealthStatus() {
@@ -92,7 +99,14 @@ export async function getHealthStatus() {
       display_name: brand.displayName,
       seed_preset: process.env.ROM_SEED_PRESET?.trim() || getRomPanelId(),
     },
-    database: { configured: Boolean(peekResolvedDatabaseUrl()), connected, error, neon_quota },
+    database: {
+      configured: Boolean(peekResolvedDatabaseUrl()),
+      connected,
+      error,
+      neon_quota,
+      host: peekDatabaseHost(),
+      source: peekDatabaseUrlSource(),
+    },
     claude: {
       configured: isAiConfigured(),
       model: process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-6',
