@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -138,18 +138,23 @@ export default function RelatorioDiretoriaPage() {
   const [data, setData] = useState<DirectorReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [sending, setSending] = useState(false)
   /** true = força fixture/demo; false = Avec live quando token OK */
   const [forceDemo, setForceDemo] = useState(false)
   const [stockKpis, setStockKpis] = useState<StockKpisPayload | null>(null)
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState<string | null>(null)
+  const dataRef = useRef<DirectorReport | null>(null)
+  dataRef.current = data
 
   /** Carrega só a etapa da aba ativa — 0011 não espera 0021 (causa do timeout). */
   const load = useCallback(async () => {
     if (tab === 'estoque') return
     const stage = tab === '0021' ? '0021' : '0011'
-    setLoading(true)
+    // Mantém tabela visível no refresh — evita tela “travada” em branco por até 120s.
+    if (dataRef.current) setRefreshing(true)
+    else setLoading(true)
     setError(null)
     try {
       const q = new URLSearchParams({
@@ -238,6 +243,7 @@ export default function RelatorioDiretoriaPage() {
       )
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [
     tab,
@@ -468,8 +474,8 @@ export default function RelatorioDiretoriaPage() {
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-2.5 text-sm font-semibold text-gold disabled:opacity-60"
           >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            Atualizar
+            <RefreshCw size={16} className={loading || refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Atualizando…' : 'Atualizar'}
           </button>
         </div>
       </div>
@@ -605,7 +611,7 @@ export default function RelatorioDiretoriaPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loading && (
+                  {loading && selectedReturn.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-6 text-muted">
                         Carregando…
@@ -619,8 +625,7 @@ export default function RelatorioDiretoriaPage() {
                       </td>
                     </tr>
                   )}
-                  {!loading &&
-                    selectedReturn.map(({ pro, sel, cmp, reactivation }) => {
+                  {selectedReturn.map(({ pro, sel, cmp, reactivation }) => {
                       const delta =
                         sel && cmp
                           ? Math.round((sel.return_rate - cmp.return_rate) * 1000) / 10
@@ -923,15 +928,14 @@ export default function RelatorioDiretoriaPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {loading && (
+                    {loading && selectedRevenue.length === 0 && (
                       <tr>
                         <td colSpan={6} className="py-6 text-muted">
                           Carregando…
                         </td>
                       </tr>
                     )}
-                    {!loading &&
-                      selectedRevenue.map(({ pro, older, newer }) => {
+                    {selectedRevenue.map(({ pro, older, newer }) => {
                         const delta =
                           older != null && newer != null
                             ? newer.revenue - older.revenue
