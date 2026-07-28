@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Download,
   FileText,
+  Package,
 } from 'lucide-react'
 import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL } from '../_components/ui'
 import { MonthYearField } from '../_components/MonthYearField'
@@ -242,17 +243,33 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <MiniStat
+        <InsightCard
           icon={<TrendingUp size={15} />}
           label={`Receita · mês acum. · ${period?.label ?? '—'}`}
           value={loading || !period ? '—' : formatCurrency(period.revenue)}
+          compare={
+            !loading && period?.previous
+              ? {
+                  text: `${fmtSignedCurrency(period.revenue - period.previous.revenue)} vs ${period.previous.label}`,
+                  positive: period.revenue - period.previous.revenue >= 0,
+                }
+              : null
+          }
         />
-        <MiniStat
+        <InsightCard
           icon={<Users size={15} />}
           label="Atendidos · mês acum."
           value={loading || !period ? '—' : String(period.attended ?? 0)}
+          compare={
+            !loading && period?.previous
+              ? {
+                  text: `${fmtSignedNumber(period.attended - period.previous.attended)} vs ${period.previous.label}`,
+                  positive: period.attended - period.previous.attended >= 0,
+                }
+              : null
+          }
         />
-        <MiniStat
+        <InsightCard
           icon={<Percent size={15} />}
           label={`Ocupação · ${period?.label ?? '—'}`}
           value={
@@ -263,30 +280,59 @@ export default function DashboardPage() {
                 : '—'
           }
         />
-        <MiniStat
+        <InsightCard
           icon={<AlertTriangle size={15} />}
           label="Receita perdida · mês acum."
           value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
-        />
-        <MiniStat
-          icon={<Sparkles size={15} />}
-          label={`Novos · ${period?.label ?? '—'}`}
-          value={loading || !period ? '—' : String(period.new_clients_period ?? 0)}
-        />
-        <MiniStat
-          icon={<TrendingUp size={15} />}
-          label={
-            period?.previous
-              ? `Δ receita vs ${period.previous.label}`
-              : 'Comparativo mês ant.'
+          compare={
+            !loading && period?.previous
+              ? {
+                  text: `${fmtSignedCurrency(period.lost_revenue - period.previous.lost_revenue)} vs ${period.previous.label}`,
+                  // Menos receita perdida = melhor
+                  positive: period.lost_revenue - period.previous.lost_revenue <= 0,
+                }
+              : null
           }
+        />
+        <InsightCard
+          icon={<Users size={15} />}
+          label="Cancel. + no-show · mês acum."
+          value={
+            loading || !period
+              ? '—'
+              : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
+          }
+          compare={
+            !loading && period?.previous
+              ? (() => {
+                  const cur = (period.cancelled ?? 0) + (period.no_shows ?? 0)
+                  const prev = period.previous.cancelled + period.previous.no_shows
+                  return {
+                    text: `${fmtSignedNumber(cur - prev)} vs ${period.previous.label}`,
+                    positive: cur - prev <= 0,
+                  }
+                })()
+              : null
+          }
+        />
+        <InsightCard
+          icon={<TrendingUp size={15} />}
+          label={period?.previous ? `Vs ${period.previous.label}` : 'Vs mês anterior'}
           value={
             loading || !period?.previous
               ? '—'
-              : period.revenue != null && period.previous.revenue != null
-                ? formatCurrency(period.revenue - period.previous.revenue)
-                : '—'
+              : fmtSignedCurrency(period.revenue - period.previous.revenue)
           }
+          compare={
+            !loading && period?.previous
+              ? {
+                  text: `${period.label} ${formatCurrency(period.revenue)} · ${period.attended} atend. vs ${period.previous.label} ${formatCurrency(period.previous.revenue)} · ${period.previous.attended} atend.`,
+                  positive: period.revenue - period.previous.revenue >= 0,
+                  muted: true,
+                }
+              : null
+          }
+          emphasize
         />
       </div>
 
@@ -301,6 +347,30 @@ export default function DashboardPage() {
           . Canais/pacotes/tops vêm do snapshot Avec do mês.
         </p>
       )}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <InsightCard
+          icon={<Sparkles size={15} />}
+          label={`Novos · ${period?.label ?? '—'}`}
+          value={loading || !period ? '—' : String(period.new_clients_period ?? 0)}
+        />
+        <InsightCard
+          icon={<Package size={15} />}
+          label={`Pacotes · ${period?.label ?? '—'}`}
+          value={loading || !period ? '—' : formatCurrency(period.packages_revenue)}
+        />
+        <InsightCard
+          icon={<TrendingUp size={15} />}
+          label={`Retorno · ${period?.label ?? '—'}`}
+          value={
+            loading || !period
+              ? '—'
+              : period.return_rate != null
+                ? formatPercentPoints(period.return_rate * 100, 0)
+                : '—'
+          }
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
         <div className="flex flex-col gap-6 lg:col-span-8 lg:gap-8">
@@ -326,12 +396,12 @@ export default function DashboardPage() {
                 </p>
               )}
             </div>
-            <MiniStat
+            <InsightCard
               icon={<Users size={15} />}
               label="Novos aguardando · funil"
               value={loading ? '—' : String(novos)}
             />
-            <MiniStat
+            <InsightCard
               icon={<Layers size={15} />}
               label="Canais ativos · funil 30d"
               value={loading ? '—' : String(activeChannels)}
@@ -581,19 +651,25 @@ export default function DashboardPage() {
                     <td className="py-2 tabular-nums text-muted">{i + 1}</td>
                     <td className="py-2 font-medium text-foreground/90">{p.name}</td>
                     <td className="py-2 tabular-nums">
-                      {formatCurrency(p.revenue)}
-                      {p.delta && <DeltaTag value={p.delta.revenue} suffix="" isCurrency />}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{formatCurrency(p.revenue)}</span>
+                        {p.delta && <DeltaUnder value={p.delta.revenue} suffix="" isCurrency />}
+                      </div>
                     </td>
                     <td className="py-2 tabular-nums">
-                      {p.attended}
-                      {p.delta && <DeltaTag value={p.delta.attended} suffix="" />}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{p.attended}</span>
+                        {p.delta && <DeltaUnder value={p.delta.attended} suffix="" />}
+                      </div>
                     </td>
                     <td className="py-2 tabular-nums">{formatCurrency(p.ticket_avg)}</td>
                     <td className="py-2 tabular-nums">
-                      {p.occupancy != null ? formatPercent(p.occupancy) : '—'}
-                      {p.delta?.occupancy != null && (
-                        <DeltaTag value={Math.round(p.delta.occupancy * 100)} suffix="pp" />
-                      )}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{p.occupancy != null ? formatPercent(p.occupancy) : '—'}</span>
+                        {p.delta?.occupancy != null && (
+                          <DeltaUnder value={Math.round(p.delta.occupancy * 100)} suffix="pp" />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -612,19 +688,61 @@ export default function DashboardPage() {
   )
 }
 
-function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function fmtSignedCurrency(diff: number): string {
+  const rounded = Math.round(diff * 100) / 100
+  if (rounded === 0) return formatCurrency(0)
+  const sign = rounded > 0 ? '+' : '−'
+  return `${sign}${formatCurrency(Math.abs(rounded))}`
+}
+
+function fmtSignedNumber(diff: number): string {
+  if (diff === 0) return '0'
+  const sign = diff > 0 ? '+' : '−'
+  return `${sign}${Math.abs(diff)}`
+}
+
+function InsightCard({
+  icon,
+  label,
+  value,
+  compare,
+  emphasize,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  compare?: { text: string; positive: boolean; muted?: boolean } | null
+  emphasize?: boolean
+}) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div
+      className={`rounded-2xl border p-4 ${
+        emphasize ? 'border-gold/30 bg-gradient-to-b from-gold/10 to-card' : 'border-border bg-card'
+      }`}
+    >
       <div className="mb-2 flex items-center gap-1.5 text-muted">
         {icon}
         <span className="text-[0.65rem] uppercase tracking-wide">{label}</span>
       </div>
-      <p className="text-2xl font-semibold tabular-nums">{value}</p>
+      <p className="text-2xl font-semibold tabular-nums leading-tight">{value}</p>
+      {compare ? (
+        <p
+          className={`mt-1.5 text-[0.7rem] leading-snug ${
+            compare.muted
+              ? 'text-muted'
+              : compare.positive
+                ? 'font-medium text-success'
+                : 'font-medium text-warning'
+          }`}
+        >
+          {compare.text}
+        </p>
+      ) : null}
     </div>
   )
 }
 
-function DeltaTag({
+function DeltaUnder({
   value,
   suffix,
   isCurrency,
@@ -637,10 +755,8 @@ function DeltaTag({
   const positive = value > 0
   const formatted = isCurrency ? formatCurrency(Math.abs(value)) : `${Math.abs(value)}${suffix}`
   return (
-    <span
-      className={`ml-1.5 text-[0.65rem] font-semibold ${positive ? 'text-success' : 'text-warning'}`}
-    >
-      {positive ? '+' : '-'}
+    <span className={`text-[0.65rem] font-semibold ${positive ? 'text-success' : 'text-warning'}`}>
+      {positive ? '+' : '−'}
       {formatted}
     </span>
   )

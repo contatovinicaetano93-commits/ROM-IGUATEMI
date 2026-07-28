@@ -97,5 +97,6 @@ describe('period-analytics', () => {
     expect(result.previous.month).toBe('2026-06')
     expect(result.previous.revenue).toBe(8000)
     expect(result.previous.attended).toBe(40)
+    expect(result.previous.lost_revenue).toBe(400)
   })
 })

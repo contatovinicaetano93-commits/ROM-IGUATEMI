@@ -157,6 +157,7 @@ export interface PeriodCompareBucket {
   cancelled: number
   no_shows: number
   ticket_avg: number | null
+  lost_revenue: number
 }
 
 export interface PeriodAnalytics {
@@ -248,6 +249,7 @@ export async function computePeriodAnalytics(opts?: {
       cancelled: prevLoss.cancelled,
       no_shows: prevLoss.no_shows,
       ticket_avg: prev_ticket_avg,
+      lost_revenue: estimateLostRevenue(prevLoss.cancelled, prevLoss.no_shows, prev_ticket_avg),
     },
   }
 }
