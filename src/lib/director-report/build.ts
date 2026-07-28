@@ -19,6 +19,17 @@ import {
 import { DIRECTOR_FLOOR_ROLES, listDirectorProfessionals } from './professionals'
 import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
+/** Evita jogar JSON bruto de validação Avec na UI (HTTP 400 salao_id etc.). */
+function shortenAvecWarning(w: string): string {
+  if (/salao_id/i.test(w)) {
+    return '0011: Avec exige salao_id — confira AVEC_UNIT_ID'
+  }
+  if (/HTTP 400/i.test(w)) {
+    return w.replace(/\{[\s\S]*\}/, '').trim().slice(0, 120) || 'Avec HTTP 400'
+  }
+  return w.length > 160 ? `${w.slice(0, 157)}…` : w
+}
+
 export interface BuildDirectorReportOptions {
   selectedMonth?: MonthKey
   /** false = 0021 só o mês selecionado (sem comparativo) */
@@ -105,22 +116,21 @@ export async function buildDirectorReport(
         compareQuarter,
         { stages, maxPages0011: opts.maxPages0011 },
       )
-      // Cada etapa cai pro mock de forma independente — uma falhar não deve
-      // jogar fora o dado real da outra que funcionou.
-      if (want0011 && live.return_blocks) {
+      // null = falha; [] = Avec OK sem dados no período (não fingir roster zerado).
+      if (want0011 && live.return_blocks !== null) {
         return_blocks = live.return_blocks
       }
-      if (want0021 && live.revenue_blocks) {
+      if (want0021 && live.revenue_blocks !== null) {
         revenue_blocks = live.revenue_blocks
       }
       if (want0011 && want0021) {
-        if (live.return_blocks && live.revenue_blocks) {
+        if (live.return_blocks !== null && live.revenue_blocks !== null) {
           source = 'avec'
-        } else if (live.return_blocks || live.revenue_blocks) {
+        } else if (live.return_blocks !== null || live.revenue_blocks !== null) {
           source = 'partial'
           const missing = [
-            !live.return_blocks ? '0011' : null,
-            !live.revenue_blocks ? '0021' : null,
+            live.return_blocks === null ? '0011' : null,
+            live.revenue_blocks === null ? '0021' : null,
           ]
             .filter(Boolean)
             .join('+')
@@ -131,13 +141,18 @@ export async function buildDirectorReport(
             .filter(Boolean)
             .join(' · ')
         }
-      } else if (want0011 && live.return_blocks) {
+      } else if (want0011 && live.return_blocks !== null) {
         source = 'avec'
-      } else if (want0021 && live.revenue_blocks) {
+      } else if (want0021 && live.revenue_blocks !== null) {
         source = 'avec'
       }
       if (live.warnings.length) {
-        liveNote = [liveNote, live.warnings.slice(0, 3).join(' · ')].filter(Boolean).join(' · ')
+        liveNote = [
+          liveNote,
+          ...live.warnings.slice(0, 3).map((w) => shortenAvecWarning(w)),
+        ]
+          .filter(Boolean)
+          .join(' · ')
       }
     } catch (e) {
       liveNote = `Avec live falhou — usando fixture: ${e instanceof Error ? e.message : String(e)}`

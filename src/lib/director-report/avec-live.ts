@@ -561,9 +561,13 @@ export async function fetchLiveDirectorBlocks(
 
   if (want0021 && !hasAnyRevenue) {
     warnings.push('0021 sem faturamento casado aos profissionais do portfólio')
+    revenue_blocks = []
   }
-  if (want0011 && !hasAnyReturn) {
-    warnings.push('0011 sem lista/taxa casada aos profissionais do portfólio')
+  if (want0011 && return_blocks != null && !hasAnyReturn) {
+    warnings.push(
+      '0011 sem lista/taxa no período — use um trimestre fechado ou confira AVEC_UNIT_ID (salao_id)',
+    )
+    return_blocks = []
   }
 
   return { return_blocks, revenue_blocks, warnings }
