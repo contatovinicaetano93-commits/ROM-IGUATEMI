@@ -181,6 +181,22 @@ export function withRequiredAvecReportParams(
   }
 }
 
+/**
+ * Params do 0007 (taxa de retorno) para sync P3.
+ * Diário/full: mês corrente (paridade Brasil) — nunca janela rolante 30d.
+ * Backfill: inicio/fim do mês do snapshot.
+ */
+export function build0007ReportParams(opts?: { inicio?: string; fim?: string }) {
+  if (opts?.inicio && opts?.fim) {
+    return withRequiredAvecReportParams('0007', {
+      inicio: opts.inicio,
+      fim: opts.fim,
+      limit: 250,
+    })
+  }
+  return withRequiredAvecReportParams('0007', { limit: 250 })
+}
+
 /** Intervalo em datas de calendário America/Sao_Paulo (não UTC do servidor). */
 export function periodRange(daysBack = 0, daysForward = 14) {
   const today = todayIso()

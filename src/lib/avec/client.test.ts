@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  build0007ReportParams,
   extractRows,
   formatTruncationWarning,
   getAvecSyncMaxPages,
@@ -70,6 +71,25 @@ describe('withRequiredAvecReportParams', () => {
       fim1: '01/07/2026',
       inicio2: '01/07/2026',
       fim2: '24/07/2026',
+      limit: 250,
+    })
+  })
+
+  it('build0007ReportParams no sync diário usa mês corrente (sem rolling 30d)', () => {
+    const params = build0007ReportParams()
+    expect(params).not.toHaveProperty('inicio')
+    expect(params).not.toHaveProperty('fim')
+    expect(String(params.inicio2)).toMatch(/^01\//)
+    expect(params.fim1).toBe(params.inicio2)
+    expect(params.limit).toBe(250)
+  })
+
+  it('build0007ReportParams no backfill usa o mês informado', () => {
+    expect(build0007ReportParams({ inicio: '01/06/2026', fim: '30/06/2026' })).toEqual({
+      inicio1: '17/04/2026',
+      fim1: '01/06/2026',
+      inicio2: '01/06/2026',
+      fim2: '30/06/2026',
       limit: 250,
     })
   })

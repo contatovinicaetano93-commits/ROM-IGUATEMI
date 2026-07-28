@@ -1,4 +1,4 @@
-import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
+import { fetchAllAvecReport, periodRange, build0007ReportParams } from '@/lib/avec/client'
 import {
   isP3NonReturnerRow,
   normalizeP3CurveRow,
@@ -27,17 +27,17 @@ function todayIsoLocal() {
 }
 
 /**
- * Taxa de retorno local: clientes com visita nos 45 dias antes do mês corrente
- * que também tiveram visita no mês corrente.
+ * Taxa de retorno local: cohort visitou nos 45d antes do mês de `asOf`
+ * e retornou no mês até `asOf`.
  */
-async function computeLocalReturnRate(): Promise<number | null> {
+async function computeLocalReturnRate(asOfIso = todayIsoLocal()): Promise<number | null> {
   const sql = getSql()
   const rows = (await sql`
     with bounds as (
       select
-        (date_trunc('month', timezone('America/Sao_Paulo', now()))::date - 45) as p1_start,
-        (date_trunc('month', timezone('America/Sao_Paulo', now()))::date) as month_start,
-        timezone('America/Sao_Paulo', now())::date as today
+        (date_trunc('month', ${asOfIso}::date)::date - 45) as p1_start,
+        date_trunc('month', ${asOfIso}::date)::date as month_start,
+        ${asOfIso}::date as as_of
     ),
     visited_p1 as (
       select distinct cs.contact_id
@@ -55,7 +55,7 @@ async function computeLocalReturnRate(): Promise<number | null> {
       where cs.active = true
         and cs.last_done_at is not null
         and (cs.last_done_at at time zone 'America/Sao_Paulo')::date >= b.month_start
-        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date <= b.today
+        and (cs.last_done_at at time zone 'America/Sao_Paulo')::date <= b.as_of
     )
     select
       (select count(*)::int from visited_p1) as cohort,
@@ -68,9 +68,10 @@ async function computeLocalReturnRate(): Promise<number | null> {
 }
 
 function asRows(result: unknown): Record<string, unknown>[] {
-  // Validate array items are objects before casting
   if (Array.isArray(result)) {
-    return result.every((item) => item && typeof item === 'object') ? (result as Record<string, unknown>[]) : []
+    return result.every((item) => item && typeof item === 'object')
+      ? (result as Record<string, unknown>[])
+      : []
   }
   if (result && typeof result === 'object') {
     const rows = (result as { rows?: unknown }).rows
@@ -102,12 +103,22 @@ function resolveId(mapper: string): string | null {
   return resolveReportId(def)
 }
 
+export type OpsPeriodOpts = {
+  asOf?: string
+  /** dd/mm/yyyy — só para 0017/0088 e backfill mensal do 0007 */
+  inicio?: string
+  fim?: string
+}
+
 /**
  * P3 — sync full: 0007, 0088, 0017 → salon_p3_daily
+ * Com `opts`, grava snapshot do período (mês) em `asOf`.
  */
-export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
-  const day = todayIsoLocal()
-  const { inicio, fim } = periodRange(30, 0)
+export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?: OpsPeriodOpts) {
+  const day = opts?.asOf ?? todayIsoLocal()
+  const rolling = periodRange(30, 0)
+  const inicio = opts?.inicio ?? rolling.inicio
+  const fim = opts?.fim ?? rolling.fim
   const params = { inicio, fim, limit: 250 }
 
   let return_rate = 0
@@ -115,8 +126,8 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
   const id0007 = resolveId('return_rate')
   if (id0007) {
     try {
-      // 0007 exige inicio1/fim1/inicio2/fim2 (mês corrente + 45d antes) — não passar inicio/fim rolantes.
-      const reportParams = withRequiredAvecReportParams(id0007, { limit: 250 })
+      // Paridade Brasil: 0007 exige inicio1/fim1/inicio2/fim2 do mês — sem rolling 30d.
+      const reportParams = build0007ReportParams(opts)
       const rows = asRows(await fetchAllAvecReport(id0007, reportParams))
       await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
       let sum = 0
@@ -136,9 +147,8 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
         return_rate = Math.round((sum / n) * 10000) / 10000
         returnRateOk = true
       } else if (nonReturners > 0) {
-        // Lista 0007 = sem retorno. Taxa ≈ retornaram / (retornaram + lista),
-        // usando cohort local (visitas no período 1 implícito via ROM).
-        const local = await computeLocalReturnRate()
+        // Lista 0007 = sem retorno. Taxa via cohort local (visitas no período 1).
+        const local = await computeLocalReturnRate(day)
         if (local != null) {
           return_rate = local
           returnRateOk = true
@@ -157,7 +167,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
   // Fallback ROM se 0007 falhou/vazio
   if (!returnRateOk) {
     try {
-      const local = await computeLocalReturnRate()
+      const local = await computeLocalReturnRate(day)
       if (local != null) {
         return_rate = local
         returnRateOk = true
@@ -181,7 +191,6 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
         stats.p3_rows = (stats.p3_rows ?? 0) + 1
         new_clients_period += c
       }
-      // Se o relatório for lista (1 linha = 1 cliente) e contagem veio 0, usa length
       if (new_clients_period === 0 && rows.length > 0) {
         new_clients_period = rows.length
         stats.p3_rows = (stats.p3_rows ?? 0) + rows.length
@@ -218,6 +227,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string) {
 
   // Só escreve os campos cujo relatório teve sucesso — evita apagar dados
   // válidos do dia quando outro relatório falha parcialmente.
+  // Nunca limpar return_rate para null (Cérebro exige return_rate > 0).
   const patch: {
     return_rate?: number
     new_clients_period?: number
