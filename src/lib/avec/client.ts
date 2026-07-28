@@ -259,6 +259,27 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
   return []
 }
 
+/**
+ * Totais do relatório Avec (`data.report.total`).
+ * Em 0007 a taxa do salão vem aqui — não nas linhas de clientes.
+ */
+export function extractReportTotals(payload: unknown): Record<string, unknown>[] {
+  if (!payload || typeof payload !== 'object') return []
+  const obj = payload as Record<string, unknown>
+  const dig = (node: unknown): Record<string, unknown>[] => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return []
+    const n = node as Record<string, unknown>
+    if (Array.isArray(n.total)) return n.total as Record<string, unknown>[]
+    if (n.report && typeof n.report === 'object' && !Array.isArray(n.report)) {
+      const rep = n.report as Record<string, unknown>
+      if (Array.isArray(rep.total)) return rep.total as Record<string, unknown>[]
+    }
+    if (n.data) return dig(n.data)
+    return []
+  }
+  return dig(obj)
+}
+
 /** Timeout/abort de página Avec — não vale retry (só queima o orçamento do relatório). */
 export function isAvecFetchAbortError(e: unknown): boolean {
   if (!e || typeof e !== 'object') return false

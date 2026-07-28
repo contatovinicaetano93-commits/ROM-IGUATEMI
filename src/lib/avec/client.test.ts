@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   avecReportHeaders,
+  extractReportTotals,
   extractRows,
   formatTruncationWarning,
   getAvecSyncMaxPages,
@@ -54,6 +55,26 @@ describe('extractRows', () => {
         data: { report: { description: 'x', result: [{ faturamento: 100, data: '2026-07-22' }] } },
       }),
     ).toEqual([{ faturamento: 100, data: '2026-07-22' }])
+  })
+})
+
+describe('extractReportTotals', () => {
+  it('extrai data.report.total (0007 taxa do salão)', () => {
+    expect(
+      extractReportTotals({
+        code: 200,
+        data: {
+          report: {
+            total: [{ total_primeiro_periodo: 100, total_retornaram: 40, taxa_retorno: '40' }],
+            result: [{ nome: 'Cliente' }],
+          },
+        },
+      }),
+    ).toEqual([{ total_primeiro_periodo: 100, total_retornaram: 40, taxa_retorno: '40' }])
+  })
+
+  it('retorna [] sem total', () => {
+    expect(extractReportTotals({ data: { report: { result: [] } } })).toEqual([])
   })
 })
 

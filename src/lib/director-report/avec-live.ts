@@ -1,5 +1,13 @@
-import { fetchAllAvecReport, fmtAvecDate, getAvecSyncMaxPages } from '@/lib/avec/client'
 import {
+  extractReportTotals,
+  extractRows,
+  fetchAllAvecReport,
+  fetchAvecReport,
+  fmtAvecDate,
+  getAvecSyncMaxPages,
+} from '@/lib/avec/client'
+import {
+  isP3NonReturnerRow,
   normalize0011ReactivationRow,
   normalizeP1ProfessionalRevenueRow,
   normalizeP3ReturnRateRow,
@@ -211,53 +219,179 @@ async function fetch0011Quarter(
   byPro: Map<string, QuarterAgg>
   salonRates: number[]
   truncated: boolean
+  source: '0011' | '0007' | 'none'
+  note: string | null
 }> {
   const id = resolveMapperId('director_return') ?? '0011'
   const { inicio, fim } = quarterRangeBr(quarter)
-  // UI/relatório: cap de páginas + deadline evita timeout no browser.
-  const result = await fetchAllAvecReport(
-    id,
-    { inicio, fim, limit: 250 },
-    budget.maxPages,
-    { deadlineAt: budget.deadlineAt },
-  )
-  if (result.truncated) {
-    console.warn(`[director-report] 0011 ${quarter} truncado em ${budget.maxPages} páginas / budget`)
-  }
-  const rows = result.rows
-
   const byPro = new Map<string, QuarterAgg>()
   const salonRates: number[] = []
+  let truncated = false
+  let source: '0011' | '0007' | 'none' = 'none'
+  let note: string | null = null
 
-  for (const row of rows) {
-    const c = normalize0011ReactivationRow(row)
-    if (!c) continue
+  // 1) Tenta 0011 — em alguns salões Avec devolve "Tipo de relatório não suportado".
+  try {
+    const result = await fetchAllAvecReport(
+      id,
+      { inicio, fim, limit: 250 },
+      budget.maxPages,
+      { deadlineAt: budget.deadlineAt },
+    )
+    if (result.truncated) {
+      console.warn(`[director-report] 0011 ${quarter} truncado em ${budget.maxPages} páginas / budget`)
+    }
+    truncated = result.truncated
+    source = '0011'
 
-    if (c.returnRate != null && (!c.lastVisit || c.name === '—')) {
-      salonRates.push(c.returnRate)
-      if (c.professional) {
-        const agg = byPro.get(c.professional) ?? {
+    for (const row of result.rows) {
+      const c = normalize0011ReactivationRow(row)
+      if (!c) continue
+
+      if (c.returnRate != null && (!c.lastVisit || c.name === '—')) {
+        salonRates.push(c.returnRate)
+        if (c.professional) {
+          const agg = byPro.get(c.professional) ?? {
+            clients: [],
+            returnRates: [],
+            clientsTotalHint: 0,
+            clientsReturnedHint: 0,
+          }
+          agg.returnRates.push(c.returnRate)
+          byPro.set(c.professional, agg)
+        }
+        continue
+      }
+
+      const proName = c.professional ?? '_unassigned'
+      const agg = byPro.get(proName) ?? {
+        clients: [],
+        returnRates: [],
+        clientsTotalHint: 0,
+        clientsReturnedHint: 0,
+      }
+      if (c.returnRate != null) agg.returnRates.push(c.returnRate)
+      if (c.name && c.name !== '—') {
+        agg.clients.push(
+          toReactivationClient({
+            name: c.name,
+            email: c.email,
+            phone: c.phone,
+            mobile: c.mobile,
+            gender: c.gender,
+            lastVisit: c.lastVisit,
+          }),
+        )
+      }
+      byPro.set(proName, agg)
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    note = `0011 indisponível (${msg.slice(0, 120)})`
+    console.warn(`[director-report] 0011 ${quarter}: ${msg}`)
+  }
+
+  const hasUseful0011 =
+    salonRates.length > 0 ||
+    [...byPro.values()].some((a) => a.clients.length > 0 || a.returnRates.length > 0)
+
+  // 2) Fallback 0007: taxa no total do relatório + lista de não-retornados (sem profissional).
+  const timeLeft =
+    budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
+  if (!hasUseful0011 && timeLeft > 12_000) {
+    const id0007 = resolveMapperId('return_rate')
+    if (id0007) {
+      try {
+        const fallback = await fetch0007QuarterFallback(id0007, inicio, fim, budget)
+        truncated = truncated || fallback.truncated
+        if (fallback.salonRate != null) salonRates.push(fallback.salonRate)
+
+        const agg = byPro.get('_unassigned') ?? {
           clients: [],
           returnRates: [],
           clientsTotalHint: 0,
           clientsReturnedHint: 0,
         }
-        agg.returnRates.push(c.returnRate)
-        byPro.set(c.professional, agg)
+        if (fallback.salonRate != null) {
+          agg.returnRates.push(fallback.salonRate)
+          if (fallback.clientsTotalHint > 0) {
+            agg.clientsTotalHint = fallback.clientsTotalHint
+            agg.clientsReturnedHint = fallback.clientsReturnedHint
+          }
+        }
+        for (const c of fallback.clients) {
+          agg.clients.push(c)
+        }
+        byPro.set('_unassigned', agg)
+        source = '0007'
+        note =
+          '0011 não suportado neste salão Avec — usando taxa/lista do 0007 (sem coluna profissional)'
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        note = note ?? `0007 fallback falhou: ${msg.slice(0, 120)}`
+        console.warn(`[director-report] 0007 fallback ${quarter}: ${msg}`)
       }
-      continue
+    }
+  }
+
+  if (!hasUseful0011 && source !== '0007') source = 'none'
+  return { byPro, salonRates, truncated, source, note }
+}
+
+/** 0007: taxa em `report.total`; linhas = clientes que NÃO retornaram. */
+async function fetch0007QuarterFallback(
+  reportId: string,
+  inicio: string,
+  fim: string,
+  budget: DirectorFetchBudget,
+): Promise<{
+  salonRate: number | null
+  clients: ReactivationClient[]
+  clientsTotalHint: number
+  clientsReturnedHint: number
+  truncated: boolean
+}> {
+  const maxPages = Math.min(4, budget.maxPages)
+  const clients: ReactivationClient[] = []
+  let salonRate: number | null = null
+  let clientsTotalHint = 0
+  let clientsReturnedHint = 0
+  let truncated = false
+  let pagesFetched = 0
+
+  for (let page = 1; page <= maxPages; page++) {
+    if (budget.deadlineAt != null && Date.now() >= budget.deadlineAt) {
+      truncated = true
+      break
+    }
+    const payload = await fetchAvecReport(reportId, { inicio, fim, limit: 250, page })
+    pagesFetched = page
+
+    if (salonRate == null) {
+      for (const total of extractReportTotals(payload)) {
+        const rate = normalizeP3ReturnRateRow(total)
+        if (rate != null) {
+          salonRate = rate
+          const first = Number(
+            total.total_primeiro_periodo ?? total.total_primeiro ?? total.total ?? 0,
+          )
+          const returned = Number(total.total_retornaram ?? total.retornaram ?? 0)
+          if (Number.isFinite(first) && first > 0) {
+            clientsTotalHint = first
+            clientsReturnedHint = Number.isFinite(returned) ? returned : Math.round(first * rate)
+          }
+          break
+        }
+      }
     }
 
-    const proName = c.professional ?? '_unassigned'
-    const agg = byPro.get(proName) ?? {
-      clients: [],
-      returnRates: [],
-      clientsTotalHint: 0,
-      clientsReturnedHint: 0,
-    }
-    if (c.returnRate != null) agg.returnRates.push(c.returnRate)
-    if (c.name && c.name !== '—') {
-      agg.clients.push(
+    const rows = extractRows(payload)
+    if (rows.length === 0) break
+    for (const row of rows) {
+      if (!isP3NonReturnerRow(row)) continue
+      const c = normalize0011ReactivationRow(row)
+      if (!c || !c.name || c.name === '—') continue
+      clients.push(
         toReactivationClient({
           name: c.name,
           email: c.email,
@@ -268,33 +402,12 @@ async function fetch0011Quarter(
         }),
       )
     }
-    byPro.set(proName, agg)
+    if (rows.length < 250) break
+    if (page === maxPages) truncated = true
   }
 
-  // Fallback 0007 só se ainda houver tempo no budget.
-  const timeLeft =
-    budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
-  if (salonRates.length === 0 && timeLeft > 12_000) {
-    const id0007 = resolveMapperId('return_rate')
-    if (id0007) {
-      try {
-        const { rows: r7 } = await fetchAllAvecReport(
-          id0007,
-          { inicio, fim, limit: 250 },
-          Math.min(4, budget.maxPages),
-          { deadlineAt: budget.deadlineAt },
-        )
-        for (const row of r7) {
-          const rate = normalizeP3ReturnRateRow(row)
-          if (rate != null) salonRates.push(rate)
-        }
-      } catch {
-        // opcional
-      }
-    }
-  }
-
-  return { byPro, salonRates, truncated: result.truncated }
+  if (pagesFetched === 0) truncated = true
+  return { salonRate, clients, clientsTotalHint, clientsReturnedHint, truncated }
 }
 
 function avg(nums: number[]): number | null {
@@ -414,11 +527,15 @@ export async function fetchLiveDirectorBlocks(
     byPro: new Map(),
     salonRates: [],
     truncated: false,
+    source: 'none',
+    note: null,
   }
   let compareQ: Awaited<ReturnType<typeof fetch0011Quarter>> = {
     byPro: new Map(),
     salonRates: [],
     truncated: false,
+    source: 'none',
+    note: null,
   }
 
   if (want0011) {
@@ -429,6 +546,7 @@ export async function fetchLiveDirectorBlocks(
     if (selResult.status === 'fulfilled') {
       selectedQ = selResult.value
       if (selectedQ.truncated) warnings.push(`0011 ${selectedQuarter}: parcial (budget UI)`)
+      if (selectedQ.note) warnings.push(selectedQ.note)
     } else
       warnings.push(
         `0011 ${selectedQuarter}: ${selResult.reason instanceof Error ? selResult.reason.message : String(selResult.reason)}`,
@@ -436,6 +554,7 @@ export async function fetchLiveDirectorBlocks(
     if (cmpResult.status === 'fulfilled') {
       compareQ = cmpResult.value
       if (compareQ.truncated) warnings.push(`0011 ${compareQuarter}: parcial (budget UI)`)
+      if (compareQ.note && compareQ.note !== selectedQ.note) warnings.push(compareQ.note)
     } else
       warnings.push(
         `0011 ${compareQuarter}: ${cmpResult.reason instanceof Error ? cmpResult.reason.message : String(cmpResult.reason)}`,
@@ -460,6 +579,8 @@ export async function fetchLiveDirectorBlocks(
       }
       cur.clients.push(...agg.clients)
       cur.returnRates.push(...agg.returnRates)
+      cur.clientsTotalHint = Math.max(cur.clientsTotalHint, agg.clientsTotalHint)
+      cur.clientsReturnedHint = Math.max(cur.clientsReturnedHint, agg.clientsReturnedHint)
       out.set(pro.id, cur)
     }
     // Linhas sem profissional: distribui só se houver 1 pro filtrado
@@ -474,6 +595,8 @@ export async function fetchLiveDirectorBlocks(
       }
       cur.clients.push(...un.clients)
       cur.returnRates.push(...un.returnRates)
+      cur.clientsTotalHint = Math.max(cur.clientsTotalHint, un.clientsTotalHint)
+      cur.clientsReturnedHint = Math.max(cur.clientsReturnedHint, un.clientsReturnedHint)
       out.set(only.id, cur)
     }
     return out
@@ -492,11 +615,12 @@ export async function fetchLiveDirectorBlocks(
       rates.push(...agg.returnRates)
     }
     if (professionals.length === 1) {
+      const un = selectedQ.byPro.get('_unassigned')
       selByPro.set(professionals[0]!.id, {
         clients: allClients,
         returnRates: rates,
-        clientsTotalHint: 0,
-        clientsReturnedHint: 0,
+        clientsTotalHint: un?.clientsTotalHint ?? 0,
+        clientsReturnedHint: un?.clientsReturnedHint ?? 0,
       })
     }
   }
@@ -614,11 +738,12 @@ export async function fetchLiveDirectorBlocks(
     warnings.push('0021 sem faturamento casado aos profissionais do portfólio')
     revenue_blocks = []
   }
+  // Sem sinal útil → null para o caller manter mock (evita tabela vazia "Nenhum profissional").
   if (want0011 && return_blocks != null && !hasAnyReturn) {
     warnings.push(
-      '0011 sem lista/taxa no período — use um trimestre fechado ou confira AVEC_UNIT_ID (salao_id)',
+      '0011 sem lista/taxa no período — Avec 0011 pode estar indisponível neste salão; fallback 0007 sem dados',
     )
-    return_blocks = []
+    return_blocks = null
   }
 
   return { return_blocks, revenue_blocks, warnings }
