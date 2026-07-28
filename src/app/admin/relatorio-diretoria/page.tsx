@@ -159,6 +159,9 @@ export default function RelatorioDiretoriaPage() {
         compare,
       })
       if (forceDemo) q.set('mock', '1')
+      // Refetch com professional_id para anexar lista 0002/local ao pro filtrado.
+      if (stage === '0011' && proId0011) q.set('professional_id', proId0011)
+      if (stage === '0021' && proId0021) q.set('professional_id', proId0021)
       const res = await apiFetch(`/api/director-report?${q}`, {
         cache: 'no-store',
         timeoutMs: 90_000,
@@ -244,6 +247,8 @@ export default function RelatorioDiretoriaPage() {
     quarter,
     compare,
     forceDemo,
+    proId0011,
+    proId0021,
   ])
 
   useEffect(() => {

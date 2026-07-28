@@ -15,14 +15,7 @@ import {
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
 import { getRomPanelId } from '@/lib/brand'
 import { toSalonDateIso } from '@/lib/salon/format'
-
-/** Iguatemi: Avec devolve 400 "não suportado" no 0011 — vai direto no 0007. */
-function shouldSkipAvec0011(): boolean {
-  if (process.env.AVEC_SKIP_REPORT_0011 === '1' || process.env.AVEC_SKIP_REPORT_0011 === 'true') {
-    return true
-  }
-  return getRomPanelId() === 'iguatemi'
-}
+import { fetchLocal0011Quarter, fetchLocal0011QuarterPair } from './local-0011'
 import { matchDirectorProfessional } from './match-pro'
 import {
   aggregateQuarterRevenue,
@@ -40,6 +33,14 @@ import type {
   ReactivationClient,
   ReturnQuarterRow,
 } from './types'
+
+/** Iguatemi: Avec devolve 400 "não suportado" no 0011 — usa 0002 local (+ 0007 taxa). */
+function shouldSkipAvec0011(): boolean {
+  if (process.env.AVEC_SKIP_REPORT_0011 === '1' || process.env.AVEC_SKIP_REPORT_0011 === 'true') {
+    return true
+  }
+  return getRomPanelId() === 'iguatemi'
+}
 
 function resolveMapperId(mapper: string): string | null {
   const def = getAvecReportRegistry().find((r) => r.mapper === mapper)
@@ -224,11 +225,12 @@ type QuarterAgg = {
 async function fetch0011Quarter(
   quarter: QuarterKey,
   budget: DirectorFetchBudget,
+  professionals: DirectorProfessional[],
 ): Promise<{
   byPro: Map<string, QuarterAgg>
   salonRates: number[]
   truncated: boolean
-  source: '0011' | '0007' | 'none'
+  source: '0011' | '0007' | 'local' | 'none'
   note: string | null
 }> {
   const id = resolveMapperId('director_return') ?? '0011'
@@ -236,11 +238,38 @@ async function fetch0011Quarter(
   const byPro = new Map<string, QuarterAgg>()
   const salonRates: number[] = []
   let truncated = false
-  let source: '0011' | '0007' | 'none' = 'none'
+  let source: '0011' | '0007' | 'local' | 'none' = 'none'
   let note: string | null = null
   const skip0011 = shouldSkipAvec0011() || id === '0007'
 
-  // 1) Tenta 0011 — Iguatemi/skip: Avec devolve 400 "não suportado", não gasta budget.
+  // 0) Iguatemi: 0011 Avec não existe — monta por profissional via 0002 (P1→P2).
+  if (skip0011 && professionals.length > 0) {
+    try {
+      const local = await fetchLocal0011Quarter(quarter, professionals, budget)
+      truncated = local.truncated
+      for (const rate of local.salonRates) salonRates.push(rate)
+      for (const [proName, agg] of local.byPro) {
+        byPro.set(proName, {
+          clients: agg.clients,
+          returnRates: agg.returnRates,
+          clientsTotalHint: agg.clientsTotalHint,
+          clientsReturnedHint: agg.clientsReturnedHint,
+        })
+      }
+      if (local.source === 'local') {
+        source = 'local'
+        note = local.note
+        return { byPro, salonRates, truncated, source, note }
+      }
+      note = local.note
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      note = `0011 local falhou: ${msg.slice(0, 120)}`
+      console.warn(`[director-report] local 0011 ${quarter}: ${msg}`)
+    }
+  }
+
+  // 1) Tenta 0011 Avec — Iguatemi/skip: não chama (400 "não suportado").
   if (!skip0011) {
     try {
       const result = await fetchAllAvecReport(
@@ -301,19 +330,16 @@ async function fetch0011Quarter(
       note = `0011 indisponível (${msg.slice(0, 120)})`
       console.warn(`[director-report] 0011 ${quarter}: ${msg}`)
     }
-  } else {
-    note = '0011 não disponível neste salão — usando taxa/lista 0007'
   }
 
   const hasUseful0011 =
     salonRates.length > 0 ||
     [...byPro.values()].some((a) => a.clients.length > 0 || a.returnRates.length > 0)
 
-  // 2) Fallback / caminho principal 0007: taxa em report.total + não-retornados (sem profissional).
+  // 2) Fallback 0007: taxa do salão (+ lista sem profissional) se ainda não há sinal útil.
   const timeLeft =
     budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
-  // No Iguatemi sempre precisa do 0007; noutros salões só se 0011 veio vazio e ainda há budget.
-  const need0007 = !hasUseful0011 && (skip0011 || timeLeft > 8_000)
+  const need0007 = !hasUseful0011 && timeLeft > 8_000
   if (need0007) {
     const id0007 = resolveMapperId('return_rate') ?? '0007'
     try {
@@ -553,26 +579,60 @@ export async function fetchLiveDirectorBlocks(
   }
 
   if (want0011) {
-    const [selResult, cmpResult] = await Promise.allSettled([
-      fetch0011Quarter(selectedQuarter, budget),
-      fetch0011Quarter(compareQuarter, budget),
-    ])
-    if (selResult.status === 'fulfilled') {
-      selectedQ = selResult.value
-      if (selectedQ.truncated) warnings.push(`0011 ${selectedQuarter}: parcial (budget UI)`)
-      if (selectedQ.note) warnings.push(selectedQ.note)
-    } else
-      warnings.push(
-        `0011 ${selectedQuarter}: ${selResult.reason instanceof Error ? selResult.reason.message : String(selResult.reason)}`,
-      )
-    if (cmpResult.status === 'fulfilled') {
-      compareQ = cmpResult.value
-      if (compareQ.truncated) warnings.push(`0011 ${compareQuarter}: parcial (budget UI)`)
-      if (compareQ.note && compareQ.note !== selectedQ.note) warnings.push(compareQ.note)
-    } else
-      warnings.push(
-        `0011 ${compareQuarter}: ${cmpResult.reason instanceof Error ? cmpResult.reason.message : String(cmpResult.reason)}`,
-      )
+    if (shouldSkipAvec0011() && professionals.length > 0) {
+      try {
+        const pair = await fetchLocal0011QuarterPair(
+          selectedQuarter,
+          compareQuarter,
+          professionals,
+          budget,
+        )
+        selectedQ = {
+          byPro: pair.selected.byPro,
+          salonRates: pair.selected.salonRates,
+          truncated: pair.selected.truncated,
+          source: pair.selected.source,
+          note: pair.selected.note,
+        }
+        compareQ = {
+          byPro: pair.compare.byPro,
+          salonRates: pair.compare.salonRates,
+          truncated: pair.compare.truncated,
+          source: pair.compare.source,
+          note: pair.compare.note,
+        }
+        if (selectedQ.truncated || compareQ.truncated) {
+          warnings.push('0011 local: amostra parcial (budget UI / páginas 0002)')
+        }
+        if (selectedQ.note) warnings.push(selectedQ.note)
+        else if (compareQ.note) warnings.push(compareQ.note)
+      } catch (e) {
+        warnings.push(
+          `0011 local: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
+    } else {
+      const [selResult, cmpResult] = await Promise.allSettled([
+        fetch0011Quarter(selectedQuarter, budget, professionals),
+        fetch0011Quarter(compareQuarter, budget, professionals),
+      ])
+      if (selResult.status === 'fulfilled') {
+        selectedQ = selResult.value
+        if (selectedQ.truncated) warnings.push(`0011 ${selectedQuarter}: parcial (budget UI)`)
+        if (selectedQ.note) warnings.push(selectedQ.note)
+      } else
+        warnings.push(
+          `0011 ${selectedQuarter}: ${selResult.reason instanceof Error ? selResult.reason.message : String(selResult.reason)}`,
+        )
+      if (cmpResult.status === 'fulfilled') {
+        compareQ = cmpResult.value
+        if (compareQ.truncated) warnings.push(`0011 ${compareQuarter}: parcial (budget UI)`)
+        if (compareQ.note && compareQ.note !== selectedQ.note) warnings.push(compareQ.note)
+      } else
+        warnings.push(
+          `0011 ${compareQuarter}: ${cmpResult.reason instanceof Error ? cmpResult.reason.message : String(cmpResult.reason)}`,
+        )
+    }
   }
 
   const salonSel = avg(selectedQ.salonRates)
@@ -691,19 +751,50 @@ export async function fetchLiveDirectorBlocks(
   let return_blocks: ProfessionalReturnBlock[] | null = null
   if (want0011) {
     try {
-      return_blocks = professionals.map((professional) => {
+      const hasPerPro = selByPro.size > 0 || cmpByPro.size > 0
+      // Com breakdown por pro: só lista quem tem dado próprio (evita 59 linhas iguais).
+      // Sem breakdown: um bloco "Salão" com a taxa 0007, se houver.
+      const roster = hasPerPro
+        ? professionals.filter((p) => selByPro.has(p.id) || cmpByPro.has(p.id))
+        : salonSel != null || salonCmp != null
+          ? [
+              {
+                id: 'pro-salon-0011',
+                name: 'Salão (taxa Avec)',
+                avec_pro_id: null,
+                role: 'other' as const,
+                active: true,
+              },
+            ]
+          : professionals
+
+      return_blocks = roster.map((professional) => {
         const selAgg = selByPro.get(professional.id)
         const cmpAgg = cmpByPro.get(professional.id)
+        const useSalon = !hasPerPro
 
-        const cmpRow = buildQuarterRow(compareQuarter, cmpAgg, salonCmp, null)
-        const selRow = buildQuarterRow(selectedQuarter, selAgg, salonSel, cmpRow.return_rate)
+        // Com breakdown: usa taxa própria; se faltar o tri comparativo, cai na taxa salão.
+        const cmpRow = buildQuarterRow(
+          compareQuarter,
+          cmpAgg,
+          useSalon || !cmpAgg ? salonCmp : null,
+          null,
+        )
+        const selRow = buildQuarterRow(
+          selectedQuarter,
+          selAgg,
+          useSalon || !selAgg ? salonSel : null,
+          cmpRow.return_rate,
+        )
 
-        // Se não há lista por pro mas há taxa salão, ainda mostra a taxa
         if (!selAgg && salonSel != null && selRow.clients_total === 0) {
           selRow.return_rate = Math.round(salonSel * 1000) / 1000
         }
         if (!cmpAgg && salonCmp != null && cmpRow.clients_total === 0) {
           cmpRow.return_rate = Math.round(salonCmp * 1000) / 1000
+          selRow.delta_vs_prev =
+            Math.round((selRow.return_rate - cmpRow.return_rate) * 1000) / 10
+        } else if (selAgg && cmpAgg) {
           selRow.delta_vs_prev =
             Math.round((selRow.return_rate - cmpRow.return_rate) * 1000) / 10
         }

@@ -193,7 +193,7 @@ export async function GET(req: NextRequest) {
       format === 'json'
         ? await cachedFetch(
             [
-              'director:json:v5',
+              'director:json:v6-local0011',
               stages,
               `slim=${slim ? 1 : 0}`,
               `m=${buildOpts.selectedMonth ?? ''}`,

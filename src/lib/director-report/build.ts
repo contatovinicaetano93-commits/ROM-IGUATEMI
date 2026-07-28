@@ -27,6 +27,9 @@ import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
 /** Evita jogar JSON bruto de validação Avec na UI (HTTP 400 salao_id etc.). */
 function shortenAvecWarning(w: string): string {
+  if (/0011 local via 0002/i.test(w)) {
+    return '0011 local (0002+0007 por profissional)'
+  }
   if (
     /n[aã]o suportado/i.test(w) ||
     /usando taxa\/lista/i.test(w) ||

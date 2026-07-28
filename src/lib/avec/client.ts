@@ -323,13 +323,18 @@ async function forceRefreshAvecToken(): Promise<string | null> {
   return avecTokenRefreshInFlight
 }
 
-export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
+export async function fetchAvecReport(
+  reportId: string,
+  params: AvecReportParams = {},
+  opts?: { timeoutMs?: number },
+) {
   assertAvecMockAllowed()
   const effectiveParams = withRequiredAvecReportParams(reportId, params)
   if (isAvecMock()) {
     return getMockReport(reportId, effectiveParams.page ?? 1)
   }
 
+  const pageTimeoutMs = opts?.timeoutMs ?? 30_000
   const cfg = await getAvecConfig()
   const baseUrl = cfg.baseUrl
   let token = cfg.token
@@ -349,7 +354,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
       const res = await fetch(url, {
         headers: avecReportHeaders(token),
         cache: 'no-store',
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(pageTimeoutMs),
       })
 
       // JWT pode estar “válido” no relógio e ainda assim a Avec devolver 401 —
@@ -362,7 +367,7 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
           const retry = await fetch(url, {
             headers: avecReportHeaders(token),
             cache: 'no-store',
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(pageTimeoutMs),
           })
           if (retry.ok) return retry.json()
           const retryText = await retry.text().catch(() => '')
