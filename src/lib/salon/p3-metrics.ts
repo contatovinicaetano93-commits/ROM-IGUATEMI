@@ -24,6 +24,11 @@ export async function ensureSalonP3Table() {
       updated_at timestamptz not null default now()
     )
   `
+  // Regressão: DROP NOT NULL + clear_return_rate deixou null em todos os dias.
+  // Cérebro só mostra taxa quando return_rate IS NOT NULL AND return_rate > 0.
+  await sql`alter table salon_p3_daily alter column return_rate set default 0`.catch(() => undefined)
+  await sql`update salon_p3_daily set return_rate = 0 where return_rate is null`.catch(() => undefined)
+  await sql`alter table salon_p3_daily alter column return_rate set not null`.catch(() => undefined)
 }
 
 export async function upsertSalonP3Daily(
