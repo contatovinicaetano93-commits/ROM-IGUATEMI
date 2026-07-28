@@ -119,13 +119,21 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const fim = opts?.fim ?? rolling.fim
   const params = { inicio, fim, limit: 250 }
 
-  let return_rate: number | null = null
+  let return_rate = 0
   let returnRateOk = false
   const id0007 = resolveId('return_rate')
   if (id0007) {
     try {
-      // 0007 usa inicio1/fim1/inicio2/fim2 derivados de inicio/fim do mês do snapshot.
-      const reportParams = withRequiredAvecReportParams(id0007, { inicio, fim, limit: 250 })
+      // Paridade Brasil: 0007 = mês corrente (+45d). NÃO passar rolling 30d.
+      // Backfill mensal: só então usa inicio/fim do mês do snapshot.
+      const reportParams =
+        opts?.inicio && opts?.fim
+          ? withRequiredAvecReportParams(id0007, {
+              inicio: opts.inicio,
+              fim: opts.fim,
+              limit: 250,
+            })
+          : withRequiredAvecReportParams(id0007, { limit: 250 })
       const rows = asRows(await fetchAllAvecReport(id0007, reportParams))
       await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
       let sum = 0
@@ -145,7 +153,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
         return_rate = Math.round((sum / n) * 10000) / 10000
         returnRateOk = true
       } else if (nonReturners > 0) {
-        // Lista 0007 = sem retorno. Só grava taxa se houver cohort local no ROM.
+        // Lista 0007 = sem retorno. Taxa via cohort local (visitas no período 1).
         const local = await computeLocalReturnRate(day)
         if (local != null) {
           return_rate = local
@@ -153,7 +161,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
           stats.p3_rows = (stats.p3_rows ?? 0) + nonReturners
         } else {
           stats.warnings?.push(
-            `P3 0007: ${nonReturners} sem retorno em ${inicio}–${fim}, sem cohort local — taxa omitida (não zerar)`,
+            `P3 0007: ${nonReturners} clientes sem retorno, sem taxa explícita — retorno local indisponível`,
           )
         }
       }
@@ -189,7 +197,6 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
         stats.p3_rows = (stats.p3_rows ?? 0) + 1
         new_clients_period += c
       }
-      // Se o relatório for lista (1 linha = 1 cliente) e contagem veio 0, usa length
       if (new_clients_period === 0 && rows.length > 0) {
         new_clients_period = rows.length
         stats.p3_rows = (stats.p3_rows ?? 0) + rows.length
@@ -226,14 +233,13 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
 
   // Só escreve os campos cujo relatório teve sucesso — evita apagar dados
   // válidos do dia quando outro relatório falha parcialmente.
+  // Nunca limpar return_rate para null (Cérebro exige return_rate > 0).
   const patch: {
-    return_rate?: number | null
+    return_rate?: number
     new_clients_period?: number
     revenue_curve?: { day: string; revenue: number }[]
-    clear_return_rate?: boolean
   } = {}
-  if (returnRateOk && return_rate != null) patch.return_rate = return_rate
-  else if (opts?.asOf) patch.clear_return_rate = true
+  if (returnRateOk) patch.return_rate = return_rate
   if (newClientsOk) patch.new_clients_period = new_clients_period
   if (revenueCurveOk) patch.revenue_curve = revenue_curve.slice(-30)
 

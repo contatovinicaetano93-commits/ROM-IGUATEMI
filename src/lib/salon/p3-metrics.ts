@@ -8,8 +8,7 @@ export interface P3CurvePoint {
 
 export interface SalonP3Daily {
   day: string
-  /** null = ainda sem taxa confiável (não confundir com 0%). */
-  return_rate: number | null
+  return_rate: number
   new_clients_period: number
   revenue_curve: P3CurvePoint[]
   updated_at: string
@@ -20,24 +19,25 @@ export async function ensureSalonP3Table() {
   await sql`
     create table if not exists salon_p3_daily (
       day date primary key,
-      return_rate numeric(6,4),
+      return_rate numeric(6,4) not null default 0,
       new_clients_period int not null default 0,
       revenue_curve jsonb not null default '[]',
       updated_at timestamptz not null default now()
     )
   `
-  // Legado: NOT NULL DEFAULT 0 — libera null para “taxa desconhecida”.
-  await sql`alter table salon_p3_daily alter column return_rate drop not null`.catch(() => undefined)
+  // Reverte regressão (DROP NOT NULL + clear_return_rate → null em todos os dias).
+  // Cérebro só mostra taxa quando return_rate IS NOT NULL AND return_rate > 0.
+  await sql`alter table salon_p3_daily alter column return_rate set default 0`.catch(() => undefined)
+  await sql`update salon_p3_daily set return_rate = 0 where return_rate is null`.catch(() => undefined)
+  await sql`alter table salon_p3_daily alter column return_rate set not null`.catch(() => undefined)
 }
 
 export async function upsertSalonP3Daily(
   day: string,
   patch: {
-    return_rate?: number | null
+    return_rate?: number
     new_clients_period?: number
     revenue_curve?: P3CurvePoint[]
-    /** Se true e return_rate omitido, grava null (apaga 0 falso). */
-    clear_return_rate?: boolean
   },
 ) {
   await ensureSalonP3Table()
@@ -47,14 +47,7 @@ export async function upsertSalonP3Daily(
   `) as SalonP3Daily[]
   const cur = mapSalonP3Row(existing[0])
 
-  const return_rate =
-    patch.return_rate !== undefined
-      ? patch.return_rate
-      : patch.clear_return_rate
-        ? null
-        : cur?.return_rate != null
-          ? Number(cur.return_rate)
-          : null
+  const return_rate = patch.return_rate ?? Number(cur?.return_rate ?? 0)
   const new_clients_period = patch.new_clients_period ?? Number(cur?.new_clients_period ?? 0)
   const revenue_curve = patch.revenue_curve ?? cur?.revenue_curve ?? []
 
@@ -87,7 +80,7 @@ function mapSalonP3Row(row: SalonP3Daily | undefined): SalonP3Daily | null {
 
 /**
  * Snapshot P3 mais recente ≤ targetDay.
- * return_rate / new_clients_period vêm da Avec (0007 / 0017) em janela rolante.
+ * return_rate / new_clients_period vêm da Avec (0007 / 0017).
  */
 export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Daily | null> {
   const sql = getSql()

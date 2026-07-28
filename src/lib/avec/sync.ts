@@ -155,7 +155,10 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
         when coalesce((stats->>'clients_upserted')::int, 0)
           + coalesce((stats->>'appointments_synced')::int, 0)
           + coalesce((stats->>'attendances_synced')::int, 0)
-          + coalesce((stats->>'revenue_rows')::int, 0) > 0
+          + coalesce((stats->>'revenue_rows')::int, 0)
+          + coalesce((stats->>'positions_synced')::int, 0)
+          + coalesce((stats->>'alerts_active')::int, 0)
+          + coalesce((stats->>'movements_synced')::int, 0) > 0
         then 'ok'
         else 'error'
       end,
@@ -163,7 +166,10 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
         when coalesce((stats->>'clients_upserted')::int, 0)
           + coalesce((stats->>'appointments_synced')::int, 0)
           + coalesce((stats->>'attendances_synced')::int, 0)
-          + coalesce((stats->>'revenue_rows')::int, 0) > 0
+          + coalesce((stats->>'revenue_rows')::int, 0)
+          + coalesce((stats->>'positions_synced')::int, 0)
+          + coalesce((stats->>'alerts_active')::int, 0)
+          + coalesce((stats->>'movements_synced')::int, 0) > 0
         then null
         else coalesce(error, 'abandoned_partial_timeout')
       end

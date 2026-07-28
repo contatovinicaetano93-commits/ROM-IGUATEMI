@@ -277,6 +277,10 @@ async function ensureProductExists(avecProductId: string, name: string): Promise
 /** Aplica uma linha de 0046: garante o produto, atualiza mínimo/sugestão e abre/atualiza alerta ativo. */
 export async function applyStockAlert(
   alert: NormalizedStockAlert,
+  opts?: {
+    /** Mapa nameKey → avec_product_id (evita SELECT * em stock_products por linha). */
+    productNameIndex?: Map<string, string>
+  },
 ): Promise<{ productId: string; avecProductId: string } | null> {
   const sql = getSql()
   const categoryId = await upsertCategoryByName(alert.categoryName)
@@ -285,12 +289,17 @@ export async function applyStockAlert(
   if (!avecProductId) {
     // Match sem acento/case — 0046 manda nome sem id e o catálogo pode diferir em acentos.
     const target = productNameKey(alert.name)
-    const candidates = (await sql`
-      select avec_product_id, name from stock_products
-      where avec_product_id is not null
-    `) as { avec_product_id: string; name: string }[]
-    const hit = candidates.find((p) => productNameKey(p.name) === target)
-    avecProductId = hit?.avec_product_id ?? syntheticAlertProductId(alert.name)
+    const fromIndex = opts?.productNameIndex?.get(target)
+    if (fromIndex) {
+      avecProductId = fromIndex
+    } else {
+      const candidates = (await sql`
+        select avec_product_id, name from stock_products
+        where avec_product_id is not null
+      `) as { avec_product_id: string; name: string }[]
+      const hit = candidates.find((p) => productNameKey(p.name) === target)
+      avecProductId = hit?.avec_product_id ?? syntheticAlertProductId(alert.name)
+    }
   }
   if (!avecProductId) return null
 
@@ -330,6 +339,21 @@ export async function applyStockAlert(
   }
 
   return { productId, avecProductId }
+}
+
+/** Índice nameKey → avec_product_id para o sync 0046 (1 query, N lookups). */
+export async function loadStockProductNameIndex(): Promise<Map<string, string>> {
+  const sql = getSql()
+  const rows = (await sql`
+    select avec_product_id, name from stock_products
+    where avec_product_id is not null
+  `) as { avec_product_id: string; name: string }[]
+  const map = new Map<string, string>()
+  for (const row of rows) {
+    const key = productNameKey(row.name)
+    if (key && !map.has(key)) map.set(key, row.avec_product_id)
+  }
+  return map
 }
 
 /**

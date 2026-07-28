@@ -22,12 +22,14 @@ import {
   normalizeStockMovementRow,
   normalizeStockPurchaseRow,
   type NormalizedStockMovement,
+  type NormalizedStockPosition,
 } from '@/lib/avec/normalize'
 import { getStockReports, getFastStockReports, getFullStockReports } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
 import {
   upsertStockProductFromPosition,
   applyStockAlert,
+  loadStockProductNameIndex,
   resolveStaleStockAlerts,
   applyStockMovementsBatch,
   enrichMovementWithPurchaseOrigin,
@@ -128,19 +130,21 @@ async function syncPositions(stats: StockSyncStats, syncRunId: string) {
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
     await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
-    let parsedCount = 0
+    const positions: NormalizedStockPosition[] = []
     for (const row of result.rows) {
       const pos = normalizeStockPositionRow(row)
-      if (!pos) continue
-      parsedCount++
-      await upsertStockProductFromPosition(pos)
-      stats.positions_synced++
+      if (pos) positions.push(pos)
     }
-    // Se a Avec devolveu linhas mas quase nada foi reconhecido, o formato do
-    // relatório provavelmente mudou — sinaliza em vez de falhar em silêncio.
-    if (result.rows.length > 5 && parsedCount < result.rows.length * 0.5) {
+    // Upserts em paralelo (chunks) — N sequencial com ~5 round-trips/SKU estoura maxDuration.
+    const CHUNK = 25
+    for (let i = 0; i < positions.length; i += CHUNK) {
+      const chunk = positions.slice(i, i + CHUNK)
+      await Promise.all(chunk.map((pos) => upsertStockProductFromPosition(pos)))
+      stats.positions_synced += chunk.length
+    }
+    if (result.rows.length > 5 && positions.length < result.rows.length * 0.5) {
       stats.warnings.push(
-        `0149: só ${parsedCount}/${result.rows.length} linhas reconhecidas — possível mudança no formato do relatório`
+        `0149: só ${positions.length}/${result.rows.length} linhas reconhecidas — possível mudança no formato do relatório`,
       )
     }
   } catch (e) {
@@ -157,12 +161,14 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
     await snapshotSafe(id, params, result.rows, stats, syncRunId)
 
+    // 1 query de catálogo — evita SELECT * em stock_products por cada linha do 0046.
+    const productNameIndex = await loadStockProductNameIndex()
     const seenAvecProductIds: string[] = []
     let active = 0
     for (const row of result.rows) {
       const alert = normalizeStockAlertRow(row)
       if (!alert) continue
-      const applied = await applyStockAlert(alert)
+      const applied = await applyStockAlert(alert, { productNameIndex })
       if (!applied) continue
       seenAvecProductIds.push(applied.avecProductId)
       active++
@@ -288,8 +294,9 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
   const run = await beginRun(kind, stats)
 
   try {
-    await syncPositions(stats, run.id)
+    // Alertas (0046) primeiro — Cérebro lê stock_alerts; 0149 N+1 não pode matar o ciclo antes.
     await syncAlerts(stats, run.id)
+    await syncPositions(stats, run.id)
 
     if (mode === 'full') {
       await syncMovements(stats, run.id)
@@ -299,7 +306,10 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
 
     stats.errors = formatAvecErrorList(stats.errors)
 
-    const hadAnyData = stats.positions_synced > 0 || stats.movements_synced > 0
+    const hadAnyData =
+      stats.positions_synced > 0 ||
+      stats.alerts_active > 0 ||
+      stats.movements_synced > 0
     const status: StockSyncRun['status'] =
       stats.errors.length > 0 && !hadAnyData
         ? 'error'
