@@ -71,20 +71,24 @@ export async function GET(req: NextRequest) {
 
         const scheduleToday = [...scheduleRaw].sort(compareScheduleByTimeThenName)
         const leads = leadRows[0] ?? { novos: 0, whatsapp_novos: 0 }
-        const salonBase = salonRaw ?? {
-          day,
-          revenue: 0,
-          appointments: scheduleToday.length,
-          attended: 0,
-          no_shows: 0,
-          cancelled: 0,
-          new_clients: leads.novos,
-          returning_clients: 0,
-          ticket_avg: null,
-          service_duration_sum_minutes: 0,
-          service_duration_count: 0,
-          updated_at: new Date().toISOString(),
-        }
+        // Sem linha de métricas do dia: não inventar 0 operacional — null → UI "—".
+        const salonBase = salonRaw
+          ? salonRaw
+          : {
+              day,
+              revenue: null as number | null,
+              appointments: scheduleToday.length,
+              attended: null as number | null,
+              no_shows: null as number | null,
+              cancelled: null as number | null,
+              new_clients: leads.novos,
+              returning_clients: null as number | null,
+              ticket_avg: null,
+              service_duration_sum_minutes: 0,
+              service_duration_count: 0,
+              updated_at: new Date().toISOString(),
+              _metrics_missing: true as const,
+            }
 
         const tmTodayMinutes =
           salonBase.service_duration_count > 0
@@ -101,7 +105,7 @@ export async function GET(req: NextRequest) {
               ticket_avg: null,
             }
 
-        const intelligence = canViewRevenue ? computeSalonIntelligence(salonBase) : null
+        const intelligence = canViewRevenue && salonRaw ? computeSalonIntelligence(salonRaw) : null
 
         return {
           day,

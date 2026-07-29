@@ -674,6 +674,12 @@ export default function RelatorioDiretoriaPage() {
                     Fonte Avec live (0011) no trimestre selecionado.
                   </p>
                 )}
+              {data?.source === 'error' && (
+                <p className="text-warning">
+                  Relatório incompleto (timeout/falha Avec) — nenhum número inventado. Toque Atualizar
+                  ou use “Forçar demo” só para treino.
+                </p>
+              )}
               {data?.source === 'mock' &&
                 (data.return_blocks?.some((b) => b.reactivation.length > 0) ? (
                   <p className="text-muted">
