@@ -110,45 +110,50 @@ export function isStockAuthConfigured() {
 }
 
 export function canViewRevenue(role: AuthRole | null | undefined) {
+  // Só admin vê faturamento no Hoje / Visão. Financeiro usa o painel /financeiro.
   return role === 'admin'
 }
 
+/** Segredo HMAC da sessão — NÃO usar a senha do usuário (permite rotação sem misturar com Bearer). */
+export function getSessionSigningSecret() {
+  const dedicated = process.env.ROM_SESSION_SECRET?.trim()
+  if (dedicated) return dedicated
+  // Fallback legado: senha admin (cookies antigos continuam válidos até relogin com secret dedicado).
+  return getAdminPassword()
+}
+
 /** HMAC-SHA256 compatível com Edge Runtime (Web Crypto). */
+/** Cache de tokens esperados por conta — evita N HMACs por request no middleware + handlers. */
+const expectedTokenCache = new Map<string, { token: string; expiresAt: number }>()
+const EXPECTED_TOKEN_TTL_MS = 5 * 60_000
+
+/** Cache cookie → sessão (mesmo isolate serverless). */
+const sessionByCookie = new Map<string, { session: AuthSession; expiresAt: number }>()
+const SESSION_COOKIE_TTL_MS = 60_000
+
 export async function createSessionToken(user: string, role: AuthRole) {
   const account = listAccounts().find((a) => a.role === role && timingSafeEqual(a.user, user))
   if (!account) return ''
+  const secret = getSessionSigningSecret()
+  if (!secret) return ''
+  const cacheKey = `${role}:${user}:${secret.slice(0, 8)}`
+  const hit = expectedTokenCache.get(cacheKey)
+  if (hit && hit.expiresAt > Date.now()) return hit.token
+
   const enc = new TextEncoder()
   const key = await crypto.subtle.importKey(
     'raw',
-    enc.encode(account.password),
+    enc.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   )
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(`rom-session:${role}:${user}`))
-  return Array.from(new Uint8Array(sig))
+  const token = Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
-}
-
-type ExpectedToken = { user: string; role: AuthRole; token: string }
-let expectedTokenCache: { at: number; tokens: ExpectedToken[] } | null = null
-
-async function listExpectedSessionTokens(): Promise<ExpectedToken[]> {
-  const now = Date.now()
-  if (expectedTokenCache && now - expectedTokenCache.at < 60_000) {
-    return expectedTokenCache.tokens
-  }
-  const accounts = listAccounts()
-  const tokens = await Promise.all(
-    accounts.map(async (account) => ({
-      user: account.user,
-      role: account.role,
-      token: await createSessionToken(account.user, account.role),
-    })),
-  )
-  expectedTokenCache = { at: now, tokens: tokens.filter((t) => Boolean(t.token)) }
-  return expectedTokenCache.tokens
+  expectedTokenCache.set(cacheKey, { token, expiresAt: Date.now() + EXPECTED_TOKEN_TTL_MS })
+  return token
 }
 
 export function validateCredentials(
@@ -174,19 +179,24 @@ export async function getSession(req: NextRequest): Promise<AuthSession | null> 
   }
 
   const cookie = req.cookies.get(AUTH_COOKIE)?.value
-  if (cookie) {
-    for (const expected of await listExpectedSessionTokens()) {
-      if (timingSafeEqual(cookie, expected.token)) {
-        return {
-          user: expected.user,
-          role: expected.role,
-          can_view_revenue: canViewRevenue(expected.role),
-        }
-      }
-    }
-    // Cookie antigo (pré dual-login) — invalida silenciosamente
-  }
+  if (!cookie) return null
 
+  const cached = sessionByCookie.get(cookie)
+  if (cached && cached.expiresAt > Date.now()) return cached.session
+
+  for (const account of listAccounts()) {
+    const expected = await createSessionToken(account.user, account.role)
+    if (expected && timingSafeEqual(cookie, expected)) {
+      const session: AuthSession = {
+        user: account.user,
+        role: account.role,
+        can_view_revenue: canViewRevenue(account.role),
+      }
+      sessionByCookie.set(cookie, { session, expiresAt: Date.now() + SESSION_COOKIE_TTL_MS })
+      return session
+    }
+  }
+  // Cookie antigo (pré dual-login / pré ROM_SESSION_SECRET) — invalida silenciosamente
   return null
 }
 
@@ -198,12 +208,10 @@ export async function isAuthorized(req: NextRequest, { allowHeaderTokens = true 
 
   if (!allowHeaderTokens) return false
 
+  // Automação: só CRON_SECRET (nunca a senha de login).
   const auth = req.headers.get('authorization')
-  const cron = process.env.CRON_SECRET
+  const cron = process.env.CRON_SECRET?.trim()
   if (cron && (auth === `Bearer ${cron}` || req.headers.get('x-cron-secret') === cron)) return true
-
-  const legacyToken = getAdminPassword()
-  if (legacyToken && auth === `Bearer ${legacyToken}`) return true
 
   return false
 }
@@ -229,32 +237,32 @@ export async function requireSession(req: NextRequest) {
   return { ok: true as const, session }
 }
 
+/** Factory para criar validadores de role. */
+function createRoleValidator(
+  allowedRoles: AuthRole[],
+  restrictionMessage: string,
+) {
+  return async (req: NextRequest) => {
+    const auth = await requireSession(req)
+    if (!auth.ok) return auth
+    if (!allowedRoles.includes(auth.session.role)) {
+      return { ok: false as const, status: 403 as const, message: restrictionMessage }
+    }
+    return auth
+  }
+}
+
 /** Relatórios financeiros / diretoria — só admin. */
 export async function requireAdmin(req: NextRequest) {
-  const auth = await requireSession(req)
-  if (!auth.ok) return auth
-  if (auth.session.role !== 'admin') {
-    return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao admin operacional' }
-  }
-  return auth
+  return createRoleValidator(['admin'], 'Acesso restrito ao admin operacional')(req)
 }
 
 /** Painel Financeiro (Sprint 4) — admin ou financeiro. Staff nunca acessa. */
 export async function requireFinance(req: NextRequest) {
-  const auth = await requireSession(req)
-  if (!auth.ok) return auth
-  if (auth.session.role !== 'admin' && auth.session.role !== 'financeiro') {
-    return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao financeiro' }
-  }
-  return auth
+  return createRoleValidator(['admin', 'financeiro'], 'Acesso restrito ao financeiro')(req)
 }
 
 /** Painel Estoque — admin, financeiro (acesso duplo) ou estoque. Staff nunca acessa. */
 export async function requireStock(req: NextRequest) {
-  const auth = await requireSession(req)
-  if (!auth.ok) return auth
-  if (auth.session.role !== 'admin' && auth.session.role !== 'financeiro' && auth.session.role !== 'estoque') {
-    return { ok: false as const, status: 403 as const, message: 'Acesso restrito ao estoque' }
-  }
-  return auth
+  return createRoleValidator(['admin', 'financeiro', 'estoque'], 'Acesso restrito ao estoque')(req)
 }
