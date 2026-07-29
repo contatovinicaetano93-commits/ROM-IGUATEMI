@@ -54,8 +54,8 @@ interface HojeData {
   salon: {
     revenue: number | null
     appointments: number
-    attended: number
-    no_shows: number
+    attended: number | null
+    no_shows: number | null
     ticket_avg: number | null
     new_clients: number
   }
@@ -179,16 +179,16 @@ export default function HojePage() {
         <KpiCard
           icon={<TrendingUp size={16} />}
           label="Atendidos"
-          value={loading ? '—' : String(salon?.attended ?? 0)}
+          value={loading ? '—' : salon?.attended == null ? '—' : String(salon.attended)}
           loading={loading}
           source={avecSource}
         />
         <KpiCard
           icon={<AlertTriangle size={16} />}
           label="No-shows"
-          value={loading ? '—' : String(salon?.no_shows ?? 0)}
+          value={loading ? '—' : salon?.no_shows == null ? '—' : String(salon.no_shows)}
           loading={loading}
-          warn={(salon?.no_shows ?? 0) > 0}
+          warn={(salon?.no_shows ?? 0) > 0 && salon?.no_shows != null}
           source={avecSource}
         />
         <KpiCard

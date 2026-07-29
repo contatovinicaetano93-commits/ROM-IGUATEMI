@@ -46,6 +46,7 @@ import {
 } from '@/lib/avec/normalize'
 import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
 import { saveReportSnapshot } from '@/lib/avec/snapshots'
+import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
 import { getDeploymentContext } from '@/lib/deployment'
 import { recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
@@ -908,23 +909,22 @@ async function syncReturningFrom0002(
         returningByDay.set(day, (returningByDay.get(day) ?? 0) + 1)
       }
 
-      // Contato/serviço de quem veio hoje — NÃO inventar horário (antes usava 12:00 e
-      // apagava o last_done_at real → Pipeline Concluídos todos iguais).
-      // Só marca concluído se a Avec mandou hora real (fim ou início).
-      if (att.lastVisitDay === today) {
-        try {
-          const contact = await upsertContact({
-            avecClientId: att.avecClientId ?? undefined,
-            name: att.clientName,
-            phone: att.phone,
-            channel: 'avec',
-            source: 'avec_sync_returning_0002',
-            // Veio hoje no 0002 — não demotar importado → novo (default do upsert).
-            status: 'convertido',
-          })
-          if (contact.anonymized_at) continue
-          const serviceName = att.serviceName || 'Atendimento'
-          const service = await findOrCreateService(contact.id, serviceName)
+      // Contato/serviço: last_done com data real (ultima_visita). Hoje prefere hora;
+      // demais dias do range → preenche só se null / dia mais antigo (sem inventar).
+      try {
+        const contact = await upsertContact({
+          avecClientId: att.avecClientId ?? undefined,
+          name: att.clientName,
+          phone: att.phone,
+          channel: 'avec',
+          source: 'avec_sync_returning_0002',
+          status: 'convertido',
+        })
+        if (contact.anonymized_at) continue
+        const serviceName = att.serviceName || 'Atendimento'
+        const service = await findOrCreateService(contact.id, serviceName)
+
+        if (att.lastVisitDay === today) {
           const doneAt = att.endedAt ?? att.startedAt ?? null
           if (doneAt) {
             await markServiceDone(service.id, {
@@ -941,16 +941,20 @@ async function syncReturningFrom0002(
               professionalName: att.professional,
               lastPrice: att.price,
             })
-          } else if (att.professional || att.price != null) {
-            await patchServiceVisitMeta(service.id, {
+          } else {
+            await applyVisitDayToService(service.id, day, {
               professionalName: att.professional,
               lastPrice: att.price,
-              allowLastPrice: true,
             })
           }
-        } catch (e) {
-          stats.errors.push(`retorno contact: ${e instanceof Error ? e.message : String(e)}`)
+        } else {
+          await applyVisitDayToService(service.id, day, {
+            professionalName: att.professional,
+            lastPrice: att.price,
+          })
         }
+      } catch (e) {
+        stats.errors.push(`retorno contact: ${e instanceof Error ? e.message : String(e)}`)
       }
     }
 

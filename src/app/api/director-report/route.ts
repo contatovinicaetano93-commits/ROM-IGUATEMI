@@ -37,11 +37,22 @@ async function buildForUi(
   } catch (e) {
     const code = e && typeof e === 'object' && 'code' in e ? (e as { code?: string }).code : null
     if (code === 'UI_DEADLINE' || (e instanceof Error && e.message === 'UI_DEADLINE')) {
-      const mock = await buildDirectorReport({ ...opts, forceMock: true, interactive: true })
-      const note = 'Avec demorou demais — mostrando demo. Toque Atualizar ou “Forçar demo”.'
+      // Sem mock automático: devolve estrutura vazia (source=error). Demo só com ?mock=1.
+      const note =
+        'Avec demorou demais — sem dados inventados. Toque Atualizar. Use “Forçar demo” só para treino.'
+      const skeleton = await buildDirectorReport({ ...opts, forceMock: true, interactive: true })
       return {
-        ...mock,
-        schedule_note: [mock.schedule_note, note].filter(Boolean).join(' · '),
+        ...skeleton,
+        source: 'error',
+        return_blocks: [],
+        revenue_blocks: [],
+        schedule_note: note,
+        summary: {
+          professionals: skeleton.summary.professionals,
+          avg_return_rate: null,
+          total_revenue_selected_month: 0,
+          avg_ticket_selected_month: null,
+        },
       }
     }
     throw e
