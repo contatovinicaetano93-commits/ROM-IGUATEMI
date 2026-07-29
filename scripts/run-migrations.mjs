@@ -28,7 +28,25 @@ const cwd = join(dirname(fileURLToPath(import.meta.url)), '..')
 const panel = (process.env.ROM_PANEL || process.env.NEXT_PUBLIC_ROM_PANEL || 'iguatemi')
   .toLowerCase()
   .replace('iguatuemi', 'iguatemi')
-const databaseUrl = process.env.DATABASE_URL
+/** Alinha ao resolveDatabaseUrl de src/lib/db.ts (pooler session → transaction). */
+function resolveDatabaseUrl(raw) {
+  const trimmed = String(raw).trim()
+  try {
+    const u = new URL(trimmed)
+    const isSupabasePooler =
+      u.hostname.includes('pooler.supabase.com') || u.hostname.includes('.pooler.supabase.')
+    const port = u.port || '5432'
+    if (isSupabasePooler && port === '5432') {
+      u.port = '6543'
+      return u.toString()
+    }
+  } catch {
+    // URL inválida — deixa o postgres.js falhar com a string original.
+  }
+  return trimmed
+}
+
+const databaseUrl = process.env.DATABASE_URL ? resolveDatabaseUrl(process.env.DATABASE_URL) : null
 
 if (!databaseUrl) {
   console.error('DATABASE_URL é obrigatória')
@@ -100,6 +118,13 @@ try {
     if (statements.length === 0) {
       console.error(`Arquivo SQL vazio: ${file}`)
       process.exit(1)
+    }
+    // 023 muda o tipo de v_kpi_daily.day (timestamptz → date); CREATE OR REPLACE
+    // não troca tipo — precisa DROP antes (igual src/lib/migrations.ts).
+    if (migration.id === '023_kpi_funnel_real') {
+      await query('drop view if exists v_kpi_daily')
+      await query('drop view if exists v_kpi_status')
+      await query('drop view if exists v_kpi_conversion')
     }
     console.log(`apply ${migration.id} (${statements.length} statements)`)
     for (const statement of statements) {

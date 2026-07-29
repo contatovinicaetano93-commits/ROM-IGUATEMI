@@ -22,8 +22,8 @@
     { "id": "019_whatsapp_aftercare", "file": "delta-whatsapp-aftercare.sql", "panels": ["brasil", "iguatemi"] },
     { "id": "020_month_metrics", "file": "delta-month-metrics.sql", "panels": ["brasil", "iguatemi"] },
     { "id": "021_contact_importado", "file": "delta-contact-importado.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "024_contacts_phone_dedupe", "file": "delta-contacts-phone-dedupe.sql", "panels": ["brasil", "iguatemi"] },
     { "id": "022_contacts_unique_full", "file": "delta-contacts-unique-full.sql", "panels": ["brasil", "iguatemi"] },
-    { "id": "023_kpi_funnel_real", "file": "delta-kpi-funnel-real.sql", "panels": ["brasil", "iguatemi"] },
-    { "id": "024_contacts_phone_dedupe", "file": "delta-contacts-phone-dedupe.sql", "panels": ["brasil", "iguatemi"] }
+    { "id": "023_kpi_funnel_real", "file": "delta-kpi-funnel-real.sql", "panels": ["brasil", "iguatemi"] }
   ]
 }

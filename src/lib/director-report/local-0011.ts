@@ -18,7 +18,11 @@ import {
   fetchAvecReport,
   fmtAvecDate,
 } from '@/lib/avec/client'
-import { normalizeAttendanceRow, normalizeP3ReturnRateRow } from '@/lib/avec/normalize'
+import {
+  isP3NonReturnerRow,
+  normalizeAttendanceRow,
+  normalizeP3ReturnRateRow,
+} from '@/lib/avec/normalize'
 import { matchDirectorProfessional } from './match-pro'
 import { labelQuarter } from './period'
 import type {
@@ -210,6 +214,8 @@ async function fetch0007SalonAndNonReturners(
       const rows = extractRows(payload)
       if (rows.length === 0) break
       for (const row of rows) {
+        // Mesmo filtro do avec-live: totais/taxa não são “não-retornadores”.
+        if (!isP3NonReturnerRow(row)) continue
         const att = normalizeAttendanceRow(row)
         const name =
           att?.clientName ??

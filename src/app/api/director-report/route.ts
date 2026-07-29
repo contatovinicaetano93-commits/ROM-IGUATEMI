@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin, requireSession } from '@/lib/auth'
-import { cachedFetch } from '@/lib/cache'
+import { cachedFetch, MemoryCache } from '@/lib/cache'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { buildDirectorReport, type BuildDirectorReportOptions } from '@/lib/director-report/build'
 import {
@@ -189,27 +189,38 @@ export async function GET(req: NextRequest) {
       maxPages0011: slim ? 6 : undefined,
     }
 
+    const cacheKey = [
+      'director:json:v6-local0011',
+      stages,
+      `slim=${slim ? 1 : 0}`,
+      `m=${buildOpts.selectedMonth ?? ''}`,
+      `q21=${buildOpts.selectedQuarter0021 ?? ''}`,
+      `c21=${buildOpts.compareQuarter0021 ?? ''}`,
+      `cm=${buildOpts.compareMonths ? 1 : 0}`,
+      `q=${buildOpts.selectedQuarter ?? ''}`,
+      `c=${buildOpts.compareQuarter ?? ''}`,
+      `pro=${professionalId ?? ''}`,
+      `mock=${forceMock ? 1 : 0}`,
+    ].join(':')
     const report =
       format === 'json'
         ? await cachedFetch(
-            [
-              'director:json:v6-local0011',
-              stages,
-              `slim=${slim ? 1 : 0}`,
-              `m=${buildOpts.selectedMonth ?? ''}`,
-              `q21=${buildOpts.selectedQuarter0021 ?? ''}`,
-              `c21=${buildOpts.compareQuarter0021 ?? ''}`,
-              `cm=${buildOpts.compareMonths ? 1 : 0}`,
-              `q=${buildOpts.selectedQuarter ?? ''}`,
-              `c=${buildOpts.compareQuarter ?? ''}`,
-              `pro=${professionalId ?? ''}`,
-              `mock=${forceMock ? 1 : 0}`,
-            ].join(':'),
+            cacheKey,
             () => buildForUi(buildOpts),
-            // Demo mock não deve ficar em cache: UI_DEADLINE já é um estado degradado;
-            // manter por 180s haria o próximo usuário ver demo mesmo após Avec recuperar.
-            forceMock ? 0 : 180,
-          )
+            // TTL real decidido após o build: UI_DEADLINE/demo não pode colar 180s
+            // (a chave só reflete mock= query, não o fallback interno).
+            0,
+          ).then((value) => {
+            const isTimeoutDemo =
+              typeof value.schedule_note === 'string' &&
+              value.schedule_note.includes('Avec demorou demais')
+            if (forceMock || isTimeoutDemo) {
+              MemoryCache.delete(cacheKey)
+            } else {
+              MemoryCache.set(cacheKey, value, 180)
+            }
+            return value
+          })
         : await buildDirectorReport({ ...buildOpts, interactive: false })
 
     if (format === 'json') {

@@ -11,8 +11,11 @@ import { getBrand } from '@/lib/brand'
 
 export function TopBar() {
   const [open, setOpen] = useState(false)
-  const { session } = useClientSession()
-  const showAdminNav = !session?.auth_enabled || Boolean(session?.can_view_revenue)
+  const { session, loading } = useClientSession()
+  // Enquanto a sessão carrega, não expor itens adminOnly (session null ⇒ auth_enabled
+  // parece off e o menu admin piscaria para staff).
+  const showAdminNav =
+    !loading && (!session?.auth_enabled || Boolean(session?.can_view_revenue))
   const role = session?.role ?? null
   const pathname = usePathname()
   const title = pageTitleFromPath(pathname)
