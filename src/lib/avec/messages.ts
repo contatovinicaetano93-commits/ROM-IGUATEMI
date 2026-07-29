@@ -89,6 +89,9 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/sem retorno|retorno local indisponível/i.test(warning)) return true
   // Estoque: paginação parcial limpa por orçamento.
   if (/fetch parcial/i.test(warning)) return true
+  // Snapshot: falha de persistência do arquivo bruto (métricas já gravadas).
+  if (/snapshot\s+\d{4}:/i.test(warning) && /avec_report_snapshots/i.test(warning)) return true
+  if (/Falha ao gravar snapshot/i.test(warning)) return true
   return false
 }
 

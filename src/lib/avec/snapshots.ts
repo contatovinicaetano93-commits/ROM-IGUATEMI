@@ -34,8 +34,9 @@ export async function saveReportSnapshot(
   const retain = Math.max(1, opts?.retain ?? 1)
 
   await sql`
-    insert into avec_report_snapshots (report_id, params, row_count, payload, sync_run_id)
+    insert into avec_report_snapshots (id, report_id, params, row_count, payload, sync_run_id)
     values (
+      gen_random_uuid(),
       ${reportId},
       ${params},
       ${rows.length},

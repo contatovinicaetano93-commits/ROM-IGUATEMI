@@ -119,12 +119,17 @@ describe('isSoftAvecSyncWarning', () => {
     expect(isSoftAvecSyncWarning('agenda: 3 agendamento(s) órfão(s) removido(s) do dia')).toBe(true)
     expect(isSoftAvecSyncWarning('Catálogo 0004 adiado — já sincronizado nas últimas 20h')).toBe(true)
     expect(isSoftAvecSyncWarning('0149: fetch parcial (2 pág., 100 linhas) — abort limpo')).toBe(true)
-    expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
+    expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(true)
+    expect(
+      isSoftAvecSyncWarning(
+        'snapshot 0088: null value in column "id" of relation "avec_report_snapshots" violates not-null constraint',
+      ),
+    ).toBe(true)
     expect(
       hardAvecSyncWarnings([
         'AVEC_UNIT_ID vazio — sync sem filtro',
-        'Falha ao gravar snapshot',
+        'Falha HTTP 500 no relatório 0002',
       ]),
-    ).toEqual(['Falha ao gravar snapshot'])
+    ).toEqual(['Falha HTTP 500 no relatório 0002'])
   })
 })
