@@ -19,8 +19,8 @@ export interface Recommendation {
 }
 
 // Enriquece cada serviço com o próximo vencimento e o estado (atrasado/vencendo/ok).
-// Baseline = última visita real (last_done_at). Sem ela, NÃO usa created_at do sync
-// (isso zerava a fila Atrasados após import/sync recente).
+// Baseline = só last_done_at real. Sem visita registrada não inventa atraso
+// (nem usa created_at do sync — isso gerava "há 60 dias" falso).
 export function enrichServices(services: ClientService[]): EnrichedService[] {
   const now = Date.now()
   return services.map((s) => {
@@ -29,17 +29,7 @@ export function enrichServices(services: ClientService[]): EnrichedService[] {
     }
 
     if (!s.last_done_at) {
-      const hasFutureSchedule =
-        !!s.scheduled_at && new Date(s.scheduled_at).getTime() >= now
-      if (hasFutureSchedule) {
-        return { ...s, next_due_at: null, days_until: null, state: 'ok' as const }
-      }
-      return {
-        ...s,
-        next_due_at: null,
-        days_until: -s.cadence_days,
-        state: 'overdue' as const,
-      }
+      return { ...s, next_due_at: null, days_until: null, state: 'ok' as const }
     }
 
     const baseline = new Date(s.last_done_at).getTime()
@@ -75,20 +65,15 @@ export function computeRecommendations(enriched: EnrichedService[]): Recommendat
     }
   }
 
-  // 1) Recorrências atrasadas / vencendo (prioridade máxima)
+  // 1) Recorrências atrasadas / vencendo (prioridade máxima) — só com visita real
   for (const s of enriched) {
     if (s.state === 'overdue') {
-      const missingVisit = !s.last_done_at
       recs.push({
         type: 'overdue',
         title: `${s.name} atrasado`,
-        detail: missingVisit
-          ? `Sem última visita registrada. Priorize confirmar retorno${
-              s.product ? ` e repor ${s.product}` : ''
-            }.`
-          : `Previsto há ${Math.abs(s.days_until ?? 0)} dia(s). Priorize reagendar${
-              s.product ? ` e reponha ${s.product}` : ''
-            }.`,
+        detail: `Previsto há ${Math.abs(s.days_until ?? 0)} dia(s). Priorize reagendar${
+          s.product ? ` e reponha ${s.product}` : ''
+        }.`,
       })
     } else if (s.state === 'due_soon') {
       recs.push({

@@ -20,7 +20,7 @@ function service(overrides: Partial<ClientService> & Pick<ClientService, 'name' 
 }
 
 describe('enrichServices', () => {
-  it('marca atrasado quando não há last_done_at (não usa created_at do sync)', () => {
+  it('não inventa atraso sem last_done_at (não usa created_at nem cadência como dias)', () => {
     const enriched = enrichServices([
       service({
         name: 'Corte',
@@ -30,7 +30,21 @@ describe('enrichServices', () => {
         created_at: new Date().toISOString(),
       }),
     ])
+    expect(enriched[0]?.state).toBe('ok')
+    expect(enriched[0]?.days_until).toBeNull()
+  })
+
+  it('marca atrasado só com visita real além da cadência', () => {
+    const enriched = enrichServices([
+      service({
+        name: 'Corte',
+        category: 'corte',
+        cadence_days: 30,
+        last_done_at: new Date(Date.now() - 45 * 86_400_000).toISOString(),
+      }),
+    ])
     expect(enriched[0]?.state).toBe('overdue')
+    expect(enriched[0]?.days_until).toBeLessThan(0)
   })
 
   it('marca vencendo dentro da janela de 30 dias', () => {
