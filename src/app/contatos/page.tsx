@@ -137,7 +137,10 @@ export default function ContatosPage() {
         setTotalInBase(null)
         return
       }
-      const params = new URLSearchParams({ sort: 'urgency', limit: '100' })
+      const params = new URLSearchParams({
+        sort: 'urgency',
+        limit: mode === 'reactivate' ? '250' : '100',
+      })
       if (mode === 'reactivate') {
         params.set('pending', 'true')
         params.set('queue', queue)
@@ -195,7 +198,7 @@ export default function ContatosPage() {
         ? 'Nenhum atrasado (cadência vencida com visita registrada).'
         : queue === 'due_soon'
           ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
-          : 'Nenhum agendado hoje ou nos próximos 7 dias.'
+          : 'Nenhum agendado hoje.'
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -282,7 +285,7 @@ export default function ContatosPage() {
               ? 'Atrasados: cadência já passou — visita registrada e sem retorno no prazo.'
               : queue === 'due_soon'
                 ? `Vencendo: retorno previsto nos próximos ${DUE_SOON_DAYS} dias (ainda não atrasou).`
-                : 'Agendados: horário marcado hoje ou nos próximos 7 dias.'}
+                : 'Agendados: pessoas com horário hoje (conta pessoa, não serviço). Pode coincidir com atrasado/vencendo.'}
           </p>
         </div>
       )}
