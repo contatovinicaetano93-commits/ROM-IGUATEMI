@@ -118,6 +118,7 @@ describe('isSoftAvecSyncWarning', () => {
     expect(isSoftAvecSyncWarning('AVEC_UNIT_ID vazio — sync sem filtro')).toBe(true)
     expect(isSoftAvecSyncWarning('agenda: 3 agendamento(s) órfão(s) removido(s) do dia')).toBe(true)
     expect(isSoftAvecSyncWarning('Catálogo 0004 adiado — já sincronizado nas últimas 20h')).toBe(true)
+    expect(isSoftAvecSyncWarning('0149: fetch parcial (2 pág., 100 linhas) — abort limpo')).toBe(true)
     expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
     expect(
       hardAvecSyncWarnings([
