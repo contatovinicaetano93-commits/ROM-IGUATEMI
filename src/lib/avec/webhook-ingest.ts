@@ -26,6 +26,10 @@ import {
   isAvecOpenStatus,
   isAvecPaidStatus,
 } from '@/lib/avec/appointment-status'
+import {
+  COMANDA_SERVICE_NAME,
+  type ScheduleOrigin,
+} from '@/lib/salon/schedule-origin'
 
 const EVENT_ALIASES: Record<string, string> = {
   'client.upsert': 'client.upsert',
@@ -318,7 +322,9 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
     await updateContact(contact.id, { status: 'convertido' })
   } else if (event === 'appointment.created' || event === 'appointment.updated') {
-    if (payload.service_name && payload.scheduled_at) {
+    // Sem horário = comanda/encaixe → ancora agora; Pipeline coloca em "No salão".
+    const when = payload.scheduled_at ?? (payload.service_name ? new Date().toISOString() : null)
+    if (payload.service_name && when) {
       const services = await listServices(contact.id)
       let service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
       if (!service) {
@@ -328,7 +334,11 @@ export async function ingestAvecWebhook(rawBody: unknown) {
           cadenceDays: defaultCadenceDaysForServiceName(payload.service_name),
         })
       }
-      await scheduleService(service.id, payload.scheduled_at, payload.professional_name)
+      const origin: ScheduleOrigin =
+        !payload.scheduled_at || payload.service_name === COMANDA_SERVICE_NAME
+          ? 'comanda'
+          : 'agenda'
+      await scheduleService(service.id, when, payload.professional_name, { origin })
       await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
       await updateContact(contact.id, { status: 'agendado' })
     }

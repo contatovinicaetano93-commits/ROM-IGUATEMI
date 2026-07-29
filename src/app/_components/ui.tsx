@@ -133,11 +133,18 @@ function CollapsibleSectionCard({
   )
 }
 
-export function CountBadge({ value, tone = 'gold' }: { value: string; tone?: 'gold' | 'success' | 'danger' }) {
+export function CountBadge({
+  value,
+  tone = 'gold',
+}: {
+  value: string
+  tone?: 'gold' | 'success' | 'danger' | 'sky'
+}) {
   const tones = {
     gold: 'bg-gold/15 text-gold',
     success: 'bg-success/15 text-success',
     danger: 'bg-danger/15 text-danger',
+    sky: 'bg-sky-500/15 text-sky-300',
   }
   return <span className={`rounded-full px-2.5 py-1 text-[0.65rem] font-semibold ${tones[tone]}`}>{value}</span>
 }

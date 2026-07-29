@@ -287,7 +287,7 @@ export default function ContatosPage() {
               ? 'Atrasados: cadência já passou — visita registrada e sem retorno no prazo.'
               : queue === 'due_soon'
                 ? `Vencendo: retorno previsto nos próximos ${DUE_SOON_DAYS} dias (ainda não atrasou).`
-                : `Agendados: pessoas com horário hoje ou nos próximos ${SCHEDULED_SOON_DAYS} dias (conta pessoa). Pode coincidir com atrasado/vencendo.`}
+                : `Agendados: agenda Avec + comanda aberta do dia (mesmo sem horário de booking), hoje até +${SCHEDULED_SOON_DAYS}d. Conta pessoa.`}
           </p>
         </div>
       )}
