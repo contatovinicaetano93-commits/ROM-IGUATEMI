@@ -87,6 +87,8 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/Catálogo 0004 adiado/i.test(warning)) return true
   // P3 sem taxa explícita — informativo.
   if (/sem retorno|retorno local indisponível/i.test(warning)) return true
+  // Estoque: paginação parcial limpa por orçamento.
+  if (/fetch parcial/i.test(warning)) return true
   return false
 }
 
