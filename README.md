@@ -6,12 +6,14 @@ Recebe contatos por WhatsApp (IA), Telegram (secretária da equipe) e Avec (sync
 
 > Repositório dedicado à unidade **Iguatemi**. O painel Brasil vive no repositório `ROM`.
 
-Stack: Next.js 16 + TypeScript + Tailwind + Neon Postgres.
+Stack: Next.js 16 + TypeScript + Tailwind + Supabase Postgres.
+
+> BR e IG usam **Supabase**. Só o **Cérebro** (painel interno Waltter) usa Neon.
 
 ## Deploy rápido
 
-1. **Neon** — projeto `rom-club-iguatemi` → rodar `db/schema.sql`
-2. **Vercel** — importar este repo → projeto `rom-club-iguatemi`
+1. **Supabase** — projeto dedicado Iguatemi → rodar `db/schema.sql`
+2. **Vercel** — importar este repo → projeto `rom-iguatemi`
 3. **Env vars** — copiar de `deploy/vercel-rom-club-iguatemi.env`
 4. **Admin** → seed preset Iguatemi
 
@@ -22,7 +24,7 @@ Guia completo: [`deploy/SETUP-IGUATEMI.md`](deploy/SETUP-IGUATEMI.md)
 ```env
 ROM_PANEL=iguatemi
 NEXT_PUBLIC_ROM_PANEL=iguatemi
-DATABASE_URL=          # Neon Iguatemi — exclusivo
+DATABASE_URL=          # Supabase pooler Iguatemi — exclusivo
 AVEC_API_TOKEN=        # Token Avec da loja Iguatemi
 ROM_ADMIN_PASSWORD=
 CRON_SECRET=
@@ -53,6 +55,6 @@ Ou manualmente: GitHub → New repository → `ROM-iguatemi` → push deste cód
 | Recurso | Compartilha com Brasil? |
 |---------|-------------------------|
 | Repositório Git | **Não** (este repo) |
-| Neon `DATABASE_URL` | **Não** |
+| Supabase `DATABASE_URL` | **Não** |
 | `AVEC_API_TOKEN` | **Não** |
 | WhatsApp / Telegram | **Não** |

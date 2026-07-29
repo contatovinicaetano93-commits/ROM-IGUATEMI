@@ -38,7 +38,7 @@ async function postSync(mode: 'fast' | 'full', baseUrl: string) {
 
 /**
  * Efeitos pós-webhook Avec — tempo real nas duas unidades (cada deploy Vercel
- * dispara sync só do seu Neon/token).
+ * dispara sync só do seu banco/token).
  *
  * 1. Recompute local imediato (salon_daily_metrics a partir do ROM)
  * 2. Fast sync em background (agenda/atendidos/receita do dia)

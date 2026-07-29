@@ -54,7 +54,7 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
   const service_duration_sum_minutes = patch.service_duration_sum_minutes ?? null
   const service_duration_count = patch.service_duration_count ?? null
 
-  // Neon serializa number como texto; coalesce(param, 0) infere int e quebra
+  // Postgres/driver pode serializar number como texto; coalesce(param, 0) infere int e quebra
   // receita decimal (ex: 165304.8). Cast explícito evita isso.
   await sql`
     insert into salon_daily_metrics (

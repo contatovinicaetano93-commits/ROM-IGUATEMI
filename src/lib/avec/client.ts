@@ -18,7 +18,7 @@ export function isAvecMock() {
   return v === '1' || v === 'true'
 }
 
-/** Mock nunca em produção — evita sujar o Neon real. */
+/** Mock nunca em produção — evita sujar o Postgres real. */
 export function assertAvecMockAllowed() {
   if (isAvecMock() && isProduction()) {
     throw new Error('AVEC_MOCK não permitido em produção — remova da Vercel')

@@ -34,7 +34,7 @@ export function hoursLeftInToken(token: string): number {
   return (exp - Date.now() / 1000) / 3600
 }
 
-/** Persiste JWT Avec no Neon — sync lê daqui sem precisar redeploy. */
+/** Persiste JWT Avec no Postgres — sync lê daqui sem precisar redeploy. */
 export async function saveAvecApiToken(token: string): Promise<void> {
   await ensureTokenStore()
   const sql = getSql()
@@ -51,7 +51,7 @@ export async function saveAvecApiToken(token: string): Promise<void> {
 }
 
 /**
- * Token runtime (Neon) se ainda válido (>30 min); senão null.
+ * Token runtime (Postgres) se ainda válido (>30 min); senão null.
  * Env AVEC_API_TOKEN continua como fallback em getAvecApiToken().
  */
 export async function loadRuntimeAvecApiToken(): Promise<string | null> {

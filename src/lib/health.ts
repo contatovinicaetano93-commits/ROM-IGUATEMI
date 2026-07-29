@@ -7,7 +7,7 @@ import { getBrand, getRomPanelId } from '@/lib/brand'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
-import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
 const logger = new Logger('Health')
 
@@ -18,17 +18,17 @@ function envOk(name: string) {
 async function probeDatabase() {
   let connected = false
   let error: string | null = null
-  let neon_quota = false
+  let db_quota = false
   try {
     const sql = getSql()
     await sql`select 1 as ok`
     connected = true
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
-    neon_quota = isNeonQuotaError(e)
-    if (neon_quota) error = neonQuotaUserMessage(e)
+    db_quota = isDbQuotaError(e)
+    if (db_quota) error = dbQuotaUserMessage(e)
   }
-  return { connected, error, neon_quota }
+  return { connected, error, db_quota }
 }
 
 async function probeKpiLayers() {
@@ -163,13 +163,13 @@ async function probeOpsCoverageYtd() {
 
 /** Resposta mínima — segura para monitoramento externo sem login. */
 export async function getPublicHealthStatus() {
-  const { connected, neon_quota } = await probeDatabase()
+  const { connected, db_quota } = await probeDatabase()
   const [metrics_ytd, ops_ytd] = connected
     ? await Promise.all([probeDailyMetricsYtd(), probeOpsCoverageYtd()])
     : [null, null]
   return {
     ok: connected,
-    neon_quota,
+    db_quota,
     database: {
       host: peekDatabaseHost(),
       source: peekDatabaseUrlSource(),
@@ -180,7 +180,7 @@ export async function getPublicHealthStatus() {
 }
 
 export async function getHealthStatus() {
-  const { connected, error, neon_quota } = await probeDatabase()
+  const { connected, error, db_quota } = await probeDatabase()
 
   const brand = getBrand()
   const deployment = getDeploymentContext()
@@ -223,7 +223,7 @@ export async function getHealthStatus() {
       configured: Boolean(peekResolvedDatabaseUrl()),
       connected,
       error,
-      neon_quota,
+      db_quota,
       host: peekDatabaseHost(),
       source: peekDatabaseUrlSource(),
     },

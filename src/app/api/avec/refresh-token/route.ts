@@ -52,7 +52,7 @@ async function execute(req: NextRequest) {
     schedule: '0 */6 * * *',
     note: minted.skipped
       ? 'Token ainda válido (≥4h) — refresh adiado'
-      : 'Token Avec renovado e salvo no Neon (sync usa na hora)',
+      : 'Token Avec renovado e salvo no banco (sync usa na hora)',
   })
 }
 

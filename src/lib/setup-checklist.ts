@@ -89,7 +89,7 @@ export const SETUP_ITEMS: SetupItem[] = [
       'Opcional: AVEC_SYNC_MAX_PAGES (padrão 80 páginas ≈ 20 mil linhas/relatório)',
       'Remova AVEC_MOCK da Vercel (se existir)',
       'Redeploy → Admin → Testar conexão → Rodar sync full',
-      'Cérebro (Waltter) passa a mostrar receita/atendidos assim que o sync popular o Neon',
+      'Cérebro (Waltter) passa a mostrar receita/atendidos assim que o sync popular o banco',
     ],
     link: {
       href: 'https://documenter.getpostman.com/view/12527228/2sA2xmUWJo',

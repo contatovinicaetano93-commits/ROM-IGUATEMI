@@ -7,7 +7,7 @@ import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 import { getDeploymentContext } from '@/lib/deployment'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
-import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
 import { repairSalonP1JsonbEncoding } from '@/lib/salon/p1-metrics'
 import { repairSalonP2JsonbEncoding } from '@/lib/salon/p2-metrics'
@@ -70,7 +70,7 @@ async function executeSync(
       : FAST_MIN_GAP_MS
 
   try {
-    // Gap antes do purge: sync_recente não deve gerar writes pesados no Neon.
+    // Gap antes do purge: sync_recente não deve gerar writes pesados no Postgres.
     if (!opts?.force) {
       const last = await getLastAvecSync(mode)
       if (last?.created_at) {
@@ -88,21 +88,21 @@ async function executeSync(
       }
     }
 
-    // Purge só em admin force ou cron full — nunca em cada webhook (queimaria Neon).
+    // Purge só em admin force ou cron full — nunca em cada webhook (queimaria cota do banco).
     if ((opts?.force || (opts?.cron && mode === 'full')) && !opts?.bypassMinGap) {
       try {
         await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
       } catch (purgeErr) {
-        if (isNeonQuotaError(purgeErr)) {
+        if (isDbQuotaError(purgeErr)) {
           if (opts?.cron) {
             return ok({
               skipped: true,
-              reason: 'neon_quota',
+              reason: 'db_quota',
               mode,
-              note: neonQuotaUserMessage(purgeErr),
+              note: dbQuotaUserMessage(purgeErr),
             })
           }
-          return err(neonQuotaUserMessage(purgeErr), 503)
+          return err(dbQuotaUserMessage(purgeErr), 503)
         }
         throw purgeErr
       }
@@ -132,7 +132,7 @@ async function executeSync(
     })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
-      // Cron/webhook: skip silencioso — outro sync ainda está no Neon.
+      // Cron/webhook: skip silencioso — outro sync ainda está no banco.
       return ok({
         skipped: true,
         reason: 'sync_em_andamento',
@@ -142,16 +142,16 @@ async function executeSync(
         note: 'Outro sync Avec já está em execução (lock distribuído)',
       })
     }
-    if (isNeonQuotaError(e)) {
+    if (isDbQuotaError(e)) {
       if (opts?.cron) {
         return ok({
           skipped: true,
-          reason: 'neon_quota',
+          reason: 'db_quota',
           mode,
-          note: neonQuotaUserMessage(e),
+          note: dbQuotaUserMessage(e),
         })
       }
-      return err(neonQuotaUserMessage(e), 503)
+      return err(dbQuotaUserMessage(e), 503)
     }
     throw e
   }
