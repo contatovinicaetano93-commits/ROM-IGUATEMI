@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { isAvecConfigured, isAvecMock, getAvecBaseUrl, testAvecConnection } from '@/lib/avec/client'
 import { runAvecSync, getLastAvecSync, type AvecSyncMode } from '@/lib/avec/sync'
-import { isAuthorized } from '@/lib/auth'
+import { requireAdmin, isAuthEnabled } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 import { getDeploymentContext } from '@/lib/deployment'
@@ -17,10 +17,14 @@ import { repairSalonP3JsonbEncoding } from '@/lib/salon/p3-metrics'
 export const maxDuration = 300
 
 async function authorize(req: NextRequest) {
-  if (isCronAuthorized(req)) return true
-  if (await isAuthorized(req)) return true
-  if (!process.env.CRON_SECRET?.trim() && !isProduction()) return true
-  return false
+  if (isCronAuthorized(req)) return { ok: true as const, cron: true as const }
+  const admin = await requireAdmin(req)
+  if (admin.ok) return { ok: true as const, cron: false as const }
+  // Dev sem senha: permite status/sync local. (paridade BR)
+  if (!isProduction() && !isAuthEnabled()) {
+    return { ok: true as const, cron: false as const }
+  }
+  return { ok: false as const, status: admin.status, message: admin.message }
 }
 
 function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecSyncMode {
@@ -154,15 +158,15 @@ async function executeSync(
 
 export async function POST(req: NextRequest) {
   try {
-    if (!(await authorize(req))) return err('Não autorizado', 401)
-    const cron = isCronAuthorized(req)
+    const auth = await authorize(req)
+    if (!auth.ok) return err(auth.message, auth.status)
     const webhook =
       req.headers.get('x-rom-sync-reason') === 'webhook' ||
       req.nextUrl.searchParams.get('source') === 'webhook'
     return await executeSync(req, {
-      force: !cron,
+      force: !auth.cron,
       defaultMode: 'full',
-      cron,
+      cron: auth.cron,
       webhook,
     })
   } catch (e) {
@@ -172,10 +176,10 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    if (!(await authorize(req))) return err('Não autorizado', 401)
+    const auth = await authorize(req)
+    if (!auth.ok) return err(auth.message, auth.status)
 
-    const cron = isCronAuthorized(req)
-    if (cron) {
+    if (auth.cron) {
       return await executeSync(req, { defaultMode: parseMode(req, 'fast'), cron: true })
     }
 
