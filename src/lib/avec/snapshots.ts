@@ -14,7 +14,7 @@ function mapSnapshotRow<T extends { params?: unknown; payload?: unknown }>(row: 
 export const SNAPSHOT_PAYLOAD_REPORT_IDS = new Set(['0045', '0242', '0243', '0142'])
 
 export type SaveReportSnapshotOptions = {
-  /** Se false/omitido, grava payload vazio (evita estourar Neon free). */
+  /** Se false/omitido, grava payload vazio (evita estourar cota do banco). */
   keepPayload?: boolean
   /** Quantos snapshots recentes manter por report_id após o insert (default 1). */
   retain?: number
@@ -84,11 +84,11 @@ export type PurgeSnapshotsResult = {
 }
 
 /**
- * Recupera espaço no Neon: DELETE primeiro (não UPDATE) — sob size-limit o UPDATE
+ * Recupera espaço no Postgres: DELETE primeiro (não UPDATE) — sob size-limit o UPDATE
  * de jsonb enorme precisa de espaço livre e falha com "could not extend file".
  * Depois zera payloads legados remanescentes e limpa sync runs velhos.
  *
- * Nota: no Neon free o espaço físico pode só cair após VACUUM no console.
+ * Nota: o espaço físico pode só cair após VACUUM / autovacuum no provedor.
  */
 export async function purgeAvecStorageBloat(opts?: {
   keepSnapshotDays?: number

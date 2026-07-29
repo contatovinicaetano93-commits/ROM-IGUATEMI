@@ -45,7 +45,7 @@ export const SETUP_ITEMS: SetupItem[] = [
     steps: [
       'Gere um segredo: openssl rand -hex 32',
       'Vercel → CRON_SECRET = o valor gerado',
-      'Protege sync cron (fast 2h + full 2×/dia) e disparo manual/webhook',
+      'Protege sync cron (fast ~20 min + full 2×/dia) e disparo manual/webhook',
       'Tempo real = webhook Avec (AVEC_WEBHOOK_SECRET) — cron é rede de segurança',
       'Redeploy',
     ],
@@ -89,7 +89,7 @@ export const SETUP_ITEMS: SetupItem[] = [
       'Opcional: AVEC_SYNC_MAX_PAGES (padrão 80 páginas ≈ 20 mil linhas/relatório)',
       'Remova AVEC_MOCK da Vercel (se existir)',
       'Redeploy → Admin → Testar conexão → Rodar sync full',
-      'Cérebro (Waltter) passa a mostrar receita/atendidos assim que o sync popular o Neon',
+      'Cérebro (Waltter) passa a mostrar receita/atendidos assim que o sync popular o banco',
     ],
     link: {
       href: 'https://documenter.getpostman.com/view/12527228/2sA2xmUWJo',

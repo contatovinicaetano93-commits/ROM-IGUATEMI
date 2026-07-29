@@ -1,5 +1,11 @@
 import { isAvecConfigured, isAvecMock } from '@/lib/avec/client'
-import { fetchLiveDirectorBlocks, type LiveDirectorStage } from './avec-live'
+import {
+  directorFullBudget,
+  directorUiBudget,
+  DIRECTOR_UI_SLIM_MAX_PAGES,
+  fetchLiveDirectorBlocks,
+  type LiveDirectorStage,
+} from './avec-live'
 import {
   buildMockReturnBlocks,
   buildMockRevenueBlocks,
@@ -21,7 +27,18 @@ import type { DirectorReport, MonthKey, QuarterKey } from './types'
 
 /** Evita jogar JSON bruto de validação Avec na UI (HTTP 400 salao_id etc.). */
 function shortenAvecWarning(w: string): string {
-  if (/salao_id/i.test(w)) {
+  if (/0011 local via 0002/i.test(w)) {
+    return '0011 local (0002+0007 por profissional)'
+  }
+  if (
+    /n[aã]o suportado/i.test(w) ||
+    /usando taxa\/lista/i.test(w) ||
+    /via 0007/i.test(w) ||
+    /n[aã]o dispon[ií]vel neste sal[aã]o/i.test(w)
+  ) {
+    return '0011 via 0007 (taxa do salão Avec)'
+  }
+  if (/salao_id/i.test(w) && !/99801|AVEC_UNIT_ID já/i.test(w)) {
     return '0011: Avec exige salao_id — confira AVEC_UNIT_ID'
   }
   if (/HTTP 400/i.test(w)) {
@@ -51,6 +68,10 @@ export interface BuildDirectorReportOptions {
   floorOnly?: boolean
   /** Cap de páginas Avec 0011 (default 40 na live). */
   maxPages0011?: number
+  /**
+   * true = budget Avec curto (UI JSON). false/omit = full (cron, CSV, e-mail).
+   */
+  interactive?: boolean
   /**
    * Limita clientes de reativação por profissional na resposta JSON (UI).
    * null/undefined = sem corte (CSV/e-mail).
@@ -114,7 +135,16 @@ export async function buildDirectorReport(
         compareQuarter0021,
         selectedQuarter,
         compareQuarter,
-        { stages, maxPages0011: opts.maxPages0011 },
+        {
+          stages,
+          maxPages0011: opts.maxPages0011,
+          budget: opts.interactive
+            ? directorUiBudget(
+                Date.now(),
+                opts.maxPages0011 ?? DIRECTOR_UI_SLIM_MAX_PAGES,
+              )
+            : directorFullBudget(),
+        },
       )
       // null = falha; [] = Avec OK sem dados no período (não fingir roster zerado).
       if (want0011 && live.return_blocks !== null) {

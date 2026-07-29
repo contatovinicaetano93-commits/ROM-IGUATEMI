@@ -4,8 +4,8 @@
 // Auth: header Authorization = token puro (sem "Bearer").
 
 import { getMockReport } from '@/lib/avec/fixtures'
-import { isAvecLoginConfigured, mintAvecApiToken } from '@/lib/avec/refresh-token'
-import { loadRuntimeAvecApiToken, saveAvecApiToken } from '@/lib/avec/token-store'
+import { isAvecLoginConfigured } from '@/lib/avec/refresh-token'
+import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
 import { getAvecUnitId } from '@/lib/brand'
 import { todayIso } from '@/lib/salon/format'
 import { isProduction } from '@/lib/env'
@@ -18,7 +18,7 @@ export function isAvecMock() {
   return v === '1' || v === 'true'
 }
 
-/** Mock nunca em produção — evita sujar o Neon real. */
+/** Mock nunca em produção — evita sujar o Postgres real. */
 export function assertAvecMockAllowed() {
   if (isAvecMock() && isProduction()) {
     throw new Error('AVEC_MOCK não permitido em produção — remova da Vercel')
@@ -62,16 +62,26 @@ export function isAvecWafForbiddenError(error: Error): boolean {
   return /<html|403 Forbidden|cloudflare|just a moment/i.test(error.message)
 }
 
+/** Timeout/abort de página Avec — não vale retry (só queima o orçamento do cron). */
+export function isAvecFetchAbortError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false
+  const err = e as Error & { name?: string; message?: string }
+  const name = err.name ?? ''
+  const msg = err.message ?? String(e)
+  return (
+    name === 'AbortError' ||
+    name === 'TimeoutError' ||
+    /aborted|timeout|TimeoutError|AbortError/i.test(msg)
+  )
+}
+
 async function getAvecConfig() {
   const baseUrl = getAvecBaseUrl()
-  if (cachedAvecToken) return { baseUrl, token: cachedAvecToken }
-  // Preferência: token renovado no DB (cron 6h) → env Vercel.
-  const runtime = await loadRuntimeAvecApiToken()
-  const token = normalizeAvecApiToken(runtime ?? process.env.AVEC_API_TOKEN?.trim() ?? '')
+  // Renova sozinho se o JWT (~12h) estiver perto do fim — não cai no env Vercel expirado.
+  const token = normalizeAvecApiToken(await ensureFreshAvecApiToken({ minHoursLeft: 1 }))
   if (!token) {
     throw new Error('AVEC_API_TOKEN é obrigatório para sync com Avec')
   }
-  cachedAvecToken = token
   return { baseUrl, token }
 }
 
@@ -228,6 +238,19 @@ export function periodRange(daysBack = 0, daysForward = 14) {
   }
 }
 
+/**
+ * Janela Avec ~N dias terminando em `anchorYmd` (inclusive), no formato dd/mm/yyyy.
+ * Usado no backfill histórico da Visão analítica (P1/P2/P3 ancorados no fim do mês).
+ */
+export function periodRangeEndingOn(anchorYmd: string, daysBack = 30) {
+  const anchor = /^\d{4}-\d{2}-\d{2}$/.test(anchorYmd) ? anchorYmd : todayIso()
+  const back = Math.max(0, Math.floor(daysBack))
+  return {
+    inicio: fmtBrFromYmd(addCalendarDays(anchor, -back)),
+    fim: fmtBrFromYmd(anchor),
+  }
+}
+
 // Extrai linhas do JSON de relatório — formato varia por endpoint.
 // Formato oficial Avec Reports: { code, data: { report: { result: [...] } } }
 export function extractRows(payload: unknown): Record<string, unknown>[] {
@@ -259,46 +282,36 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
   return []
 }
 
-/** Uma renovação por invocação serverless — evita stampede em 401 paralelo. */
-let avecTokenRefreshInFlight: Promise<string | null> | null = null
-/** Cache do token na invocação — evita CREATE TABLE + SELECT a cada relatório. */
-let cachedAvecToken: string | null = null
-
-async function forceRefreshAvecToken(): Promise<string | null> {
-  if (!isAvecLoginConfigured()) return null
-  if (!avecTokenRefreshInFlight) {
-    avecTokenRefreshInFlight = (async () => {
-      try {
-        const minted = await mintAvecApiToken({ force: true })
-        try {
-          await saveAvecApiToken(minted.token)
-        } catch {
-          // Persistência falhou — o JWT em memória ainda serve para o retry 401.
-        }
-        const token = normalizeAvecApiToken(minted.token)
-        process.env.AVEC_API_TOKEN = token
-        cachedAvecToken = token
-        return token
-      } catch {
-        return null
-      }
-    })().finally(() => {
-      avecTokenRefreshInFlight = null
-    })
+/** Totais agregados do payload Avec (`total` / `report.total`) — usado no 0011 local. */
+export function extractReportTotals(payload: unknown): Record<string, unknown>[] {
+  if (!payload || typeof payload !== 'object') return []
+  const obj = payload as Record<string, unknown>
+  const dig = (node: unknown): Record<string, unknown>[] => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return []
+    const n = node as Record<string, unknown>
+    if (Array.isArray(n.total)) return n.total as Record<string, unknown>[]
+    if (n.report && typeof n.report === 'object' && !Array.isArray(n.report)) {
+      const rep = n.report as Record<string, unknown>
+      if (Array.isArray(rep.total)) return rep.total as Record<string, unknown>[]
+    }
+    if (n.data) return dig(n.data)
+    return []
   }
-  return avecTokenRefreshInFlight
+  return dig(obj)
 }
 
-export async function fetchAvecReport(reportId: string, params: AvecReportParams = {}) {
+export async function fetchAvecReport(
+  reportId: string,
+  params: AvecReportParams = {},
+  opts?: { timeoutMs?: number },
+) {
   assertAvecMockAllowed()
   const effectiveParams = withRequiredAvecReportParams(reportId, params)
   if (isAvecMock()) {
     return getMockReport(reportId, effectiveParams.page ?? 1)
   }
 
-  const cfg = await getAvecConfig()
-  const baseUrl = cfg.baseUrl
-  let token = cfg.token
+  const pageTimeoutMs = opts?.timeoutMs ?? 30_000
   const qs = new URLSearchParams()
   qs.set('page', String(effectiveParams.page ?? 1))
   qs.set('limit', String(effectiveParams.limit ?? 250))
@@ -307,41 +320,44 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
     qs.set(k, String(v))
   }
 
+  const { baseUrl, token: initialToken } = await getAvecConfig()
   const url = `${baseUrl}/reports/${reportId}?${qs}`
-  let refreshedFor401 = false
+
+  let token = initialToken
+  let refreshedOnce = false
 
   return retryWithBackoff(
     async () => {
       const res = await fetch(url, {
         headers: avecReportHeaders(token),
         cache: 'no-store',
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(pageTimeoutMs),
       })
 
       // JWT pode estar “válido” no relógio e ainda assim a Avec devolver 401 —
       // renova via login Cognito e tenta 1× de novo no mesmo request.
-      if (res.status === 401 && !refreshedFor401 && isAvecLoginConfigured()) {
-        const next = await forceRefreshAvecToken()
-        if (next) {
-          token = normalizeAvecApiToken(next)
-          refreshedFor401 = true
-          const retry = await fetch(url, {
-            headers: avecReportHeaders(token),
-            cache: 'no-store',
-            signal: AbortSignal.timeout(30_000),
-          })
-          if (retry.ok) return retry.json()
-          const retryText = await retry.text().catch(() => '')
-          const body =
-            retry.status === 401
-              ? 'token Avec expirado — renovar'
-              : retryText
-                ? retryText.slice(0, 200)
-                : ''
-          const err = new Error(`Avec ${reportId} HTTP ${retry.status}${body ? `: ${body}` : ''}`)
-          ;(err as Error & { status?: number }).status = retry.status
-          throw err
-        }
+      if (res.status === 401 && !refreshedOnce && isAvecLoginConfigured()) {
+        refreshedOnce = true
+        await res.text().catch(() => '')
+        token = normalizeAvecApiToken(
+          await ensureFreshAvecApiToken({ force: true, minHoursLeft: 0 }),
+        )
+        const retry = await fetch(url, {
+          headers: avecReportHeaders(token),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(pageTimeoutMs),
+        })
+        if (retry.ok) return retry.json()
+        const retryText = await retry.text().catch(() => '')
+        const body =
+          retry.status === 401
+            ? 'token Avec expirado — renovar'
+            : retryText
+              ? retryText.slice(0, 200)
+              : ''
+        const err = new Error(`Avec ${reportId} HTTP ${retry.status}${body ? `: ${body}` : ''}`)
+        ;(err as Error & { status?: number }).status = retry.status
+        throw err
       }
 
       if (!res.ok) {
@@ -364,7 +380,9 @@ export async function fetchAvecReport(reportId: string, params: AvecReportParams
       maxAttempts: 4,
       initialDelayMs: 1500,
       // Rede/5xx e WAF HTML 403 — retry. 4xx JSON (token/params) não.
+      // Timeout/abort também não: 3×30s queima stock_fast / sync antes do deadline.
       shouldRetry: (e) => {
+        if (isAvecFetchAbortError(e)) return false
         const status = (e as Error & { status?: number }).status
         if (status === undefined || status >= 500) return true
         return isAvecWafForbiddenError(e)
@@ -416,15 +434,31 @@ export function formatTruncationWarning(reportId: string, result: AvecReportFetc
 export async function fetchAllAvecReport(
   reportId: string,
   params: AvecReportParams = {},
-  maxPages = getAvecSyncMaxPages()
+  maxPages = getAvecSyncMaxPages(),
+  opts?: { deadlineAt?: number | null },
 ): Promise<AvecReportFetchResult> {
   const limit = params.limit ?? AVEC_PAGE_LIMIT
   const all: Record<string, unknown>[] = []
   let pagesFetched = 0
   let truncated = false
+  const deadlineAt = opts?.deadlineAt ?? null
 
   for (let page = 1; page <= maxPages; page++) {
-    const payload = await fetchAvecReport(reportId, { ...params, page, limit })
+    if (deadlineAt != null && Date.now() >= deadlineAt) {
+      truncated = true
+      break
+    }
+    let payload: unknown
+    try {
+      payload = await fetchAvecReport(reportId, { ...params, page, limit })
+    } catch (e) {
+      // Com deadline: abort limpo — devolve o que já veio em vez de matar o sync.
+      if (deadlineAt != null && isAvecFetchAbortError(e)) {
+        truncated = true
+        break
+      }
+      throw e
+    }
     const rows = extractRows(payload)
     pagesFetched = page
     if (rows.length === 0) break

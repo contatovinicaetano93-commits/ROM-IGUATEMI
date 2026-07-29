@@ -9,7 +9,7 @@ export const maxDuration = 60
 
 /**
  * Renova JWT Avec (~12h) via Cognito + amplify/signin.
- * Cron Vercel: a cada 6 horas (0 every-6h * * *).
+ * Cron Vercel: a cada 3 horas (30 every-3h * * * — offset vs BR :00).
  * Também aceita admin autenticado (force=1).
  */
 async function authorize(req: NextRequest) {
@@ -33,7 +33,7 @@ async function execute(req: NextRequest) {
   const runtime = await loadRuntimeAvecApiToken()
   const current = runtime ?? process.env.AVEC_API_TOKEN ?? null
 
-  // Cron 6h: se ainda restam ≥4h, não renova (evita churn).
+  // Cron 3h: se ainda restam ≥4h, não renova (evita churn).
   const minted = await mintAvecApiToken({
     force,
     currentToken: current,
@@ -49,10 +49,10 @@ async function execute(req: NextRequest) {
     skipped: minted.skipped,
     hours_left: Math.round(minted.hours_left * 100) / 100,
     salon_id: minted.salon_id,
-    schedule: '0 */6 * * *',
+    schedule: '30 */3 * * *',
     note: minted.skipped
       ? 'Token ainda válido (≥4h) — refresh adiado'
-      : 'Token Avec renovado e salvo no Neon (sync usa na hora)',
+      : 'Token Avec renovado e salvo no banco (sync usa na hora)',
   })
 }
 

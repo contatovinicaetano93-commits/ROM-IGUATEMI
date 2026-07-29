@@ -1,16 +1,13 @@
 import { isAvecConfigured } from '@/lib/avec/client'
 import { recomputeSalonMetricsFromRom } from '@/lib/salon/metrics'
 
-/** Eventos que disparam pull Avec fast (agenda/caixa do dia). */
+/** Eventos que disparam pull Avec fast (agenda/caixa do dia). Full fica só no cron 2×/dia. */
 const FAST_EVENTS = new Set([
   'appointment.created',
   'appointment.updated',
   'appointment.cancelled',
   'service.completed',
 ])
-
-/** Eventos que disparam pull Avec full (P1/P2/P3 + catálogo). */
-const FULL_EVENTS = new Set(['service.completed', 'appointment.cancelled'])
 
 function internalBaseUrl(): string | null {
   const fromEnv = process.env.ROM_PUBLIC_URL?.trim() || process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()
@@ -22,15 +19,17 @@ function internalBaseUrl(): string | null {
   return null
 }
 
-async function postSync(mode: 'fast' | 'full', baseUrl: string) {
+async function postSyncFast(baseUrl: string) {
   const secret = process.env.CRON_SECRET?.trim()
   if (!secret) return
 
-  await fetch(`${baseUrl}/api/avec/sync?mode=${mode}&source=webhook`, {
+  await fetch(`${baseUrl}/api/avec/sync?mode=fast`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${secret}`,
       'Content-Type': 'application/json',
+      // Distingue webhook do cron Vercel — gap curto, nunca full.
+      'x-rom-sync-reason': 'webhook',
     },
     cache: 'no-store',
   }).catch(() => {})
@@ -38,11 +37,11 @@ async function postSync(mode: 'fast' | 'full', baseUrl: string) {
 
 /**
  * Efeitos pós-webhook Avec — tempo real nas duas unidades (cada deploy Vercel
- * dispara sync só do seu Neon/token).
+ * dispara sync só do seu banco/token).
  *
  * 1. Recompute local imediato (salon_daily_metrics a partir do ROM)
  * 2. Fast sync em background (agenda/atendidos/receita do dia)
- * 3. Full sync em background após atendimento/cancelamento (P1/P2/P3)
+ * Full (P1/P2/P3/catálogo) NÃO dispara aqui — só cron 2×/dia (evita 403/DB).
  */
 export async function runAvecWebhookSideEffects(event: string) {
   await recomputeSalonMetricsFromRom().catch(() => {})
@@ -57,13 +56,8 @@ export async function runAvecWebhookSideEffects(event: string) {
   const baseUrl = internalBaseUrl()
   if (!baseUrl) return
 
-  // Sequencial: fast e full compartilham o lock `avec_sync`.
-  // Em paralelo o segundo era skipped (sync_em_andamento) e P1–P3 sumia.
   if (FAST_EVENTS.has(event)) {
-    await postSync('fast', baseUrl)
-  }
-  if (FULL_EVENTS.has(event)) {
-    await postSync('full', baseUrl)
+    await postSyncFast(baseUrl)
   }
 }
 

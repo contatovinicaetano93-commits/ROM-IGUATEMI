@@ -2,35 +2,35 @@
   "crons": [
     {
       "path": "/api/avec/refresh-token",
-      "schedule": "0 */6 * * *"
+      "schedule": "30 */3 * * *"
     },
     {
       "path": "/api/avec/sync",
-      "schedule": "15 */2 * * *"
+      "schedule": "10,30,50 * * * *"
     },
     {
       "path": "/api/avec/sync?mode=full",
-      "schedule": "0 12,22 * * *"
+      "schedule": "35 10,22 * * *"
     },
     {
       "path": "/api/estoque/sync",
-      "schedule": "45 */4 * * *"
+      "schedule": "35 * * * *"
     },
     {
       "path": "/api/estoque/sync?mode=full",
-      "schedule": "50 23 * * *"
+      "schedule": "55 11 * * *"
     },
     {
       "path": "/api/avec/purge-snapshots",
-      "schedule": "10 7 * * *"
+      "schedule": "25 7 * * *"
     },
     {
       "path": "/api/director-report",
-      "schedule": "0 11 * * 2"
+      "schedule": "15 11 * * 2"
     },
     {
       "path": "/api/reminders/aftercare",
-      "schedule": "40 */4 * * *"
+      "schedule": "40 */2 * * *"
     }
   ]
 }

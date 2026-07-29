@@ -2,12 +2,12 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { isAvecConfigured, isAvecMock, getAvecBaseUrl, testAvecConnection } from '@/lib/avec/client'
 import { runAvecSync, getLastAvecSync, type AvecSyncMode } from '@/lib/avec/sync'
-import { isAuthorized } from '@/lib/auth'
+import { requireAdmin, isAuthEnabled } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 import { getDeploymentContext } from '@/lib/deployment'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
-import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
 import { repairSalonP1JsonbEncoding } from '@/lib/salon/p1-metrics'
 import { repairSalonP2JsonbEncoding } from '@/lib/salon/p2-metrics'
@@ -17,10 +17,14 @@ import { repairSalonP3JsonbEncoding } from '@/lib/salon/p3-metrics'
 export const maxDuration = 300
 
 async function authorize(req: NextRequest) {
-  if (isCronAuthorized(req)) return true
-  if (await isAuthorized(req)) return true
-  if (!process.env.CRON_SECRET?.trim() && !isProduction()) return true
-  return false
+  if (isCronAuthorized(req)) return { ok: true as const, cron: true as const }
+  const admin = await requireAdmin(req)
+  if (admin.ok) return { ok: true as const, cron: false as const }
+  // Dev sem senha: permite status/sync local. (paridade BR)
+  if (!isProduction() && !isAuthEnabled()) {
+    return { ok: true as const, cron: false as const }
+  }
+  return { ok: false as const, status: admin.status, message: admin.message }
 }
 
 function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecSyncMode {
@@ -29,22 +33,15 @@ function parseMode(req: NextRequest, cronFallback: AvecSyncMode = 'fast'): AvecS
   return cronFallback
 }
 
-/** Alinhado ao cron leve: fast 2h, full 2×/dia (09/19 BRT). */
-const FAST_MIN_GAP_MS = 100 * 60_000
-const FULL_MIN_GAP_MS = 9 * 60 * 60_000
-/** Webhook: tempo real, mas evita rajada de full+purge. */
-const WEBHOOK_FAST_MIN_GAP_MS = 60_000
-const WEBHOOK_FULL_MIN_GAP_MS = 5 * 60_000
+/** Espaçamento mínimo mesmo se o cron Vercel for reconfigurado à força. (paridade BR) */
+const FAST_MIN_GAP_MS = 12 * 60_000
+const FULL_MIN_GAP_MS = 5 * 60 * 60_000
+/** Webhook: gap curto — não flooda, mas atualiza caixa após evento. */
+const WEBHOOK_FAST_MIN_GAP_MS = 90_000
 
 async function executeSync(
   req: NextRequest,
-  opts?: {
-    force?: boolean
-    defaultMode?: AvecSyncMode
-    cron?: boolean
-    /** Webhook em tempo real — usa gap curto, não o das janelas de cron. */
-    bypassMinGap?: boolean
-  },
+  opts?: { force?: boolean; defaultMode?: AvecSyncMode; cron?: boolean; webhook?: boolean },
 ) {
   const mode = parseMode(req, opts?.defaultMode ?? 'fast')
 
@@ -61,48 +58,50 @@ async function executeSync(
     return err('Avec não configurado (AVEC_API_TOKEN)', 503)
   }
 
-  const minGap = opts?.bypassMinGap
-    ? mode === 'full'
-      ? WEBHOOK_FULL_MIN_GAP_MS
-      : WEBHOOK_FAST_MIN_GAP_MS
-    : mode === 'full'
-      ? FULL_MIN_GAP_MS
-      : FAST_MIN_GAP_MS
+  // Webhook nunca roda full (P1–P3/catálogo) — só o cron 2×/dia.
+  const effectiveMode: AvecSyncMode = opts?.webhook && mode === 'full' ? 'fast' : mode
 
-  try {
-    // Gap antes do purge: sync_recente não deve gerar writes pesados no Neon.
-    if (!opts?.force) {
-      const last = await getLastAvecSync(mode)
-      if (last?.created_at) {
-        const age = Date.now() - new Date(last.created_at).getTime()
-        if (age >= 0 && age < minGap) {
-          return ok({
-            skipped: true,
-            reason: 'sync_recente',
-            mode,
-            last,
-            schedule: mode === 'fast' ? 'intraday' : 'full',
-            note: `Último sync ${mode} há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
-          })
-        }
+  const minGap =
+    opts?.webhook && effectiveMode === 'fast'
+      ? WEBHOOK_FAST_MIN_GAP_MS
+      : effectiveMode === 'full'
+        ? FULL_MIN_GAP_MS
+        : FAST_MIN_GAP_MS
+
+  if (!opts?.force) {
+    // Ignora runs órfãos (killed mid-flight com stats.running=true).
+    const last = await getLastAvecSync(effectiveMode, { finishedOnly: true })
+    if (last?.created_at) {
+      const age = Date.now() - new Date(last.created_at).getTime()
+      if (age >= 0 && age < minGap) {
+        return ok({
+          skipped: true,
+          reason: 'sync_recente',
+          mode: effectiveMode,
+          last,
+          schedule: effectiveMode === 'fast' ? 'intraday' : 'full',
+          note: `Último sync ${effectiveMode} há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
+        })
       }
     }
+  }
 
-    // Purge só em admin force ou cron full — nunca em cada webhook (queimaria Neon).
-    if ((opts?.force || (opts?.cron && mode === 'full')) && !opts?.bypassMinGap) {
+  try {
+    // Purge só em admin force ou cron full — nunca em cada webhook.
+    if ((opts?.force || (opts?.cron && effectiveMode === 'full')) && !opts?.webhook) {
       try {
         await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
       } catch (purgeErr) {
-        if (isNeonQuotaError(purgeErr)) {
+        if (isDbQuotaError(purgeErr)) {
           if (opts?.cron) {
             return ok({
               skipped: true,
-              reason: 'neon_quota',
-              mode,
-              note: neonQuotaUserMessage(purgeErr),
+              reason: 'db_quota',
+              mode: effectiveMode,
+              note: dbQuotaUserMessage(purgeErr),
             })
           }
-          return err(neonQuotaUserMessage(purgeErr), 503)
+          return err(dbQuotaUserMessage(purgeErr), 503)
         }
         throw purgeErr
       }
@@ -119,39 +118,39 @@ async function executeSync(
       // não bloqueia sync
     }
 
-    const run = await runAvecSync(mode)
+    const run = await runAvecSync(effectiveMode)
     return ok({
       ...run,
       skipped: false,
-      mode,
-      schedule: mode === 'fast' ? 'intraday' : 'full',
+      mode: effectiveMode,
+      schedule: effectiveMode === 'fast' ? 'intraday' : 'full',
       note:
-        mode === 'fast'
+        effectiveMode === 'fast'
           ? 'Sync fast — agenda/caixa do dia (sem P1–P3)'
           : 'Sync full — catálogo + P1/P2/P3',
     })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
-      // Cron/webhook: skip silencioso — outro sync ainda está no Neon.
+      // Cron/webhook: skip silencioso — outro sync ainda está no banco.
       return ok({
         skipped: true,
         reason: 'sync_em_andamento',
-        mode,
+        mode: effectiveMode,
         holder: e.holder,
         expires_at: e.expiresAt,
         note: 'Outro sync Avec já está em execução (lock distribuído)',
       })
     }
-    if (isNeonQuotaError(e)) {
+    if (isDbQuotaError(e)) {
       if (opts?.cron) {
         return ok({
           skipped: true,
-          reason: 'neon_quota',
-          mode,
-          note: neonQuotaUserMessage(e),
+          reason: 'db_quota',
+          mode: effectiveMode,
+          note: dbQuotaUserMessage(e),
         })
       }
-      return err(neonQuotaUserMessage(e), 503)
+      return err(dbQuotaUserMessage(e), 503)
     }
     throw e
   }
@@ -159,14 +158,16 @@ async function executeSync(
 
 export async function POST(req: NextRequest) {
   try {
-    if (!(await authorize(req))) return err('Não autorizado', 401)
-    const cron = isCronAuthorized(req)
-    const fromWebhook = req.nextUrl.searchParams.get('source') === 'webhook'
+    const auth = await authorize(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+    const webhook =
+      req.headers.get('x-rom-sync-reason') === 'webhook' ||
+      req.nextUrl.searchParams.get('source') === 'webhook'
     return await executeSync(req, {
-      force: !cron,
+      force: !auth.cron,
       defaultMode: 'full',
-      cron,
-      bypassMinGap: fromWebhook,
+      cron: auth.cron,
+      webhook,
     })
   } catch (e) {
     return handleError(e)
@@ -175,10 +176,10 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    if (!(await authorize(req))) return err('Não autorizado', 401)
+    const auth = await authorize(req)
+    if (!auth.ok) return err(auth.message, auth.status)
 
-    const cron = isCronAuthorized(req)
-    if (cron) {
+    if (auth.cron) {
       return await executeSync(req, { defaultMode: parseMode(req, 'fast'), cron: true })
     }
 
@@ -190,22 +191,23 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '15 */2 * * *', mode: 'fast', path: '/api/avec/sync' },
+        fast: { schedule: '10,30,50 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: {
-          schedule: '0 12,22 * * *',
+          schedule: '35 10,22 * * *',
           mode: 'full',
           path: '/api/avec/sync?mode=full',
-          note: '09:00 / 19:00 America/Sao_Paulo — catálogo 0004 só 1×/dia',
+          note: '07:35 / 19:35 America/Sao_Paulo — offset vs BR (:20)',
         },
-        estoque_fast: { schedule: '45 */4 * * *', path: '/api/estoque/sync' },
-        estoque_full: { schedule: '50 23 * * *', path: '/api/estoque/sync?mode=full' },
+        estoque_fast: { schedule: '35 * * * *', path: '/api/estoque/sync' },
+        estoque_full: { schedule: '55 11 * * *', path: '/api/estoque/sync?mode=full' },
         purge: {
-          schedule: '10 7 * * *',
+          schedule: '25 7 * * *',
           path: '/api/avec/purge-snapshots',
-          note: '04:10 America/Sao_Paulo',
+          note: '04:25 America/Sao_Paulo — offset vs BR (:10)',
         },
+        token: { schedule: '30 */3 * * *', path: '/api/avec/refresh-token' },
         cadence:
-          'fast 2h + full 2×/dia (09/19 BRT) + estoque 4h/1×dia + purge diário — tempo real via webhook Avec',
+          'fast ~20 min (offset BR) · full 2×/dia · estoque horário · token 3h · purge diário — webhook só fast',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),

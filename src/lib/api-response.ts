@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { Logger } from '@/lib/logger'
 import { isProduction } from '@/lib/env'
-import { isNeonQuotaError, neonQuotaUserMessage } from '@/lib/avec/neon-errors'
+import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
 const logger = new Logger('API')
 
@@ -45,11 +45,11 @@ export function handleError(e: unknown) {
   if (e instanceof ZodError) {
     return err(e.issues.map((i) => i.message).join(', '), 422)
   }
-  if (isNeonQuotaError(e)) {
-    logger.error('Neon quota blocked request', {
+  if (isDbQuotaError(e)) {
+    logger.error('DB quota blocked request', {
       message: e instanceof Error ? e.message : String(e),
     })
-    return err(neonQuotaUserMessage(e), 503)
+    return err(dbQuotaUserMessage(e), 503)
   }
   if (e instanceof Error) {
     // Log full error server-side, return generic message to client

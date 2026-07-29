@@ -6,6 +6,8 @@ import {
   logEvent,
   setPreferredManicurist,
   setPreferredHairstylist,
+  resolveUpsertPhone,
+  type ContactRow,
 } from '@/lib/contacts'
 import {
   listServices,
@@ -58,6 +60,7 @@ import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
 import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
+import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
 
 export type AvecSyncMode = 'fast' | 'full'
 
@@ -78,6 +81,8 @@ export interface AvecSyncStats {
   p1_rows?: number
   p2_rows?: number
   p3_rows?: number
+  /** true enquanto o job ainda não chamou finish — excluído do min-gap. */
+  running?: boolean
 }
 
 export interface AvecSyncRun {
@@ -102,9 +107,24 @@ async function recordSyncRun(kind: string, status: AvecSyncRun['status'], stats:
 /** Abre run no início — snapshots recebem sync_run_id correto. */
 async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<AvecSyncRun> {
   const sql = getSql()
+  // Runs mortos por timeout/kill não devem bloquear o min-gap / status UI.
+  await sql`
+    update avec_sync_runs
+    set
+      status = 'error',
+      error = coalesce(error, 'Sync interrompido (timeout/kill)'),
+      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
+    where kind in ('fast', 'full', 'stock_fast', 'stock_full')
+      and coalesce(stats->>'running', 'false') = 'true'
+      and (
+        kind = ${kind}
+        or created_at < now() - interval '8 minutes'
+      )
+  `
+  const starting: AvecSyncStats = { ...stats, running: true }
   const rows = (await sql`
     insert into avec_sync_runs (kind, status, stats)
-    values (${kind}, 'partial', ${stats})
+    values (${kind}, 'partial', ${starting})
     returning *
   `) as AvecSyncRun[]
   return rows[0]!
@@ -117,30 +137,53 @@ async function finishAvecSyncRun(
   error?: string,
 ): Promise<AvecSyncRun> {
   const sql = getSql()
+  const finished: AvecSyncStats = { ...stats, running: false }
   const rows = (await sql`
     update avec_sync_runs
-    set status = ${status}, stats = ${stats}, error = ${error ?? null}
+    set status = ${status}, stats = ${finished}, error = ${error ?? null}
     where id = ${id}::uuid
     returning *
   `) as AvecSyncRun[]
   return rows[0]!
 }
 
-export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null> {
+export async function getLastAvecSync(
+  kind?: string,
+  opts?: { finishedOnly?: boolean },
+): Promise<AvecSyncRun | null> {
   const sql = getSql()
+  // NÃO fazer UPDATE aqui — Relatórios/Hoje/Visão chamam isto a cada load.
+  // Orphans são saneados em begin / abandonStaleAvecSyncRuns.
+  const finishedOnly = opts?.finishedOnly === true
   if (kind) {
-    const rows = (await sql`
-      select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
-    `) as AvecSyncRun[]
+    const rows = finishedOnly
+      ? ((await sql`
+          select * from avec_sync_runs
+          where kind = ${kind}
+            and coalesce(stats->>'running', 'false') <> 'true'
+          order by created_at desc
+          limit 1
+        `) as AvecSyncRun[])
+      : ((await sql`
+          select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
+        `) as AvecSyncRun[])
     return rows[0] ?? null
   }
   // Hoje/badge: só agenda Avec (fast/full) — não misturar stock_* .
-  const rows = (await sql`
-    select * from avec_sync_runs
-    where kind in ('fast', 'full')
-    order by created_at desc
-    limit 1
-  `) as AvecSyncRun[]
+  const rows = finishedOnly
+    ? ((await sql`
+        select * from avec_sync_runs
+        where kind in ('fast', 'full')
+          and coalesce(stats->>'running', 'false') <> 'true'
+        order by created_at desc
+        limit 1
+      `) as AvecSyncRun[])
+    : ((await sql`
+        select * from avec_sync_runs
+        where kind in ('fast', 'full')
+        order by created_at desc
+        limit 1
+      `) as AvecSyncRun[])
   return rows[0] ?? null
 }
 
@@ -246,6 +289,30 @@ function warnIfTruncated(stats: AvecSyncStats, reportId: string, result: Awaited
   if (result.truncated) stats.warnings.push(formatTruncationWarning(reportId, result))
 }
 
+/**
+ * Dedupa upserts no batch do sync: mesmo telefone (ou mesmo avec id) reusa a
+ * mesma Promise encadeada — evita corrida contacts_phone_idx dentro do relatório.
+ */
+function createBatchContactUpserter() {
+  const chains = new Map<string, Promise<ContactRow>>()
+
+  return function upsertInBatch(
+    input: Parameters<typeof upsertContact>[0],
+  ): Promise<ContactRow> {
+    const phone = resolveUpsertPhone(input.phone)
+    const avec = input.avecClientId?.trim() || null
+    const key = phone ? `p:${phone}` : avec ? `a:${avec}` : null
+    if (!key) return upsertContact(input)
+
+    const prev = chains.get(key)
+    // then(fn, fn): após rejeição a cadeia continua (mesmo padrão de withUpsertKey).
+    const run = () => upsertContact(input)
+    const next = (prev ?? Promise.resolve()).then(run, run)
+    chains.set(key, next)
+    return next
+  }
+}
+
 /** Dump / sync Avec com canal avec preso em "novo" → importado (≠ lead WhatsApp). */
 async function healImportadoStatus(stats: AvecSyncStats) {
   try {
@@ -309,6 +376,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   const todayOpenServiceIds: string[] = []
   let todayBooked = 0
   let todayRows = 0
+  const upsertInBatch = createBatchContactUpserter()
 
   for (const row of result.rows) {
     try {
@@ -339,7 +407,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         continue
       }
 
-      const contact = await upsertContact({
+      const contact = await upsertInBatch({
         avecClientId: appt.avecClientId ?? undefined,
         name: appt.clientName,
         email: appt.email,
@@ -451,6 +519,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   const today = todayIso()
   let durationSumMinutes = 0
   let durationCount = 0
+  const upsertInBatch = createBatchContactUpserter()
 
   for (const row of result.rows) {
     try {
@@ -467,7 +536,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         durationCount++
       }
 
-      const contact = await upsertContact({
+      const contact = await upsertInBatch({
         avecClientId: att.avecClientId ?? undefined,
         name: att.clientName,
         phone: att.phone,
@@ -914,7 +983,7 @@ async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
 }
 
 export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSyncRun> {
-  // Fast e full compartilham o mesmo lease — evita overlap no Neon entre cron/webhook.
+  // Fast e full compartilham o mesmo lease — evita overlap no Postgres entre cron/webhook.
   return withSyncLock(SYNC_LOCK_KEYS.avec, () => runAvecSyncUnlocked(mode), {
     ttlMs: 6 * 60 * 1000,
     owner: `avec-${mode}`,
@@ -925,6 +994,11 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
   }
+
+  // JWT ~12h: renova antes do primeiro report (evita 401 + banner "token expirado").
+  await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {
+    // sync continua — fetchAvecReport ainda tenta force-refresh no 401
+  })
 
   const debug = process.env.AVEC_SYNC_DEBUG === '1' || process.env.AVEC_SYNC_DEBUG === 'true'
   const step = (label: string) => {
