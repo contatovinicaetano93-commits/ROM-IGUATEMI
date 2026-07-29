@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Columns3, RefreshCw } from 'lucide-react'
-import { apiFetch } from '@/lib/api-client'
+import { apiFetch, clearApiClientCache } from '@/lib/api-client'
 import { fmtScheduleParts } from '@/lib/salon/format'
 import { contactHref } from '@/lib/auth-redirect'
+import { useLiveRefresh } from '@/lib/use-live-refresh'
 import { CountBadge } from '../_components/ui'
 import {
   CollapsibleBody,
@@ -107,24 +108,37 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (opts?: { fresh?: boolean; silent?: boolean }) => {
+    const silent = opts?.silent === true
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
-      const res = await apiFetch('/api/pipeline', { cache: 'no-store', timeoutMs: 25_000 })
+      if (opts?.fresh || silent) clearApiClientCache('/api/pipeline')
+      const res = await apiFetch('/api/pipeline', {
+        cache: 'no-store',
+        clientCache: opts?.fresh || silent ? false : undefined,
+        timeoutMs: 25_000,
+      })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setData(json.data)
+      setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      if (!silent) setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    load()
+    void load()
   }, [load])
+
+  useLiveRefresh(() => {
+    void load({ silent: true })
+  }, 60_000)
 
   const dayLabel = data
     ? new Date(data.day + 'T12:00:00').toLocaleDateString('pt-BR', {
@@ -150,7 +164,7 @@ export default function PipelinePage() {
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={() => void load({ fresh: true })}
           disabled={loading}
           className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
         >
