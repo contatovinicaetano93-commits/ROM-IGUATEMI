@@ -14,6 +14,17 @@ export async function deliverDirectorReport(
   report: DirectorReport,
   stage: DirectorReportStage = 'all'
 ) {
+  if (report.source === 'error') {
+    return {
+      email: {
+        ok: false,
+        to: getDirectorReportRecipients(),
+        error: 'Sem dados Avec — envio cancelado (sem fixture)',
+      },
+      telegram: null as { ok: boolean; error?: string; chat?: string } | null,
+    }
+  }
+
   const email = await sendDirectorReportEmail(report, stage)
   const unitName = getBrand().displayName
 
@@ -25,7 +36,7 @@ export async function deliverDirectorReport(
         report.source === 'mock'
           ? `${unitName} · Relatório diretoria [DEMO / mock — não usar para decisão]`
           : report.source === 'partial'
-            ? `${unitName} · Relatório diretoria [PARCIAL — Avec + demo]`
+            ? `${unitName} · Relatório diretoria [PARCIAL — só etapas Avec OK]`
             : `${unitName} · Relatório diretoria`,
         stage === 'all' ? 'Etapas: 0011 + 0021' : `Etapa: ${stage}`,
       ]
