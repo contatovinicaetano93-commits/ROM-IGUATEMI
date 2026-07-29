@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Plus,
@@ -110,8 +110,12 @@ function whatsappHrefFor(c: Contact): string | null {
 export default function ContatosPage() {
   const [mode, setMode] = useState<ListMode>('reactivate')
   const [queue, setQueue] = useState<ReactivateQueue>('overdue')
-  const [queueInitialized, setQueueInitialized] = useState(false)
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [queueCounts, setQueueCounts] = useState<{
+    overdue: number
+    due_soon: number
+    scheduled: number
+  }>({ overdue: 0, due_soon: 0, scheduled: 0 })
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -136,6 +140,7 @@ export default function ContatosPage() {
       const params = new URLSearchParams({ sort: 'urgency', limit: '100' })
       if (mode === 'reactivate') {
         params.set('pending', 'true')
+        params.set('queue', queue)
       } else {
         params.set('q', debouncedQuery)
       }
@@ -147,6 +152,14 @@ export default function ContatosPage() {
         setContacts(json.data ?? [])
         const total = json.meta?.total
         setTotalInBase(typeof total === 'number' ? total : null)
+        const q = json.meta?.queues
+        if (q && typeof q.overdue === 'number') {
+          setQueueCounts({
+            overdue: q.overdue,
+            due_soon: q.due_soon,
+            scheduled: q.scheduled,
+          })
+        }
       }
     } catch (e) {
       setError(String(e))
@@ -158,47 +171,9 @@ export default function ContatosPage() {
   useEffect(() => {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, debouncedQuery])
+  }, [mode, debouncedQuery, queue])
 
-  const queues = useMemo(() => {
-    const overdue: Contact[] = []
-    const due_soon: Contact[] = []
-    const scheduled: Contact[] = []
-    for (const c of contacts) {
-      const q = contactQueue(c)
-      if (q === 'overdue') overdue.push(c)
-      else if (q === 'due_soon') due_soon.push(c)
-      else if (q === 'scheduled') scheduled.push(c)
-    }
-    return { overdue, due_soon, scheduled }
-  }, [contacts])
-
-  useEffect(() => {
-    if (mode !== 'reactivate' || loading || queueInitialized) return
-    const first: ReactivateQueue =
-      queues.overdue.length > 0
-        ? 'overdue'
-        : queues.due_soon.length > 0
-          ? 'due_soon'
-          : queues.scheduled.length > 0
-            ? 'scheduled'
-            : 'overdue'
-    setQueue(first)
-    setQueueInitialized(true)
-  }, [mode, loading, queues, queueInitialized])
-
-  useEffect(() => {
-    if (mode === 'reactivate') setQueueInitialized(false)
-  }, [mode])
-
-  const visible =
-    mode === 'search'
-      ? contacts
-      : queue === 'overdue'
-        ? queues.overdue
-        : queue === 'due_soon'
-          ? queues.due_soon
-          : queues.scheduled
+  const visible = contacts
 
   const countLabel =
     mode === 'search'
@@ -207,7 +182,9 @@ export default function ContatosPage() {
             totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
         : 'busque na base'
-      : `${visible.length} na fila`
+      : `${visible.length} na fila${
+          totalInBase != null && totalInBase > visible.length ? ` · ${totalInBase} no total` : ''
+        }`
 
   const emptyCopy =
     mode === 'search'
@@ -275,9 +252,9 @@ export default function ContatosPage() {
         <div className="no-scrollbar flex gap-2 overflow-x-auto">
           {(
             [
-              { id: 'overdue' as const, label: 'Atrasados', count: queues.overdue.length },
-              { id: 'due_soon' as const, label: 'Vencendo', count: queues.due_soon.length },
-              { id: 'scheduled' as const, label: 'Agendados', count: queues.scheduled.length },
+              { id: 'overdue' as const, label: 'Atrasados', count: queueCounts.overdue },
+              { id: 'due_soon' as const, label: 'Vencendo', count: queueCounts.due_soon },
+              { id: 'scheduled' as const, label: 'Agendados', count: queueCounts.scheduled },
             ] as const
           ).map((q) => {
             const active = queue === q.id

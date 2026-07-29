@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { ok, okCached, handleError, err } from '@/lib/api-response'
 import { cachedFetch, MemoryCache } from '@/lib/cache'
-import { listContactsWithSummary } from '@/lib/contact-summary'
+import { countUrgencyQueues, listContactsWithSummary } from '@/lib/contact-summary'
 import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
 import { addService } from '@/lib/services'
 import { SERVICE_CATEGORIES } from '@/lib/services'
@@ -30,6 +30,14 @@ const schema = z.object({
   services: z.array(serviceSchema).optional(),
 })
 
+const URGENCY_QUEUES = ['overdue', 'due_soon', 'scheduled'] as const
+type UrgencyQueue = (typeof URGENCY_QUEUES)[number]
+
+function parseUrgencyQueue(raw: string | null): UrgencyQueue | null {
+  if (!raw) return null
+  return (URGENCY_QUEUES as readonly string[]).includes(raw) ? (raw as UrgencyQueue) : null
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireAuth(req)
@@ -41,18 +49,27 @@ export async function GET(req: NextRequest) {
     const query = searchParams.get('q') ?? searchParams.get('query') ?? null
     const status = searchParams.get('status')
     const channel = searchParams.get('channel')
+    const urgencyQueue = parseUrgencyQueue(searchParams.get('queue'))
+    const countsOnly = searchParams.get('counts') === '1' || searchParams.get('counts') === 'true'
 
     const rawLimit = Number(searchParams.get('limit') ?? 100)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 100
 
+    if (countsOnly) {
+      const cacheKey = `contacts:queue-counts:v1:ch=${channel ?? ''}`
+      const queues = await cachedFetch(cacheKey, () => countUrgencyQueues({ channel }), 30)
+      return okCached(null, 30, { queues })
+    }
+
     const cacheKey = [
-      'contacts:list:v6',
+      'contacts:list:v7',
       `lim=${limit}`,
       `sort=${sort}`,
       `pend=${pendingOnly ? 1 : 0}`,
       `q=${query ?? ''}`,
       `st=${status ?? ''}`,
       `ch=${channel ?? ''}`,
+      `uq=${urgencyQueue ?? ''}`,
     ].join(':')
 
     const result = await cachedFetch(
@@ -65,12 +82,21 @@ export async function GET(req: NextRequest) {
           status,
           channel,
           orderBy: sort === 'name' ? 'name' : 'urgency',
+          urgencyQueue,
         })
         let items = rawItems
         if (sort === 'urgency') {
           items = [...items].sort(compareByOverdueThenName)
         }
-        return { items, total }
+
+        let queueTotal = total
+        let queues: Awaited<ReturnType<typeof countUrgencyQueues>> | null = null
+        if (pendingOnly) {
+          queues = await countUrgencyQueues({ channel })
+          if (urgencyQueue) queueTotal = queues[urgencyQueue]
+        }
+
+        return { items, total: queueTotal, queues }
       },
       query ? 15 : 30,
     )
@@ -84,6 +110,8 @@ export async function GET(req: NextRequest) {
         status: status ?? 'all',
         channel: channel ?? 'all',
         pending: pendingOnly,
+        queue: urgencyQueue ?? 'all',
+        queues: result.queues ?? undefined,
       },
     )
   } catch (e) {
@@ -130,6 +158,7 @@ export async function POST(req: NextRequest) {
     })
 
     MemoryCache.deletePrefix('contacts:list:')
+    MemoryCache.deletePrefix('contacts:queue-counts:')
     return ok(contact, undefined, 201)
   } catch (e) {
     return handleError(e)
