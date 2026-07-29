@@ -92,7 +92,7 @@ export async function listActionItems(opts: ListActionItemsOpts = {}): Promise<A
     select cs.*, c.name as contact_name, c.status as contact_status, c.phone as contact_phone
     from client_services cs
     join contacts c on c.id = cs.contact_id
-    where cs.active = true and cs.contact_id in ${sql(ids)}
+    where cs.active = true and cs.contact_id = any(${ids}::uuid[])
     order by cs.contact_id
   `) as (JoinedService & { contact_phone: string | null })[]
 
