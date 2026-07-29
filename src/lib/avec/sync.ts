@@ -365,7 +365,8 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
 }
 
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
-  const range = mode === 'fast' ? periodRange(0, 0) : periodRange(1, 21)
+  // Fast: hoje + 7d (Contatos Agendados / visão da semana). Full: ontem → +21d.
+  const range = mode === 'fast' ? periodRange(0, 7) : periodRange(1, 21)
   // 0051: site = origem Online/Local ("" = todos). Unidade vem do token (salon_id).
   const params = { ...range, site: '', profissional_id: '', limit: 250 }
   const result = await fetchAllAvecReport('0051', params)
@@ -385,7 +386,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       if (!appt) continue
 
       const apptDay = appt.scheduledAt ? toSalonDateIso(appt.scheduledAt) : null
-      if (mode === 'fast' && apptDay && apptDay !== today) continue
+      // Não descartar dias futuros no fast — Contatos Agendados usa a semana.
 
       // Status agenda 0051. No-show KPI: fonte canônica é 0248 (não gravar aqui).
       // "Em Atendimento" / "A Realizar" = aberto — NÃO marcar pago nem perdido.
