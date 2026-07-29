@@ -127,13 +127,18 @@ export default function ContatosPage() {
   async function load() {
     setLoading(true)
     try {
+      if (mode === 'search' && !debouncedQuery) {
+        setError(null)
+        setContacts([])
+        setTotalInBase(null)
+        return
+      }
       const params = new URLSearchParams({ sort: 'urgency', limit: '100' })
       if (mode === 'reactivate') {
         params.set('pending', 'true')
-      } else if (debouncedQuery) {
+      } else {
         params.set('q', debouncedQuery)
       }
-      // Buscar sem texto: não lista a base (use o campo de busca no DB geral).
       const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) setError(json.error)
