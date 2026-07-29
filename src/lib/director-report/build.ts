@@ -58,6 +58,7 @@ export interface BuildDirectorReportOptions {
   selectedQuarter?: QuarterKey
   compareQuarter?: QuarterKey
   professionalId?: string
+  /** Só com “Forçar demo” / ?mock=1 — nunca no caminho normal. */
   forceMock?: boolean
   /** Qual etapa buscar na Avec (UI carrega 0011/0021 separado). */
   stages?: LiveDirectorStage
@@ -111,22 +112,74 @@ export async function buildDirectorReport(
     floorOnly ? { roles: DIRECTOR_FLOOR_ROLES } : undefined,
   )
   if (opts.professionalId) {
-    // Busca no roster completo se o filtro floor esconder o id pedido.
     const all = listDirectorProfessionals(true)
     professionals = all.filter((p) => p.id === opts.professionalId)
   }
 
-  const avecReady = isAvecConfigured() && !isAvecMock() && !opts.forceMock
-  let source: 'mock' | 'avec' | 'partial' = 'mock'
-  let return_blocks = want0011
-    ? buildMockReturnBlocks(professionals, selectedQuarter, compareQuarter)
-    : []
-  let revenue_blocks = want0021
-    ? buildMockRevenueBlocks(professionals, selectedMonth)
-    : []
-  let liveNote: string | null = null
+  // Demo explícito — único caminho que inventa números.
+  if (opts.forceMock || isAvecMock()) {
+    const return_blocks = want0011
+      ? buildMockReturnBlocks(professionals, selectedQuarter, compareQuarter)
+      : []
+    const revenue_blocks = want0021
+      ? buildMockRevenueBlocks(professionals, selectedMonth)
+      : []
+    const returnRates = return_blocks
+      .map((b) => b.quarters.find((x) => x.quarter === selectedQuarter)?.return_rate ?? null)
+      .filter((x): x is number => x != null)
+    const selectedRevenue = revenue_blocks.map((b) => {
+      const row = b.months.find((m) => m.month === selectedMonth)
+      return row ?? { revenue: 0, ticket_avg: 0, attended: 0 }
+    })
+    const totalRev = selectedRevenue.reduce((s, r) => s + r.revenue, 0)
+    const totalAtt = selectedRevenue.reduce((s, r) => s + r.attended, 0)
+    const draft: DirectorReport = {
+      generated_at: new Date().toISOString(),
+      period: {
+        selected_month: selectedMonth,
+        compare_months: compareMonths && Boolean(compareQuarter0021),
+        selected_quarter_0021: selectedQuarter0021,
+        compare_quarter_0021: compareQuarter0021,
+        selected_quarter: selectedQuarter,
+        compare_quarter: compareQuarter,
+        label: '',
+        label_0011: '',
+        label_0021: '',
+        reference_date: '',
+      },
+      source: 'mock',
+      avec_reports: { return: '0011', revenue: '0021' },
+      schedule_note: 'Dados de demonstração (mock) — não usar para decisão',
+      return_blocks,
+      revenue_blocks,
+      summary: {
+        professionals: professionals.length,
+        avg_return_rate:
+          returnRates.length > 0
+            ? returnRates.reduce((a, b) => a + b, 0) / returnRates.length
+            : null,
+        total_revenue_selected_month: totalRev,
+        avg_ticket_selected_month: totalAtt > 0 ? Math.round(totalRev / totalAtt) : null,
+      },
+    }
+    draft.period.reference_date = reportReferenceDate(draft)
+    draft.period.label_0011 = label0011(draft)
+    draft.period.label_0021 = label0021(draft)
+    draft.period.label = reportPeriodLabel(draft)
+    return draft
+  }
 
-  if (avecReady) {
+  const avecReady = isAvecConfigured()
+  let source: 'mock' | 'avec' | 'error' | 'partial' = 'error'
+  let return_blocks: DirectorReport['return_blocks'] = []
+  let revenue_blocks: DirectorReport['revenue_blocks'] = []
+  let liveNote: string | null = null
+  let live0011 = false
+  let live0021 = false
+
+  if (!avecReady) {
+    liveNote = 'Avec não configurada — sem dados inventados'
+  } else {
     try {
       const live = await fetchLiveDirectorBlocks(
         professionals,
@@ -146,35 +199,49 @@ export async function buildDirectorReport(
             : directorFullBudget(),
         },
       )
-      // null = falha; [] = Avec OK sem dados no período (não fingir roster zerado).
-      if (want0011 && live.return_blocks !== null) {
-        return_blocks = live.return_blocks
-      }
-      if (want0021 && live.revenue_blocks !== null) {
-        revenue_blocks = live.revenue_blocks
-      }
-      if (want0011 && want0021) {
-        if (live.return_blocks !== null && live.revenue_blocks !== null) {
-          source = 'avec'
-        } else if (live.return_blocks !== null || live.revenue_blocks !== null) {
-          source = 'partial'
-          const missing = [
-            live.return_blocks === null ? '0011' : null,
-            live.revenue_blocks === null ? '0021' : null,
-          ]
-            .filter(Boolean)
-            .join('+')
-          liveNote = [
-            liveNote,
-            `Etapa ${missing} em demo — outra etapa Avec live.`,
-          ]
-            .filter(Boolean)
-            .join(' · ')
+      // null = falha → vazio; [] = Avec OK sem dados no período.
+      if (want0011) {
+        if (live.return_blocks !== null) {
+          return_blocks = live.return_blocks
+          live0011 = true
+        } else {
+          return_blocks = []
         }
-      } else if (want0011 && live.return_blocks !== null) {
+      }
+      if (want0021) {
+        if (live.revenue_blocks !== null) {
+          revenue_blocks = live.revenue_blocks
+          live0021 = true
+        } else {
+          revenue_blocks = []
+        }
+      }
+      const ok0011 = !want0011 || live0011
+      const ok0021 = !want0021 || live0021
+      if (ok0011 && ok0021) {
         source = 'avec'
-      } else if (want0021 && live.revenue_blocks !== null) {
-        source = 'avec'
+      } else if (live0011 || live0021) {
+        source = 'partial'
+        const missing = [
+          want0011 && !live0011 ? '0011' : null,
+          want0021 && !live0021 ? '0021' : null,
+        ]
+          .filter(Boolean)
+          .join('+')
+        liveNote = [
+          liveNote,
+          `Etapa ${missing} sem dado Avec — bloco vazio (sem fixture).`,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      } else {
+        source = 'error'
+        liveNote = [
+          liveNote,
+          'Avec sem dados utilizáveis — relatório vazio (sem fixture)',
+        ]
+          .filter(Boolean)
+          .join(' · ')
       }
       if (live.warnings.length) {
         liveNote = [
@@ -185,7 +252,10 @@ export async function buildDirectorReport(
           .join(' · ')
       }
     } catch (e) {
-      liveNote = `Avec live falhou — usando fixture: ${e instanceof Error ? e.message : String(e)}`
+      source = 'error'
+      return_blocks = []
+      revenue_blocks = []
+      liveNote = `Avec live falhou — sem fixture: ${e instanceof Error ? e.message : String(e)}`
       console.warn('[director-report]', liveNote)
     }
   }
@@ -257,9 +327,9 @@ export async function buildDirectorReport(
         ? '⚠ Nenhum profissional cadastrado no roster desta unidade — relatório sai vazio (sem envio útil).'
         : source === 'avec'
           ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 live Avec${liveNote ? ` · ${liveNote}` : ''}`
-          : avecReady
-            ? `Envio em 2 etapas (terças 08:00 SP): 0011/0021 · fallback fixture${liveNote ? ` · ${liveNote}` : ''}`
-            : 'Envio em 2 etapas (terças 08:00 SP): 0011 trimestre vs trimestre · 0021 mês (ou trimestre vs trimestre) · dados mock',
+          : source === 'partial'
+            ? `Dados parciais Avec (etapa faltante vazia, sem fixture)${liveNote ? ` · ${liveNote}` : ''}`
+            : `Sem dados Avec — relatório vazio (sem fixture)${liveNote ? ` · ${liveNote}` : ''}`,
     return_blocks,
     revenue_blocks,
     summary: {

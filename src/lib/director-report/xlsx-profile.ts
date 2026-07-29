@@ -55,15 +55,14 @@ export async function buildProfessionalProfileWorkbook(
 
   let months: MonthRevenueRow[]
   let source: 'mock' | 'avec' = 'mock'
-  if (avecReady) {
-    try {
-      months = await fetchProfessionalProfileMonths(professional, selectedMonth)
-      source = 'avec'
-    } catch {
-      months = buildMockRevenueBlocks([professional], selectedMonth)[0]!.months
-    }
-  } else {
+  if (opts.forceMock || isAvecMock()) {
     months = buildMockRevenueBlocks([professional], selectedMonth)[0]!.months
+    source = 'mock'
+  } else if (avecReady) {
+    months = await fetchProfessionalProfileMonths(professional, selectedMonth)
+    source = 'avec'
+  } else {
+    throw new Error('Avec não configurada — perfil XLSX só com dados reais (use ?mock=1 só para treino)')
   }
 
   const quarters = aggregateQuarterRevenue(months)

@@ -488,9 +488,9 @@ function buildQuarterRow(
 }
 
 export interface LiveDirectorBlocks {
-  /** null = etapa 0011 falhou ao montar (bug/exceção) — quem chama deve cair pro mock só dessa etapa. */
+  /** null = etapa 0011 falhou ao montar (bug/exceção) — caller deixa bloco vazio (sem fixture). */
   return_blocks: ProfessionalReturnBlock[] | null
-  /** null = etapa 0021 falhou ao montar (bug/exceção) — quem chama deve cair pro mock só dessa etapa. */
+  /** null = etapa 0021 falhou ao montar (bug/exceção) — caller deixa bloco vazio (sem fixture). */
   revenue_blocks: ProfessionalRevenueBlock[] | null
   warnings: string[]
 }
@@ -841,14 +841,12 @@ export async function fetchLiveDirectorBlocks(
 
   if (want0021 && !hasAnyRevenue) {
     warnings.push('0021 sem faturamento casado aos profissionais do portfólio')
-    revenue_blocks = []
   }
-  // Sem sinal útil → null para o caller manter mock (evita tabela vazia "Nenhum profissional").
+  // Sem sinal útil: mantém blocos reais (vazios/zeros) — não nullar para forçar mock.
   if (want0011 && return_blocks != null && !hasAnyReturn) {
     warnings.push(
       '0011 sem lista/taxa no período — Avec 0011 pode estar indisponível neste salão; fallback 0007 sem dados',
     )
-    return_blocks = null
   }
 
   return { return_blocks, revenue_blocks, warnings }

@@ -674,24 +674,22 @@ export default function RelatorioDiretoriaPage() {
                     Fonte Avec live (0011) no trimestre selecionado.
                   </p>
                 )}
+              {data?.source === 'partial' && (
+                <p className="text-warning">
+                  Relatório parcial — só etapas Avec OK. Etapa faltante ficou vazia (sem fixture).
+                </p>
+              )}
               {data?.source === 'error' && (
                 <p className="text-warning">
                   Relatório incompleto (timeout/falha Avec) — nenhum número inventado. Toque Atualizar
                   ou use “Forçar demo” só para treino.
                 </p>
               )}
-              {data?.source === 'mock' &&
-                (data.return_blocks?.some((b) => b.reactivation.length > 0) ? (
-                  <p className="text-muted">
-                    Lista disponível em modo demo/parcial — toque Atualizar para tentar Avec/local de
-                    novo.
-                  </p>
-                ) : (
-                  <p className="text-warning">
-                    Dados de demonstração (mock / fallback). Com token Avec e sync OK, a lista 0011
-                    vem ao vivo; sem isso, fixture (Dani) + síntese.
-                  </p>
-                ))}
+              {data?.source === 'mock' && (
+                <p className="text-warning">
+                  Dados de demonstração (mock). Só aparecem com “Forçar demo” — não usar para decisão.
+                </p>
+              )}
             </div>
             <div className="space-y-4">
               {(proId0011 ? selectedReturn : selectedReturn.slice(0, 3)).map(
