@@ -34,7 +34,7 @@ export const ERROR_MESSAGES = {
     AVEC_TIMEOUT: 'Timeout na sincronização com Avec',
     AVEC_RATE_LIMIT: 'Limite de requisições à Avec atingido. Tente novamente em alguns minutos.',
     AVEC_TOKEN_EXPIRED:
-      'Token Avec expirado — o refresh automático (a cada 6h) falhou; force em /api/avec/refresh-token?force=1',
+      'Token Avec expirado — o refresh automático (a cada 3h) falhou; force em /api/avec/refresh-token?force=1',
     WEBHOOK_INVALID: 'Webhook inválido ou assinatura incorreta',
   },
 
