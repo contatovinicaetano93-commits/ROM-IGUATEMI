@@ -1,4 +1,4 @@
-import { getSql, peekResolvedDatabaseUrl, peekDatabaseUrlSource, peekDatabaseHost } from '@/lib/db'
+import { getSql, peekResolvedDatabaseUrl, peekDatabaseUrlSource, peekDatabaseHost, peekDatabasePort } from '@/lib/db'
 import { Logger } from '@/lib/logger'
 import { isAvecConfigured, isAvecMock, getAvecBaseUrl } from '@/lib/avec/client'
 import { isAuthEnabled, isFinanceAuthConfigured, isStockAuthConfigured } from '@/lib/auth'
@@ -172,6 +172,7 @@ export async function getPublicHealthStatus() {
     db_quota,
     database: {
       host: peekDatabaseHost(),
+      port: peekDatabasePort(),
       source: peekDatabaseUrlSource(),
     },
     metrics_ytd,
@@ -225,6 +226,7 @@ export async function getHealthStatus() {
       error,
       db_quota,
       host: peekDatabaseHost(),
+      port: peekDatabasePort(),
       source: peekDatabaseUrlSource(),
     },
     claude: {

@@ -122,6 +122,18 @@ export function peekDatabaseHost(): string | null {
   }
 }
 
+/** Porta efetiva após rewrite 5432→6543 (sem credenciais). */
+export function peekDatabasePort(): string | null {
+  const url = peekResolvedDatabaseUrl()
+  if (!url) return null
+  try {
+    const u = new URL(toTransactionPoolerUrl(url))
+    return u.port || '5432'
+  } catch {
+    return null
+  }
+}
+
 function resolveDatabaseUrl(): string {
   const url = peekResolvedDatabaseUrl()
   if (!url) throw new Error('DATABASE_URL não configurada')
