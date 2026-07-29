@@ -129,8 +129,9 @@ async function orderContactsByUrgency(
  * ranqueados no SQL — sem carregar a tabela inteira de serviços.
  *
  * Só conta atraso/vencendo com last_done_at real (não inventa visita).
- * Vencendo: janela DUE_SOON_DAYS.
- * Filas exclusivas: atrasado > vencendo > agendado (igual à UI).
+ * Vencendo: janela DUE_SOON_DAYS (exclusivo vs atrasados).
+ * Agendados: qualquer contato com horário HOJE (não exclusivos —
+ * podem também estar atrasados/vencendo; a fila mostra a agenda).
  */
 async function rankUrgentContactIds(
   limit: number,
@@ -179,7 +180,17 @@ async function rankUrgentContactIds(
             and (scheduled_at at time zone 'America/Sao_Paulo')::date
               <= (now() at time zone 'America/Sao_Paulo')::date
                 + (${SCHEDULED_SOON_DAYS} * interval '1 day')
-        )::int as scheduled_soon
+        )::int as scheduled_soon,
+        count(*) filter (
+          where scheduled_at is not null
+            and (scheduled_at at time zone 'America/Sao_Paulo')::date
+              = (now() at time zone 'America/Sao_Paulo')::date
+        )::int as scheduled_today,
+        min(scheduled_at) filter (
+          where scheduled_at is not null
+            and (scheduled_at at time zone 'America/Sao_Paulo')::date
+              = (now() at time zone 'America/Sao_Paulo')::date
+        ) as next_scheduled_today
       from svc
       group by contact_id
     )
@@ -196,19 +207,14 @@ async function rankUrgentContactIds(
           and pc.overdue = 0
           and pc.due_soon > 0
         )
-        or (
-          ${queue}::text = 'scheduled'
-          and pc.overdue = 0
-          and pc.due_soon = 0
-          and pc.scheduled_soon > 0
-        )
+        or (${queue}::text = 'scheduled' and pc.scheduled_today > 0)
       )
     order by
       case
+        when ${queue}::text = 'scheduled' then extract(epoch from pc.next_scheduled_today)
         when ${queue}::text = 'due_soon' then pc.due_soon
-        when ${queue}::text = 'scheduled' then pc.scheduled_soon
         else pc.max_overdue_days
-      end desc,
+      end asc nulls last,
       pc.max_overdue_days desc,
       pc.overdue desc,
       pc.due_soon desc,
@@ -218,7 +224,7 @@ async function rankUrgentContactIds(
   return rows.map((r) => r.contact_id)
 }
 
-/** Totais por fila exclusiva (para chips Reativar). */
+/** Totais das filas Reativar (Atrasados/Vencendo exclusivos; Agendados = agenda de hoje). */
 export async function countUrgencyQueues(
   opts: { channel?: string | null } = {},
 ): Promise<UrgencyQueueCounts> {
@@ -248,20 +254,15 @@ export async function countUrgencyQueues(
         count(*) filter (
           where scheduled_at is not null
             and (scheduled_at at time zone 'America/Sao_Paulo')::date
-              >= (now() at time zone 'America/Sao_Paulo')::date
-            and (scheduled_at at time zone 'America/Sao_Paulo')::date
-              <= (now() at time zone 'America/Sao_Paulo')::date
-                + (${SCHEDULED_SOON_DAYS} * interval '1 day')
-        )::int as scheduled_soon
+              = (now() at time zone 'America/Sao_Paulo')::date
+        )::int as scheduled_today
       from svc
       group by contact_id
     )
     select
       count(*) filter (where pc.overdue > 0)::int as overdue,
       count(*) filter (where pc.overdue = 0 and pc.due_soon > 0)::int as due_soon,
-      count(*) filter (
-        where pc.overdue = 0 and pc.due_soon = 0 and pc.scheduled_soon > 0
-      )::int as scheduled
+      count(*) filter (where pc.scheduled_today > 0)::int as scheduled
     from per_contact pc
     join contacts c on c.id = pc.contact_id
     where c.anonymized_at is null
