@@ -202,7 +202,7 @@ export default function ContatosPage() {
         ? 'Nenhum contato encontrado.'
         : 'Nenhum contato na base.'
       : queue === 'overdue'
-        ? 'Nenhum atrasado (sem visita registrada ou cadência vencida).'
+        ? 'Nenhum atrasado (cadência vencida com visita registrada).'
         : queue === 'due_soon'
           ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
           : 'Nenhum agendado.'

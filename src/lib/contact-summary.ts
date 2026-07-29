@@ -115,8 +115,8 @@ async function orderContactsByUrgency(
  * Contatos com sinal de urgência (atraso / vencendo / agendado),
  * ranqueados no SQL — sem carregar a tabela inteira de serviços.
  *
- * Sem last_done_at: trata como atrasado (created_at do sync não é baseline).
- * Vencendo: janela DUE_SOON_DAYS (não 7d — cadências típicas são 30+).
+ * Só conta atraso/vencendo com last_done_at real (não inventa visita).
+ * Vencendo: janela DUE_SOON_DAYS.
  */
 async function rankUrgentContactIds(
   limit: number,
@@ -130,11 +130,7 @@ async function rankUrgentContactIds(
         contact_id,
         scheduled_at,
         case
-          when cadence_days is null then null
-          when last_done_at is null
-            and (scheduled_at is null or scheduled_at < now())
-            then now() - (cadence_days * interval '1 day')
-          when last_done_at is null then null
+          when cadence_days is null or last_done_at is null then null
           else last_done_at + (cadence_days * interval '1 day')
         end as next_due
       from client_services
