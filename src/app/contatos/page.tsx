@@ -34,7 +34,7 @@ interface Contact {
   top_action: string | null
 }
 
-type ListMode = 'reactivate' | 'all' | 'search'
+type ListMode = 'reactivate' | 'search'
 type ReactivateQueue = 'overdue' | 'due_soon' | 'scheduled'
 
 function contactQueue(c: Contact): ReactivateQueue | null {
@@ -127,18 +127,13 @@ export default function ContatosPage() {
   async function load() {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
-        limit: mode === 'all' ? '500' : '100',
-        sort: mode === 'all' ? 'name' : 'urgency',
-      })
+      const params = new URLSearchParams({ sort: 'urgency', limit: '100' })
       if (mode === 'reactivate') {
         params.set('pending', 'true')
-      } else if (mode === 'search' && debouncedQuery) {
+      } else if (debouncedQuery) {
         params.set('q', debouncedQuery)
-      } else if (mode === 'search') {
-        // Buscar vazio: amostra recente (não a base inteira) — use Todos.
-        params.set('limit', '100')
       }
+      // Buscar sem texto: não lista a base (use o campo de busca no DB geral).
       const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) setError(json.error)
@@ -192,37 +187,33 @@ export default function ContatosPage() {
   }, [mode])
 
   const visible =
-    mode === 'reactivate'
-      ? queue === 'overdue'
+    mode === 'search'
+      ? contacts
+      : queue === 'overdue'
         ? queues.overdue
         : queue === 'due_soon'
           ? queues.due_soon
           : queues.scheduled
-      : contacts
 
   const countLabel =
-    mode === 'reactivate'
-      ? `${visible.length} na fila`
-      : mode === 'all'
+    mode === 'search'
+      ? debouncedQuery
         ? `${visible.length} contato${visible.length === 1 ? '' : 's'}${
             totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
-        : `${visible.length} contato${visible.length === 1 ? '' : 's'}${
-            totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
-          }${debouncedQuery ? '' : ' (digite para buscar)'}`
+        : 'busque na base'
+      : `${visible.length} na fila`
 
   const emptyCopy =
     mode === 'search'
       ? debouncedQuery
         ? 'Nenhum contato encontrado.'
         : 'Digite um nome ou telefone para buscar na base.'
-      : mode === 'all'
-        ? 'Nenhum contato na base desta unidade.'
-        : queue === 'overdue'
-          ? 'Nenhum atrasado (cadência vencida com visita registrada).'
-          : queue === 'due_soon'
-            ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
-            : 'Nenhum agendado hoje ou nos próximos 7 dias.'
+      : queue === 'overdue'
+        ? 'Nenhum atrasado (cadência vencida com visita registrada).'
+        : queue === 'due_soon'
+          ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
+          : 'Nenhum agendado hoje ou nos próximos 7 dias.'
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -233,9 +224,7 @@ export default function ContatosPage() {
           <p className="mt-0.5 text-xs text-muted">
             {mode === 'reactivate'
               ? 'Reative quem está atrasado, vencendo ou agendado'
-              : mode === 'all'
-                ? 'Todos os contatos da unidade (A–Z)'
-                : 'Busque por nome ou telefone em toda a base'}
+              : 'Busque por nome ou telefone em toda a base'}
             {' · '}
             {countLabel}
           </p>
@@ -251,12 +240,11 @@ export default function ContatosPage() {
       <div
         role="tablist"
         aria-label="Modo da lista"
-        className="grid grid-cols-3 rounded-2xl border border-border bg-card p-1"
+        className="grid grid-cols-2 rounded-2xl border border-border bg-card p-1"
       >
         {(
           [
             { id: 'reactivate' as const, label: 'Reativar' },
-            { id: 'all' as const, label: 'Todos' },
             { id: 'search' as const, label: 'Buscar' },
           ] as const
         ).map((tab) => {
@@ -358,22 +346,13 @@ export default function ContatosPage() {
             <p className="text-sm text-muted">{emptyCopy}</p>
             <div className="flex flex-wrap items-center justify-center gap-2">
               {mode === 'reactivate' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setMode('all')}
-                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-gold"
-                  >
-                    Ver todos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode('search')}
-                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-gold"
-                  >
-                    Buscar contato
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => setMode('search')}
+                  className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-gold"
+                >
+                  Buscar contato
+                </button>
               )}
               <button
                 type="button"
