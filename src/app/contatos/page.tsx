@@ -1,20 +1,22 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { Plus, X, Phone, Search, ChevronRight, AlertTriangle, Clock, Calendar } from 'lucide-react'
 import {
-  Avatar,
-  StatusPill,
-  PrimaryButton,
-  CHANNEL_LABEL,
-  STATUS_LABEL,
-} from '../_components/ui'
-import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
+  Plus,
+  X,
+  Phone,
+  Search,
+  AlertTriangle,
+  Clock,
+  Calendar,
+  MessageSquare,
+} from 'lucide-react'
+import { Avatar, PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
-import { timeAgo } from '@/lib/salon/format'
+import { whatsAppUrl } from '@/lib/salon/format'
 import { CATEGORY_LABEL } from '@/lib/salon/constants'
+import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
 
 interface Contact {
   id: string
@@ -32,29 +34,88 @@ interface Contact {
   top_action: string | null
 }
 
-/** Status fixos do funil — sempre disponíveis no filtro (mesmo com lista vazia). */
-const FUNNEL_STATUS_OPTIONS = ['novo', 'importado', 'em_atendimento', 'agendado', 'convertido', 'perdido']
+type ListMode = 'reactivate' | 'search'
+type ReactivateQueue = 'overdue' | 'due_soon' | 'scheduled'
 
-/** Canais fixos — filtro server-side (não só os da página atual). */
-const CHANNEL_OPTIONS = ['whatsapp', 'avec', 'manual', 'telegram', 'instagram']
-
-function statusFromSearchParam(raw: string | null): string {
-  if (raw && FUNNEL_STATUS_OPTIONS.includes(raw)) return raw
-  return 'all'
+function contactQueue(c: Contact): ReactivateQueue | null {
+  if (c.overdue > 0) return 'overdue'
+  if (c.due_soon > 0) return 'due_soon'
+  if (c.scheduled_soon > 0) return 'scheduled'
+  return null
 }
 
-function ContatosPageContent() {
-  const searchParams = useSearchParams()
+function serviceLine(c: Contact, queue: ReactivateQueue | null): string {
+  const action = c.top_action?.trim()
+  if (queue === 'overdue') {
+    const days = c.max_overdue_days
+    const base = action?.replace(/\s+atrasado$/i, '').trim() || 'Serviço'
+    return days > 0 ? `${base} · há ${days} dia${days === 1 ? '' : 's'}` : `${base} atrasado`
+  }
+  if (queue === 'due_soon') {
+    const base = action?.replace(/\s+vencendo$/i, '').trim() || 'Serviço'
+    return `${base} · em até 7 dias`
+  }
+  if (queue === 'scheduled') {
+    return action || 'Retorno agendado'
+  }
+  return action || 'Sem sinal de retorno'
+}
+
+function urgencyBadge(queue: ReactivateQueue | null) {
+  if (queue === 'overdue') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-danger/15 px-2 py-0.5 text-[0.65rem] font-semibold text-danger">
+        <AlertTriangle size={10} /> Atrasado
+      </span>
+    )
+  }
+  if (queue === 'due_soon') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[0.65rem] font-semibold text-warning">
+        <Clock size={10} /> Vencendo
+      </span>
+    )
+  }
+  if (queue === 'scheduled') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[0.65rem] font-semibold text-sky-300">
+        <Calendar size={10} /> Agendado
+      </span>
+    )
+  }
+  return null
+}
+
+function logOutreach(contactId: string) {
+  void apiFetch('/api/reactivation/outreach', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contactId,
+      surface: 'contact_list',
+      lastDoneAtAtSend: null,
+    }),
+  }).catch(() => {})
+}
+
+function whatsappHrefFor(c: Contact): string | null {
+  if (!c.phone) return null
+  const text = buildClientWhatsAppMessage({
+    contact: { name: c.name },
+    daysSinceVisit: c.max_overdue_days > 0 ? c.max_overdue_days : null,
+  })
+  return whatsAppUrl(c.phone, text)
+}
+
+export default function ContatosPage() {
+  const [mode, setMode] = useState<ListMode>('reactivate')
+  const [queue, setQueue] = useState<ReactivateQueue>('overdue')
+  const [queueInitialized, setQueueInitialized] = useState(false)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
-  const [pendingOnly, setPendingOnly] = useState(false)
-  const [statusFilter, setStatusFilter] = useState(() =>
-    statusFromSearchParam(searchParams.get('status')),
-  )
-  const [channelFilter, setChannelFilter] = useState<string>('all')
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
 
@@ -63,19 +124,23 @@ function ContatosPageContent() {
     return () => window.clearTimeout(t)
   }, [query])
 
-  async function load(
-    searchQ = debouncedQuery,
-    status = statusFilter,
-    channel = channelFilter,
-  ) {
+  async function load() {
     setLoading(true)
     try {
       const params = new URLSearchParams({ sort: 'urgency', limit: '100' })
-      if (pendingOnly) params.set('pending', 'true')
-      if (searchQ) params.set('q', searchQ)
-      if (status !== 'all') params.set('status', status)
-      if (channel !== 'all') params.set('channel', channel)
-      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store', timeoutMs: 20_000 })
+      if (mode === 'reactivate') {
+        params.set('pending', 'true')
+      } else if (debouncedQuery) {
+        params.set('q', debouncedQuery)
+      } else {
+        // Buscar sem texto: lista vazia até digitar (evita funil genérico).
+        setContacts([])
+        setTotalInBase(null)
+        setError(null)
+        setLoading(false)
+        return
+      }
+      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) setError(json.error)
       else {
@@ -92,49 +157,75 @@ function ContatosPageContent() {
   }
 
   useEffect(() => {
-    void load(debouncedQuery, statusFilter, channelFilter)
+    void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingOnly, debouncedQuery, statusFilter, channelFilter])
+  }, [mode, debouncedQuery])
+
+  const queues = useMemo(() => {
+    const overdue: Contact[] = []
+    const due_soon: Contact[] = []
+    const scheduled: Contact[] = []
+    for (const c of contacts) {
+      const q = contactQueue(c)
+      if (q === 'overdue') overdue.push(c)
+      else if (q === 'due_soon') due_soon.push(c)
+      else if (q === 'scheduled') scheduled.push(c)
+    }
+    return { overdue, due_soon, scheduled }
+  }, [contacts])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    const url = new URL(window.location.href)
-    if (statusFilter === 'all') url.searchParams.delete('status')
-    else url.searchParams.set('status', statusFilter)
-    window.history.replaceState(null, '', `${url.pathname}${url.search}`)
-  }, [statusFilter])
+    if (mode !== 'reactivate' || loading || queueInitialized) return
+    const first: ReactivateQueue =
+      queues.overdue.length > 0
+        ? 'overdue'
+        : queues.due_soon.length > 0
+          ? 'due_soon'
+          : queues.scheduled.length > 0
+            ? 'scheduled'
+            : 'overdue'
+    setQueue(first)
+    setQueueInitialized(true)
+  }, [mode, loading, queues, queueInitialized])
 
-  const statusFromData = Array.from(new Set(contacts.map((c) => c.status)))
-  const statusOptions = Array.from(new Set([...FUNNEL_STATUS_OPTIONS, ...statusFromData]))
-  const hasFilters = true
+  useEffect(() => {
+    if (mode === 'reactivate') setQueueInitialized(false)
+  }, [mode])
 
-  // Status e canal já vêm filtrados no servidor.
-  const filtered = contacts
+  const visible =
+    mode === 'search' ? contacts : queue === 'overdue' ? queues.overdue : queue === 'due_soon' ? queues.due_soon : queues.scheduled
 
-  const emptyNovoHint =
-    statusFilter === 'novo' && !loading && contacts.length === 0 && !debouncedQuery && !error
-  const emptyImportadoHint =
-    statusFilter === 'importado' && !loading && contacts.length === 0 && !debouncedQuery && !error
-  const truncatedHint =
-    !loading &&
-    totalInBase != null &&
-    totalInBase > contacts.length &&
-    contacts.length > 0 &&
-    !debouncedQuery
+  const countLabel =
+    mode === 'search'
+      ? debouncedQuery
+        ? `${visible.length} resultado${visible.length === 1 ? '' : 's'}${
+            totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
+          }`
+        : 'Digite nome ou telefone'
+      : `${visible.length} na fila`
 
-  const subtitle = loading
-    ? 'Todos os canais, em um só lugar'
-    : totalInBase != null && totalInBase > contacts.length
-      ? `Mostrando ${filtered.length} de ${totalInBase} ${statusFilter === 'all' ? 'contatos' : (STATUS_LABEL[statusFilter] ?? statusFilter).toLowerCase()}`
-      : `${filtered.length} de ${contacts.length} ${contacts.length === 1 ? 'contato' : 'contatos'}`
+  const emptyCopy =
+    mode === 'search'
+      ? debouncedQuery
+        ? 'Nenhum contato encontrado.'
+        : 'Busque por nome ou telefone para achar um cliente específico.'
+      : queue === 'overdue'
+        ? 'Nenhum atrasado.'
+        : queue === 'due_soon'
+          ? 'Nenhum vencendo.'
+          : 'Nenhum agendado.'
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold lg:hidden">Contatos</p>
-          <h1 className="mt-1 text-xl font-semibold lg:mt-0 lg:text-2xl">Clientes & leads</h1>
-        <p className="mt-0.5 text-xs text-muted">{subtitle}</p>
+          <h1 className="mt-1 text-xl font-semibold lg:mt-0 lg:text-2xl">Contatos</h1>
+          <p className="mt-0.5 text-xs text-muted">
+            {mode === 'reactivate' ? 'Reative quem está atrasado ou vencendo' : 'Ache um cliente específico'}
+            {' · '}
+            {countLabel}
+          </p>
         </div>
         <div className="shrink-0 lg:w-72">
           <PrimaryButton onClick={() => setFormOpen(true)}>
@@ -144,81 +235,89 @@ function ContatosPageContent() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={() => setPendingOnly((v) => !v)}
-          aria-pressed={pendingOnly}
-          className={`flex items-center justify-center gap-2 rounded-2xl border py-2.5 text-sm font-medium transition-colors ${
-            pendingOnly
-              ? 'border-gold bg-gold/15 text-gold'
-              : 'border-border bg-card text-muted active:text-foreground'
-          }`}
-        >
-          <AlertTriangle size={15} />
-          {pendingOnly ? 'Mostrando só pendentes' : 'Só ações pendentes'}
-        </button>
-        <UrgencyBadgeLegend />
-        {truncatedHint && (
-          <p className="rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted">
-            Lista limitada a {contacts.length} de {totalInBase}. Use a busca ou o filtro{' '}
+      <div
+        role="tablist"
+        aria-label="Modo da lista"
+        className="grid grid-cols-2 rounded-2xl border border-border bg-card p-1"
+      >
+        {(
+          [
+            { id: 'reactivate' as const, label: 'Reativar' },
+            { id: 'search' as const, label: 'Buscar' },
+          ] as const
+        ).map((tab) => {
+          const active = mode === tab.id
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setMode(tab.id)}
+              className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+                active ? 'bg-gold/15 text-gold' : 'text-muted active:text-foreground'
+              }`}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {mode === 'reactivate' && (
+        <div className="no-scrollbar flex gap-2 overflow-x-auto">
+          {(
+            [
+              { id: 'overdue' as const, label: 'Atrasados', count: queues.overdue.length },
+              { id: 'due_soon' as const, label: 'Vencendo', count: queues.due_soon.length },
+              { id: 'scheduled' as const, label: 'Agendados', count: queues.scheduled.length },
+            ] as const
+          ).map((q) => {
+            const active = queue === q.id
+            return (
+              <button
+                key={q.id}
+                type="button"
+                onClick={() => setQueue(q.id)}
+                aria-pressed={active}
+                className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors ${
+                  active
+                    ? 'border-gold bg-gold/15 text-gold'
+                    : 'border-border bg-card text-muted active:text-foreground'
+                }`}
+              >
+                {q.label}
+                <span className="ml-1.5 tabular-nums opacity-80">{q.count}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {mode === 'search' && (
+        <div className="relative">
+          <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            type="search"
+            inputMode="search"
+            enterKeyHint="search"
+            autoFocus
+            aria-label="Buscar por nome ou telefone"
+            placeholder="Nome ou telefone"
+            className="w-full rounded-2xl border border-border bg-card py-3.5 pl-12 pr-12 text-base outline-none focus:border-gold"
+          />
+          {query && (
             <button
               type="button"
-              className="text-gold underline-offset-2 hover:underline"
-              onClick={() => setStatusFilter('importado')}
+              onClick={() => setQuery('')}
+              aria-label="Limpar busca"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted active:text-foreground"
             >
-              Importado
-            </button>{' '}
-            / status para achar um contato específico.
-          </p>
-        )}
-      </div>
-
-      <div className="relative">
-        <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          type="search"
-          inputMode="search"
-          enterKeyHint="search"
-          aria-label="Buscar por nome ou telefone"
-          placeholder="Buscar por nome ou telefone (toda a base)"
-          className="w-full rounded-2xl border border-border bg-card py-2.5 pl-10 pr-10 text-base outline-none focus:border-gold"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery('')}
-            aria-label="Limpar busca"
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted active:text-foreground"
-          >
-            <X size={18} />
-          </button>
-        )}
-      </div>
-
-      {hasFilters && (
-        <div className="flex flex-col gap-2">
-          <FilterRow
-            label="Status"
-            options={statusOptions.map((s) => ({ value: s, label: STATUS_LABEL[s] ?? s }))}
-            active={statusFilter}
-            onSelect={setStatusFilter}
-          />
-          <FilterRow
-            label="Canal"
-            options={CHANNEL_OPTIONS.map((c) => ({ value: c, label: CHANNEL_LABEL[c] ?? c }))}
-            active={channelFilter}
-            onSelect={setChannelFilter}
-          />
-          <p className="text-[0.7rem] leading-relaxed text-muted">
-            <span className="font-medium text-foreground/80">Novo lead</span> = WhatsApp/manual.
-            {' '}
-            <span className="font-medium text-foreground/80">Importado</span> = base Avec (0004), não
-            é lead novo do funil. Lista limitada a 500 por consulta — use busca por nome/telefone
-            para achar além do topo.
-          </p>
+              <X size={18} />
+            </button>
+          )}
         </div>
       )}
 
@@ -235,189 +334,99 @@ function ContatosPageContent() {
               <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-border" />
               <div className="flex-1 space-y-2">
                 <div className="h-3 w-32 animate-pulse rounded bg-border" />
-                <div className="h-2.5 w-20 animate-pulse rounded bg-border" />
+                <div className="h-2.5 w-40 animate-pulse rounded bg-border" />
               </div>
             </div>
           ))}
 
-        {!loading && contacts.length === 0 && !error && !debouncedQuery && !emptyNovoHint && !emptyImportadoHint && (
-          <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato ainda. Toque em “Novo contato”.</p>
-        )}
-
-        {!loading && emptyNovoHint && (
-          <p className="px-4 py-12 text-center text-sm text-muted">
-            Nenhum lead novo no momento — a base Avec aparece em{' '}
-            <button
-              type="button"
-              className="text-gold underline-offset-2 hover:underline"
-              onClick={() => setStatusFilter('importado')}
-            >
-              Importado
-            </button>
-            .
-          </p>
-        )}
-
-        {!loading && emptyImportadoHint && (
-          <p className="px-4 py-12 text-center text-sm text-muted">
-            Nenhum contato Importado agora — rode o sync Avec (0004) ou confira se já foram
-            promovidos para Agendado/Convertido. Leads WhatsApp ficam em{' '}
-            <button
-              type="button"
-              className="text-gold underline-offset-2 hover:underline"
-              onClick={() => setStatusFilter('novo')}
-            >
-              Novo lead
-            </button>
-            .
-          </p>
-        )}
-
-        {!loading && contacts.length > 0 && filtered.length === 0 && !emptyNovoHint && !emptyImportadoHint && (
-          <div className="space-y-2 px-4 py-12 text-center text-sm text-muted">
-            <p>Nenhum contato encontrado com esses filtros.</p>
-            {pendingOnly && statusFilter !== 'all' && (
-              <p>
-                Há {contacts.length} pendente{contacts.length === 1 ? '' : 's'} neste status com outro
-                canal —{' '}
+        {!loading && !error && visible.length === 0 && (
+          <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
+            <p className="text-sm text-muted">{emptyCopy}</p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {mode === 'reactivate' && (
                 <button
                   type="button"
-                  className="text-gold underline-offset-2 hover:underline"
-                  onClick={() => setChannelFilter('all')}
+                  onClick={() => setMode('search')}
+                  className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-gold"
                 >
-                  limpar filtro de canal
+                  Buscar contato
                 </button>
-                .
-              </p>
-            )}
+              )}
+              <button
+                type="button"
+                onClick={() => setFormOpen(true)}
+                className="rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-semibold text-gold"
+              >
+                Novo contato
+              </button>
+            </div>
           </div>
         )}
 
-        {!loading && contacts.length === 0 && debouncedQuery && !error && (
-          <p className="px-4 py-12 text-center text-sm text-muted">Nenhum contato encontrado.</p>
-        )}
-
         {!loading &&
-          filtered.map((c) => (
-            <Link
-              key={c.id}
-              href={`/contatos/${c.id}`}
-              className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-0 active:bg-surface"
-            >
-              <Avatar name={c.name || c.phone || '?'} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{c.name || c.phone || 'Sem nome'}</p>
-                <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted">
-                  <span>{CHANNEL_LABEL[c.channel] ?? c.channel}</span>
-                  <span aria-hidden>·</span>
-                  <span>{timeAgo(c.created_at)}</span>
-                  {c.top_action && (
-                    <>
-                      <span aria-hidden>·</span>
-                      <span className="truncate text-gold">{c.top_action}</span>
-                    </>
-                  )}
-                  {c.phone && (
-                    <>
-                      <span aria-hidden>·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <Phone size={11} />
-                        {c.phone}
-                      </span>
-                    </>
-                  )}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                {(c.max_overdue_days > 0 || c.due_soon > 0 || c.scheduled_soon > 0) && (
-                  <div className="flex items-center gap-1">
-                    {c.max_overdue_days > 0 && (
-                      <span
-                        title={`${c.max_overdue_days} dia(s) sem retorno · ${c.overdue} serviço(s) atrasado(s)`}
-                        className="inline-flex items-center gap-0.5 rounded-full bg-danger/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-danger"
-                      >
-                        <AlertTriangle size={10} />
-                        {c.max_overdue_days}
-                      </span>
-                    )}
-                    {c.due_soon > 0 && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning">
-                        <Clock size={10} />
-                        {c.due_soon}
-                      </span>
-                    )}
-                    {c.scheduled_soon > 0 && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[0.6rem] font-semibold text-sky-300">
-                        <Calendar size={10} />
-                        {c.scheduled_soon}
-                      </span>
-                    )}
+          visible.map((c) => {
+            const q = contactQueue(c)
+            const wa = whatsappHrefFor(c)
+            return (
+              <div
+                key={c.id}
+                className="flex items-stretch gap-2 border-b border-border px-3 py-3 last:border-0 sm:px-4"
+              >
+                <Link
+                  href={`/contatos/${c.id}?returnTo=${encodeURIComponent('/contatos')}`}
+                  className="flex min-w-0 flex-1 items-center gap-3 active:opacity-90"
+                >
+                  <Avatar name={c.name || c.phone || '?'} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-medium">{c.name || c.phone || 'Sem nome'}</p>
+                      {urgencyBadge(mode === 'reactivate' ? queue : q)}
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {c.phone ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Phone size={11} />
+                          {c.phone}
+                        </span>
+                      ) : (
+                        'Sem telefone'
+                      )}
+                      <span aria-hidden> · </span>
+                      <span className="text-foreground/80">{serviceLine(c, mode === 'reactivate' ? queue : q)}</span>
+                    </p>
                   </div>
+                </Link>
+                {wa ? (
+                  <a
+                    href={wa}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => logOutreach(c.id)}
+                    aria-label={`Reativar ${c.name || 'contato'} no WhatsApp`}
+                    className="flex shrink-0 items-center justify-center gap-1.5 self-center rounded-xl border border-success/40 bg-success/10 px-3 py-2.5 text-xs font-semibold text-success active:scale-[0.98]"
+                  >
+                    <MessageSquare size={14} />
+                    <span className="hidden sm:inline">Reativar</span>
+                  </a>
+                ) : (
+                  <span className="flex shrink-0 items-center self-center px-2 text-[0.65rem] text-muted">
+                    Sem WA
+                  </span>
                 )}
-                <StatusPill status={c.status} />
               </div>
-              <ChevronRight size={16} className="shrink-0 text-muted" />
-            </Link>
-          ))}
+            )
+          })}
       </div>
 
-      {formOpen && <NewContactSheet onClose={() => setFormOpen(false)} onCreated={load} />}
+      {formOpen && (
+        <NewContactSheet
+          onClose={() => setFormOpen(false)}
+          onCreated={() => {
+            void load()
+          }}
+        />
+      )}
     </main>
-  )
-}
-
-export default function ContatosPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
-          <div className="h-10 w-48 animate-pulse rounded-xl bg-card" />
-          <div className="h-12 w-full animate-pulse rounded-2xl bg-card" />
-          <div className="h-72 w-full animate-pulse rounded-2xl bg-card" />
-        </main>
-      }
-    >
-      <ContatosPageContent />
-    </Suspense>
-  )
-}
-
-function FilterRow({
-  label,
-  options,
-  active,
-  onSelect,
-}: {
-  label: string
-  options: { value: string; label: string }[]
-  active: string
-  onSelect: (value: string) => void
-}) {
-  const chips = [{ value: 'all', label: 'Todos' }, ...options]
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-12 shrink-0 text-[0.6rem] uppercase tracking-wide text-muted">{label}</span>
-      <div className="no-scrollbar flex gap-2 overflow-x-auto">
-        {chips.map((chip) => {
-          const isActive = active === chip.value
-          return (
-            <button
-              key={chip.value}
-              type="button"
-              onClick={() => onSelect(chip.value)}
-              aria-pressed={isActive}
-              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                isActive
-                  ? 'border-gold bg-gold/15 text-gold'
-                  : 'border-border bg-card text-muted active:text-foreground'
-              }`}
-            >
-              {chip.label}
-            </button>
-          )
-        })}
-      </div>
-    </div>
   )
 }
 

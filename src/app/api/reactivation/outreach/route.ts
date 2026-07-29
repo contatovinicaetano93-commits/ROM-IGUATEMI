@@ -8,7 +8,7 @@ const schema = z.object({
   contactId: z.string().uuid().optional(),
   phone: z.string().min(8).optional(),
   name: z.string().optional(),
-  surface: z.enum(['contact_detail', 'director_0011', 'other']).default('other'),
+  surface: z.enum(['contact_detail', 'contact_list', 'director_0011', 'other']).default('other'),
   lastDoneAtAtSend: z.string().nullable().optional(),
 })
 

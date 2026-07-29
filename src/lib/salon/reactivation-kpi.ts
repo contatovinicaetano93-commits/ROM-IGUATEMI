@@ -4,7 +4,7 @@ import { logEvent, upsertContact } from '@/lib/contacts'
 /** Janela padrão de atribuição (meio do intervalo 14–30 combinado). */
 export const REACTIVATION_WINDOW_DAYS = 21
 
-export type ReactivationSurface = 'contact_detail' | 'director_0011' | 'other'
+export type ReactivationSurface = 'contact_detail' | 'contact_list' | 'director_0011' | 'other'
 
 export interface ReactivationKpi {
   window_days: number

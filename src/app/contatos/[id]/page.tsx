@@ -25,7 +25,6 @@ import {
   ShieldOff,
 } from 'lucide-react'
 import {
-  StatusPill,
   PrimaryButton,
   SectionCard,
   CHANNEL_LABEL,
@@ -95,14 +94,6 @@ interface Profile {
 }
 
 const STATUS_FLOW = ['importado', 'novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']
-
-const REC_TONE: Record<string, string> = {
-  overdue: 'border-danger/40 bg-danger/10',
-  due_soon: 'border-warning/40 bg-warning/10',
-  scheduled: 'border-sky-500/40 bg-sky-500/10',
-  upsell: 'border-gold/40 bg-gold/10',
-  crosssell: 'border-sky-500/40 bg-sky-500/10',
-}
 
 function ServiceStateBadge({ state, days }: { state: Service['state']; days: number | null }) {
   if (state === 'overdue')
@@ -175,23 +166,7 @@ function eventMeta(e: ContactEvent): { icon: React.ReactNode; title: string; det
   return { icon: <MessageSquare size={14} />, title: `${e.channel} · ${e.direction === 'in' ? 'entrada' : 'saída'}`, detail: '' }
 }
 
-export default function ContactDetailPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6">
-          <div className="h-8 w-40 animate-pulse rounded-xl bg-card" />
-          <div className="h-24 w-full animate-pulse rounded-2xl bg-card" />
-          <div className="h-64 w-full animate-pulse rounded-2xl bg-card" />
-        </main>
-      }
-    >
-      <ContactDetailPageContent />
-    </Suspense>
-  )
-}
-
-function ContactDetailPageContent() {
+function ContactDetailPageInner() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -210,8 +185,14 @@ function ContactDetailPageContent() {
   const [scheduleFor, setScheduleFor] = useState<Service | null>(null)
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [mutationOk, setMutationOk] = useState<string | null>(null)
-  const [showDetails, setShowDetails] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    apiFetch('/api/auth/session', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => setIsAdmin(Boolean(json.data?.can_view_revenue)))
+      .catch(() => setIsAdmin(false))
+  }, [])
 
   const load = useCallback(async () => {
     const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store' })
@@ -252,11 +233,6 @@ function ContactDetailPageContent() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false))
-
-    apiFetch('/api/auth/session', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => setIsAdmin(Boolean(json.data?.can_view_revenue)))
-      .catch(() => setIsAdmin(false))
   }, [id])
 
   async function anonymize() {
@@ -388,8 +364,10 @@ function ContactDetailPageContent() {
     ? whatsAppUrl(contact.phone, clientWhatsAppText)
     : null
 
+  const urgentServices = services.filter((s) => s.state === 'overdue' || s.state === 'due_soon' || Boolean(s.scheduled_at))
+  const primaryRec = recommendations.find((r) => ['overdue', 'due_soon', 'scheduled'].includes(r.type)) ?? recommendations[0]
   return (
-    <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-8 lg:px-8 lg:py-8">
+    <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-5 px-5 py-6 lg:px-8 lg:py-8">
       <button onClick={goBack} className="flex items-center gap-1 text-sm text-muted active:text-foreground lg:hover:text-foreground">
         <ChevronLeft size={18} /> {backLabel}
       </button>
@@ -420,16 +398,18 @@ function ContactDetailPageContent() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-8">
-        <div className="flex flex-col gap-5 lg:col-span-5 lg:gap-6">
-      {/* Perfil */}
+      {/* 1. Header */}
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold">
               {contact.anonymized_at ? 'Cliente anônimo (LGPD)' : contact.name ?? 'Sem nome'}
             </h1>
-            <p className="mt-0.5 text-xs text-muted">{CHANNEL_LABEL[contact.channel] ?? contact.channel}</p>
+            {contact.phone && (
+              <a href={`tel:${contact.phone}`} className="mt-1 flex items-center gap-2 text-sm text-foreground/90">
+                <Phone size={15} className="text-muted" /> {contact.phone}
+              </a>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {!contact.anonymized_at && (
@@ -453,31 +433,101 @@ function ContactDetailPageContent() {
                 <ShieldOff size={15} />
               </button>
             )}
-            <StatusPill status={contact.status} />
           </div>
         </div>
-        <div className="mt-4 flex flex-col gap-2 text-sm">
-          {contact.phone && (
-            <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-foreground/90">
-              <Phone size={15} className="text-muted" /> {contact.phone}
-            </a>
-          )}
-          {contact.email && (
-            <a href={`mailto:${contact.email}`} className="flex items-center gap-2 truncate text-foreground/90">
-              <Mail size={15} className="text-muted" /> {contact.email}
-            </a>
-          )}
-          {contact.notes && <p className="mt-1 text-xs leading-relaxed text-muted">{contact.notes}</p>}
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+      </div>
+
+      {/* 2. O que fazer agora */}
+      <section className="rounded-2xl border border-gold/30 bg-gold/5 p-5">
+        <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">O que fazer agora</p>
+        {primaryRec ? (
+          <div className="mt-2">
+            <p className="text-base font-semibold">{primaryRec.title}</p>
+            <p className="mt-1 text-sm leading-relaxed text-foreground/80">{primaryRec.detail}</p>
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-muted">Nenhuma ação urgente — cliente em dia ou sem cadência.</p>
+        )}
+
+        {clientWhatsAppHref && (
+          <a
+            href={clientWhatsAppHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => {
+              void apiFetch('/api/reactivation/outreach', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contactId: contact.id,
+                  surface: 'contact_detail',
+                  lastDoneAtAtSend: last_visit?.last_done_at ?? null,
+                }),
+              }).catch(() => {})
+            }}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-success/40 bg-success/15 py-3.5 text-sm font-semibold text-success active:scale-[0.99]"
+          >
+            <MessageSquare size={16} />
+            Reativar no WhatsApp
+          </a>
+        )}
+
+        {urgentServices.length > 0 && (
+          <div className="mt-4 flex flex-col gap-3">
+            {urgentServices.map((s) => (
+              <div key={s.id} className="rounded-xl border border-border bg-card p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{s.name}</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {CATEGORY_LABEL[s.category] ?? s.category}
+                      {s.cadence_days ? ` · a cada ${s.cadence_days}d` : ''}
+                      {s.scheduled_at ? ` · ${fmtSchedule(s.scheduled_at)}` : ''}
+                    </p>
+                  </div>
+                  <ServiceStateBadge state={s.state} days={s.days_until} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => markDone(s.id)}
+                    className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-foreground/90 active:bg-surface"
+                  >
+                    <Check size={13} /> Feito hoje
+                  </button>
+                  <button
+                    onClick={() => setScheduleFor(s)}
+                    className="flex items-center gap-1.5 rounded-lg border border-gold/30 bg-gold/10 px-3 py-1.5 text-xs text-gold active:bg-gold/20"
+                  >
+                    <Calendar size={13} /> {s.scheduled_at ? 'Reagendar' : 'Agendar'}
+                  </button>
+                  {s.scheduled_at && (
+                    <button
+                      onClick={() => unschedule(s.id)}
+                      className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted active:bg-surface"
+                    >
+                      <X size={13} /> Limpar
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* 3. Dados do cliente */}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-[0.65rem] uppercase tracking-[0.2em] text-muted">Dados do cliente</h2>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border border-border bg-card px-3 py-2.5">
             <p className="text-[0.65rem] uppercase tracking-wide text-muted">Manicure preferida</p>
             <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
               <Hand size={14} className="shrink-0 text-gold" />
               {contact.preferred_manicurist?.trim() || 'Ainda não informada'}
             </p>
           </div>
-          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+          <div className="rounded-xl border border-border bg-card px-3 py-2.5">
             <p className="text-[0.65rem] uppercase tracking-wide text-muted">Cabeleireiro preferido</p>
             <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
               <Scissors size={14} className="shrink-0 text-gold" />
@@ -485,53 +535,182 @@ function ContactDetailPageContent() {
             </p>
           </div>
         </div>
-      </div>
 
-      <LastVisitCard visit={last_visit} showPrice={isAdmin} />
+        <LastVisitCard visit={last_visit} showPrice={isAdmin} />
 
-      {/* Ficha do cliente (Sprint 3) — ticket/LTV só com can_view_revenue */}
-      {(client_stats.cadence_avg_days != null ||
-        client_stats.completed_services_count > 0 ||
-        (isAdmin &&
-          (client_stats.ticket_avg != null || client_stats.ltv_projection != null))) && (
-        <div className="grid grid-cols-2 gap-2">
-          {isAdmin && (
-            <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+        {isAdmin && (client_stats.ticket_avg != null ||
+          client_stats.cadence_avg_days != null ||
+          client_stats.completed_services_count > 0) && (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-border bg-card px-3 py-2.5">
               <p className="text-[0.65rem] uppercase tracking-wide text-muted">Ticket médio</p>
               <p className="mt-1 text-sm font-semibold tabular-nums">
                 {client_stats.ticket_avg != null ? formatCurrency(client_stats.ticket_avg) : '—'}
               </p>
             </div>
-          )}
-          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
-            <p className="text-[0.65rem] uppercase tracking-wide text-muted">Cadência esperada</p>
-            <p className="mt-1 text-sm font-semibold tabular-nums">
-              {client_stats.cadence_avg_days != null ? `${client_stats.cadence_avg_days}d` : '—'}
-            </p>
-          </div>
-          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
-            <p className="text-[0.65rem] uppercase tracking-wide text-muted">Serviços realizados</p>
-            <p className="mt-1 text-sm font-semibold tabular-nums">{client_stats.completed_services_count}</p>
-          </div>
-          {isAdmin && (
-            <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
-              <p className="text-[0.65rem] uppercase tracking-wide text-muted">
-                LTV projetado (2a)
+            <div className="rounded-xl border border-border bg-card px-3 py-2.5">
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted">Cadência esperada</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums">
+                {client_stats.cadence_avg_days != null ? `${client_stats.cadence_avg_days}d` : '—'}
               </p>
+            </div>
+            <div className="rounded-xl border border-border bg-card px-3 py-2.5">
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted">Serviços realizados</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums">{client_stats.completed_services_count}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-card px-3 py-2.5">
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted">LTV projetado (2a)</p>
               <p className="mt-1 text-sm font-semibold tabular-nums">
                 {client_stats.ltv_projection != null ? formatCurrency(client_stats.ltv_projection) : '—'}
               </p>
             </div>
+          </div>
+        )}
+
+        {(contact.email || contact.notes || contact.channel) && (
+          <div className="rounded-2xl border border-border bg-card p-4 text-sm">
+            <p className="text-xs text-muted">{CHANNEL_LABEL[contact.channel] ?? contact.channel}</p>
+            {contact.email && (
+              <a href={`mailto:${contact.email}`} className="mt-2 flex items-center gap-2 truncate text-foreground/90">
+                <Mail size={15} className="text-muted" /> {contact.email}
+              </a>
+            )}
+            {contact.notes && <p className="mt-2 text-xs leading-relaxed text-muted">{contact.notes}</p>}
+          </div>
+        )}
+
+        <SectionCard title="Briefing do backstaff">
+          {briefError && (
+            <p className="mb-3 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+              {briefError}
+            </p>
+          )}
+          {brief ? (
+            <div className="flex flex-col gap-3">
+              <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">{brief.text}</p>
+              <span className="text-[0.65rem] uppercase tracking-wide text-muted">
+                {brief.source === 'ai' ? 'Gerado por Claude' : 'Gerado por regras (Claude não configurado)'}
+              </span>
+            </div>
+          ) : (
+            <p className="mb-3 text-sm text-muted">
+              Gere um resumo com as ações de cross-sell e up-sell recomendadas para este cliente.
+            </p>
+          )}
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            {brief && (
+              <button
+                type="button"
+                onClick={copyBrief}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold text-foreground active:scale-[0.99] transition-transform"
+              >
+                {briefCopied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
+                {briefCopied ? 'Copiado!' : 'Copiar briefing'}
+              </button>
+            )}
+            <button
+              onClick={generateBrief}
+              disabled={briefLoading}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold active:scale-[0.99] transition-transform disabled:opacity-60"
+            >
+              <Sparkles size={16} />
+              {briefLoading ? 'Gerando…' : brief ? 'Atualizar' : 'Gerar briefing'}
+            </button>
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="Serviços & cadência"
+          badge={
+            <button onClick={() => setAddOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-gold">
+              <Plus size={14} /> Adicionar
+            </button>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            {services.length === 0 && <p className="py-4 text-center text-sm text-muted">Nenhum serviço cadastrado.</p>}
+            {services.map((s) => (
+              <div key={s.id} className="rounded-xl border border-border bg-surface p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{s.name}</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {CATEGORY_LABEL[s.category] ?? s.category}
+                      {s.product ? ` · ${s.product}` : ''}
+                      {s.cadence_days ? ` · a cada ${s.cadence_days}d` : ''}
+                      {s.scheduled_at ? ` · ${fmtSchedule(s.scheduled_at)}` : ''}
+                    </p>
+                  </div>
+                  <ServiceStateBadge state={s.state} days={s.days_until} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => markDone(s.id)}
+                    className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-foreground/90 active:bg-card"
+                  >
+                    <Check size={13} /> Feito hoje
+                  </button>
+                  <button
+                    onClick={() => setScheduleFor(s)}
+                    className="flex items-center gap-1.5 rounded-lg border border-gold/30 bg-gold/10 px-3 py-1.5 text-xs text-gold active:bg-gold/20"
+                  >
+                    <Calendar size={13} /> {s.scheduled_at ? 'Reagendar' : 'Agendar'}
+                  </button>
+                  {s.scheduled_at && (
+                    <button
+                      onClick={() => unschedule(s.id)}
+                      className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted active:bg-card"
+                    >
+                      <X size={13} /> Limpar
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </section>
+
+      {/* 4. Histórico recolhível */}
+      <details className="rounded-2xl border border-border bg-card open:pb-1">
+        <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold marker:content-none [&::-webkit-details-marker]:hidden">
+          Histórico de atendimento
+          <span className="ml-2 text-xs font-normal text-muted">({events.length})</span>
+        </summary>
+        <div className="border-t border-border px-5 py-4">
+          {events.length === 0 ? (
+            <p className="py-2 text-center text-sm text-muted">Nenhum evento registrado ainda.</p>
+          ) : (
+            <ol className="relative flex flex-col gap-4 pl-5">
+              <span className="absolute left-[7px] top-1 bottom-1 w-px bg-border" aria-hidden />
+              {events.map((e) => {
+                const meta = eventMeta(e)
+                return (
+                  <li key={e.id} className="relative">
+                    <span
+                      className={`absolute -left-5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full border ${
+                        meta.danger ? 'border-danger/50 bg-danger/15 text-danger' : 'border-gold/40 bg-gold/10 text-gold'
+                      }`}
+                    >
+                      <span className="scale-[0.6]">{meta.icon}</span>
+                    </span>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className={`text-sm font-medium ${meta.danger ? 'text-danger' : ''}`}>{meta.title}</p>
+                      <span className="shrink-0 text-[0.65rem] text-muted">{relTime(e.created_at)}</span>
+                    </div>
+                    {meta.detail && <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted">{meta.detail}</p>}
+                    <span className="mt-1 inline-block text-[0.6rem] uppercase tracking-wide text-muted/70">
+                      {HANDLED_BY_LABEL[e.handled_by] ?? e.handled_by}
+                    </span>
+                  </li>
+                )
+              })}
+            </ol>
           )}
         </div>
-      )}
-      {isAdmin && client_stats.ltv_projection != null && (
-        <p className="-mt-3 text-[0.65rem] text-muted">
-          LTV é projeção (ticket médio × frequência × 2 anos), não histórico real de gasto.
-        </p>
-      )}
+      </details>
 
-      {/* Status guiado */}
+      {/* 5. Status do funil — só no perfil */}
       <SectionCard title="Status do atendimento">
         <div className="no-scrollbar flex gap-2 overflow-x-auto">
           {STATUS_FLOW.map((s) => {
@@ -551,181 +730,6 @@ function ContactDetailPageContent() {
         </div>
       </SectionCard>
 
-      {/* Briefing IA pro backstaff */}
-      <SectionCard title="Briefing do backstaff">
-        {briefError && (
-          <p className="mb-3 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
-            {briefError}
-          </p>
-        )}
-        {brief ? (
-          <div className="flex flex-col gap-3">
-            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">{brief.text}</p>
-            <span className="text-[0.65rem] uppercase tracking-wide text-muted">
-              {brief.source === 'ai' ? 'Gerado por Claude' : 'Gerado por regras (Claude não configurado)'}
-            </span>
-          </div>
-        ) : (
-          <p className="mb-3 text-sm text-muted">
-            Gere um resumo com as ações de cross-sell e up-sell recomendadas para este cliente.
-          </p>
-        )}
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          {brief && (
-            <button
-              type="button"
-              onClick={copyBrief}
-              className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold text-foreground active:scale-[0.99] transition-transform"
-            >
-              {briefCopied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
-              {briefCopied ? 'Copiado!' : 'Copiar briefing'}
-            </button>
-          )}
-          {clientWhatsAppHref && (
-            <a
-              href={clientWhatsAppHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Abrir WhatsApp com mensagem pessoal de reativação"
-              onClick={() => {
-                void apiFetch('/api/reactivation/outreach', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    contactId: contact.id,
-                    surface: 'contact_detail',
-                    lastDoneAtAtSend: last_visit?.last_done_at ?? null,
-                  }),
-                }).catch(() => {})
-              }}
-              className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-success/40 bg-success/10 py-3 text-sm font-semibold text-success"
-            >
-              <MessageSquare size={16} />
-              WhatsApp
-            </a>
-          )}
-          <button
-            onClick={generateBrief}
-            disabled={briefLoading}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold active:scale-[0.99] transition-transform disabled:opacity-60 ${brief && clientWhatsAppHref ? '' : brief ? '' : 'w-full'}`}
-          >
-            <Sparkles size={16} />
-            {briefLoading ? 'Gerando…' : brief ? 'Atualizar' : 'Gerar briefing'}
-          </button>
-        </div>
-      </SectionCard>
-
-      {/* Recomendações — só a principal no modo recepção */}
-      {recommendations.length > 0 && (
-        <div className={`rounded-2xl border p-4 ${REC_TONE[recommendations[0].type] ?? 'border-border bg-card'}`}>
-          <p className="text-sm font-semibold">{recommendations[0].title}</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-foreground/80">{recommendations[0].detail}</p>
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={() => setShowDetails((v) => !v)}
-        className="rounded-2xl border border-border bg-card py-3 text-sm font-medium text-muted active:text-foreground"
-      >
-        {showDetails ? 'Ocultar serviços e histórico' : 'Ver serviços e histórico'}
-      </button>
-        </div>
-
-        {showDetails && (
-        <div className="flex flex-col gap-5 lg:col-span-7 lg:gap-6">
-      {/* Serviços */}
-      <SectionCard
-        title="Serviços & recorrência"
-        badge={
-          <button onClick={() => setAddOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-gold">
-            <Plus size={14} /> Adicionar
-          </button>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {services.length === 0 && <p className="py-4 text-center text-sm text-muted">Nenhum serviço cadastrado.</p>}
-          {services.map((s) => (
-            <div key={s.id} className="rounded-xl border border-border bg-surface p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{s.name}</p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {CATEGORY_LABEL[s.category] ?? s.category}
-                    {s.product ? ` · ${s.product}` : ''}
-                    {s.cadence_days ? ` · a cada ${s.cadence_days}d` : ''}
-                    {s.scheduled_at ? ` · ${fmtSchedule(s.scheduled_at)}` : ''}
-                  </p>
-                </div>
-                <ServiceStateBadge state={s.state} days={s.days_until} />
-              </div>
-              {s.scheduled_at && (
-                <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-sky-500/10 px-2 py-1 text-[0.65rem] font-medium text-sky-300">
-                  <Calendar size={11} /> Agendado: {fmtSchedule(s.scheduled_at)}
-                </p>
-              )}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  onClick={() => markDone(s.id)}
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-foreground/90 active:bg-card"
-                >
-                  <Check size={13} /> Feito hoje
-                </button>
-                <button
-                  onClick={() => setScheduleFor(s)}
-                  className="flex items-center gap-1.5 rounded-lg border border-gold/30 bg-gold/10 px-3 py-1.5 text-xs text-gold active:bg-gold/20"
-                >
-                  <Calendar size={13} /> {s.scheduled_at ? 'Reagendar' : 'Agendar'}
-                </button>
-                {s.scheduled_at && (
-                  <button
-                    onClick={() => unschedule(s.id)}
-                    className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted active:bg-card"
-                  >
-                    <X size={13} /> Limpar
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
-      {/* Histórico de atendimento (timeline) */}
-      <SectionCard title="Histórico de atendimento">
-        {events.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted">Nenhum evento registrado ainda.</p>
-        ) : (
-          <ol className="relative flex flex-col gap-4 pl-5">
-            <span className="absolute left-[7px] top-1 bottom-1 w-px bg-border" aria-hidden />
-            {events.map((e) => {
-              const meta = eventMeta(e)
-              return (
-                <li key={e.id} className="relative">
-                  <span
-                    className={`absolute -left-5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full border ${
-                      meta.danger ? 'border-danger/50 bg-danger/15 text-danger' : 'border-gold/40 bg-gold/10 text-gold'
-                    }`}
-                  >
-                    <span className="scale-[0.6]">{meta.icon}</span>
-                  </span>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className={`text-sm font-medium ${meta.danger ? 'text-danger' : ''}`}>{meta.title}</p>
-                    <span className="shrink-0 text-[0.65rem] text-muted">{relTime(e.created_at)}</span>
-                  </div>
-                  {meta.detail && <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted">{meta.detail}</p>}
-                  <span className="mt-1 inline-block text-[0.6rem] uppercase tracking-wide text-muted/70">
-                    {HANDLED_BY_LABEL[e.handled_by] ?? e.handled_by}
-                  </span>
-                </li>
-              )
-            })}
-          </ol>
-        )}
-      </SectionCard>
-        </div>
-        )}
-      </div>
 
       {addOpen && (
         <AddServiceSheet
@@ -764,6 +768,23 @@ function ContactDetailPageContent() {
     </main>
   )
 }
+
+export default function ContactDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex flex-1 flex-col gap-4 px-5 py-6">
+          <div className="h-6 w-24 animate-pulse rounded bg-border" />
+          <div className="h-28 animate-pulse rounded-2xl bg-card" />
+          <div className="h-40 animate-pulse rounded-2xl bg-card" />
+        </main>
+      }
+    >
+      <ContactDetailPageInner />
+    </Suspense>
+  )
+}
+
 
 function ScheduleSheet({
   service,
