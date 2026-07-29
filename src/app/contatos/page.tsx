@@ -15,7 +15,7 @@ import {
 import { Avatar, PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { whatsAppUrl } from '@/lib/salon/format'
-import { CATEGORY_LABEL } from '@/lib/salon/constants'
+import { CATEGORY_LABEL, DUE_SOON_DAYS } from '@/lib/salon/constants'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
 
 interface Contact {
@@ -53,7 +53,7 @@ function serviceLine(c: Contact, queue: ReactivateQueue | null): string {
   }
   if (queue === 'due_soon') {
     const base = action?.replace(/\s+vencendo$/i, '').trim() || 'Serviço'
-    return `${base} · em até 7 dias`
+    return `${base} · em até ${DUE_SOON_DAYS} dias`
   }
   if (queue === 'scheduled') {
     return action || 'Retorno agendado'
@@ -132,14 +132,8 @@ export default function ContatosPage() {
         params.set('pending', 'true')
       } else if (debouncedQuery) {
         params.set('q', debouncedQuery)
-      } else {
-        // Buscar sem texto: lista vazia até digitar (evita funil genérico).
-        setContacts([])
-        setTotalInBase(null)
-        setError(null)
-        setLoading(false)
-        return
       }
+      // Buscar sem texto: lista a base (paginada) — "puxar todos os contatos".
       const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) setError(json.error)
@@ -197,22 +191,20 @@ export default function ContatosPage() {
 
   const countLabel =
     mode === 'search'
-      ? debouncedQuery
-        ? `${visible.length} resultado${visible.length === 1 ? '' : 's'}${
-            totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
-          }`
-        : 'Digite nome ou telefone'
+      ? `${visible.length} contato${visible.length === 1 ? '' : 's'}${
+          totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
+        }${debouncedQuery ? '' : ' (base)'}`
       : `${visible.length} na fila`
 
   const emptyCopy =
     mode === 'search'
       ? debouncedQuery
         ? 'Nenhum contato encontrado.'
-        : 'Busque por nome ou telefone para achar um cliente específico.'
+        : 'Nenhum contato na base.'
       : queue === 'overdue'
-        ? 'Nenhum atrasado.'
+        ? 'Nenhum atrasado (sem visita registrada ou cadência vencida).'
         : queue === 'due_soon'
-          ? 'Nenhum vencendo.'
+          ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
           : 'Nenhum agendado.'
 
   return (
@@ -222,7 +214,7 @@ export default function ContatosPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold lg:hidden">Contatos</p>
           <h1 className="mt-1 text-xl font-semibold lg:mt-0 lg:text-2xl">Contatos</h1>
           <p className="mt-0.5 text-xs text-muted">
-            {mode === 'reactivate' ? 'Reative quem está atrasado ou vencendo' : 'Ache um cliente específico'}
+            {mode === 'reactivate' ? 'Reative quem está atrasado ou vencendo' : 'Liste a base ou busque por nome/telefone'}
             {' · '}
             {countLabel}
           </p>

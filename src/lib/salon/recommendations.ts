@@ -1,6 +1,7 @@
 import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
 import { listServices } from '@/lib/services'
+import { DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { compareByOverdueThenName, urgencyForServices } from '@/lib/salon/urgency'
 
 interface JoinedService extends ClientService {
@@ -47,7 +48,11 @@ export async function listActionItems(opts: ListActionItemsOpts = {}): Promise<A
         scheduled_at,
         case
           when cadence_days is null then null
-          else coalesce(last_done_at, created_at) + (cadence_days * interval '1 day')
+          when last_done_at is null
+            and (scheduled_at is null or scheduled_at < now())
+            then now() - (cadence_days * interval '1 day')
+          when last_done_at is null then null
+          else last_done_at + (cadence_days * interval '1 day')
         end as next_due
       from client_services
       where active = true
@@ -68,12 +73,12 @@ export async function listActionItems(opts: ListActionItemsOpts = {}): Promise<A
         count(*) filter (
           where next_due is not null
             and next_due >= now()
-            and next_due <= now() + interval '7 days'
+            and next_due <= now() + (${DUE_SOON_DAYS} * interval '1 day')
         )::int as due_soon,
         count(*) filter (
           where scheduled_at is not null
             and scheduled_at >= now()
-            and scheduled_at <= now() + interval '7 days'
+            and scheduled_at <= now() + (${SCHEDULED_SOON_DAYS} * interval '1 day')
         )::int as scheduled_soon
       from svc
       group by contact_id

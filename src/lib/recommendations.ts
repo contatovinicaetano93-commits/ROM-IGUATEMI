@@ -1,5 +1,5 @@
 import type { ClientService } from '@/lib/services'
-import { DAY_MS } from '@/lib/salon/constants'
+import { DAY_MS, DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { fmtSchedule } from '@/lib/salon/format'
 
 export type ServiceState = 'overdue' | 'due_soon' | 'ok' | 'no_cadence'
@@ -19,17 +19,34 @@ export interface Recommendation {
 }
 
 // Enriquece cada serviço com o próximo vencimento e o estado (atrasado/vencendo/ok).
-// Baseline = última vez feito; se nunca, usa a data de cadastro.
+// Baseline = última visita real (last_done_at). Sem ela, NÃO usa created_at do sync
+// (isso zerava a fila Atrasados após import/sync recente).
 export function enrichServices(services: ClientService[]): EnrichedService[] {
   const now = Date.now()
   return services.map((s) => {
     if (!s.cadence_days) {
       return { ...s, next_due_at: null, days_until: null, state: 'no_cadence' as const }
     }
-    const baseline = new Date(s.last_done_at ?? s.created_at).getTime()
+
+    if (!s.last_done_at) {
+      const hasFutureSchedule =
+        !!s.scheduled_at && new Date(s.scheduled_at).getTime() >= now
+      if (hasFutureSchedule) {
+        return { ...s, next_due_at: null, days_until: null, state: 'ok' as const }
+      }
+      return {
+        ...s,
+        next_due_at: null,
+        days_until: -s.cadence_days,
+        state: 'overdue' as const,
+      }
+    }
+
+    const baseline = new Date(s.last_done_at).getTime()
     const nextDue = baseline + s.cadence_days * DAY_MS
     const daysUntil = Math.round((nextDue - now) / DAY_MS)
-    const state: ServiceState = daysUntil < 0 ? 'overdue' : daysUntil <= 7 ? 'due_soon' : 'ok'
+    const state: ServiceState =
+      daysUntil < 0 ? 'overdue' : daysUntil <= DUE_SOON_DAYS ? 'due_soon' : 'ok'
     return { ...s, next_due_at: new Date(nextDue).toISOString(), days_until: daysUntil, state }
   })
 }
@@ -40,13 +57,13 @@ export function computeRecommendations(enriched: EnrichedService[]): Recommendat
   const has = (cat: string) => enriched.some((s) => s.category === cat)
   const now = Date.now()
 
-  // 0) Agendamentos confirmados nos próximos 7 dias
+  // 0) Agendamentos confirmados nos próximos N dias
   for (const s of enriched) {
     if (!s.scheduled_at) continue
     const t = new Date(s.scheduled_at).getTime()
     if (t < now) continue
     const daysUntil = Math.round((t - now) / DAY_MS)
-    if (daysUntil <= 7) {
+    if (daysUntil <= SCHEDULED_SOON_DAYS) {
       recs.push({
         type: 'scheduled',
         title: `${s.name} agendado`,
@@ -61,12 +78,17 @@ export function computeRecommendations(enriched: EnrichedService[]): Recommendat
   // 1) Recorrências atrasadas / vencendo (prioridade máxima)
   for (const s of enriched) {
     if (s.state === 'overdue') {
+      const missingVisit = !s.last_done_at
       recs.push({
         type: 'overdue',
         title: `${s.name} atrasado`,
-        detail: `Previsto há ${Math.abs(s.days_until ?? 0)} dia(s). Priorize reagendar${
-          s.product ? ` e reponha ${s.product}` : ''
-        }.`,
+        detail: missingVisit
+          ? `Sem última visita registrada. Priorize confirmar retorno${
+              s.product ? ` e repor ${s.product}` : ''
+            }.`
+          : `Previsto há ${Math.abs(s.days_until ?? 0)} dia(s). Priorize reagendar${
+              s.product ? ` e reponha ${s.product}` : ''
+            }.`,
       })
     } else if (s.state === 'due_soon') {
       recs.push({

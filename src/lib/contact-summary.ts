@@ -1,6 +1,7 @@
 import { CONTACT_STATUSES, type ContactRow, type ContactStatus } from '@/lib/contacts'
 import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
+import { DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { compareByOverdueThenName, urgencyForServices } from '@/lib/salon/urgency'
 
 export interface ContactListItem extends ContactRow {
@@ -111,8 +112,11 @@ async function orderContactsByUrgency(
 }
 
 /**
- * Contatos com sinal de urgência (atraso / vencendo / agendado em 7d),
+ * Contatos com sinal de urgência (atraso / vencendo / agendado),
  * ranqueados no SQL — sem carregar a tabela inteira de serviços.
+ *
+ * Sem last_done_at: trata como atrasado (created_at do sync não é baseline).
+ * Vencendo: janela DUE_SOON_DAYS (não 7d — cadências típicas são 30+).
  */
 async function rankUrgentContactIds(
   limit: number,
@@ -127,7 +131,11 @@ async function rankUrgentContactIds(
         scheduled_at,
         case
           when cadence_days is null then null
-          else coalesce(last_done_at, created_at) + (cadence_days * interval '1 day')
+          when last_done_at is null
+            and (scheduled_at is null or scheduled_at < now())
+            then now() - (cadence_days * interval '1 day')
+          when last_done_at is null then null
+          else last_done_at + (cadence_days * interval '1 day')
         end as next_due
       from client_services
       where active = true
@@ -148,12 +156,12 @@ async function rankUrgentContactIds(
         count(*) filter (
           where next_due is not null
             and next_due >= now()
-            and next_due <= now() + interval '7 days'
+            and next_due <= now() + (${DUE_SOON_DAYS} * interval '1 day')
         )::int as due_soon,
         count(*) filter (
           where scheduled_at is not null
             and scheduled_at >= now()
-            and scheduled_at <= now() + interval '7 days'
+            and scheduled_at <= now() + (${SCHEDULED_SOON_DAYS} * interval '1 day')
         )::int as scheduled_soon
       from svc
       group by contact_id
