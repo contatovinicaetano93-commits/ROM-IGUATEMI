@@ -7,6 +7,8 @@ export type AvecSyncMeta = {
   created_at: string | null
   stale: boolean
   hint: string | null
+  /** Mensagem de erro do último finished (timeout/kill etc.). */
+  error: string | null
   /** Último fast (caixa/Hoje). */
   fast_created_at: string | null
   fast_stale: boolean
@@ -24,7 +26,7 @@ export type AvecSyncMeta = {
  */
 export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
   return cachedFetch(
-    'avec:sync-meta:v1',
+    'avec:sync-meta:v2',
     async () => {
       const [full, fast] = await Promise.all([
         getLastAvecSync('full', { finishedOnly: true }).catch(() => null),
@@ -59,6 +61,7 @@ export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
         created_at,
         stale,
         hint: kpiSourceFromSyncStatus(stale ? 'stale' : syncStatus),
+        error: latest?.error ?? null,
         fast_created_at: fast?.created_at ?? null,
         fast_stale: never_synced || fastStale,
         never_synced,

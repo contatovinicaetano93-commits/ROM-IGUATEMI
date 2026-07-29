@@ -1,8 +1,15 @@
 import type { ClientService } from '@/lib/services'
 import { enrichServices, computeRecommendations } from '@/lib/recommendations'
-import { DAY_MS } from '@/lib/salon/constants'
+import { SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { compareByNamePtBr } from '@/lib/salon/sort'
+
+/** Soma dias em YYYY-MM-DD (calendário, sem fuso). */
+function addIsoDays(isoDay: string, days: number): string {
+  const [y, m, d] = isoDay.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + days))
+  return dt.toISOString().slice(0, 10)
+}
 
 export interface UrgencySummary {
   overdue: number
@@ -30,7 +37,6 @@ export function compareByOverdueThenName(
 export function urgencyForServices(services: ClientService[]): UrgencySummary {
   const enriched = enrichServices(services)
   const recommendations = computeRecommendations(enriched)
-  const now = Date.now()
 
   const overdueServices = enriched.filter((s) => s.state === 'overdue')
   const overdue = overdueServices.length
@@ -39,12 +45,14 @@ export function urgencyForServices(services: ClientService[]): UrgencySummary {
     0,
   )
   const due_soon = enriched.filter((s) => s.state === 'due_soon').length
+  const salonToday = todayIso()
+  const scheduledUntil = addIsoDays(salonToday, SCHEDULED_SOON_DAYS)
+  // Inclui o dia civil inteiro (mesmo horário já passado) até +SCHEDULED_SOON_DAYS.
   const scheduled_soon = enriched.filter((s) => {
     if (!s.scheduled_at) return false
-    const t = new Date(s.scheduled_at).getTime()
-    return t >= now && t - now <= 7 * DAY_MS
+    const day = toSalonDateIso(s.scheduled_at)
+    return day != null && day >= salonToday && day <= scheduledUntil
   }).length
-  const salonToday = todayIso()
   const scheduled_today = enriched.filter((s) => {
     if (!s.scheduled_at) return false
     return toSalonDateIso(s.scheduled_at) === salonToday

@@ -24,6 +24,8 @@ export interface ListContactsWithSummaryOpts {
   status?: string | null
   /** Canal (whatsapp/avec/manual/…). */
   channel?: string | null
+  /** Lista alfabética da base (modo Todos) — sem priorizar urgência. */
+  orderBy?: 'urgency' | 'name'
 }
 
 export interface ContactListResult {
@@ -156,8 +158,11 @@ async function rankUrgentContactIds(
         )::int as due_soon,
         count(*) filter (
           where scheduled_at is not null
-            and scheduled_at >= now()
-            and scheduled_at <= now() + (${SCHEDULED_SOON_DAYS} * interval '1 day')
+            and (scheduled_at at time zone 'America/Sao_Paulo')::date
+              >= (now() at time zone 'America/Sao_Paulo')::date
+            and (scheduled_at at time zone 'America/Sao_Paulo')::date
+              <= (now() at time zone 'America/Sao_Paulo')::date
+                + (${SCHEDULED_SOON_DAYS} * interval '1 day')
         )::int as scheduled_soon
       from svc
       group by contact_id
@@ -187,14 +192,24 @@ export async function listContactsWithSummary(
   const rawQuery = (opts.query ?? '').trim()
   const q = rawQuery.toLowerCase()
   const qDigits = rawQuery.replace(/\D/g, '')
+  const nameTokens = q
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2)
+    .slice(0, 5)
   const pendingOnly = opts.pendingOnly === true
   const status = parseStatus(opts.status)
   const channel = parseChannel(opts.channel)
+  const orderByName = opts.orderBy === 'name'
   const sql = getSql()
 
-  // Busca por nome/telefone — SQL limit + serviços só dos hits.
-  if (q || qDigits.length >= 3) {
-    const namePattern = q ? `%${q}%` : null
+  // Busca por nome/telefone — tokens AND (ex.: "vinicius caetano") + dígitos.
+  if (nameTokens.length > 0 || qDigits.length >= 3) {
+    const t0 = nameTokens[0] ? `%${nameTokens[0]}%` : null
+    const t1 = nameTokens[1] ? `%${nameTokens[1]}%` : null
+    const t2 = nameTokens[2] ? `%${nameTokens[2]}%` : null
+    const t3 = nameTokens[3] ? `%${nameTokens[3]}%` : null
+    const t4 = nameTokens[4] ? `%${nameTokens[4]}%` : null
     const phonePattern = qDigits.length >= 3 ? `%${qDigits}%` : null
     const countRows = (await sql`
       select count(*)::int as n from contacts
@@ -202,7 +217,14 @@ export async function listContactsWithSummary(
         and (${status}::text is null or status = ${status})
         and (${channel}::text is null or channel = ${channel})
         and (
-          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
+          (
+            ${t0}::text is not null
+            and lower(coalesce(name, '')) like ${t0}
+            and (${t1}::text is null or lower(coalesce(name, '')) like ${t1})
+            and (${t2}::text is null or lower(coalesce(name, '')) like ${t2})
+            and (${t3}::text is null or lower(coalesce(name, '')) like ${t3})
+            and (${t4}::text is null or lower(coalesce(name, '')) like ${t4})
+          )
           or (
             ${phonePattern}::text is not null
             and regexp_replace(coalesce(phone, ''), '\\D', '', 'g') like ${phonePattern}
@@ -216,13 +238,20 @@ export async function listContactsWithSummary(
         and (${status}::text is null or status = ${status})
         and (${channel}::text is null or channel = ${channel})
         and (
-          (${namePattern}::text is not null and lower(coalesce(name, '')) like ${namePattern})
+          (
+            ${t0}::text is not null
+            and lower(coalesce(name, '')) like ${t0}
+            and (${t1}::text is null or lower(coalesce(name, '')) like ${t1})
+            and (${t2}::text is null or lower(coalesce(name, '')) like ${t2})
+            and (${t3}::text is null or lower(coalesce(name, '')) like ${t3})
+            and (${t4}::text is null or lower(coalesce(name, '')) like ${t4})
+          )
           or (
             ${phonePattern}::text is not null
             and regexp_replace(coalesce(phone, ''), '\\D', '', 'g') like ${phonePattern}
           )
         )
-      order by created_at desc
+      order by name nulls last, created_at desc
       limit ${limit}
     `) as ContactRow[]
     const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
@@ -230,6 +259,25 @@ export async function listContactsWithSummary(
     if (!pendingOnly) return { items: withU, total }
     const items = withU.filter((c) => c.pending_actions > 0)
     return { items, total: contacts.length < limit ? items.length : total }
+  }
+
+  // Todos: base da unidade em ordem alfabética (sem filtro de urgência).
+  if (orderByName && !pendingOnly && !status) {
+    const countRows = (await sql`
+      select count(*)::int as n from contacts
+      where anonymized_at is null
+        and (${channel}::text is null or channel = ${channel})
+    `) as { n: number }[]
+    const total = countRows[0]?.n ?? 0
+    const contacts = (await sql`
+      select * from contacts
+      where anonymized_at is null
+        and (${channel}::text is null or channel = ${channel})
+      order by lower(coalesce(name, '')) asc nulls last, created_at desc
+      limit ${limit}
+    `) as ContactRow[]
+    const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+    return { items: withUrgency(contacts, byContact), total }
   }
 
   // Filtro de status do funil: página por created_at (não ranqueia 40k importados).
