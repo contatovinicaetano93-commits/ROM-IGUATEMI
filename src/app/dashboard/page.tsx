@@ -139,7 +139,14 @@ export default function DashboardPage() {
                 : 'Sync Avec full desatualizado (>24h) — números podem estar velhos',
           )
         } else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
-        else if (sync?.status === 'error') warnings.push('Último sync Avec com erro — confira Admin')
+        else if (sync?.status === 'error') {
+          const errMsg = typeof sync.error === 'string' ? sync.error.toLowerCase() : ''
+          warnings.push(
+            errMsg.includes('timeout') || errMsg.includes('abandoned') || errMsg.includes('interrompido')
+              ? 'Último sync Avec interrompido por timeout (Vercel) — confira Admin / rode sync de novo'
+              : 'Último sync Avec com erro — confira Admin',
+          )
+        }
 
         if (warnings.length) setWarn(warnings.join(' · '))
         else setWarn(null)

@@ -34,7 +34,7 @@ interface Contact {
   top_action: string | null
 }
 
-type ListMode = 'reactivate' | 'search'
+type ListMode = 'reactivate' | 'all' | 'search'
 type ReactivateQueue = 'overdue' | 'due_soon' | 'scheduled'
 
 function contactQueue(c: Contact): ReactivateQueue | null {
@@ -127,13 +127,18 @@ export default function ContatosPage() {
   async function load() {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ sort: 'urgency', limit: '100' })
+      const params = new URLSearchParams({
+        limit: mode === 'all' ? '500' : '100',
+        sort: mode === 'all' ? 'name' : 'urgency',
+      })
       if (mode === 'reactivate') {
         params.set('pending', 'true')
-      } else if (debouncedQuery) {
+      } else if (mode === 'search' && debouncedQuery) {
         params.set('q', debouncedQuery)
+      } else if (mode === 'search') {
+        // Buscar vazio: amostra recente (não a base inteira) — use Todos.
+        params.set('limit', '100')
       }
-      // Buscar sem texto: lista a base (paginada) — "puxar todos os contatos".
       const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.error) setError(json.error)
@@ -187,25 +192,37 @@ export default function ContatosPage() {
   }, [mode])
 
   const visible =
-    mode === 'search' ? contacts : queue === 'overdue' ? queues.overdue : queue === 'due_soon' ? queues.due_soon : queues.scheduled
+    mode === 'reactivate'
+      ? queue === 'overdue'
+        ? queues.overdue
+        : queue === 'due_soon'
+          ? queues.due_soon
+          : queues.scheduled
+      : contacts
 
   const countLabel =
-    mode === 'search'
-      ? `${visible.length} contato${visible.length === 1 ? '' : 's'}${
-          totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
-        }${debouncedQuery ? '' : ' (base)'}`
-      : `${visible.length} na fila`
+    mode === 'reactivate'
+      ? `${visible.length} na fila`
+      : mode === 'all'
+        ? `${visible.length} contato${visible.length === 1 ? '' : 's'}${
+            totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
+          }`
+        : `${visible.length} contato${visible.length === 1 ? '' : 's'}${
+            totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
+          }${debouncedQuery ? '' : ' (digite para buscar)'}`
 
   const emptyCopy =
     mode === 'search'
       ? debouncedQuery
         ? 'Nenhum contato encontrado.'
-        : 'Nenhum contato na base.'
-      : queue === 'overdue'
-        ? 'Nenhum atrasado (cadência vencida com visita registrada).'
-        : queue === 'due_soon'
-          ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
-          : 'Nenhum agendado.'
+        : 'Digite um nome ou telefone para buscar na base.'
+      : mode === 'all'
+        ? 'Nenhum contato na base desta unidade.'
+        : queue === 'overdue'
+          ? 'Nenhum atrasado (cadência vencida com visita registrada).'
+          : queue === 'due_soon'
+            ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
+            : 'Nenhum agendado hoje ou nos próximos 7 dias.'
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -214,7 +231,11 @@ export default function ContatosPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold lg:hidden">Contatos</p>
           <h1 className="mt-1 text-xl font-semibold lg:mt-0 lg:text-2xl">Contatos</h1>
           <p className="mt-0.5 text-xs text-muted">
-            {mode === 'reactivate' ? 'Reative quem está atrasado ou vencendo' : 'Liste a base ou busque por nome/telefone'}
+            {mode === 'reactivate'
+              ? 'Reative quem está atrasado, vencendo ou agendado'
+              : mode === 'all'
+                ? 'Todos os contatos da unidade (A–Z)'
+                : 'Busque por nome ou telefone em toda a base'}
             {' · '}
             {countLabel}
           </p>
@@ -230,11 +251,12 @@ export default function ContatosPage() {
       <div
         role="tablist"
         aria-label="Modo da lista"
-        className="grid grid-cols-2 rounded-2xl border border-border bg-card p-1"
+        className="grid grid-cols-3 rounded-2xl border border-border bg-card p-1"
       >
         {(
           [
             { id: 'reactivate' as const, label: 'Reativar' },
+            { id: 'all' as const, label: 'Todos' },
             { id: 'search' as const, label: 'Buscar' },
           ] as const
         ).map((tab) => {
@@ -336,13 +358,22 @@ export default function ContatosPage() {
             <p className="text-sm text-muted">{emptyCopy}</p>
             <div className="flex flex-wrap items-center justify-center gap-2">
               {mode === 'reactivate' && (
-                <button
-                  type="button"
-                  onClick={() => setMode('search')}
-                  className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-gold"
-                >
-                  Buscar contato
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setMode('all')}
+                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-gold"
+                  >
+                    Ver todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode('search')}
+                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-gold"
+                  >
+                    Buscar contato
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -384,7 +415,9 @@ export default function ContatosPage() {
                         'Sem telefone'
                       )}
                       <span aria-hidden> · </span>
-                      <span className="text-foreground/80">{serviceLine(c, mode === 'reactivate' ? queue : q)}</span>
+                      <span className="text-foreground/80">
+                        {serviceLine(c, mode === 'reactivate' ? queue : q)}
+                      </span>
                     </p>
                   </div>
                 </Link>
@@ -413,8 +446,10 @@ export default function ContatosPage() {
       {formOpen && (
         <NewContactSheet
           onClose={() => setFormOpen(false)}
-          onCreated={() => {
-            void load()
+          onCreated={(createdName) => {
+            setMode('search')
+            setQuery(createdName)
+            setDebouncedQuery(createdName.trim())
           }}
         />
       )}
@@ -422,7 +457,13 @@ export default function ContatosPage() {
   )
 }
 
-function NewContactSheet({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function NewContactSheet({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void
+  onCreated: (name: string) => void
+}) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [notes, setNotes] = useState('')
@@ -436,6 +477,12 @@ function NewContactSheet({ onClose, onCreated }: { onClose: () => void; onCreate
     e.preventDefault()
     setSubmitting(true)
     setFormError(null)
+    const digits = phone.replace(/\D/g, '')
+    if (digits.length < 8) {
+      setFormError('Telefone com pelo menos 8 dígitos')
+      setSubmitting(false)
+      return
+    }
     try {
       const services =
         serviceName.trim().length > 0
@@ -458,7 +505,7 @@ function NewContactSheet({ onClose, onCreated }: { onClose: () => void; onCreate
         setFormError(json.error ?? 'Erro ao salvar')
         return
       }
-      onCreated()
+      onCreated(name.trim())
       onClose()
     } catch (err) {
       setFormError(String(err))
@@ -493,7 +540,7 @@ function NewContactSheet({ onClose, onCreated }: { onClose: () => void; onCreate
               placeholder="Nome do cliente"
             />
           </Field>
-          <Field label="Telefone">
+          <Field label="Telefone (mín. 8 dígitos)">
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}

@@ -21,7 +21,10 @@ const serviceSchema = z.object({
 
 const schema = z.object({
   name: z.string().min(1),
-  phone: z.string().min(8),
+  phone: z
+    .string()
+    .min(8, 'Telefone com pelo menos 8 dígitos')
+    .refine((v) => v.replace(/\D/g, '').length >= 8, 'Telefone com pelo menos 8 dígitos'),
   email: z.string().email().optional(),
   notes: z.string().optional(),
   services: z.array(serviceSchema).optional(),
@@ -43,7 +46,7 @@ export async function GET(req: NextRequest) {
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 100
 
     const cacheKey = [
-      'contacts:list:v5',
+      'contacts:list:v6',
       `lim=${limit}`,
       `sort=${sort}`,
       `pend=${pendingOnly ? 1 : 0}`,
@@ -61,6 +64,7 @@ export async function GET(req: NextRequest) {
           pendingOnly,
           status,
           channel,
+          orderBy: sort === 'name' ? 'name' : 'urgency',
         })
         let items = rawItems
         if (sort === 'urgency') {
