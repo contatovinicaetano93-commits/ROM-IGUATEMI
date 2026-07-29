@@ -296,7 +296,20 @@ export default function RelatorioDiretoriaPage() {
         const cmp = b.quarters.find((q) => q.quarter === compare)
         return { pro: b.professional, sel, cmp, reactivation: b.reactivation }
       })
+      .sort((a, b) => {
+        // Mesmo padrão do BR: mais clientes p/ reativar primeiro; empate → maior retorno.
+        const aN = a.sel?.clients_total ?? a.reactivation.length
+        const bN = b.sel?.clients_total ?? b.reactivation.length
+        const byClients = bN - aN
+        if (byClients !== 0) return byClients
+        return (b.sel?.return_rate ?? 0) - (a.sel?.return_rate ?? 0)
+      })
   }, [data, quarter, compare, proId0011])
+
+  const clientsOnList = useMemo(
+    () => selectedReturn.reduce((s, r) => s + (r.sel?.clients_total ?? r.reactivation.length), 0),
+    [selectedReturn],
+  )
 
   const quarterPair = useMemo(() => {
     if (!compareMonths) return { older: quarter0021, newer: quarter0021 }
@@ -531,7 +544,7 @@ export default function RelatorioDiretoriaPage() {
             <Kpi
               icon={<Users size={16} />}
               label="Na lista"
-              value={loading ? '—' : String(selectedReturn.length)}
+              value={loading ? '—' : String(clientsOnList)}
             />
             <Kpi
               icon={<TrendingUp size={16} />}
@@ -622,7 +635,7 @@ export default function RelatorioDiretoriaPage() {
                           </td>
                           <td
                             className={`py-3 pr-3 tabular-nums ${
-                              delta != null && delta < 0 ? 'text-danger' : 'text-success'
+                              delta == null ? 'text-muted' : 'text-success'
                             }`}
                           >
                             {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta} p.p.`}
@@ -957,11 +970,7 @@ export default function RelatorioDiretoriaPage() {
                             </td>
                             <td
                               className={`py-3 tabular-nums ${
-                                delta == null
-                                  ? 'text-muted'
-                                  : delta < 0
-                                    ? 'text-danger'
-                                    : 'text-success'
+                                delta == null ? 'text-muted' : 'text-success'
                               }`}
                             >
                               {delta == null ? '—' : formatCurrency(delta)}
