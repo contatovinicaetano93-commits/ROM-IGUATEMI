@@ -67,10 +67,9 @@ function withUrgency(
 async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
   if (ids.length === 0) return []
   const sql = getSql()
-  // postgres.js exige o helper sql(ids) para expandir IN (...).
   return (await sql`
     select * from contacts
-    where id in ${sql(ids)}
+    where id = any(${ids}::uuid[])
       and anonymized_at is null
   `) as ContactRow[]
 }
@@ -81,8 +80,11 @@ async function loadServicesByContactIds(ids: string[]): Promise<Map<string, Clie
   if (ids.length === 0) return byContact
   const sql = getSql()
   const services = (await sql`
-    select * from client_services
-    where active = true and contact_id in ${sql(ids)}
+    select
+      id, contact_id, name, category, product, professional_name, cadence_days,
+      last_done_at, last_price, scheduled_at, active, notes, created_at
+    from client_services
+    where active = true and contact_id = any(${ids}::uuid[])
   `) as ClientService[]
   for (const s of services) {
     const list = byContact.get(s.contact_id) ?? []
@@ -394,7 +396,7 @@ export async function listContactsWithSummary(
         where status = ${status}
           and anonymized_at is null
           and (${channel}::text is null or channel = ${channel})
-          and id in ${sql(pendingIds)}
+          and id = any(${pendingIds}::uuid[])
       `) as ContactRow[]
       const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
       const items = withUrgency(contacts, byContact)
@@ -448,7 +450,7 @@ export async function listContactsWithSummary(
             select * from contacts
             where anonymized_at is null
               and (${channel}::text is null or channel = ${channel})
-              and id not in ${sql(urgentIds)}
+              and not (id = any(${urgentIds}::uuid[]))
             order by created_at desc
             limit ${remaining}
           `) as ContactRow[])
