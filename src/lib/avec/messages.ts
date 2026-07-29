@@ -4,7 +4,7 @@
  */
 
 export const AVEC_TOKEN_EXPIRED_MESSAGE =
-  'Token Avec expirado — o refresh automático (a cada 6h) falhou; force em Admin ou /api/avec/refresh-token?force=1'
+  'Token Avec expirado — o refresh automático (a cada 3h) falhou; force em Admin ou /api/avec/refresh-token?force=1'
 
 /** Último sync bem-sucedido há mais que isto → badge "stale". */
 export const AVEC_SYNC_STALE_MS = 2.5 * 60 * 60 * 1000
