@@ -9,6 +9,7 @@ interface Entry<T> {
 }
 
 const store = new Map<string, Entry<unknown>>()
+const inflight = new Map<string, Promise<unknown>>()
 
 export function ttlGet<T>(key: string): T | undefined {
   const hit = store.get(key)
@@ -32,8 +33,21 @@ export async function ttlGetOrSet<T>(
 ): Promise<T> {
   const cached = ttlGet<T>(key)
   if (cached !== undefined) return cached
-  const value = await compute()
-  return ttlSet(key, value, ttlMs)
+
+  const pending = inflight.get(key)
+  if (pending) return pending as Promise<T>
+
+  const promise = (async () => {
+    const again = ttlGet<T>(key)
+    if (again !== undefined) return again
+    const value = await compute()
+    return ttlSet(key, value, ttlMs)
+  })().finally(() => {
+    inflight.delete(key)
+  })
+
+  inflight.set(key, promise)
+  return promise
 }
 
 export function ttlDelete(prefixOrKey: string) {

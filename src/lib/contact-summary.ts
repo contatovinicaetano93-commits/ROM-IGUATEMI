@@ -135,25 +135,6 @@ function parseChannel(raw: string | null | undefined): string | null {
   return (CONTACT_CHANNELS as readonly string[]).includes(raw) ? raw : null
 }
 
-async function orderContactsByUrgency(
-  ids: string[],
-  byContact: Map<string, ClientService[]>,
-): Promise<ContactRow[]> {
-  const contacts = await fetchContactsByIds(ids)
-  const byId = new Map(contacts.map((c) => [c.id, c]))
-  const ordered = ids.map((id) => byId.get(id)).filter((c): c is ContactRow => Boolean(c))
-  ordered.sort((a, b) => {
-    const ua = urgencyForServices(byContact.get(a.id) ?? [])
-    const ub = urgencyForServices(byContact.get(b.id) ?? [])
-    return compareByOverdueThenName(
-      { max_overdue_days: ua.max_overdue_days, name: a.name },
-      { max_overdue_days: ub.max_overdue_days, name: b.name },
-    )
-  })
-  return ordered
-}
-
-/** Mantém a ordem dos IDs (ex.: ranking SQL por horário). */
 async function orderContactsByIds(ids: string[]): Promise<ContactRow[]> {
   const contacts = await fetchContactsByIds(ids)
   const byId = new Map(contacts.map((c) => [c.id, c]))
@@ -460,13 +441,11 @@ export async function listContactsWithSummary(
   }
 
   // Pending: ranking SQL de urgência (atraso / vencendo / agendado).
+  // Mantém ordem do SQL — evita 2ª passagem urgencyForServices só para reordenar.
   if (pendingOnly) {
     const pendingIds = await rankUrgentContactIds(limit, { channel, urgencyQueue })
     const byContact = await loadServicesByContactIds(pendingIds)
-    const ordered =
-      urgencyQueue === 'scheduled'
-        ? await orderContactsByIds(pendingIds)
-        : await orderContactsByUrgency(pendingIds, byContact)
+    const ordered = await orderContactsByIds(pendingIds)
     const items = withUrgency(ordered, byContact)
     return { items, total: items.length }
   }
@@ -474,7 +453,7 @@ export async function listContactsWithSummary(
   // Default: urgentes via ranking SQL, depois recentes para completar a página.
   const urgentIds = await rankUrgentContactIds(limit, { channel, urgencyQueue: null })
   const byContact = await loadServicesByContactIds(urgentIds)
-  const orderedUrgent = await orderContactsByUrgency(urgentIds, byContact)
+  const orderedUrgent = await orderContactsByIds(urgentIds)
 
   let items =
     orderedUrgent.length >= limit

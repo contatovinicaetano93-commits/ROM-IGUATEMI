@@ -5,6 +5,7 @@ import { ingestAvecWebhook } from '@/lib/avec/webhook-ingest'
 import { scheduleAvecWebhookSideEffects } from '@/lib/avec/sync-trigger'
 import { isAuthorized } from '@/lib/auth'
 import { resolveRequestHost } from '@/lib/deployment'
+import { invalidateOpsCaches } from '@/lib/ops-cache'
 
 /**
  * Webhook Avec — tempo real (push).
@@ -19,6 +20,8 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const result = await ingestAvecWebhook(body)
+    // Agenda já gravada no Postgres — limpa Contatos/Hoje/Pipeline deste isolate.
+    invalidateOpsCaches()
     scheduleAvecWebhookSideEffects(result.event)
     return ok(result)
   } catch (e) {

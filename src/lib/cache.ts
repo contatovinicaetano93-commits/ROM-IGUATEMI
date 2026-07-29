@@ -1,3 +1,5 @@
+import { RequestDeduplicator } from '@/lib/deduplicator'
+
 export interface CacheEntry<T> {
   value: T
   expiresAt: number
@@ -51,6 +53,7 @@ export class MemoryCache {
   }
 }
 
+/** Cache + singleflight — miss concorrente não stampede o Postgres. */
 export async function cachedFetch<T>(
   key: string,
   fn: () => Promise<T>,
@@ -59,9 +62,13 @@ export async function cachedFetch<T>(
   const cached = MemoryCache.get<T>(key)
   if (cached) return cached
 
-  const value = await fn()
-  MemoryCache.set(key, value, ttlSeconds)
-  return value
+  return RequestDeduplicator.deduplicate(`cache:${key}`, async () => {
+    const again = MemoryCache.get<T>(key)
+    if (again) return again
+    const value = await fn()
+    MemoryCache.set(key, value, ttlSeconds)
+    return value
+  })
 }
 
 export function createCachedFunction<T>(

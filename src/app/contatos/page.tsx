@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Plus,
@@ -13,10 +13,11 @@ import {
   MessageSquare,
 } from 'lucide-react'
 import { Avatar, PrimaryButton } from '../_components/ui'
-import { apiFetch } from '@/lib/api-client'
+import { apiFetch, clearApiClientCache } from '@/lib/api-client'
 import { fmtSchedule, fmtScheduleParts, toSalonDateIso, whatsAppUrl } from '@/lib/salon/format'
 import { CATEGORY_LABEL, DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
+import { useLiveRefresh } from '@/lib/use-live-refresh'
 
 interface Contact {
   id: string
@@ -130,8 +131,9 @@ export default function ContatosPage() {
     return () => window.clearTimeout(t)
   }, [query])
 
-  async function load() {
-    setLoading(true)
+  async function load(opts?: { silent?: boolean }) {
+    const silent = opts?.silent === true
+    if (!silent) setLoading(true)
     try {
       if (mode === 'search' && !debouncedQuery) {
         setError(null)
@@ -149,10 +151,15 @@ export default function ContatosPage() {
       } else {
         params.set('q', debouncedQuery)
       }
-      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
+      if (silent) clearApiClientCache('/api/contacts')
+      const res = await apiFetch(`/api/contacts?${params}`, {
+        cache: 'no-store',
+        clientCache: !silent,
+      })
       const json = await res.json()
-      if (json.error) setError(json.error)
-      else {
+      if (json.error) {
+        if (!silent) setError(json.error)
+      } else {
         setError(null)
         setContacts(json.data ?? [])
         const total = json.meta?.total
@@ -167,11 +174,18 @@ export default function ContatosPage() {
         }
       }
     } catch (e) {
-      setError(String(e))
+      if (!silent) setError(String(e))
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
+
+  const silentRefresh = useCallback(() => {
+    void load({ silent: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, debouncedQuery, queue])
+
+  useLiveRefresh(silentRefresh, 60_000)
 
   useEffect(() => {
     void load()

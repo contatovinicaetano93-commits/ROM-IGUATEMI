@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Sun,
@@ -20,10 +20,11 @@ import { CountBadge } from '../_components/ui'
 import { BriefSheet } from '../_components/BriefSheet'
 import { UrgencyBadgeLegend } from '../_components/UrgencyBadgeLegend'
 import { fmtScheduleParts, formatCurrency } from '@/lib/salon/format'
-import { apiFetch } from '@/lib/api-client'
+import { apiFetch, clearApiClientCache } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
 import { contactHref } from '@/lib/auth-redirect'
 import { usePersistedBool } from '@/lib/use-persisted-bool'
+import { useLiveRefresh } from '@/lib/use-live-refresh'
 import { deriveAvecSyncUi } from '@/lib/avec/messages'
 import { formatKpiSources, kpiSourceFromSyncStatus } from '@/lib/kpi-source'
 
@@ -97,16 +98,37 @@ export default function HojePage() {
   const [scheduleOpen, setScheduleOpen] = usePersistedBool(HOJE_OPEN_SCHEDULE_KEY, false)
   const [playbookOpen, setPlaybookOpen] = usePersistedBool(HOJE_OPEN_PLAYBOOK_KEY, false)
 
-  useEffect(() => {
-    apiFetch('/api/hoje', { cache: 'no-store', timeoutMs: 25_000 })
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.error) setError(json.error)
-        else setData(json.data)
+  const loadHoje = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true
+    if (!silent) setLoading(true)
+    try {
+      if (silent) clearApiClientCache('/api/hoje')
+      const r = await apiFetch('/api/hoje', {
+        cache: 'no-store',
+        clientCache: !silent,
+        timeoutMs: 25_000,
       })
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false))
+      const json = await r.json()
+      if (json.error) {
+        if (!silent) setError(json.error)
+      } else {
+        setError(null)
+        setData(json.data)
+      }
+    } catch (e) {
+      if (!silent) setError(String(e))
+    } finally {
+      if (!silent) setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    void loadHoje()
+  }, [loadHoje])
+
+  useLiveRefresh(() => {
+    void loadHoje({ silent: true })
+  }, 60_000)
 
   const salon = data?.salon
   // Só mostra faturamento depois da API confirmar (staff nunca vê)

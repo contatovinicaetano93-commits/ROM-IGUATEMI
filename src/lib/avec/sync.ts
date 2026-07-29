@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { invalidateOpsCaches } from '@/lib/ops-cache'
 import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 import {
   upsertContact,
@@ -1156,11 +1157,14 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       payload: { avec_sync: stats, status, mode },
     })
 
+    // Contatos/Hoje/Pipeline não devem servir snapshot pré-sync neste isolate.
+    invalidateOpsCaches()
     return finished
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e)
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
+    invalidateOpsCaches()
     return finishAvecSyncRun(run.id, 'error', stats, msg)
   }
 }
