@@ -151,6 +151,20 @@ export const SETUP_ITEMS: SetupItem[] = [
     ],
     link: { href: 'https://t.me/BotFather', label: '@BotFather' },
   },
+  {
+    id: 'omie',
+    label: 'Omie (Contas a Pagar → despesas)',
+    envVars: ['OMIE_APP_KEY', 'OMIE_APP_SECRET'],
+    priority: 'quando_tiver',
+    steps: [
+      'Portal do Desenvolvedor Omie → Meus Aplicativos / Chave de Integração',
+      'Copiar App Key + App Secret DESTA unidade (Iguatemi ≠ Brasil)',
+      'Vercel → OMIE_APP_KEY e OMIE_APP_SECRET (Production) → Redeploy',
+      'Financeiro → “Puxar despesas Omie” (ou aguarde o cron diário 08:45 UTC)',
+      'Despesas Omie entram por data de vencimento; cancelados são removidos no sync',
+    ],
+    link: { href: 'https://developer.omie.com.br/', label: 'Portal Omie' },
+  },
 ]
 
 export function isItemConfigured(
@@ -170,6 +184,7 @@ export function isItemConfigured(
     }
     cron: { configured: boolean }
     auth: { enabled: boolean }
+    omie?: { configured?: boolean }
     deployment?: { panel: string }
     validation?: { ok: boolean }
     webhooks?: { avec_secret?: boolean }
@@ -202,6 +217,8 @@ export function isItemConfigured(
         Boolean(health.telegram.finance_bot_webhook_secret) &&
         Boolean(health.telegram.finance_bot_whitelist)
       )
+    case 'omie':
+      return Boolean(health.omie?.configured)
     default:
       return false
   }

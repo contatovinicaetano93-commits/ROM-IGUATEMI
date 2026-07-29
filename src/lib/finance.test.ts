@@ -123,7 +123,12 @@ describe('finance', () => {
       const { createExpense } = await import('@/lib/finance')
       const result = await createExpense(baseInput)
 
-      expect(result).toEqual(created)
+      expect(result).toEqual({
+        ...created,
+        source: 'manual',
+        external_id: null,
+        omie_status: null,
+      })
     })
   })
 

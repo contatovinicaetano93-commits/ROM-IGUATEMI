@@ -8,6 +8,7 @@ export type KpiSourceKind =
   | 'avec'
   | 'proxy'
   | 'manual'
+  | 'omie'
   | 'rom'
   | 'incomplete'
   | 'stale'
@@ -17,6 +18,7 @@ export const KPI_SOURCE_PT: Record<KpiSourceKind, string> = {
   avec: 'Avec',
   proxy: 'proxy',
   manual: 'manual',
+  omie: 'Omie',
   rom: 'ROM',
   incomplete: 'incompleto',
   stale: 'desatualizado',
