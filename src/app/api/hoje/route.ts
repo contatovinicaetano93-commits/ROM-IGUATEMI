@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 
         // Sequencial no pooler max:1 — Promise.all competia consigo mesmo e com outras lambdas.
         const salonRaw = await getSalonMetrics(day)
-        const playbookAll = await listActionItems()
+        const playbookAll = await listActionItems({ limit: 60 })
         const scheduleRaw = await listTodaySchedules(day, 200)
         const leadRows = (await sql`
           select

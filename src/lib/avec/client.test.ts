@@ -6,6 +6,7 @@ import {
   getAvecSyncMaxPages,
   isAvecWafForbiddenError,
   normalizeAvecApiToken,
+  periodRangeEndingOn,
   wasPaginationTruncated,
   withRequiredAvecReportParams,
   type AvecReportFetchResult,
@@ -176,5 +177,21 @@ describe('pagination truncation', () => {
     expect(getAvecSyncMaxPages()).toBe(500)
     if (prev === undefined) delete process.env.AVEC_SYNC_MAX_PAGES
     else process.env.AVEC_SYNC_MAX_PAGES = prev
+  })
+})
+
+describe('periodRangeEndingOn', () => {
+  it('ancora janela ~30d no fim do mês', () => {
+    expect(periodRangeEndingOn('2026-04-30', 30)).toEqual({
+      inicio: '31/03/2026',
+      fim: '30/04/2026',
+    })
+  })
+
+  it('aceita daysBack 0 (só o dia âncora)', () => {
+    expect(periodRangeEndingOn('2026-01-15', 0)).toEqual({
+      inicio: '15/01/2026',
+      fim: '15/01/2026',
+    })
   })
 })
