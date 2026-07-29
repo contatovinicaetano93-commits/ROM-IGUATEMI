@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     }
 
     const cacheKey = [
-      'contacts:list:v7',
+      'contacts:list:v8',
       `lim=${limit}`,
       `sort=${sort}`,
       `pend=${pendingOnly ? 1 : 0}`,
@@ -85,7 +85,8 @@ export async function GET(req: NextRequest) {
           urgencyQueue,
         })
         let items = rawItems
-        if (sort === 'urgency') {
+        // Agendados já vêm ordenados por horário — não reordenar por atraso.
+        if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
           items = [...items].sort(compareByOverdueThenName)
         }
 

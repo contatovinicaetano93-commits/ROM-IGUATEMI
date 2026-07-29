@@ -2,6 +2,7 @@ import { CONTACT_STATUSES, type ContactRow, type ContactStatus } from '@/lib/con
 import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
 import { DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
+import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { compareByOverdueThenName, urgencyForServices } from '@/lib/salon/urgency'
 
 export interface ContactListItem extends ContactRow {
@@ -12,6 +13,8 @@ export interface ContactListItem extends ContactRow {
   pending_actions: number
   urgency_score: number
   top_action: string | null
+  /** Próximo horário na janela Agendados (hoje → +SCHEDULED_SOON_DAYS). */
+  next_scheduled_at: string | null
 }
 
 export interface ListContactsWithSummaryOpts {
@@ -45,12 +48,37 @@ export interface ContactListResult {
   total: number
 }
 
+function addIsoDays(isoDay: string, days: number): string {
+  const [y, m, d] = isoDay.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + days))
+  return dt.toISOString().slice(0, 10)
+}
+
+/** Próximo scheduled_at na janela hoje…+SCHEDULED_SOON_DAYS (fuso do salão). */
+function nextScheduledInWindow(services: ClientService[]): string | null {
+  const today = todayIso()
+  const until = addIsoDays(today, SCHEDULED_SOON_DAYS)
+  let best: string | null = null
+  let bestTs = Number.POSITIVE_INFINITY
+  for (const s of services) {
+    if (!s.scheduled_at) continue
+    const day = toSalonDateIso(s.scheduled_at)
+    if (!day || day < today || day > until) continue
+    const ts = new Date(s.scheduled_at).getTime()
+    if (Number.isNaN(ts) || ts >= bestTs) continue
+    bestTs = ts
+    best = s.scheduled_at
+  }
+  return best
+}
+
 function withUrgency(
   contacts: ContactRow[],
   byContact: Map<string, ClientService[]>,
 ): ContactListItem[] {
   return contacts.map((c) => {
-    const u = urgencyForServices(byContact.get(c.id) ?? [])
+    const services = byContact.get(c.id) ?? []
+    const u = urgencyForServices(services)
     return {
       ...c,
       overdue: u.overdue,
@@ -60,6 +88,7 @@ function withUrgency(
       pending_actions: u.pending_actions,
       urgency_score: u.urgency_score,
       top_action: u.top_action,
+      next_scheduled_at: nextScheduledInWindow(services),
     }
   })
 }
@@ -122,6 +151,13 @@ async function orderContactsByUrgency(
     )
   })
   return ordered
+}
+
+/** Mantém a ordem dos IDs (ex.: ranking SQL por horário). */
+async function orderContactsByIds(ids: string[]): Promise<ContactRow[]> {
+  const contacts = await fetchContactsByIds(ids)
+  const byId = new Map(contacts.map((c) => [c.id, c]))
+  return ids.map((id) => byId.get(id)).filter((c): c is ContactRow => Boolean(c))
 }
 
 /**
@@ -427,7 +463,10 @@ export async function listContactsWithSummary(
   if (pendingOnly) {
     const pendingIds = await rankUrgentContactIds(limit, { channel, urgencyQueue })
     const byContact = await loadServicesByContactIds(pendingIds)
-    const ordered = await orderContactsByUrgency(pendingIds, byContact)
+    const ordered =
+      urgencyQueue === 'scheduled'
+        ? await orderContactsByIds(pendingIds)
+        : await orderContactsByUrgency(pendingIds, byContact)
     const items = withUrgency(ordered, byContact)
     return { items, total: items.length }
   }
