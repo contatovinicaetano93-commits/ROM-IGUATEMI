@@ -249,32 +249,41 @@ export default function ContatosPage() {
       </div>
 
       {mode === 'reactivate' && (
-        <div className="no-scrollbar flex gap-2 overflow-x-auto">
-          {(
-            [
-              { id: 'overdue' as const, label: 'Atrasados', count: queueCounts.overdue },
-              { id: 'due_soon' as const, label: 'Vencendo', count: queueCounts.due_soon },
-              { id: 'scheduled' as const, label: 'Agendados', count: queueCounts.scheduled },
-            ] as const
-          ).map((q) => {
-            const active = queue === q.id
-            return (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => setQueue(q.id)}
-                aria-pressed={active}
-                className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors ${
-                  active
-                    ? 'border-gold bg-gold/15 text-gold'
-                    : 'border-border bg-card text-muted active:text-foreground'
-                }`}
-              >
-                {q.label}
-                <span className="ml-1.5 tabular-nums opacity-80">{q.count}</span>
-              </button>
-            )
-          })}
+        <div className="flex flex-col gap-2">
+          <div className="no-scrollbar flex gap-2 overflow-x-auto">
+            {(
+              [
+                { id: 'overdue' as const, label: 'Atrasados', count: queueCounts.overdue },
+                { id: 'due_soon' as const, label: 'Vencendo', count: queueCounts.due_soon },
+                { id: 'scheduled' as const, label: 'Agendados', count: queueCounts.scheduled },
+              ] as const
+            ).map((q) => {
+              const active = queue === q.id
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={() => setQueue(q.id)}
+                  aria-pressed={active}
+                  className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors ${
+                    active
+                      ? 'border-gold bg-gold/15 text-gold'
+                      : 'border-border bg-card text-muted active:text-foreground'
+                  }`}
+                >
+                  {q.label}
+                  <span className="ml-1.5 tabular-nums opacity-80">{q.count}</span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
+            {queue === 'overdue'
+              ? 'Atrasados: cadência já passou — visita registrada e sem retorno no prazo.'
+              : queue === 'due_soon'
+                ? `Vencendo: retorno previsto nos próximos ${DUE_SOON_DAYS} dias (ainda não atrasou).`
+                : 'Agendados: horário marcado hoje ou nos próximos 7 dias.'}
+          </p>
         </div>
       )}
 
