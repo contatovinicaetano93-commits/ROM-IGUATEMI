@@ -19,7 +19,7 @@ describe('omie dates', () => {
 describe('normalizeOmieTitulo', () => {
   const cats = new Map([['2.04.04', 'Energia Elétrica']])
 
-  it('normaliza título pago', () => {
+  it('normaliza título pago com CNPJ serviços', () => {
     const titulo: OmieTituloEncontrado = {
       cabecTitulo: {
         nCodTitulo: 123,
@@ -33,13 +33,14 @@ describe('normalizeOmieTitulo', () => {
         cCPFCNPJCliente: '11.111.111/0001-11',
       },
     }
-    const n = normalizeOmieTitulo(titulo, cats, 'Fornecedor X')
+    const n = normalizeOmieTitulo(titulo, cats, 'Fornecedor X', 'servicos')
     expect(n?.externalId).toBe('123')
     expect(n?.amount).toBe(249.5)
     expect(n?.expenseDate).toBe('2026-07-10')
     expect(n?.categoryName).toBe('Energia Elétrica')
-    expect(n?.description).toContain('Energia Elétrica')
+    expect(n?.description).toContain('Serviços (salão)')
     expect(n?.description).toContain('Fornecedor X')
+    expect(n?.cnpjKind).toBe('servicos')
     expect(n?.status).toBe('PAGO')
   })
 
@@ -52,8 +53,9 @@ describe('normalizeOmieTitulo', () => {
         dDtVenc: '10/07/2026',
       },
     }
-    const n = normalizeOmieTitulo(titulo, cats, null)
+    const n = normalizeOmieTitulo(titulo, cats, null, 'comercio')
     expect(n?.status).toBe('CANCELADO')
+    expect(n?.cnpjKind).toBe('comercio')
     expect(n?.amount).toBe(0)
   })
 })

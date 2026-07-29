@@ -14,7 +14,10 @@ async function execute(opts: { cron: boolean; monthParam: string | null }) {
     if (opts.cron) {
       return ok({ skipped: true, reason: 'aguardando_omie_credentials' })
     }
-    return err('Omie não configurado (OMIE_APP_KEY / OMIE_APP_SECRET)', 503)
+    return err(
+      'Omie não configurado (OMIE_SERVICOS_APP_KEY/SECRET e OMIE_COMERCIO_APP_KEY/SECRET)',
+      503,
+    )
   }
 
   if (opts.monthParam) {

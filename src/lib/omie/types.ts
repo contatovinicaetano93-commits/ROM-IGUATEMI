@@ -76,4 +76,5 @@ export interface OmieNormalizedExpense {
   categoryCode: string | null
   status: string
   supplierName: string | null
+  cnpjKind: 'servicos' | 'comercio'
 }

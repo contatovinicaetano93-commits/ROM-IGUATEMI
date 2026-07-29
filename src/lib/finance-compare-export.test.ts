@@ -28,6 +28,7 @@ function bucket(partial: {
     to: `${partial.month}-28`,
     revenue,
     expenses,
+    expenses_by_cnpj: { total: expenses, servicos: expenses, comercio: 0, manual: 0 },
     attended,
     ticket_avg: partial.ticket_avg ?? (attended > 0 ? revenue / attended : null),
     daily: partial.daily ?? [],

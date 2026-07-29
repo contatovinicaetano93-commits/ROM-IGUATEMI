@@ -260,7 +260,11 @@ export async function getHealthStatus() {
     },
     cron: { configured: envOk('CRON_SECRET') },
     omie: {
-      configured: envOk('OMIE_APP_KEY') && envOk('OMIE_APP_SECRET'),
+      configured: envOk('OMIE_SERVICOS_APP_KEY') || envOk('OMIE_APP_KEY'),
+      servicos:
+        (envOk('OMIE_SERVICOS_APP_KEY') && envOk('OMIE_SERVICOS_APP_SECRET')) ||
+        (envOk('OMIE_APP_KEY') && envOk('OMIE_APP_SECRET')),
+      comercio: envOk('OMIE_COMERCIO_APP_KEY') && envOk('OMIE_COMERCIO_APP_SECRET'),
       mock: process.env.OMIE_MOCK === '1' || process.env.OMIE_MOCK === 'true',
     },
     auth: {

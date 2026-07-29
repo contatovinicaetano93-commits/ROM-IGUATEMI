@@ -29,6 +29,8 @@ export interface FinanceExpense {
   source: 'manual' | 'omie' | string
   external_id: string | null
   omie_status: string | null
+  /** CNPJ Omie de origem: servicos (salão) | comercio (produtos). */
+  omie_cnpj_kind: 'servicos' | 'comercio' | null
 }
 
 export async function listCategories(activeOnly = true): Promise<FinanceCategory[]> {
@@ -78,27 +80,47 @@ export async function listExpenses(from: string, to: string): Promise<FinanceExp
         id, category_id, description, amount::float as amount,
         expense_date::text as expense_date, notes, receipt_url, created_at,
         coalesce(source, 'manual') as source,
-        external_id, omie_status
+        external_id, omie_status, omie_cnpj_kind
       from finance_expenses
       where expense_date >= ${from}::date and expense_date <= ${to}::date
       order by expense_date desc, created_at desc
     `
     return rows as FinanceExpense[]
   } catch {
-    const rows = await sql`
-      select
-        id, category_id, description, amount::float as amount,
-        expense_date::text as expense_date, notes, receipt_url, created_at
-      from finance_expenses
-      where expense_date >= ${from}::date and expense_date <= ${to}::date
-      order by expense_date desc, created_at desc
-    `
-    return (rows as Omit<FinanceExpense, 'source' | 'external_id' | 'omie_status'>[]).map((r) => ({
-      ...r,
-      source: 'manual',
-      external_id: null,
-      omie_status: null,
-    }))
+    try {
+      const rows = await sql`
+        select
+          id, category_id, description, amount::float as amount,
+          expense_date::text as expense_date, notes, receipt_url, created_at,
+          coalesce(source, 'manual') as source,
+          external_id, omie_status
+        from finance_expenses
+        where expense_date >= ${from}::date and expense_date <= ${to}::date
+        order by expense_date desc, created_at desc
+      `
+      return (rows as Omit<FinanceExpense, 'omie_cnpj_kind'>[]).map((r) => ({
+        ...r,
+        omie_cnpj_kind: r.source === 'omie' ? 'servicos' : null,
+      }))
+    } catch {
+      const rows = await sql`
+        select
+          id, category_id, description, amount::float as amount,
+          expense_date::text as expense_date, notes, receipt_url, created_at
+        from finance_expenses
+        where expense_date >= ${from}::date and expense_date <= ${to}::date
+        order by expense_date desc, created_at desc
+      `
+      return (
+        rows as Omit<FinanceExpense, 'source' | 'external_id' | 'omie_status' | 'omie_cnpj_kind'>[]
+      ).map((r) => ({
+        ...r,
+        source: 'manual',
+        external_id: null,
+        omie_status: null,
+        omie_cnpj_kind: null,
+      }))
+    }
   }
 }
 
@@ -124,6 +146,7 @@ export async function createExpense(input: CreateExpenseInput): Promise<FinanceE
     source: row.source ?? 'manual',
     external_id: row.external_id ?? null,
     omie_status: row.omie_status ?? null,
+    omie_cnpj_kind: row.omie_cnpj_kind ?? null,
   }
 }
 
@@ -196,6 +219,49 @@ async function sumExpenses(from: string, to: string): Promise<number> {
     where expense_date >= ${from}::date and expense_date <= ${to}::date
   `) as { total: string | number }[]
   return Number(rows[0]?.total ?? 0) || 0
+}
+
+export interface ExpenseCnpjBreakdown {
+  total: number
+  servicos: number
+  comercio: number
+  manual: number
+}
+
+async function sumExpensesByCnpj(from: string, to: string): Promise<ExpenseCnpjBreakdown> {
+  const sql = getSql()
+  try {
+    const rows = (await sql`
+      select
+        coalesce(sum(amount), 0)::float as total,
+        coalesce(sum(amount) filter (
+          where source = 'omie' and coalesce(omie_cnpj_kind, 'servicos') = 'servicos'
+        ), 0)::float as servicos,
+        coalesce(sum(amount) filter (
+          where source = 'omie' and omie_cnpj_kind = 'comercio'
+        ), 0)::float as comercio,
+        coalesce(sum(amount) filter (
+          where coalesce(source, 'manual') <> 'omie'
+        ), 0)::float as manual
+      from finance_expenses
+      where expense_date >= ${from}::date and expense_date <= ${to}::date
+    `) as {
+      total: number
+      servicos: number
+      comercio: number
+      manual: number
+    }[]
+    const row = rows[0]
+    return {
+      total: Math.round(Number(row?.total ?? 0) * 100) / 100,
+      servicos: Math.round(Number(row?.servicos ?? 0) * 100) / 100,
+      comercio: Math.round(Number(row?.comercio ?? 0) * 100) / 100,
+      manual: Math.round(Number(row?.manual ?? 0) * 100) / 100,
+    }
+  } catch {
+    const total = await sumExpenses(from, to)
+    return { total, servicos: 0, comercio: 0, manual: total }
+  }
 }
 
 export interface FinanceDayPoint {
@@ -369,6 +435,8 @@ export interface FinanceKpiBucket {
   to: string
   revenue: number
   expenses: number
+  /** Split por CNPJ Omie (serviços / comércio) + manuais. */
+  expenses_by_cnpj: ExpenseCnpjBreakdown
   /** Proxy de comandas finalizadas (métrica attended da Avec/Lake). */
   attended: number
   /** Ticket médio do período (receita ÷ atendidos). */
@@ -399,16 +467,17 @@ export interface FinanceKpis {
 
 async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
   const { from, to } = monthRange(monthKey)
-  const [revenue, expenses, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
+  const [revenue, expenseBreakdown, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),
-      sumExpenses(from, to),
+      sumExpensesByCnpj(from, to),
       getPaymentMixRange(from, to),
       getFiscalSplitSummary(from, to),
       sumAttended(from, to),
       listDailyMetrics(from, to),
       sumStockCogs(from, to),
     ])
+  const expenses = expenseBreakdown.total
   const cmv = cmvCoverage.cmv
   const revenueRounded = Math.round(revenue * 100) / 100
   const expensesRounded = Math.round(expenses * 100) / 100
@@ -425,6 +494,7 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
     to,
     revenue: revenueRounded,
     expenses: expensesRounded,
+    expenses_by_cnpj: expenseBreakdown,
     attended,
     ticket_avg,
     daily,
