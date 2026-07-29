@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { Avatar, PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
-import { whatsAppUrl } from '@/lib/salon/format'
+import { fmtSchedule, fmtScheduleParts, toSalonDateIso, whatsAppUrl } from '@/lib/salon/format'
 import { CATEGORY_LABEL, DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
 
@@ -32,6 +32,7 @@ interface Contact {
   pending_actions: number
   urgency_score: number
   top_action: string | null
+  next_scheduled_at?: string | null
 }
 
 type ListMode = 'reactivate' | 'search'
@@ -56,6 +57,7 @@ function serviceLine(c: Contact, queue: ReactivateQueue | null): string {
     return `${base} · em até ${DUE_SOON_DAYS} dias`
   }
   if (queue === 'scheduled') {
+    if (c.next_scheduled_at) return fmtSchedule(c.next_scheduled_at)
     return action || 'Retorno agendado'
   }
   return action || 'Sem sinal de retorno'
@@ -360,57 +362,78 @@ export default function ContatosPage() {
         )}
 
         {!loading &&
-          visible.map((c) => {
+          visible.map((c, i) => {
             const q = contactQueue(c)
             const wa = whatsappHrefFor(c)
+            const dayKey =
+              mode === 'reactivate' && queue === 'scheduled' && c.next_scheduled_at
+                ? toSalonDateIso(c.next_scheduled_at)
+                : null
+            const prevDayKey =
+              i > 0 &&
+              mode === 'reactivate' &&
+              queue === 'scheduled' &&
+              visible[i - 1]?.next_scheduled_at
+                ? toSalonDateIso(visible[i - 1]!.next_scheduled_at!)
+                : null
+            const dayHeader =
+              dayKey && dayKey !== prevDayKey && c.next_scheduled_at
+                ? fmtScheduleParts(c.next_scheduled_at).day
+                : null
             return (
-              <div
-                key={c.id}
-                className="flex items-stretch gap-2 border-b border-border px-3 py-3 last:border-0 sm:px-4"
-              >
-                <Link
-                  href={`/contatos/${c.id}?returnTo=${encodeURIComponent('/contatos')}`}
-                  className="flex min-w-0 flex-1 items-center gap-3 active:opacity-90"
-                >
-                  <Avatar name={c.name || c.phone || '?'} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-sm font-medium">{c.name || c.phone || 'Sem nome'}</p>
-                      {urgencyBadge(mode === 'reactivate' ? queue : q)}
-                    </div>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {c.phone ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Phone size={11} />
-                          {c.phone}
-                        </span>
-                      ) : (
-                        'Sem telefone'
-                      )}
-                      <span aria-hidden> · </span>
-                      <span className="text-foreground/80">
-                        {serviceLine(c, mode === 'reactivate' ? queue : q)}
-                      </span>
+              <div key={c.id}>
+                {dayHeader && (
+                  <div className="border-b border-border bg-surface/60 px-3 py-2 sm:px-4">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted">
+                      {dayHeader}
                     </p>
                   </div>
-                </Link>
-                {wa ? (
-                  <a
-                    href={wa}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => logOutreach(c.id)}
-                    aria-label={`Reativar ${c.name || 'contato'} no WhatsApp`}
-                    className="flex shrink-0 items-center justify-center gap-1.5 self-center rounded-xl border border-success/40 bg-success/10 px-3 py-2.5 text-xs font-semibold text-success active:scale-[0.98]"
-                  >
-                    <MessageSquare size={14} />
-                    <span className="hidden sm:inline">Reativar</span>
-                  </a>
-                ) : (
-                  <span className="flex shrink-0 items-center self-center px-2 text-[0.65rem] text-muted">
-                    Sem WA
-                  </span>
                 )}
+                <div className="flex items-stretch gap-2 border-b border-border px-3 py-3 last:border-0 sm:px-4">
+                  <Link
+                    href={`/contatos/${c.id}?returnTo=${encodeURIComponent('/contatos')}`}
+                    className="flex min-w-0 flex-1 items-center gap-3 active:opacity-90"
+                  >
+                    <Avatar name={c.name || c.phone || '?'} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-medium">{c.name || c.phone || 'Sem nome'}</p>
+                        {urgencyBadge(mode === 'reactivate' ? queue : q)}
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {c.phone ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Phone size={11} />
+                            {c.phone}
+                          </span>
+                        ) : (
+                          'Sem telefone'
+                        )}
+                        <span aria-hidden> · </span>
+                        <span className="text-foreground/80">
+                          {serviceLine(c, mode === 'reactivate' ? queue : q)}
+                        </span>
+                      </p>
+                    </div>
+                  </Link>
+                  {wa ? (
+                    <a
+                      href={wa}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => logOutreach(c.id)}
+                      aria-label={`Reativar ${c.name || 'contato'} no WhatsApp`}
+                      className="flex shrink-0 items-center justify-center gap-1.5 self-center rounded-xl border border-success/40 bg-success/10 px-3 py-2.5 text-xs font-semibold text-success active:scale-[0.98]"
+                    >
+                      <MessageSquare size={14} />
+                      <span className="hidden sm:inline">Reativar</span>
+                    </a>
+                  ) : (
+                    <span className="flex shrink-0 items-center self-center px-2 text-[0.65rem] text-muted">
+                      Sem WA
+                    </span>
+                  )}
+                </div>
               </div>
             )
           })}
