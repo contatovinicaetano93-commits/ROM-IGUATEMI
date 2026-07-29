@@ -47,11 +47,7 @@ export async function listActionItems(opts: ListActionItemsOpts = {}): Promise<A
         contact_id,
         scheduled_at,
         case
-          when cadence_days is null then null
-          when last_done_at is null
-            and (scheduled_at is null or scheduled_at < now())
-            then now() - (cadence_days * interval '1 day')
-          when last_done_at is null then null
+          when cadence_days is null or last_done_at is null then null
           else last_done_at + (cadence_days * interval '1 day')
         end as next_due
       from client_services
