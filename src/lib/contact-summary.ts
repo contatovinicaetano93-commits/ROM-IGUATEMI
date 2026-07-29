@@ -450,7 +450,7 @@ export async function listContactsWithSummary(
             select * from contacts
             where anonymized_at is null
               and (${channel}::text is null or channel = ${channel})
-              and id <> all(${urgentIds}::uuid[])
+              and not (id = any(${urgentIds}::uuid[]))
             order by created_at desc
             limit ${remaining}
           `) as ContactRow[])
