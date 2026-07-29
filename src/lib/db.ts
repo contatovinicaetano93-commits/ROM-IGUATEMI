@@ -35,6 +35,34 @@ export type Sql = {
 let cached: PostgresSql | null = null
 let cachedUrl: string | null = null
 
+/**
+ * Session pooler (5432) no Supabase tem poucas slots (EMAXCONNSESSION / pool_size 15).
+ * Em serverless (Vercel), transaction mode (6543) libera a conexão a cada query.
+ */
+export function toTransactionPoolerUrl(raw: string): string {
+  const trimmed = raw.trim()
+  try {
+    const u = new URL(trimmed)
+    const isSupabasePooler =
+      u.hostname.includes('pooler.supabase.com') || u.hostname.includes('.pooler.supabase.')
+    const port = u.port || '5432'
+    if (isSupabasePooler && port === '5432') {
+      u.port = '6543'
+      return u.toString()
+    }
+  } catch {
+    // URL inválida — deixa o postgres.js falhar com a string original.
+  }
+  return trimmed
+}
+
+export function isDbPoolExhaustedError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /EMAXCONNSESSION|max clients reached|remaining connection slots|too many connections/i.test(
+    msg,
+  )
+}
+
 function wrap(sql: PostgresSql): Sql {
   const tagged = ((strings: TemplateStringsArray, ...values: unknown[]) =>
     sql(strings, ...(values as never[]))) as unknown as Sql
@@ -65,7 +93,7 @@ function readDeployOverlayUrl(): string | null {
   return null
 }
 
-/** URL efetiva: bake de deploy → overlay secrets/ → DATABASE_URL. */
+/** URL efetiva (ainda sem rewrite de porta): bake → overlay → DATABASE_URL. */
 export function peekResolvedDatabaseUrl(): string | null {
   const baked = typeof DEPLOY_DATABASE_URL === 'string' ? DEPLOY_DATABASE_URL.trim() : ''
   if (baked.startsWith('postgres')) return baked
@@ -94,10 +122,22 @@ export function peekDatabaseHost(): string | null {
   }
 }
 
+/** Porta efetiva após rewrite 5432→6543 (sem credenciais). */
+export function peekDatabasePort(): string | null {
+  const url = peekResolvedDatabaseUrl()
+  if (!url) return null
+  try {
+    const u = new URL(toTransactionPoolerUrl(url))
+    return u.port || '5432'
+  } catch {
+    return null
+  }
+}
+
 function resolveDatabaseUrl(): string {
   const url = peekResolvedDatabaseUrl()
-  if (url) return url
-  throw new Error('DATABASE_URL não configurada')
+  if (!url) throw new Error('DATABASE_URL não configurada')
+  return toTransactionPoolerUrl(url)
 }
 
 export function getSql(): Sql {
@@ -107,13 +147,13 @@ export function getSql(): Sql {
     cached?.end({ timeout: 1 }).catch(() => {})
     cached = postgres(url, {
       ssl: 'require',
-      // Transaction pooler (6543): 8 conexões permitem Promise.all real nos painéis
-      // sem estourar o pooler (cada isolate serverless tem o próprio pool).
-      max: 8,
+      // 1 conn por isolate — várias lambdas × max alto estouram session pooler.
+      max: 1,
+      // Transaction pooler: prepared statements quebram no modo transaction.
       prepare: false,
-      idle_timeout: 15,
-      max_lifetime: 60 * 5,
-      connect_timeout: 15,
+      idle_timeout: 5,
+      max_lifetime: 60 * 2,
+      connect_timeout: 10,
     })
     cachedUrl = url
   }
