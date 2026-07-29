@@ -10,8 +10,22 @@ function isPublicApi(pathname: string) {
   return PUBLIC_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
+function isFinanceAllowedAdminApi(pathname: string) {
+  // Handlers usam requireFinance (admin + financeiro).
+  return pathname === '/api/admin/analytics-backfill'
+}
+
 function isFinancePath(pathname: string) {
-  return pathname === '/financeiro' || pathname.startsWith('/financeiro/') || pathname.startsWith('/api/financeiro/')
+  return (
+    pathname === '/financeiro' ||
+    pathname.startsWith('/financeiro/') ||
+    pathname.startsWith('/api/financeiro/') ||
+    isFinanceAllowedAdminApi(pathname)
+  )
+}
+
+function isLgpdAnonymizePath(pathname: string) {
+  return /^\/api\/contacts\/[^/]+\/anonymize$/.test(pathname)
 }
 
 function isRelatoriosPath(pathname: string) {
@@ -29,6 +43,44 @@ function isStockPath(pathname: string) {
 // Área compartilhada por todos os papéis (admin, staff, financeiro) — não é exclusiva do financeiro.
 function isOnboardingPath(pathname: string) {
   return pathname === '/onboarding' || pathname.startsWith('/onboarding/') || pathname.startsWith('/api/onboarding/')
+}
+
+/** Staff: operação do dia (sem receita comercial / admin). */
+function isStaffPath(pathname: string) {
+  return (
+    pathname === '/' ||
+    pathname === '/hoje' ||
+    pathname.startsWith('/api/hoje') ||
+    pathname === '/pipeline' ||
+    pathname.startsWith('/api/pipeline') ||
+    pathname === '/contatos' ||
+    pathname.startsWith('/contatos/') ||
+    pathname.startsWith('/api/contacts') ||
+    pathname.startsWith('/api/services') ||
+    pathname.startsWith('/api/schedule') ||
+    pathname.startsWith('/api/recommendations') ||
+    pathname.startsWith('/api/reactivation') ||
+    isOnboardingPath(pathname) ||
+    pathname === '/api/auth/session' ||
+    pathname === '/api/auth/logout'
+  )
+}
+
+function isAdminOnlyPath(pathname: string) {
+  return (
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
+    pathname === '/dashboard' ||
+    pathname.startsWith('/api/kpis') ||
+    pathname === '/api/avec/sync' ||
+    pathname === '/api/avec/sync/revenue-backfill' ||
+    pathname === '/api/avec/purge-snapshots' ||
+    pathname === '/api/avec/refresh-token' ||
+    pathname === '/api/seed' ||
+    (pathname.startsWith('/api/admin/') && !isFinanceAllowedAdminApi(pathname)) ||
+    pathname === '/api/lgpd/purge' ||
+    isLgpdAnonymizePath(pathname)
+  )
 }
 
 function isProtectedPage(pathname: string) {
@@ -85,7 +137,8 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/lgpd/purge' ||
     pathname === '/api/reminders/financeiro' ||
     pathname === '/api/reminders/aftercare' ||
-    pathname === '/api/admin/migrations'
+    pathname === '/api/admin/migrations' ||
+    pathname === '/api/admin/analytics-backfill'
   if (!(await isAuthorized(req, { allowHeaderTokens }))) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
@@ -100,15 +153,28 @@ export async function middleware(req: NextRequest) {
   // a uma chamada sem sessão (senão o cron cairia no 403 "acesso restrito").
   if (isCronAuthorized(req)) return NextResponse.next()
 
-  // Isolamento do painel Financeiro (Sprint 4): financeiro enxerga /financeiro
-  // + /estoque (acesso duplo) + /relatorios (overview do mês) + /onboarding
-  // — não hoje/dashboard/contatos/admin.
   const session = await getSession(req)
   const role = session?.role
   const financePath = isFinancePath(pathname)
   const stockPath = isStockPath(pathname)
   const onboardingPath = isOnboardingPath(pathname)
   const relatoriosPath = isRelatoriosPath(pathname)
+
+  // Staff: só operação (hoje/pipeline/contatos/onboarding) — sem Visão/Financeiro/Admin.
+  if (role === 'staff' && (isProtectedPage(pathname) || isProtectedApi(pathname)) && !isStaffPath(pathname)) {
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json({ error: 'Acesso restrito — use a conta admin para analytics/admin' }, { status: 403 })
+    }
+    return NextResponse.redirect(new URL('/hoje', req.url))
+  }
+
+  // Admin-only: diagnóstico, sync manual, visão analítica.
+  if (isAdminOnlyPath(pathname) && role !== 'admin') {
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json({ error: 'Acesso restrito ao admin' }, { status: 403 })
+    }
+    return NextResponse.redirect(new URL(role === 'financeiro' ? '/financeiro' : '/hoje', req.url))
+  }
 
   if (
     role === 'financeiro' &&
@@ -123,8 +189,7 @@ export async function middleware(req: NextRequest) {
     }
     return NextResponse.redirect(new URL('/financeiro', req.url))
   }
-  // Isolamento do painel Estoque: estoque só enxerga /estoque (+ /onboarding) —
-  // nunca financeiro/hoje/dashboard/contatos/admin.
+
   if (
     role === 'estoque' &&
     (isProtectedPage(pathname) || isProtectedApi(pathname)) &&
@@ -136,12 +201,14 @@ export async function middleware(req: NextRequest) {
     }
     return NextResponse.redirect(new URL('/estoque', req.url))
   }
+
   if ((financePath || relatoriosPath) && role !== 'admin' && role !== 'financeiro') {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
     }
     return NextResponse.redirect(new URL('/hoje', req.url))
   }
+
   if (stockPath && role !== 'admin' && role !== 'financeiro' && role !== 'estoque') {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })

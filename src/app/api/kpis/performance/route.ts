@@ -6,6 +6,8 @@ import { compareByNamePtBr } from '@/lib/salon/sort'
 import { todayIso } from '@/lib/salon/format'
 import { ttlGetOrSet } from '@/lib/ttl-cache'
 
+export const maxDuration = 20
+
 function monthLastDay(monthKey: string): string {
   const [y, m] = monthKey.split('-').map(Number)
   const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate()

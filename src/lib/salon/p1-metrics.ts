@@ -124,7 +124,10 @@ export async function getSalonP1Daily(day: string): Promise<SalonP1Daily | null>
  * aqui é o snapshot mais recente vs o snapshot disponível mais próximo de N
  * dias atrás, não meses de calendário como no TM.
  */
-export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Daily | null> {
+export async function getSalonP1DailyNear(
+  targetDay: string,
+  opts?: { maxSkewDays?: number },
+): Promise<SalonP1Daily | null> {
   const sql = getSql()
   try {
     const rows = (await sql`
@@ -140,10 +143,34 @@ export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Dai
       order by day desc
       limit 1
     `) as SalonP1Daily[]
-    return mapSalonP1Row(rows[0])
+    const row = mapSalonP1Row(rows[0])
+    if (!row || opts?.maxSkewDays == null) return row
+    const minDay = addDaysIso(targetDay, -Math.max(0, Math.floor(opts.maxSkewDays)))
+    return row.day >= minDay ? row : null
   } catch {
     return null
   }
+}
+
+function addDaysIso(day: string, delta: number): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Último dia civil do mês imediatamente anterior a `day` (YYYY-MM-DD).
+ * Usado no ranking MoM (snapshot atual vs EOM do mês passado).
+ */
+export function previousCalendarMonthEnd(day: string): string {
+  const y = Number(day.slice(0, 4))
+  const m = Number(day.slice(5, 7))
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) {
+    return addDaysIso(day, -30)
+  }
+  // Dia 0 do mês `m` = último dia do mês anterior.
+  const d = new Date(Date.UTC(y, m - 1, 0))
+  return d.toISOString().slice(0, 10)
 }
 
 export async function getLatestSalonP1Daily(): Promise<SalonP1Daily | null> {

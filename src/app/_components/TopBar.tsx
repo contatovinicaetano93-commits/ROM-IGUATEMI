@@ -1,36 +1,27 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X, ChevronRight, Wallet, Boxes, GraduationCap, Stethoscope, FileBarChart } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV, pageTitleFromPath } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
+import { useClientSession } from './SessionProvider'
 import { getBrand } from '@/lib/brand'
 
 export function TopBar() {
   const [open, setOpen] = useState(false)
-  const [showAdminNav, setShowAdminNav] = useState(false)
-  const [role, setRole] = useState<string | null>(null)
+  const { session } = useClientSession()
+  const showAdminNav = !session?.auth_enabled || Boolean(session?.can_view_revenue)
+  const role = session?.role ?? null
   const pathname = usePathname()
   const title = pageTitleFromPath(pathname)
   const brand = getBrand()
   const navItems = useMemo(
     () =>
       APP_NAV.filter((item) => !('adminOnly' in item) || !item.adminOnly || showAdminNav),
-    [showAdminNav]
+    [showAdminNav],
   )
-
-  useEffect(() => {
-    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => {
-        const session = json.data
-        setShowAdminNav(!session?.auth_enabled || Boolean(session?.can_view_revenue))
-        setRole(session?.role ?? null)
-      })
-      .catch(() => setShowAdminNav(false))
-  }, [])
 
   // Financeiro/estoque são isolados pelo middleware — menu próprio, sem links
   // mortos que só levariam a um redirect de volta.

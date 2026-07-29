@@ -126,21 +126,41 @@ async function finishAvecSyncRun(
   return rows[0]!
 }
 
-export async function getLastAvecSync(kind?: string): Promise<AvecSyncRun | null> {
+export async function getLastAvecSync(
+  kind?: string,
+  opts?: { finishedOnly?: boolean },
+): Promise<AvecSyncRun | null> {
   const sql = getSql()
+  const finishedOnly = opts?.finishedOnly === true
   if (kind) {
-    const rows = (await sql`
-      select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
-    `) as AvecSyncRun[]
+    const rows = finishedOnly
+      ? ((await sql`
+          select * from avec_sync_runs
+          where kind = ${kind}
+            and coalesce(stats->>'running', 'false') <> 'true'
+          order by created_at desc
+          limit 1
+        `) as AvecSyncRun[])
+      : ((await sql`
+          select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
+        `) as AvecSyncRun[])
     return rows[0] ?? null
   }
   // Hoje/badge: só agenda Avec (fast/full) — não misturar stock_* .
-  const rows = (await sql`
-    select * from avec_sync_runs
-    where kind in ('fast', 'full')
-    order by created_at desc
-    limit 1
-  `) as AvecSyncRun[]
+  const rows = finishedOnly
+    ? ((await sql`
+        select * from avec_sync_runs
+        where kind in ('fast', 'full')
+          and coalesce(stats->>'running', 'false') <> 'true'
+        order by created_at desc
+        limit 1
+      `) as AvecSyncRun[])
+    : ((await sql`
+        select * from avec_sync_runs
+        where kind in ('fast', 'full')
+        order by created_at desc
+        limit 1
+      `) as AvecSyncRun[])
   return rows[0] ?? null
 }
 
