@@ -32,6 +32,26 @@ export function isAvecOpenStatus(status: string): boolean {
   return /\batendimento\b/.test(s) || /\b(a|por|para)\s+realizar\b/.test(s)
 }
 
+/**
+ * Comanda/encaixe aberto na agenda (sem necessariamente horário de booking).
+ * Inclui Aguardando / Agendado / Em Atendimento / A Realizar.
+ */
+export function isAvecOpenComandaStatus(status: string): boolean {
+  const s = norm(status)
+  if (!s) return true // Avec às vezes manda linha aberta sem status
+  if (isAvecCancelledStatus(s) || isAvecNoShowStatus(s) || isAvecNegativeOutcomeStatus(s)) {
+    return false
+  }
+  if (isAvecPaidStatus(s)) return false
+  return (
+    isAvecOpenStatus(s) ||
+    /\bagend/.test(s) ||
+    /\baguard/.test(s) ||
+    /\bcomanda\b/.test(s) ||
+    /\babert/.test(s)
+  )
+}
+
 export function isAvecPaidStatus(status: string): boolean {
   const s = norm(status)
   if (isAvecNoShowStatus(s)) return false

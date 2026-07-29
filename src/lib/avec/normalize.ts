@@ -89,6 +89,8 @@ export interface NormalizedAvecAppointment {
   email: string | null
   serviceName: string | null
   scheduledAt: string | null
+  /** Dia civil da agenda (YYYY-MM-DD), mesmo quando o horário veio vazio. */
+  appointmentDay: string | null
   professional: string | null
   price: number | null
   status: string | null
@@ -182,7 +184,7 @@ export function parseAvecDateTime(datePart: string | null, timePart?: string | n
       const parsed = new Date(d)
       return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
     }
-    const timeRaw = t ?? (d.includes('T') ? d.split('T')[1]?.replace(/[zZ]|[+-]\d{2}:?\d{2}$/, '') : null) ?? '00:00:00'
+    const timeRaw = t ?? (d.includes('T') ? d.split('T')[1]?.replace(/[zZ]|[+-]\d{2}:?\d{2}$/, '') : null) ?? '12:00:00'
     const time = timeRaw.length === 5 ? `${timeRaw}:00` : timeRaw
     const [y, mo, day] = dateOnly.split('-').map(Number)
     const [hh, mm, ss] = normalizeTimeParts(time)
@@ -195,9 +197,9 @@ export function parseAvecDateTime(datePart: string | null, timePart?: string | n
     const month = Number(m[2]) - 1
     let year = Number(m[3])
     if (year < 100) year += 2000
-    const time = t ?? m[4] ?? '10:00'
+    const time = t ?? m[4] ?? '12:00'
     const [hh, mm, ss] = normalizeTimeParts(time)
-    return saoPauloWallToIso(year, month, day, hh || 10, mm, ss)
+    return saoPauloWallToIso(year, month, day, hh || 12, mm, ss)
   }
 
   const parsed = new Date(d)
@@ -284,7 +286,30 @@ export function normalizeAppointmentRow(row: Record<string, unknown>): Normalize
   ])
   const datePart = pick(row, ['data', 'data_agendamento', 'agendamento', 'dia', 'date'])
   const timePart = pickAppointmentTimePart(row)
-  const scheduledAt = parseAvecDateTime(datePart, timePart)
+  const appointmentDay = (() => {
+    if (!datePart) return null
+    const d = datePart.trim()
+    const iso = d.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+    const br = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/)
+    if (br) {
+      let year = Number(br[3])
+      if (year < 100) year += 2000
+      return `${year}-${String(br[2]).padStart(2, '0')}-${String(br[1]).padStart(2, '0')}`
+    }
+    return null
+  })()
+  let scheduledAt = parseAvecDateTime(datePart, timePart)
+  if (!scheduledAt && appointmentDay) {
+    scheduledAt = saoPauloWallToIso(
+      Number(appointmentDay.slice(0, 4)),
+      Number(appointmentDay.slice(5, 7)) - 1,
+      Number(appointmentDay.slice(8, 10)),
+      12,
+      0,
+      0,
+    )
+  }
   const professional = pick(row, [
     'profissional',
     'profissional_nome',
@@ -298,7 +323,18 @@ export function normalizeAppointmentRow(row: Record<string, unknown>): Normalize
 
   if (!avecClientId && !clientName && !phone) return null
 
-  return { avecClientId, clientName, phone, email, serviceName, scheduledAt, professional, price, status }
+  return {
+    avecClientId,
+    clientName,
+    phone,
+    email,
+    serviceName,
+    scheduledAt,
+    appointmentDay,
+    professional,
+    price,
+    status,
+  }
 }
 
 export function normalizeAttendanceRow(row: Record<string, unknown>): NormalizedAvecAttendance | null {

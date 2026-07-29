@@ -318,7 +318,9 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
     await updateContact(contact.id, { status: 'convertido' })
   } else if (event === 'appointment.created' || event === 'appointment.updated') {
-    if (payload.service_name && payload.scheduled_at) {
+    // Comanda/encaixe pode chegar sem horário — ancora agora para entrar em Agendados.
+    const when = payload.scheduled_at ?? (payload.service_name ? new Date().toISOString() : null)
+    if (payload.service_name && when) {
       const services = await listServices(contact.id)
       let service = services.find((s) => s.name.toLowerCase() === payload.service_name!.toLowerCase())
       if (!service) {
@@ -328,7 +330,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
           cadenceDays: defaultCadenceDaysForServiceName(payload.service_name),
         })
       }
-      await scheduleService(service.id, payload.scheduled_at, payload.professional_name)
+      await scheduleService(service.id, when, payload.professional_name)
       await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
       await updateContact(contact.id, { status: 'agendado' })
     }

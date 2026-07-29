@@ -54,6 +54,8 @@ import {
   isAvecCancelledStatus,
   isAvecNegativeOutcomeStatus,
   isAvecNoShowStatus,
+  isAvecOpenComandaStatus,
+  isAvecOpenStatus,
   isAvecPaidStatus,
 } from '@/lib/avec/appointment-status'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
@@ -385,9 +387,6 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       const appt = normalizeAppointmentRow(row)
       if (!appt) continue
 
-      const apptDay = appt.scheduledAt ? toSalonDateIso(appt.scheduledAt) : null
-      // Não descartar dias futuros no fast — Contatos Agendados usa a semana.
-
       // Status agenda 0051. No-show KPI: fonte canônica é 0248 (não gravar aqui).
       // "Em Atendimento" / "A Realizar" = aberto — NÃO marcar pago nem perdido.
       // "não pago" não casa com \bpago\b.
@@ -397,6 +396,36 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       const isPaid = isAvecPaidStatus(status)
       const isCancelled = isAvecCancelledStatus(status)
       const isLostOutcome = isCancelled || isNoShow || isNegativeOutcome
+      const isOpenComanda = !isPaid && !isLostOutcome && isAvecOpenComandaStatus(status)
+
+      // Comanda/encaixe aberto sem horário: ancora no dia da linha ou agora.
+      let scheduledAt = appt.scheduledAt
+      if (
+        !scheduledAt &&
+        isOpenComanda &&
+        (appt.appointmentDay || appt.serviceName || isAvecOpenStatus(status))
+      ) {
+        const day = appt.appointmentDay ?? today
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23',
+        }).formatToParts(new Date())
+        const hh = parts.find((p) => p.type === 'hour')?.value ?? '12'
+        const mm = parts.find((p) => p.type === 'minute')?.value ?? '00'
+        scheduledAt = new Date(`${day}T${hh}:${mm}:00-03:00`).toISOString()
+      }
+      const apptDay =
+        (scheduledAt ? toSalonDateIso(scheduledAt) : null) ?? appt.appointmentDay
+      const serviceName =
+        appt.serviceName ??
+        (isOpenComanda &&
+        apptDay === today &&
+        (isAvecOpenStatus(status) || /\baguard/.test(status) || !status)
+          ? 'Comanda / atendimento'
+          : null)
+      // Não descartar dias futuros no fast — Contatos Agendados usa a semana.
 
       if (apptDay === today) {
         todayRows++
@@ -426,17 +455,17 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         continue
       }
 
-      if (appt.serviceName && appt.scheduledAt) {
+      if (serviceName && scheduledAt) {
         const existing = await listServices(contact.id)
-        const had = existing.some((s) => s.name.toLowerCase() === appt.serviceName!.toLowerCase())
-        const service = await findOrCreateService(contact.id, appt.serviceName)
+        const had = existing.some((s) => s.name.toLowerCase() === serviceName.toLowerCase())
+        const service = await findOrCreateService(contact.id, serviceName)
         if (!had) stats.services_created++
 
         // 0051 status Pago = comanda fechada. Usa hora_ini do agendamento (único relógio
         // estável que a Avec manda) — evita Concluídos todos com o mesmo horário inventado.
         if (isPaid) {
           await markServiceDone(service.id, {
-            doneAt: appt.scheduledAt,
+            doneAt: scheduledAt,
             professionalName: appt.professional,
             lastPrice: appt.price,
           })
@@ -455,8 +484,8 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             await updateContact(contact.id, { status: 'perdido' })
           }
         } else {
-          if (!service.scheduled_at || service.scheduled_at !== appt.scheduledAt) {
-            await scheduleService(service.id, appt.scheduledAt, appt.professional)
+          if (!service.scheduled_at || service.scheduled_at !== scheduledAt) {
+            await scheduleService(service.id, scheduledAt, appt.professional)
             stats.services_scheduled++
           } else if (appt.professional && !service.professional_name) {
             await patchServiceVisitMeta(service.id, {
@@ -466,9 +495,9 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
           if (apptDay === today) todayOpenServiceIds.push(service.id)
         }
 
-        if (appt.professional && isNailService(appt.serviceName)) {
+        if (appt.professional && isNailService(serviceName)) {
           await setPreferredManicurist(contact.id, appt.professional)
-        } else if (appt.professional && isHairService(appt.serviceName)) {
+        } else if (appt.professional && isHairService(serviceName)) {
           await setPreferredHairstylist(contact.id, appt.professional)
         }
       } else if (isLostOutcome) {

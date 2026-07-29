@@ -134,6 +134,18 @@ describe('normalizeAppointmentRow 0051/0248', () => {
     // 17:00 parede SP → 20:00 UTC (não depende do TZ do runner).
     expect(row?.scheduledAt).toBe('2026-07-18T20:00:00.000Z')
   })
+
+  it('comanda/encaixe com data e sem hora ainda gera scheduledAt no dia', () => {
+    const row = normalizeAppointmentRow({
+      salao_cliente_id: 99,
+      cliente_nome: 'Walk-in',
+      data: '2026-07-29',
+      status: 'Em Atendimento',
+      servico: 'Corte',
+    })
+    expect(row?.appointmentDay).toBe('2026-07-29')
+    expect(row?.scheduledAt).toBe('2026-07-29T15:00:00.000Z')
+  })
 })
 
 describe('parseServiceTempoMinutes', () => {
