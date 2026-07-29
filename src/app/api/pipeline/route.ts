@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
+import { cachedFetch } from '@/lib/cache'
 import { listTodayPipeline } from '@/lib/services'
 import { todayIso } from '@/lib/salon/format'
 
@@ -13,18 +14,27 @@ export async function GET(req: NextRequest) {
 
     const dayParam = req.nextUrl.searchParams.get('day')
     const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : todayIso()
-    const { scheduled, completed } = await listTodayPipeline(day)
-
-    return ok({
-      day,
-      scheduled,
-      completed,
-      counts: {
-        scheduled: scheduled.length,
-        completed: completed.length,
-        total: scheduled.length + completed.length,
+    const payload = await cachedFetch(
+      `pipeline:v2:${day}`,
+      async () => {
+        const { scheduled, walkIn, completed } = await listTodayPipeline(day)
+        return {
+          day,
+          scheduled,
+          walkIn,
+          completed,
+          counts: {
+            scheduled: scheduled.length,
+            walkIn: walkIn.length,
+            completed: completed.length,
+            total: scheduled.length + walkIn.length + completed.length,
+          },
+        }
       },
-    })
+      30,
+    )
+
+    return ok(payload)
   } catch (e) {
     return handleError(e)
   }

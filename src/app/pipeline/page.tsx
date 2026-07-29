@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Columns3, RefreshCw } from 'lucide-react'
-import { apiFetch } from '@/lib/api-client'
+import { apiFetch, clearApiClientCache } from '@/lib/api-client'
+import { useLiveRefresh } from '@/lib/use-live-refresh'
 import { fmtScheduleParts } from '@/lib/salon/format'
 import { contactHref } from '@/lib/auth-redirect'
 import { CountBadge } from '../_components/ui'
@@ -26,8 +27,9 @@ interface PipelineCard {
 interface PipelineData {
   day: string
   scheduled: PipelineCard[]
+  walkIn: PipelineCard[]
   completed: PipelineCard[]
-  counts: { scheduled: number; completed: number; total: number }
+  counts: { scheduled: number; walkIn: number; completed: number; total: number }
 }
 
 function PipelineColumn({
@@ -41,13 +43,12 @@ function PipelineColumn({
 }: {
   title: string
   count: number
-  tone: 'gold' | 'success'
+  tone: 'gold' | 'success' | 'sky'
   items: PipelineCard[]
   timeFrom: (item: PipelineCard) => string | null
   emptyLabel: string
   storageKey: string
 }) {
-  // Pipeline: colunas abertas por padrão (recepção precisa ver a lista).
   const [open, setOpen] = useSectionOpen(storageKey, true)
   return (
     <section
@@ -88,7 +89,13 @@ function PipelineColumn({
                   </div>
                   {when && (
                     <div className="shrink-0 text-right">
-                      <p className="text-base font-semibold tabular-nums text-gold">{when.time}</p>
+                      <p
+                        className={`text-base font-semibold tabular-nums ${
+                          tone === 'sky' ? 'text-sky-300' : 'text-gold'
+                        }`}
+                      >
+                        {when.time}
+                      </p>
                       <p className="text-[0.65rem] uppercase tracking-wide text-muted">{when.day}</p>
                     </div>
                   )}
@@ -107,24 +114,37 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (opts?: { fresh?: boolean; silent?: boolean }) => {
+    const silent = opts?.silent === true
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
-      const res = await apiFetch('/api/pipeline', { cache: 'no-store', timeoutMs: 25_000 })
+      if (opts?.fresh || silent) clearApiClientCache('/api/pipeline')
+      const res = await apiFetch('/api/pipeline', {
+        cache: 'no-store',
+        clientCache: opts?.fresh || silent ? false : undefined,
+        timeoutMs: 25_000,
+      })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setData(json.data)
+      setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      if (!silent) setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    load()
+    void load()
   }, [load])
+
+  useLiveRefresh(() => {
+    void load({ silent: true })
+  }, 60_000)
 
   const dayLabel = data
     ? new Date(data.day + 'T12:00:00').toLocaleDateString('pt-BR', {
@@ -145,12 +165,13 @@ export default function PipelinePage() {
             {dayLabel || 'Agenda do dia'}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Agendados = agenda Avec (0051). Concluídos = atendimentos Avec (0002) + marcações no ROM.
+            Agendados = booking com horário. No salão = comanda/encaixe sem booking. Concluídos =
+            0002 + marcações no ROM.
           </p>
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={() => void load({ fresh: true })}
           disabled={loading}
           className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
         >
@@ -173,7 +194,16 @@ export default function PipelinePage() {
           tone="gold"
           items={loading ? [] : (data?.scheduled ?? [])}
           timeFrom={(item) => item.scheduled_at}
-          emptyLabel={loading ? 'Carregando…' : 'Nenhum agendamento aberto hoje.'}
+          emptyLabel={loading ? 'Carregando…' : 'Nenhum booking aberto hoje.'}
+        />
+        <PipelineColumn
+          title="No salão"
+          storageKey="pipeline.section.nosalao.open"
+          count={loading ? 0 : (data?.counts.walkIn ?? 0)}
+          tone="sky"
+          items={loading ? [] : (data?.walkIn ?? [])}
+          timeFrom={(item) => item.scheduled_at}
+          emptyLabel={loading ? 'Carregando…' : 'Nenhuma comanda/encaixe aberto.'}
         />
         <PipelineColumn
           title="Concluídos"

@@ -58,6 +58,10 @@ import {
   isAvecOpenStatus,
   isAvecPaidStatus,
 } from '@/lib/avec/appointment-status'
+import {
+  COMANDA_SERVICE_NAME,
+  type ScheduleOrigin,
+} from '@/lib/salon/schedule-origin'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
 import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
@@ -423,9 +427,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         (isOpenComanda &&
         apptDay === today &&
         (isAvecOpenStatus(status) || /\baguard/.test(status) || !status)
-          ? 'Comanda / atendimento'
+          ? COMANDA_SERVICE_NAME
           : null)
       // Não descartar dias futuros no fast — Contatos Agendados usa a semana.
+      const scheduleOrigin: ScheduleOrigin =
+        !appt.hasClockTime || serviceName === COMANDA_SERVICE_NAME ? 'comanda' : 'agenda'
 
       if (apptDay === today) {
         todayRows++
@@ -484,14 +490,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
             await updateContact(contact.id, { status: 'perdido' })
           }
         } else {
-          if (!service.scheduled_at || service.scheduled_at !== scheduledAt) {
-            await scheduleService(service.id, scheduledAt, appt.professional)
-            stats.services_scheduled++
-          } else if (appt.professional && !service.professional_name) {
-            await patchServiceVisitMeta(service.id, {
-              professionalName: appt.professional,
-            })
-          }
+          const before = service.scheduled_at
+          const updated = await scheduleService(service.id, scheduledAt, appt.professional, {
+            origin: scheduleOrigin,
+          })
+          if (updated && before !== scheduledAt) stats.services_scheduled++
           if (apptDay === today) todayOpenServiceIds.push(service.id)
         }
 
