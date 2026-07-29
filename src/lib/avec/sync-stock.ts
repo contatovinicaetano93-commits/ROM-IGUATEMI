@@ -8,12 +8,14 @@ import {
   fetchAllAvecReport,
   formatTruncationWarning,
   fmtAvecDate,
+  isAvecFetchAbortError,
   periodRange,
   type AvecReportParams,
 } from '@/lib/avec/client'
 import {
   formatAvecErrorList,
   formatAvecUserMessage,
+  hardAvecSyncWarnings,
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
@@ -49,6 +51,8 @@ export interface StockSyncStats {
   snapshots_saved: number
   errors: string[]
   warnings: string[]
+  running?: boolean
+  aborted?: boolean
 }
 
 export interface StockSyncRun {
@@ -60,6 +64,12 @@ export interface StockSyncRun {
   created_at: string
 }
 
+/** Fast estoque no cron Vercel (~300s): páginas curtas + orçamento de parede. (paridade BR) */
+const STOCK_FAST_MAX_PAGES = 2
+const STOCK_FAST_PAGE_LIMIT = 100
+/** 200s: margem vs maxDuration 300s (upsert DB + 0046). */
+const STOCK_FAST_BUDGET_MS = 200_000
+
 function reportId(mapper: string): string | null {
   const def = getStockReports().find((r) => r.mapper === mapper)
   return def?.id ?? null
@@ -67,9 +77,20 @@ function reportId(mapper: string): string | null {
 
 async function beginRun(kind: string, stats: StockSyncStats): Promise<StockSyncRun> {
   const sql = getSql()
+  // Abort limpo de runs mortos (timeout/kill do cron) — status/error claros.
+  await sql`
+    update avec_sync_runs
+    set
+      status = 'error',
+      error = coalesce(error, 'Sync estoque interrompido (timeout/kill)'),
+      stats = coalesce(stats, '{}'::jsonb) || '{"running":false,"aborted":true}'::jsonb
+    where kind = ${kind}
+      and coalesce(stats->>'running', 'false') = 'true'
+  `
+  const starting = { ...stats, running: true as const }
   const rows = (await sql`
     insert into avec_sync_runs (kind, status, stats)
-    values (${kind}, 'partial', ${stats})
+    values (${kind}, 'partial', ${starting})
     returning *
   `) as StockSyncRun[]
   return rows[0]!
@@ -82,20 +103,33 @@ async function finishRun(
   error?: string
 ): Promise<StockSyncRun> {
   const sql = getSql()
+  const finished = { ...stats, running: false as const }
   const rows = (await sql`
     update avec_sync_runs
-    set status = ${status}, stats = ${stats}, error = ${error ?? null}
+    set status = ${status}, stats = ${finished}, error = ${error ?? null}
     where id = ${id}::uuid
     returning *
   `) as StockSyncRun[]
   return rows[0]!
 }
 
-export async function getLastStockSync(kind: 'stock_fast' | 'stock_full'): Promise<StockSyncRun | null> {
+export async function getLastStockSync(
+  kind: 'stock_fast' | 'stock_full',
+  opts?: { finishedOnly?: boolean },
+): Promise<StockSyncRun | null> {
   const sql = getSql()
-  const rows = (await sql`
-    select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
-  `) as StockSyncRun[]
+  const finishedOnly = opts?.finishedOnly === true
+  const rows = finishedOnly
+    ? ((await sql`
+        select * from avec_sync_runs
+        where kind = ${kind}
+          and coalesce(stats->>'running', 'false') <> 'true'
+        order by created_at desc
+        limit 1
+      `) as StockSyncRun[])
+    : ((await sql`
+        select * from avec_sync_runs where kind = ${kind} order by created_at desc limit 1
+      `) as StockSyncRun[])
   return rows[0] ?? null
 }
 
@@ -115,22 +149,59 @@ async function snapshotSafe(
   }
 }
 
-async function syncPositions(stats: StockSyncStats, syncRunId: string) {
+type StockPageOpts = {
+  maxPages: number
+  pageLimit: number
+  deadlineAt: number | null
+  /** Fast com teto baixo: truncamento é esperado, não vira warning. */
+  expectTruncation?: boolean
+  skipSnapshot?: boolean
+}
+
+async function syncPositions(stats: StockSyncStats, syncRunId: string, opts: StockPageOpts) {
   const id = reportId('stock_position')
   if (!id) return
+  if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
+    stats.warnings.push('0149: pulado — orçamento de tempo esgotado')
+    stats.aborted = true
+    return
+  }
   const params = {
     inicio: fmtAvecDate(new Date()),
     marca: '',
     linha: '',
     local: '',
     categoria: '',
-    limit: 250,
+    limit: opts.pageLimit,
     site: avecSiteParam(),
   }
   try {
-    const result = await fetchAllAvecReport(id, params)
-    if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
-    await snapshotSafe(id, params, result.rows, stats, syncRunId)
+    const result = await fetchAllAvecReport(id, params, opts.maxPages, {
+      deadlineAt: opts.deadlineAt,
+    })
+    if (result.truncated && !opts.expectTruncation) {
+      stats.warnings.push(formatTruncationWarning(id, result))
+    }
+    if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt && result.rows.length === 0) {
+      stats.aborted = true
+      stats.warnings.push('0149: orçamento esgotado durante fetch (abort limpo)')
+      return
+    }
+    if (
+      opts.expectTruncation &&
+      result.truncated &&
+      result.rows.length > 0 &&
+      opts.deadlineAt != null &&
+      Date.now() >= opts.deadlineAt
+    ) {
+      stats.aborted = true
+      stats.warnings.push(
+        `0149: fetch parcial (${result.pagesFetched} pág., ${result.rows.length} linhas) — abort limpo`,
+      )
+    }
+    if (!opts.skipSnapshot) {
+      await snapshotSafe(id, params, result.rows, stats, syncRunId)
+    }
 
     const positions: NormalizedStockPosition[] = []
     for (const row of result.rows) {
@@ -140,6 +211,13 @@ async function syncPositions(stats: StockSyncStats, syncRunId: string) {
     // Upserts em paralelo (chunks) — N sequencial com ~5 round-trips/SKU estoura maxDuration.
     const CHUNK = 25
     for (let i = 0; i < positions.length; i += CHUNK) {
+      if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
+        stats.aborted = true
+        stats.warnings.push(
+          `0149: orçamento esgotado após ${stats.positions_synced} posições (abort limpo)`,
+        )
+        break
+      }
       const chunk = positions.slice(i, i + CHUNK)
       await Promise.all(chunk.map((pos) => upsertStockProductFromPosition(pos)))
       stats.positions_synced += chunk.length
@@ -150,24 +228,49 @@ async function syncPositions(stats: StockSyncStats, syncRunId: string) {
       )
     }
   } catch (e) {
+    if (isAvecFetchAbortError(e)) {
+      stats.aborted = true
+      stats.warnings.push(
+        `0149: timeout/abort limpo — ${e instanceof Error ? e.message : String(e)}`,
+      )
+      return
+    }
     stats.errors.push(`0149 (posição): ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
-async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
+async function syncAlerts(stats: StockSyncStats, syncRunId: string, opts: StockPageOpts) {
   const id = reportId('stock_alert')
   if (!id) return
-  const params = { site: avecSiteParam(), limit: 250 }
+  if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
+    stats.warnings.push('0046: pulado — orçamento de tempo esgotado')
+    stats.aborted = true
+    return
+  }
+  const params = { site: avecSiteParam(), limit: opts.pageLimit }
   try {
-    const result = await fetchAllAvecReport(id, params)
-    if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
-    await snapshotSafe(id, params, result.rows, stats, syncRunId)
+    const result = await fetchAllAvecReport(id, params, opts.maxPages, {
+      deadlineAt: opts.deadlineAt,
+    })
+    if (result.truncated && !opts.expectTruncation) {
+      stats.warnings.push(formatTruncationWarning(id, result))
+    }
+    if (!opts.skipSnapshot) {
+      await snapshotSafe(id, params, result.rows, stats, syncRunId)
+    }
 
     // 1 query de catálogo — evita SELECT * em stock_products por cada linha do 0046.
     const productNameIndex = await loadStockProductNameIndex()
     const seenAvecProductIds: string[] = []
     let active = 0
     for (const row of result.rows) {
+      if (opts.deadlineAt != null && Date.now() >= opts.deadlineAt) {
+        stats.aborted = true
+        stats.warnings.push(
+          `0046: orçamento esgotado após ${active} alertas (abort limpo)`,
+        )
+        break
+      }
       const alert = normalizeStockAlertRow(row)
       if (!alert) continue
       const applied = await applyStockAlert(alert, { productNameIndex })
@@ -195,6 +298,25 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string) {
       }
     }
   } catch (e) {
+    if (isAvecFetchAbortError(e)) {
+      stats.aborted = true
+      stats.warnings.push(
+        `0046: timeout/abort limpo — ${e instanceof Error ? e.message : String(e)}`,
+      )
+      try {
+        const seeded = await seedLocalStockAlertsFromCatalog()
+        stats.alerts_seeded_local = seeded
+        if (seeded > 0) {
+          stats.alerts_active = seeded
+          stats.warnings.push(
+            `0046 abort — ${seeded} alertas locais a partir do catálogo (qty ≤ mínimo)`,
+          )
+        }
+      } catch {
+        /* ignore */
+      }
+      return
+    }
     stats.errors.push(`0046 (alertas): ${e instanceof Error ? e.message : String(e)}`)
     try {
       const seeded = await seedLocalStockAlertsFromCatalog()
@@ -322,12 +444,20 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
   const kind = mode === 'full' ? 'stock_full' : 'stock_fast'
   const stats = emptyStats()
   const run = await beginRun(kind, stats)
+  const deadlineAt = mode === 'fast' ? Date.now() + STOCK_FAST_BUDGET_MS : null
+  const pageOpts: StockPageOpts = {
+    maxPages: mode === 'fast' ? STOCK_FAST_MAX_PAGES : 40,
+    pageLimit: mode === 'fast' ? STOCK_FAST_PAGE_LIMIT : 250,
+    deadlineAt,
+    expectTruncation: mode === 'fast',
+    skipSnapshot: mode === 'fast',
+  }
 
   try {
     // Alertas (0046) + seed local antes de 0149 — Cérebro lê stock_alerts;
     // posição é pesada e não pode matar o ciclo antes.
-    await syncAlerts(stats, run.id)
-    await syncPositions(stats, run.id)
+    await syncAlerts(stats, run.id, pageOpts)
+    await syncPositions(stats, run.id, pageOpts)
 
     if (mode === 'full') {
       await syncMovements(stats, run.id)
@@ -337,6 +467,7 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
 
     stats.errors = formatAvecErrorList(stats.errors)
 
+    const hardWarnings = hardAvecSyncWarnings(stats.warnings)
     const hadAnyData =
       stats.positions_synced > 0 ||
       stats.movements_synced > 0 ||
@@ -345,15 +476,22 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
     const status: StockSyncRun['status'] =
       stats.errors.length > 0 && !hadAnyData
         ? 'error'
-        : stats.errors.length > 0 || stats.warnings.length > 0
+        : stats.errors.length > 0 || hardWarnings.length > 0 || stats.aborted
           ? 'partial'
           : 'ok'
 
     const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))
+    const abortMsg = stats.aborted
+      ? (stats.warnings.find((w) => /orçamento|abort|timeout/i.test(w)) ??
+        'Sync estoque abortado por orçamento de tempo (evita timeout/kill)')
+      : null
+    // Abort limpo com dados parciais: partial + warning, sem error (Cérebro/Diagnóstico).
     const topError =
       status === 'error'
         ? (authErr ?? formatAvecUserMessage(stats.errors[0]) ?? stats.errors[0] ?? undefined)
-        : authErr
+        : (authErr ??
+          (stats.aborted && !hadAnyData ? abortMsg : undefined) ??
+          undefined)
 
     return await finishRun(run.id, status, stats, topError)
   } catch (e) {

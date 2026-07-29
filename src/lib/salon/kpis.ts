@@ -20,9 +20,12 @@ export interface ContactKpis {
 
 export { contactKpiWindow }
 
-export async function fetchContactKpis(dayLimit = 30): Promise<ContactKpis> {
+export async function fetchContactKpis(
+  dayLimit = 30,
+  referenceDay?: string,
+): Promise<ContactKpis> {
   const sql = getSql()
-  const window = contactKpiWindow(dayLimit)
+  const window = contactKpiWindow(dayLimit, referenceDay)
 
   // byDay = entrada real no funil (exclui dump Avec 0004 / status importado).
   // byStatus = inventário completo da base (transparência).

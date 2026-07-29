@@ -75,7 +75,7 @@ export async function buildSalonContext(): Promise<SalonContext> {
   const [salon, kpis_contato, playbook_top5, agendamentosRaw] = await Promise.all([
     getSalonMetrics(day),
     fetchContactKpis(7),
-    listActionItems(),
+    listActionItems({ limit: 20 }),
     listTodaySchedules(day, 20),
   ])
 

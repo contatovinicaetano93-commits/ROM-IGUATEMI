@@ -1,4 +1,4 @@
--- Delta ROM · Jul 2026 — rodar no Neon após schema.sql base
+-- Delta ROM · Jul 2026 — rodar no Postgres (Supabase) após schema.sql base
 -- Tabelas: snapshots Avec, KPIs do salão, cache de briefing
 
 create table if not exists avec_report_snapshots (

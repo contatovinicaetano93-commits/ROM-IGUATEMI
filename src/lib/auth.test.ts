@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   canViewRevenue,
   createSessionToken,
+  getSessionSigningSecret,
   isAuthEnabled,
   isStaffAuthConfigured,
   validateCredentials,
@@ -13,6 +14,7 @@ const ENV_KEYS = [
   'ROM_ACCESS_TOKEN',
   'ROM_STAFF_USER',
   'ROM_STAFF_PASSWORD',
+  'ROM_SESSION_SECRET',
 ] as const
 
 const snapshot = new Map<string, string | undefined>()
@@ -76,5 +78,30 @@ describe('auth dual login', () => {
     expect(adminTok).toHaveLength(64)
     expect(staffTok).toHaveLength(64)
     expect(adminTok).not.toEqual(staffTok)
+  })
+
+  it('usa ROM_SESSION_SECRET para HMAC (não a senha do usuário)', async () => {
+    setEnv({
+      ROM_ADMIN_USER: 'admin',
+      ROM_ADMIN_PASSWORD: 'admin-pass',
+      ROM_SESSION_SECRET: 'dedicated-session-secret',
+      ROM_STAFF_USER: 'staff',
+      ROM_STAFF_PASSWORD: 'staff-pass',
+    })
+
+    expect(getSessionSigningSecret()).toBe('dedicated-session-secret')
+
+    const withDedicated = await createSessionToken('admin', 'admin')
+    setEnv({
+      ROM_ADMIN_USER: 'admin',
+      ROM_ADMIN_PASSWORD: 'admin-pass',
+      ROM_SESSION_SECRET: undefined,
+      ROM_STAFF_USER: 'staff',
+      ROM_STAFF_PASSWORD: 'staff-pass',
+    })
+    const withFallback = await createSessionToken('admin', 'admin')
+    expect(withDedicated).toHaveLength(64)
+    expect(withFallback).toHaveLength(64)
+    expect(withDedicated).not.toEqual(withFallback)
   })
 })

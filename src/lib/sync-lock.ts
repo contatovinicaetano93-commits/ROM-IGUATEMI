@@ -83,7 +83,7 @@ async function release(key: string, owner: string): Promise<void> {
 }
 
 /**
- * Lease distribuído via Postgres — funciona com Neon serverless (HTTP).
+ * Lease distribuído via Postgres (Supabase pooler).
  * TTL cobre maxDuration do sync; release no finally mesmo se falhar.
  */
 export async function withSyncLock<T>(

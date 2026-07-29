@@ -21,20 +21,21 @@ describe('scheduleAvecWebhookSideEffects', () => {
     await runAvecWebhookSideEffects('appointment.created')
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1)
-    const url = String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[0])
-    expect(url).toContain('mode=fast')
-    expect(url).toContain('source=webhook')
+    expect(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[0])).toContain(
+      'mode=fast',
+    )
   })
 
-  it('dispara fast e full em service.completed', async () => {
+  it('dispara só fast em service.completed (full fica no cron)', async () => {
     const { runAvecWebhookSideEffects } = await import('@/lib/avec/sync-trigger')
     await runAvecWebhookSideEffects('service.completed')
 
-    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
-    const urls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]))
-    expect(urls.some((u) => u.includes('mode=fast'))).toBe(true)
-    expect(urls.some((u) => u.includes('mode=full'))).toBe(true)
-    expect(urls.every((u) => u.includes('source=webhook'))).toBe(true)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] ?? []
+    expect(String(url)).toContain('mode=fast')
+    expect((init as RequestInit)?.headers).toMatchObject({
+      'x-rom-sync-reason': 'webhook',
+    })
   })
 
   it('não dispara sync em client.upsert', async () => {

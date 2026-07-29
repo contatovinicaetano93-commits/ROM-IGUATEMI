@@ -67,6 +67,12 @@ function isPhoneUniqueViolation(error: unknown): boolean {
   return hay.includes('contacts_phone_idx') || hay.includes('(phone)')
 }
 
+/** Só E.164 via normalizePhone — nunca grava telefone cru (bate no índice único). */
+export function resolveUpsertPhone(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  return normalizePhone(raw)
+}
+
 /** Atualiza contato existente casado por telefone (conflito com novo avec_client_id). */
 async function mergeContactByPhone(
   phone: string,

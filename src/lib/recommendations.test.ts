@@ -19,6 +19,33 @@ function service(overrides: Partial<ClientService> & Pick<ClientService, 'name' 
   }
 }
 
+describe('enrichServices', () => {
+  it('marca atrasado quando não há last_done_at (não usa created_at do sync)', () => {
+    const enriched = enrichServices([
+      service({
+        name: 'Corte',
+        category: 'corte',
+        cadence_days: 30,
+        last_done_at: null,
+        created_at: new Date().toISOString(),
+      }),
+    ])
+    expect(enriched[0]?.state).toBe('overdue')
+  })
+
+  it('marca vencendo dentro da janela de 30 dias', () => {
+    const enriched = enrichServices([
+      service({
+        name: 'Corte',
+        category: 'corte',
+        cadence_days: 30,
+        last_done_at: new Date(Date.now() - 20 * 86_400_000).toISOString(),
+      }),
+    ])
+    expect(enriched[0]?.state).toBe('due_soon')
+  })
+})
+
 describe('computeRecommendations', () => {
   it('sugere up-sell de tratamento quando cliente faz corte', () => {
     const enriched = enrichServices([

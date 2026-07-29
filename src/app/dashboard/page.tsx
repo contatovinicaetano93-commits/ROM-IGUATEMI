@@ -84,7 +84,16 @@ export default function DashboardPage() {
   const [data, setData] = useState<KpiData | null>(null)
   const [tm, setTm] = useState<TmComparison | null>(null)
   const [performance, setPerformance] = useState<PerformanceData | null>(null)
-  const [period, setPeriod] = useState<PeriodAnalytics | null>(null)
+  const [period, setPeriod] = useState<(PeriodAnalytics & {
+    sync?: {
+      status: string | null
+      created_at: string | null
+      stale: boolean
+      hint: string | null
+      fast_stale?: boolean
+      never_synced?: boolean
+    }
+  }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -95,65 +104,48 @@ export default function DashboardPage() {
     async function loadDashboard() {
       try {
         setLoading(true)
-        setWarn(null)
-        // Período primeiro (cards principais da Visão); resto em paralelo depois.
-        const periodRes = await apiFetch(`/api/kpis/periodo?month=${month}`, {
+        // Evita KPIs do mês anterior com rótulos do mês novo enquanto as requests resolvem.
+        setTm(null)
+        setPerformance(null)
+        setPeriod(null)
+        // Um lambda: evita waterfall de 4 rotas × pooler max:1.
+        const dashRes = await apiFetch(`/api/kpis/dashboard?month=${month}`, {
           cache: 'no-store',
-          timeoutMs: 25_000,
+          timeoutMs: 45_000,
         })
+        const dashJson = await dashRes.json()
         if (cancelled) return
-        try {
-          const periodJson = await periodRes.json()
-          if (periodJson.error) setWarn(`Período: ${periodJson.error}`)
-          else if (periodJson.data) setPeriod(periodJson.data)
-        } catch {
-          setWarn('Analytics de período indisponível')
+        if (dashJson.error) {
+          setError(dashJson.error)
+          setWarn(null)
+          return
         }
-        if (!cancelled) setLoading(false)
 
-        const [kpisRes, tmRes, perfRes] = await Promise.all([
-          apiFetch('/api/kpis', { cache: 'no-store', timeoutMs: 20_000 }),
-          apiFetch('/api/kpis/tempo-medio', { cache: 'no-store', timeoutMs: 15_000 }),
-          apiFetch(`/api/kpis/performance?month=${month}`, { cache: 'no-store', timeoutMs: 25_000 }),
-        ])
-        if (cancelled) return
+        const bundle = dashJson.data ?? {}
+        setData(bundle.kpis ?? null)
+        setTm(bundle.tm ?? null)
+        setPerformance(bundle.performance ?? null)
+        setPeriod(bundle.period ?? null)
+        setError(null)
 
         const warnings: string[] = []
+        const sync = bundle.period?.sync
+        if (sync?.stale) {
+          warnings.push(
+            sync.never_synced
+              ? 'Nenhum sync Avec registrado ainda — confira Admin / cron'
+              : sync.fast_stale
+                ? 'Sync Avec fast desatualizado (>1h) — números do dia podem estar velhos'
+                : 'Sync Avec full desatualizado (>24h) — números podem estar velhos',
+          )
+        } else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
+        else if (sync?.status === 'error') warnings.push('Último sync Avec com erro — confira Admin')
 
-        try {
-          const kpisJson = await kpisRes.json()
-          if (kpisJson.error) setError(kpisJson.error)
-          else {
-            setError(null)
-            setData(kpisJson.data)
-          }
-        } catch {
-          setError('Falha ao carregar KPIs do funil')
-        }
-
-        try {
-          const tmJson = await tmRes.json()
-          if (tmJson.error) warnings.push(`Tempo médio: ${tmJson.error}`)
-          else if (tmJson.data) setTm(tmJson.data)
-          else setTm(null)
-        } catch {
-          warnings.push('Tempo médio indisponível')
-          setTm(null)
-        }
-
-        try {
-          const perfJson = await perfRes.json()
-          if (perfJson.error) warnings.push(`Performance: ${perfJson.error}`)
-          else if (perfJson.data) setPerformance(perfJson.data)
-          else setPerformance(null)
-        } catch {
-          warnings.push('Performance indisponível')
-          setPerformance(null)
-        }
-
-        if (warnings.length) setWarn((prev) => [prev, ...warnings].filter(Boolean).join(' · '))
+        if (warnings.length) setWarn(warnings.join(' · '))
+        else setWarn(null)
       } catch (e) {
         if (!cancelled) setError(String(e))
+      } finally {
         if (!cancelled) setLoading(false)
       }
     }

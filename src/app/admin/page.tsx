@@ -71,7 +71,7 @@ interface HealthStatus {
     configured: boolean
     connected: boolean
     error: string | null
-    neon_quota?: boolean
+    db_quota?: boolean
   }
   claude: { configured: boolean; model?: string }
   avec: {
@@ -373,10 +373,11 @@ export default function AdminPage() {
           {health ? (
             <div className="space-y-2 text-sm">
               <HealthRow label="Banco de dados" ok={health.database.connected} detail={health.database.error ?? undefined} />
-              {health.database.neon_quota && (
+              {health.database.db_quota && (
                 <p className="rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-foreground/90">
-                  Neon sem cota (transferência/tamanho). Use &quot;Liberar espaço Neon&quot; quando a cota
-                  voltar, ou upgrade / novo projeto Neon com DATABASE_URL novo.
+                  Banco sem cota (transferência/tamanho). Esta unidade usa Supabase — confira
+                  DATABASE_URL no pooler (*.pooler.supabase.com), pause crons agressivos ou faça
+                  upgrade do plano Supabase.
                 </p>
               )}
               <HealthRow
@@ -566,8 +567,8 @@ export default function AdminPage() {
               <p className="rounded-xl border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground/80">
                 <span className="font-semibold text-gold">Tempo real:</span> webhook{' '}
                 <code className="text-[0.7rem]">/api/webhooks/avec</code> (header{' '}
-                <code className="text-[0.7rem]">x-avec-secret</code>). Cron leve: fast 2h, full
-                2×/dia (09/19 BRT), estoque a cada 4h; webhook dispara sync em tempo real.
+                <code className="text-[0.7rem]">x-avec-secret</code>). Cron: fast ~20 min (offset
+                BR), full 2×/dia, estoque horário, token 3h; webhook dispara sync em tempo real.
               </p>
               <PrimaryButton type="button" onClick={runAvecSync} disabled={syncing || !avec.configured}>
                 {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
@@ -579,7 +580,7 @@ export default function AdminPage() {
                 disabled={purging || syncing}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold text-foreground/90 lg:hover:bg-card"
               >
-                {purging ? 'Limpando Neon…' : 'Liberar espaço Neon (purge snapshots)'}
+                {purging ? 'Limpando banco…' : 'Liberar espaço (purge snapshots)'}
               </button>
               {purgeMsg && <p className="text-xs text-muted">{purgeMsg}</p>}
               <PrimaryButton
