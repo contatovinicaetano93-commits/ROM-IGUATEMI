@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/avec/sync",
-      "schedule": "10,30,50 * * * *"
+      "schedule": "15 * * * *"
     },
     {
       "path": "/api/avec/sync?mode=full",
@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/estoque/sync",
-      "schedule": "35 * * * *"
+      "schedule": "45 */2 * * *"
     },
     {
       "path": "/api/estoque/sync?mode=full",
