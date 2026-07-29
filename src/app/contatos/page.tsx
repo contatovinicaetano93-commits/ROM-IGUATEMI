@@ -15,7 +15,7 @@ import {
 import { Avatar, PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { whatsAppUrl } from '@/lib/salon/format'
-import { CATEGORY_LABEL, DUE_SOON_DAYS } from '@/lib/salon/constants'
+import { CATEGORY_LABEL, DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
 
 interface Contact {
@@ -198,7 +198,7 @@ export default function ContatosPage() {
         ? 'Nenhum atrasado (cadência vencida com visita registrada).'
         : queue === 'due_soon'
           ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
-          : 'Nenhum agendado hoje.'
+          : `Nenhum agendado hoje ou nos próximos ${SCHEDULED_SOON_DAYS} dias.`
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -285,7 +285,7 @@ export default function ContatosPage() {
               ? 'Atrasados: cadência já passou — visita registrada e sem retorno no prazo.'
               : queue === 'due_soon'
                 ? `Vencendo: retorno previsto nos próximos ${DUE_SOON_DAYS} dias (ainda não atrasou).`
-                : 'Agendados: pessoas com horário hoje (conta pessoa, não serviço). Pode coincidir com atrasado/vencendo.'}
+                : `Agendados: pessoas com horário hoje ou nos próximos ${SCHEDULED_SOON_DAYS} dias (conta pessoa). Pode coincidir com atrasado/vencendo.`}
           </p>
         </div>
       )}
