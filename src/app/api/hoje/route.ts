@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { ok, err, handleError } from '@/lib/api-response'
+import { okCached, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { getSql } from '@/lib/db'
@@ -129,7 +129,7 @@ export async function GET(req: NextRequest) {
       },
     )
 
-    return ok(payload)
+    return okCached(payload, 30)
   } catch (e) {
     return handleError(e)
   }

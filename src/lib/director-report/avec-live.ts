@@ -1,11 +1,21 @@
-import { fetchAllAvecReport, fmtAvecDate } from '@/lib/avec/client'
 import {
+  extractReportTotals,
+  extractRows,
+  fetchAllAvecReport,
+  fetchAvecReport,
+  fmtAvecDate,
+  getAvecSyncMaxPages,
+} from '@/lib/avec/client'
+import {
+  isP3NonReturnerRow,
   normalize0011ReactivationRow,
   normalizeP1ProfessionalRevenueRow,
   normalizeP3ReturnRateRow,
 } from '@/lib/avec/normalize'
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
+import { getRomPanelId } from '@/lib/brand'
 import { toSalonDateIso } from '@/lib/salon/format'
+import { fetchLocal0011Quarter, fetchLocal0011QuarterPair } from './local-0011'
 import { matchDirectorProfessional } from './match-pro'
 import {
   aggregateQuarterRevenue,
@@ -23,6 +33,14 @@ import type {
   ReactivationClient,
   ReturnQuarterRow,
 } from './types'
+
+/** Iguatemi: Avec devolve 400 "não suportado" no 0011 — usa 0002 local (+ 0007 taxa). */
+function shouldSkipAvec0011(): boolean {
+  if (process.env.AVEC_SKIP_REPORT_0011 === '1' || process.env.AVEC_SKIP_REPORT_0011 === 'true') {
+    return true
+  }
+  return getRomPanelId() === 'iguatemi'
+}
 
 function resolveMapperId(mapper: string): string | null {
   const def = getAvecReportRegistry().find((r) => r.mapper === mapper)
@@ -97,12 +115,39 @@ function emptyMonthRow(month: MonthKey): MonthRevenueRow {
   }
 }
 
+/** Budget interativo: caber no abort ~90–120s do browser. */
+export const DIRECTOR_UI_BUDGET_MS = 45_000
+export const DIRECTOR_UI_MAX_PAGES = 8
+export const DIRECTOR_UI_SLIM_MAX_PAGES = 6
+
+export type DirectorFetchBudget = {
+  deadlineAt: number | null
+  maxPages: number
+}
+
+export function directorUiBudget(now = Date.now(), maxPages = DIRECTOR_UI_MAX_PAGES): DirectorFetchBudget {
+  return {
+    deadlineAt: now + DIRECTOR_UI_BUDGET_MS,
+    maxPages,
+  }
+}
+
+export function directorFullBudget(): DirectorFetchBudget {
+  return { deadlineAt: null, maxPages: getAvecSyncMaxPages() }
+}
+
 async function fetch0021Month(
   month: MonthKey,
+  budget: DirectorFetchBudget = directorFullBudget(),
 ): Promise<Map<string, { revenue: number; attended: number; ticketAvg: number }>> {
   const id = resolveMapperId('professionals_revenue') ?? '0021'
   const { inicio, fim } = monthRangeBr(month)
-  const { rows } = await fetchAllAvecReport(id, { inicio, fim, limit: 250 })
+  const { rows } = await fetchAllAvecReport(
+    id,
+    { inicio, fim, limit: 250 },
+    Math.min(budget.maxPages, 20),
+    { deadlineAt: budget.deadlineAt },
+  )
   const byName = new Map<string, { revenue: number; attended: number; ticketAvg: number }>()
 
   for (const row of rows) {
@@ -179,55 +224,214 @@ type QuarterAgg = {
 
 async function fetch0011Quarter(
   quarter: QuarterKey,
-  maxPages?: number,
+  budget: DirectorFetchBudget,
+  professionals: DirectorProfessional[],
 ): Promise<{
   byPro: Map<string, QuarterAgg>
   salonRates: number[]
+  truncated: boolean
+  source: '0011' | '0007' | 'local' | 'none'
+  note: string | null
 }> {
   const id = resolveMapperId('director_return') ?? '0011'
   const { inicio, fim } = quarterRangeBr(quarter)
-  // UI/relatório: cap de páginas evita timeout (default Avec sync = 80 × 250 = 20k linhas).
-  const { rows, truncated } = await fetchAllAvecReport(
-    id,
-    { inicio, fim, limit: 250 },
-    maxPages ?? 40,
-  )
-  if (truncated) {
-    console.warn(`[director-report] 0011 ${quarter} truncado em ${maxPages ?? 40} páginas`)
-  }
-
   const byPro = new Map<string, QuarterAgg>()
   const salonRates: number[] = []
+  let truncated = false
+  let source: '0011' | '0007' | 'local' | 'none' = 'none'
+  let note: string | null = null
+  const skip0011 = shouldSkipAvec0011() || id === '0007'
 
-  for (const row of rows) {
-    const c = normalize0011ReactivationRow(row)
-    if (!c) continue
+  // 0) Iguatemi: 0011 Avec não existe — monta por profissional via 0002 (P1→P2).
+  if (skip0011 && professionals.length > 0) {
+    try {
+      const local = await fetchLocal0011Quarter(quarter, professionals, budget)
+      truncated = local.truncated
+      for (const rate of local.salonRates) salonRates.push(rate)
+      for (const [proName, agg] of local.byPro) {
+        byPro.set(proName, {
+          clients: agg.clients,
+          returnRates: agg.returnRates,
+          clientsTotalHint: agg.clientsTotalHint,
+          clientsReturnedHint: agg.clientsReturnedHint,
+        })
+      }
+      if (local.source === 'local') {
+        source = 'local'
+        note = local.note
+        return { byPro, salonRates, truncated, source, note }
+      }
+      note = local.note
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      note = `0011 local falhou: ${msg.slice(0, 120)}`
+      console.warn(`[director-report] local 0011 ${quarter}: ${msg}`)
+    }
+  }
 
-    if (c.returnRate != null && (!c.lastVisit || c.name === '—')) {
-      salonRates.push(c.returnRate)
-      if (c.professional) {
-        const agg = byPro.get(c.professional) ?? {
+  // 1) Tenta 0011 Avec — Iguatemi/skip: não chama (400 "não suportado").
+  if (!skip0011) {
+    try {
+      const result = await fetchAllAvecReport(
+        id,
+        { inicio, fim, limit: 250 },
+        budget.maxPages,
+        { deadlineAt: budget.deadlineAt },
+      )
+      if (result.truncated) {
+        console.warn(`[director-report] 0011 ${quarter} truncado em ${budget.maxPages} páginas / budget`)
+      }
+      truncated = result.truncated
+      source = '0011'
+
+      for (const row of result.rows) {
+        const c = normalize0011ReactivationRow(row)
+        if (!c) continue
+
+        if (c.returnRate != null && (!c.lastVisit || c.name === '—')) {
+          salonRates.push(c.returnRate)
+          if (c.professional) {
+            const agg = byPro.get(c.professional) ?? {
+              clients: [],
+              returnRates: [],
+              clientsTotalHint: 0,
+              clientsReturnedHint: 0,
+            }
+            agg.returnRates.push(c.returnRate)
+            byPro.set(c.professional, agg)
+          }
+          continue
+        }
+
+        const proName = c.professional ?? '_unassigned'
+        const agg = byPro.get(proName) ?? {
           clients: [],
           returnRates: [],
           clientsTotalHint: 0,
           clientsReturnedHint: 0,
         }
-        agg.returnRates.push(c.returnRate)
-        byPro.set(c.professional, agg)
+        if (c.returnRate != null) agg.returnRates.push(c.returnRate)
+        if (c.name && c.name !== '—') {
+          agg.clients.push(
+            toReactivationClient({
+              name: c.name,
+              email: c.email,
+              phone: c.phone,
+              mobile: c.mobile,
+              gender: c.gender,
+              lastVisit: c.lastVisit,
+            }),
+          )
+        }
+        byPro.set(proName, agg)
       }
-      continue
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      note = `0011 indisponível (${msg.slice(0, 120)})`
+      console.warn(`[director-report] 0011 ${quarter}: ${msg}`)
+    }
+  }
+
+  const hasUseful0011 =
+    salonRates.length > 0 ||
+    [...byPro.values()].some((a) => a.clients.length > 0 || a.returnRates.length > 0)
+
+  // 2) Fallback 0007: taxa do salão (+ lista sem profissional) se ainda não há sinal útil.
+  const timeLeft =
+    budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
+  const need0007 = !hasUseful0011 && timeLeft > 8_000
+  if (need0007) {
+    const id0007 = resolveMapperId('return_rate') ?? '0007'
+    try {
+      const fallback = await fetch0007QuarterFallback(id0007, inicio, fim, budget)
+      truncated = truncated || fallback.truncated
+      if (fallback.salonRate != null) salonRates.push(fallback.salonRate)
+
+      const agg = byPro.get('_unassigned') ?? {
+        clients: [],
+        returnRates: [],
+        clientsTotalHint: 0,
+        clientsReturnedHint: 0,
+      }
+      if (fallback.salonRate != null) {
+        agg.returnRates.push(fallback.salonRate)
+        if (fallback.clientsTotalHint > 0) {
+          agg.clientsTotalHint = fallback.clientsTotalHint
+          agg.clientsReturnedHint = fallback.clientsReturnedHint
+        }
+      }
+      for (const c of fallback.clients) {
+        agg.clients.push(c)
+      }
+      byPro.set('_unassigned', agg)
+      source = '0007'
+      note =
+        'Etapa 0011 via 0007 (taxa do salão; lista sem profissional — filtre 1 pro para ver clientes)'
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      note = `0007 falhou: ${msg.slice(0, 140)}`
+      console.warn(`[director-report] 0007 ${quarter}: ${msg}`)
+    }
+  }
+
+  if (!hasUseful0011 && source !== '0007') source = 'none'
+  return { byPro, salonRates, truncated, source, note }
+}
+
+/** 0007: taxa em `report.total`; linhas = clientes que NÃO retornaram. */
+async function fetch0007QuarterFallback(
+  reportId: string,
+  inicio: string,
+  fim: string,
+  budget: DirectorFetchBudget,
+): Promise<{
+  salonRate: number | null
+  clients: ReactivationClient[]
+  clientsTotalHint: number
+  clientsReturnedHint: number
+  truncated: boolean
+}> {
+  const maxPages = Math.min(4, budget.maxPages)
+  const clients: ReactivationClient[] = []
+  let salonRate: number | null = null
+  let clientsTotalHint = 0
+  let clientsReturnedHint = 0
+  let truncated = false
+  let pagesFetched = 0
+
+  for (let page = 1; page <= maxPages; page++) {
+    if (budget.deadlineAt != null && Date.now() >= budget.deadlineAt) {
+      truncated = true
+      break
+    }
+    const payload = await fetchAvecReport(reportId, { inicio, fim, limit: 250, page })
+    pagesFetched = page
+
+    if (salonRate == null) {
+      for (const total of extractReportTotals(payload)) {
+        const rate = normalizeP3ReturnRateRow(total)
+        if (rate != null) {
+          salonRate = rate
+          const first = Number(
+            total.total_primeiro_periodo ?? total.total_primeiro ?? total.total ?? 0,
+          )
+          const returned = Number(total.total_retornaram ?? total.retornaram ?? 0)
+          if (Number.isFinite(first) && first > 0) {
+            clientsTotalHint = first
+            clientsReturnedHint = Number.isFinite(returned) ? returned : Math.round(first * rate)
+          }
+          break
+        }
+      }
     }
 
-    const proName = c.professional ?? '_unassigned'
-    const agg = byPro.get(proName) ?? {
-      clients: [],
-      returnRates: [],
-      clientsTotalHint: 0,
-      clientsReturnedHint: 0,
-    }
-    if (c.returnRate != null) agg.returnRates.push(c.returnRate)
-    if (c.name && c.name !== '—') {
-      agg.clients.push(
+    const rows = extractRows(payload)
+    if (rows.length === 0) break
+    for (const row of rows) {
+      if (!isP3NonReturnerRow(row)) continue
+      const c = normalize0011ReactivationRow(row)
+      if (!c || !c.name || c.name === '—') continue
+      clients.push(
         toReactivationClient({
           name: c.name,
           email: c.email,
@@ -238,26 +442,12 @@ async function fetch0011Quarter(
         }),
       )
     }
-    byPro.set(proName, agg)
+    if (rows.length < 250) break
+    if (page === maxPages) truncated = true
   }
 
-  // Fallback: 0007 no mesmo período (taxa salão) se 0011 não trouxe taxa
-  if (salonRates.length === 0) {
-    const id0007 = resolveMapperId('return_rate')
-    if (id0007) {
-      try {
-        const { rows: r7 } = await fetchAllAvecReport(id0007, { inicio, fim, limit: 250 })
-        for (const row of r7) {
-          const rate = normalizeP3ReturnRateRow(row)
-          if (rate != null) salonRates.push(rate)
-        }
-      } catch {
-        // opcional
-      }
-    }
-  }
-
-  return { byPro, salonRates }
+  if (pagesFetched === 0) truncated = true
+  return { salonRate, clients, clientsTotalHint, clientsReturnedHint, truncated }
 }
 
 function avg(nums: number[]): number | null {
@@ -319,12 +509,21 @@ export async function fetchLiveDirectorBlocks(
   compareQuarter0021: QuarterKey | null,
   selectedQuarter: QuarterKey,
   compareQuarter: QuarterKey,
-  opts?: { stages?: LiveDirectorStage; maxPages0011?: number },
+  opts?: {
+    stages?: LiveDirectorStage
+    maxPages0011?: number
+    budget?: DirectorFetchBudget
+  },
 ): Promise<LiveDirectorBlocks> {
   const warnings: string[] = []
   const stages = opts?.stages ?? 'all'
   const want0011 = stages === '0011' || stages === 'all'
   const want0021 = stages === '0021' || stages === 'all'
+  const budget =
+    opts?.budget ??
+    (opts?.maxPages0011 != null
+      ? directorUiBudget(Date.now(), opts.maxPages0011)
+      : directorFullBudget())
 
   const monthsNeeded = new Set<MonthKey>(want0021 ? [selectedMonth] : [])
   if (want0021 && compareQuarter0021) {
@@ -355,7 +554,7 @@ export async function fetchLiveDirectorBlocks(
     await Promise.all(
       [...monthsNeeded].map(async (m) => {
         try {
-          monthMaps.set(m, await fetch0021Month(m))
+          monthMaps.set(m, await fetch0021Month(m, budget))
         } catch (e) {
           warnings.push(`0021 ${m}: ${e instanceof Error ? e.message : String(e)}`)
           monthMaps.set(m, new Map())
@@ -367,28 +566,73 @@ export async function fetchLiveDirectorBlocks(
   let selectedQ: Awaited<ReturnType<typeof fetch0011Quarter>> = {
     byPro: new Map(),
     salonRates: [],
+    truncated: false,
+    source: 'none',
+    note: null,
   }
   let compareQ: Awaited<ReturnType<typeof fetch0011Quarter>> = {
     byPro: new Map(),
     salonRates: [],
+    truncated: false,
+    source: 'none',
+    note: null,
   }
 
   if (want0011) {
-    const maxPages = opts?.maxPages0011
-    const [selResult, cmpResult] = await Promise.allSettled([
-      fetch0011Quarter(selectedQuarter, maxPages),
-      fetch0011Quarter(compareQuarter, maxPages),
-    ])
-    if (selResult.status === 'fulfilled') selectedQ = selResult.value
-    else
-      warnings.push(
-        `0011 ${selectedQuarter}: ${selResult.reason instanceof Error ? selResult.reason.message : String(selResult.reason)}`,
-      )
-    if (cmpResult.status === 'fulfilled') compareQ = cmpResult.value
-    else
-      warnings.push(
-        `0011 ${compareQuarter}: ${cmpResult.reason instanceof Error ? cmpResult.reason.message : String(cmpResult.reason)}`,
-      )
+    if (shouldSkipAvec0011() && professionals.length > 0) {
+      try {
+        const pair = await fetchLocal0011QuarterPair(
+          selectedQuarter,
+          compareQuarter,
+          professionals,
+          budget,
+        )
+        selectedQ = {
+          byPro: pair.selected.byPro,
+          salonRates: pair.selected.salonRates,
+          truncated: pair.selected.truncated,
+          source: pair.selected.source,
+          note: pair.selected.note,
+        }
+        compareQ = {
+          byPro: pair.compare.byPro,
+          salonRates: pair.compare.salonRates,
+          truncated: pair.compare.truncated,
+          source: pair.compare.source,
+          note: pair.compare.note,
+        }
+        if (selectedQ.truncated || compareQ.truncated) {
+          warnings.push('0011 local: amostra parcial (budget UI / páginas 0002)')
+        }
+        if (selectedQ.note) warnings.push(selectedQ.note)
+        else if (compareQ.note) warnings.push(compareQ.note)
+      } catch (e) {
+        warnings.push(
+          `0011 local: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
+    } else {
+      const [selResult, cmpResult] = await Promise.allSettled([
+        fetch0011Quarter(selectedQuarter, budget, professionals),
+        fetch0011Quarter(compareQuarter, budget, professionals),
+      ])
+      if (selResult.status === 'fulfilled') {
+        selectedQ = selResult.value
+        if (selectedQ.truncated) warnings.push(`0011 ${selectedQuarter}: parcial (budget UI)`)
+        if (selectedQ.note) warnings.push(selectedQ.note)
+      } else
+        warnings.push(
+          `0011 ${selectedQuarter}: ${selResult.reason instanceof Error ? selResult.reason.message : String(selResult.reason)}`,
+        )
+      if (cmpResult.status === 'fulfilled') {
+        compareQ = cmpResult.value
+        if (compareQ.truncated) warnings.push(`0011 ${compareQuarter}: parcial (budget UI)`)
+        if (compareQ.note && compareQ.note !== selectedQ.note) warnings.push(compareQ.note)
+      } else
+        warnings.push(
+          `0011 ${compareQuarter}: ${cmpResult.reason instanceof Error ? cmpResult.reason.message : String(cmpResult.reason)}`,
+        )
+    }
   }
 
   const salonSel = avg(selectedQ.salonRates)
@@ -409,6 +653,8 @@ export async function fetchLiveDirectorBlocks(
       }
       cur.clients.push(...agg.clients)
       cur.returnRates.push(...agg.returnRates)
+      cur.clientsTotalHint = Math.max(cur.clientsTotalHint, agg.clientsTotalHint)
+      cur.clientsReturnedHint = Math.max(cur.clientsReturnedHint, agg.clientsReturnedHint)
       out.set(pro.id, cur)
     }
     // Linhas sem profissional: distribui só se houver 1 pro filtrado
@@ -423,6 +669,8 @@ export async function fetchLiveDirectorBlocks(
       }
       cur.clients.push(...un.clients)
       cur.returnRates.push(...un.returnRates)
+      cur.clientsTotalHint = Math.max(cur.clientsTotalHint, un.clientsTotalHint)
+      cur.clientsReturnedHint = Math.max(cur.clientsReturnedHint, un.clientsReturnedHint)
       out.set(only.id, cur)
     }
     return out
@@ -441,11 +689,12 @@ export async function fetchLiveDirectorBlocks(
       rates.push(...agg.returnRates)
     }
     if (professionals.length === 1) {
+      const un = selectedQ.byPro.get('_unassigned')
       selByPro.set(professionals[0]!.id, {
         clients: allClients,
         returnRates: rates,
-        clientsTotalHint: 0,
-        clientsReturnedHint: 0,
+        clientsTotalHint: un?.clientsTotalHint ?? 0,
+        clientsReturnedHint: un?.clientsReturnedHint ?? 0,
       })
     }
   }
@@ -502,19 +751,50 @@ export async function fetchLiveDirectorBlocks(
   let return_blocks: ProfessionalReturnBlock[] | null = null
   if (want0011) {
     try {
-      return_blocks = professionals.map((professional) => {
+      const hasPerPro = selByPro.size > 0 || cmpByPro.size > 0
+      // Com breakdown por pro: só lista quem tem dado próprio (evita 59 linhas iguais).
+      // Sem breakdown: um bloco "Salão" com a taxa 0007, se houver.
+      const roster = hasPerPro
+        ? professionals.filter((p) => selByPro.has(p.id) || cmpByPro.has(p.id))
+        : salonSel != null || salonCmp != null
+          ? [
+              {
+                id: 'pro-salon-0011',
+                name: 'Salão (taxa Avec)',
+                avec_pro_id: null,
+                role: 'other' as const,
+                active: true,
+              },
+            ]
+          : professionals
+
+      return_blocks = roster.map((professional) => {
         const selAgg = selByPro.get(professional.id)
         const cmpAgg = cmpByPro.get(professional.id)
+        const useSalon = !hasPerPro
 
-        const cmpRow = buildQuarterRow(compareQuarter, cmpAgg, salonCmp, null)
-        const selRow = buildQuarterRow(selectedQuarter, selAgg, salonSel, cmpRow.return_rate)
+        // Com breakdown: usa taxa própria; se faltar o tri comparativo, cai na taxa salão.
+        const cmpRow = buildQuarterRow(
+          compareQuarter,
+          cmpAgg,
+          useSalon || !cmpAgg ? salonCmp : null,
+          null,
+        )
+        const selRow = buildQuarterRow(
+          selectedQuarter,
+          selAgg,
+          useSalon || !selAgg ? salonSel : null,
+          cmpRow.return_rate,
+        )
 
-        // Se não há lista por pro mas há taxa salão, ainda mostra a taxa
         if (!selAgg && salonSel != null && selRow.clients_total === 0) {
           selRow.return_rate = Math.round(salonSel * 1000) / 1000
         }
         if (!cmpAgg && salonCmp != null && cmpRow.clients_total === 0) {
           cmpRow.return_rate = Math.round(salonCmp * 1000) / 1000
+          selRow.delta_vs_prev =
+            Math.round((selRow.return_rate - cmpRow.return_rate) * 1000) / 10
+        } else if (selAgg && cmpAgg) {
           selRow.delta_vs_prev =
             Math.round((selRow.return_rate - cmpRow.return_rate) * 1000) / 10
         }
@@ -563,11 +843,12 @@ export async function fetchLiveDirectorBlocks(
     warnings.push('0021 sem faturamento casado aos profissionais do portfólio')
     revenue_blocks = []
   }
+  // Sem sinal útil → null para o caller manter mock (evita tabela vazia "Nenhum profissional").
   if (want0011 && return_blocks != null && !hasAnyReturn) {
     warnings.push(
-      '0011 sem lista/taxa no período — use um trimestre fechado ou confira AVEC_UNIT_ID (salao_id)',
+      '0011 sem lista/taxa no período — Avec 0011 pode estar indisponível neste salão; fallback 0007 sem dados',
     )
-    return_blocks = []
+    return_blocks = null
   }
 
   return { return_blocks, revenue_blocks, warnings }

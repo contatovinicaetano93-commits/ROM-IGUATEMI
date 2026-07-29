@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { ok, handleError, err } from '@/lib/api-response'
+import { ok, okCached, handleError, err } from '@/lib/api-response'
 import { cachedFetch, MemoryCache } from '@/lib/cache'
 import { listContactsWithSummary } from '@/lib/contact-summary'
 import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
@@ -71,13 +71,17 @@ export async function GET(req: NextRequest) {
       query ? 15 : 30,
     )
 
-    return ok(result.items, {
-      total: result.total,
-      limit,
-      status: status ?? 'all',
-      channel: channel ?? 'all',
-      pending: pendingOnly,
-    })
+    return okCached(
+      result.items,
+      query ? 15 : 30,
+      {
+        total: result.total,
+        limit,
+        status: status ?? 'all',
+        channel: channel ?? 'all',
+        pending: pendingOnly,
+      },
+    )
   } catch (e) {
     return handleError(e)
   }
