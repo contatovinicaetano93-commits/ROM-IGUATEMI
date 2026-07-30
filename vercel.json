@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/estoque/sync",
-      "schedule": "35 * * * *"
+      "schedule": "5 * * * *"
     },
     {
       "path": "/api/estoque/sync?mode=full",
