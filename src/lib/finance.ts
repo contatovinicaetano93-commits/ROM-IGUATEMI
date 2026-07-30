@@ -231,9 +231,15 @@ async function sumExpenses(from: string, to: string): Promise<number> {
           coalesce(source, 'manual') = 'omie'
           and (
             coalesce(omie_category_code, '') like '2.16%'
-            or coalesce(omie_category_code, '') like '2.18%'
+            or coalesce(omie_category_code, '') like '2.17%'
+            or coalesce(omie_category_code, '') like '2.24%'
+            or coalesce(omie_category_code, '') like '0.01%'
             or description ilike '%TED entre contas%'
             or description ilike '%Adiantamento de Lucro%'
+            or description ilike '%Distribuição de Lucro%'
+            or description ilike '%Distribuicao de Lucro%'
+            or description ilike '%Mutuo %'
+            or description ilike '%Mútuo %'
           )
         )
     `) as { total: string | number }[]
@@ -245,6 +251,10 @@ async function sumExpenses(from: string, to: string): Promise<number> {
       where expense_date >= ${from}::date and expense_date <= ${to}::date
         and description not ilike '%TED entre contas%'
         and description not ilike '%Adiantamento de Lucro%'
+        and description not ilike '%Distribuição de Lucro%'
+        and description not ilike '%Distribuicao de Lucro%'
+        and description not ilike '%Mutuo %'
+        and description not ilike '%Mútuo %'
     `) as { total: string | number }[]
     return Number(rows[0]?.total ?? 0) || 0
   }
@@ -278,9 +288,15 @@ async function sumExpensesByCnpj(from: string, to: string): Promise<ExpenseCnpjB
           coalesce(source, 'manual') = 'omie'
           and (
             coalesce(omie_category_code, '') like '2.16%'
-            or coalesce(omie_category_code, '') like '2.18%'
+            or coalesce(omie_category_code, '') like '2.17%'
+            or coalesce(omie_category_code, '') like '2.24%'
+            or coalesce(omie_category_code, '') like '0.01%'
             or description ilike '%TED entre contas%'
             or description ilike '%Adiantamento de Lucro%'
+            or description ilike '%Distribuição de Lucro%'
+            or description ilike '%Distribuicao de Lucro%'
+            or description ilike '%Mutuo %'
+            or description ilike '%Mútuo %'
           )
         )
     `) as {
@@ -373,9 +389,15 @@ async function listDailyOmieExpenses(
         and expense_date <= ${to}::date
         and not (
           coalesce(omie_category_code, '') like '2.16%'
-          or coalesce(omie_category_code, '') like '2.18%'
+          or coalesce(omie_category_code, '') like '2.17%'
+          or coalesce(omie_category_code, '') like '2.24%'
+          or coalesce(omie_category_code, '') like '0.01%'
           or description ilike '%TED entre contas%'
           or description ilike '%Adiantamento de Lucro%'
+          or description ilike '%Distribuição de Lucro%'
+          or description ilike '%Distribuicao de Lucro%'
+          or description ilike '%Mutuo %'
+          or description ilike '%Mútuo %'
         )
       group by expense_date
       order by expense_date asc
