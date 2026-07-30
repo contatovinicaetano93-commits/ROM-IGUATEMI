@@ -650,6 +650,9 @@ export default function FinanceiroPage() {
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       const data = json.data as {
+        skipped?: boolean
+        reason?: string
+        note?: string
         created?: number
         updated?: number
         skipped_cancelled?: number
@@ -657,6 +660,10 @@ export default function FinanceiroPage() {
         fetched?: number
         error?: string
         kinds?: { kind: string; label: string; fetched: number; created: number; updated: number; error?: string }[]
+      }
+      if (data.skipped) {
+        setOmieSyncMsg(data.note ?? 'Sync Omie já em andamento — tente de novo em alguns minutos.')
+        return
       }
       if (data.error && !(data.fetched && data.fetched > 0)) throw new Error(data.error)
       const kindBits =

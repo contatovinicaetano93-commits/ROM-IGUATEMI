@@ -24,6 +24,7 @@ import {
   upsertOmieExpense,
 } from '@/lib/omie/store'
 import type { OmieNormalizedExpense, OmieTituloEncontrado } from '@/lib/omie/types'
+import { todayIso } from '@/lib/salon/format'
 import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 
 const CANCELLED_STATUSES = new Set(['CANCELADO', 'CANCELADA'])
@@ -376,11 +377,10 @@ async function syncOmieExpensesRecentUnlocked(): Promise<{
     return { runs: [], configured: false }
   }
 
-  const now = new Date()
-  const y = now.getUTCFullYear()
-  const m = now.getUTCMonth() + 1
-  const current = `${y}-${String(m).padStart(2, '0')}`
-  const prevDate = new Date(Date.UTC(y, m - 2, 1))
+  const today = todayIso()
+  const current = today.slice(0, 7)
+  const [y, m] = current.split('-').map(Number)
+  const prevDate = new Date(Date.UTC(y!, m! - 2, 1))
   const previous = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, '0')}`
 
   // Unlocked internals — um único lease cobre mês anterior + atual.
