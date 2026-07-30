@@ -116,8 +116,9 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
  * após markServiceDone limpar scheduled_at.
  *
  * Novos do dia = contatos criados no ROM naquele dia, exceto importação em massa
- * da base Avec (`importado` / backfill 0004 / lake). Sync de agenda/atendimento
- * (primeira aparição no ROM) continua contando — não confundir com dump 0004.
+ * da base Avec (`importado` / backfill 0004 / lake / last_done). Sync de
+ * agenda/atendimento (primeira aparição no ROM) continua contando — não
+ * confundir com dump 0004 ou reimport `avec_last_done_backfill`.
  */
 export async function recomputeSalonMetricsFromRom(day = todayIso()) {
   const sql = getSql()
@@ -152,6 +153,7 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
         and coalesce(source, '') not like 'avec_sync_clients%'
         and coalesce(source, '') not like 'avec_backfill%'
         and coalesce(source, '') not like 'avec_lake%'
+        and coalesce(source, '') not like 'avec_last_done%'
     ` as unknown as Promise<{ n: number }[]>,
   ])
 
