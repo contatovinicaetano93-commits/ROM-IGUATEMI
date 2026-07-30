@@ -81,8 +81,7 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
   // TM 0223 catálogo / ignorado de propósito — não marca sync partial.
   if (/TM 0223:/i.test(warning)) return true
-  // Truncamento com skip de métricas (não zerar) — informativo.
-  if (/truncado/i.test(warning)) return true
+  // Truncamento que PULA métricas (recorrentes/agenda reconcile) é HARD.
   // Catálogo 0004 adiado de propósito (ritmo leve).
   if (/Catálogo 0004 adiado/i.test(warning)) return true
   // P3 sem taxa explícita — informativo.

@@ -398,9 +398,9 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
 
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   // Fast: hoje + 7d (Contatos Agendados / visão da semana). Full: ontem → +21d.
-  // Fast: hoje + amanhã (cabe nos 300s Vercel). Semana completa no full (2×/dia).
-  // Janela +7d no fast gerava 504 eterno (Sync interrompido a cada cron).
-  const range = mode === 'fast' ? periodRange(0, 1) : periodRange(1, 21)
+  // Fast: hoje + 2d (Contatos próximo) — cabe no teto com cache/lean path.
+  // Semana completa (+21d) só no full (2×/dia). +7d no fast gerava 504 eterno.
+  const range = mode === 'fast' ? periodRange(0, 2) : periodRange(1, 21)
   // 0051: site = origem Online/Local ("" = todos). Unidade vem do token (salon_id).
   const params = { ...range, site: '', profissional_id: '', limit: 250 }
   const result = await fetchAllAvecReport('0051', params)

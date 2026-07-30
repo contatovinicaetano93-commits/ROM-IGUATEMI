@@ -107,15 +107,17 @@ async function executeSync(
       }
     }
 
-    // One-shot: desfaz jsonb duplo legado (JSON.stringify + postgres.js) que zera a Visão.
-    try {
-      await Promise.all([
-        repairSalonP1JsonbEncoding(),
-        repairSalonP2JsonbEncoding(),
-        repairSalonP3JsonbEncoding(),
-      ])
-    } catch {
-      // não bloqueia sync
+    // Repair jsonb legado só no full — no fast a cada 20min era custo morto.
+    if (effectiveMode === 'full') {
+      try {
+        await Promise.all([
+          repairSalonP1JsonbEncoding(),
+          repairSalonP2JsonbEncoding(),
+          repairSalonP3JsonbEncoding(),
+        ])
+      } catch {
+        // não bloqueia sync
+      }
     }
 
     const run = await runAvecSync(effectiveMode)
