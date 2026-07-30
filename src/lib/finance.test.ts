@@ -51,6 +51,7 @@ function mockBucketSql(opts: {
     ])
     .mockResolvedValueOnce([{ attended: opts.attended ?? 0 }])
     .mockResolvedValueOnce(opts.daily ?? [])
+    .mockResolvedValueOnce([]) // despesas Omie diárias (listDailyOmieExpenses)
     .mockResolvedValueOnce([
       {
         cmv: opts.cmv ?? 0,
@@ -207,5 +208,47 @@ describe('finance', () => {
         { method: 'Cartão', amount: 100, share: 16.7 },
       ])
     })
+  })
+})
+
+describe('mergeDailyFinanceSeries', () => {
+  it('une receita e despesas Omie; dia só despesa entra com receita 0', async () => {
+    const { mergeDailyFinanceSeries } = await import('@/lib/finance')
+    const merged = mergeDailyFinanceSeries(
+      [
+        { day: '2026-07-01', revenue: 1000, attended: 5, ticket_avg: 200 },
+        { day: '2026-07-02', revenue: 500, attended: 2, ticket_avg: 250 },
+      ],
+      [
+        { day: '2026-07-01', servicos: 100.5, comercio: 20 },
+        { day: '2026-07-03', servicos: 0, comercio: 80 },
+      ],
+    )
+    expect(merged).toEqual([
+      {
+        day: '2026-07-01',
+        revenue: 1000,
+        attended: 5,
+        ticket_avg: 200,
+        expenses_servicos: 100.5,
+        expenses_comercio: 20,
+      },
+      {
+        day: '2026-07-02',
+        revenue: 500,
+        attended: 2,
+        ticket_avg: 250,
+        expenses_servicos: 0,
+        expenses_comercio: 0,
+      },
+      {
+        day: '2026-07-03',
+        revenue: 0,
+        attended: 0,
+        ticket_avg: null,
+        expenses_servicos: 0,
+        expenses_comercio: 80,
+      },
+    ])
   })
 })
