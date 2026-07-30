@@ -129,6 +129,9 @@ export function currentYearSp(now = new Date()): number {
 /**
  * Pedido com período histórico (ex.: 2025 quando o calendário já está em 2026).
  * Precisa de budget Avec completo — o caminho slim/55s da UI zera esses dados.
+ *
+ * `stage` limita quais chaves entram: evita que filtro da outra aba (ex. 0011 em
+ * 2025-Q4) force caminho histórico no 0021 do ano corrente.
  */
 export function isHistoricalDirectorPeriod(
   opts: {
@@ -137,11 +140,30 @@ export function isHistoricalDirectorPeriod(
     compare?: string | null
     quarter0021?: string | null
     compare0021?: string | null
+    stage?: '0011' | '0021' | 'all' | null
+    /** Se false, ignore compare0021 (UI não usa o trimestre de comparação). */
+    compareMonths?: boolean | null
   },
   now = new Date(),
 ): boolean {
   const year = currentYearSp(now)
-  const keys = [opts.month, opts.quarter, opts.compare, opts.quarter0021, opts.compare0021]
+  const stage = opts.stage ?? 'all'
+  const keys: Array<string | null | undefined> =
+    stage === '0011'
+      ? [opts.quarter, opts.compare]
+      : stage === '0021'
+        ? [
+            opts.month,
+            opts.quarter0021,
+            opts.compareMonths === false ? null : opts.compare0021,
+          ]
+        : [
+            opts.month,
+            opts.quarter,
+            opts.compare,
+            opts.quarter0021,
+            opts.compareMonths === false ? null : opts.compare0021,
+          ]
   for (const key of keys) {
     if (!key) continue
     const y = Number(String(key).slice(0, 4))

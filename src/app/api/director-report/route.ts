@@ -116,6 +116,7 @@ async function runDelivery(
     selectedQuarter: opts.quarter,
     compareQuarter: opts.compare,
     professionalId: opts.professionalId,
+    stages: opts.stage === 'all' ? 'all' : opts.stage,
   })
   const delivery = await deliverDirectorReport(report, opts.stage)
 
@@ -212,6 +213,8 @@ export async function GET(req: NextRequest) {
       compare: compareQuarter,
       quarter0021: selectedQuarter0021,
       compare0021: compareQuarter0021,
+      stage: stages,
+      compareMonths,
     })
     // Histórico: nunca slim — precisa do walk Avec completo ou o relatório fica zerado.
     const slim = historical ? false : searchParams.get('slim') === '1'
@@ -236,7 +239,7 @@ export async function GET(req: NextRequest) {
       format === 'json'
         ? await cachedFetch(
             [
-              'director:json:v7-hist',
+              'director:json:v8-hist-stage',
               stages,
               `slim=${slim ? 1 : 0}`,
               `hist=${historical ? 1 : 0}`,

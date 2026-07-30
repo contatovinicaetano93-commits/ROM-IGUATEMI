@@ -161,13 +161,14 @@ export default function RelatorioDiretoriaPage() {
     const stage = tab === '0021' ? '0021' : '0011'
     setLoading(true)
     setError(null)
-    const historical = isHistoricalSelection([
-      month,
-      quarter,
-      compare,
-      quarter0021,
-      compareQuarter0021,
-    ])
+    const historical =
+      stage === '0011'
+        ? isHistoricalSelection([quarter, compare])
+        : isHistoricalSelection([
+            month,
+            quarter0021,
+            compareMonths ? compareQuarter0021 : null,
+          ])
     const fetchMs = historical ? HISTORICAL_FETCH_MS : CURRENT_FETCH_MS
     try {
       const q = new URLSearchParams({
@@ -187,6 +188,7 @@ export default function RelatorioDiretoriaPage() {
       if (stage === '0021' && proId0021) q.set('professional_id', proId0021)
       const res = await apiFetch(`/api/director-report?${q}`, {
         cache: 'no-store',
+        clientCache: false,
         timeoutMs: fetchMs,
       })
       const json = await res.json()
@@ -478,7 +480,9 @@ export default function RelatorioDiretoriaPage() {
                   ? 'text-foreground'
                   : data?.source === 'partial'
                     ? 'text-warning'
-                    : 'text-warning'
+                    : data?.source === 'error'
+                      ? 'text-danger'
+                      : 'text-warning'
               }
             >
               {loading
@@ -486,8 +490,12 @@ export default function RelatorioDiretoriaPage() {
                 : data?.source === 'avec'
                   ? 'Avec live'
                   : data?.source === 'partial'
-                    ? 'parcial (Avec + demo)'
-                    : 'demo / fixture'}
+                    ? 'parcial'
+                    : data?.source === 'error'
+                      ? 'sem dados / timeout'
+                      : data
+                        ? 'demo / fixture'
+                        : '—'}
             </span>
             {data?.schedule_note ? ` · ${data.schedule_note}` : ''}
           </p>
