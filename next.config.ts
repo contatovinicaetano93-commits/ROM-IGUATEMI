@@ -3,11 +3,11 @@ import { withSentryConfig } from '@sentry/nextjs'
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['postgres'],
-  // Garante que o overlay secrets/database-url.txt entre no bundle serverless.
+  // secrets/ overlay + db/*.sql + migrations.json no bundle serverless (Vercel).
   outputFileTracingIncludes: {
-    '/*': ['./secrets/**/*'],
-    '/api/*': ['./secrets/**/*'],
-    '/api/**/*': ['./secrets/**/*'],
+    '/*': ['./secrets/**/*', './db/**/*'],
+    '/api/*': ['./secrets/**/*', './db/**/*'],
+    '/api/**/*': ['./secrets/**/*', './db/**/*'],
   },
 }
 
