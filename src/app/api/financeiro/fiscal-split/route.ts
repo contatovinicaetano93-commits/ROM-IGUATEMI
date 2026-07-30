@@ -9,13 +9,13 @@ import {
   listFiscalSplits,
   type FiscalSplitRawPayload,
 } from '@/lib/fiscal-split'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 
 const MAX_SETTLEMENTS_PER_REQUEST = 1000
 
 function monthRange(monthKey: string): { from: string; to: string } {
-  const [y, m] = monthKey.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
-  return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
+  const w = resolveMonthWindow(monthKey)
+  return { from: w.from, to: w.to }
 }
 
 export async function GET(req: NextRequest) {

@@ -2,6 +2,7 @@ import { getSql } from '@/lib/db'
 import { todayIso } from '@/lib/salon/format'
 import { labelMonth, labelQuarter, quarterOfMonth, monthsInQuarter } from '@/lib/director-report/period'
 import type { MonthKey, QuarterKey } from '@/lib/director-report/types'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 
 export interface TmBucket {
   key: string
@@ -27,9 +28,8 @@ function previousMonthKey(month: MonthKey): MonthKey {
 }
 
 function monthRange(month: MonthKey): { start: string; end: string } {
-  const [y, m] = month.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
-  return { start: `${month}-01`, end: `${month}-${String(lastDay).padStart(2, '0')}` }
+  const w = resolveMonthWindow(month)
+  return { start: w.from, end: w.to }
 }
 
 function previousQuarterKey(quarter: QuarterKey): QuarterKey {

@@ -6,6 +6,7 @@ import {
 } from '@/lib/fiscal-split'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
+import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
 
 /** true após o 1º ensureFiscalSplitTable bem-sucedido neste isolate. */
 let fiscalTableReady = false
@@ -183,16 +184,10 @@ function currentMonthKey(referenceDay: string): string {
   return referenceDay.slice(0, 7)
 }
 
-function previousMonthKey(monthKey: string): string {
-  const [y, m] = monthKey.split('-').map(Number)
-  const d = new Date(Date.UTC(y!, m! - 2, 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-}
-
 function monthRange(monthKey: string): { from: string; to: string } {
-  const [y, m] = monthKey.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
-  return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
+  // Mesma janela MTD da Visão analítica (mês corrente até hoje).
+  const w = resolveMonthWindow(monthKey)
+  return { from: w.from, to: w.to }
 }
 
 function labelMonthPt(monthKey: string): string {
@@ -539,8 +534,14 @@ export interface FinanceKpis {
   previous: FinanceKpiBucket
 }
 
-async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
-  const { from, to } = monthRange(monthKey)
+async function buildBucket(
+  monthKey: string,
+  range?: { from: string; to: string; label?: string },
+): Promise<FinanceKpiBucket> {
+  const base = monthRange(monthKey)
+  const from = range?.from ?? base.from
+  const to = range?.to ?? base.to
+  const label = range?.label ?? labelMonthPt(monthKey)
   const [revenue, expenseBreakdown, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),
@@ -563,7 +564,7 @@ async function buildBucket(monthKey: string): Promise<FinanceKpiBucket> {
 
   return {
     month: monthKey,
-    label: labelMonthPt(monthKey),
+    label,
     from,
     to,
     revenue: revenueRounded,
@@ -594,10 +595,33 @@ export async function computeFinanceKpis(opts?: {
     fiscalTableReady = true
   }
   const current = opts?.month ?? currentMonthKey(todayIso())
-  const compare = opts?.compareMonth ?? previousMonthKey(current)
-  const [currentBucket, previousBucket] = await Promise.all([
-    buildBucket(current),
-    buildBucket(compare),
-  ])
+  const currentWindow = resolveMonthWindow(current)
+  const compareKey = opts?.compareMonth
+  const prevWindow = compareKey
+    ? (() => {
+        const w = resolveMonthWindow(compareKey, currentWindow.to)
+        return {
+          month: w.month,
+          from: w.from,
+          to: w.to,
+          label: labelMonthPt(w.month),
+          mtd_aligned: false,
+        }
+      })()
+    : resolvePreviousComparableWindow(currentWindow)
+  const currentLabel = currentWindow.mtd
+    ? `${labelMonthPt(current)} (até dia ${Number(currentWindow.to.slice(8, 10))})`
+    : labelMonthPt(current)
+  // Sequencial: reduz pico no pooler.
+  const currentBucket = await buildBucket(current, {
+    from: currentWindow.from,
+    to: currentWindow.to,
+    label: currentLabel,
+  })
+  const previousBucket = await buildBucket(prevWindow.month, {
+    from: prevWindow.from,
+    to: prevWindow.to,
+    label: prevWindow.label,
+  })
   return { current: currentBucket, previous: previousBucket }
 }

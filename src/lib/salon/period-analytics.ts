@@ -12,53 +12,23 @@ import {
   type P2PackageRow,
 } from '@/lib/salon/p2-metrics'
 import { getSalonP3DailyNear } from '@/lib/salon/p3-metrics'
+import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-function currentMonthKey(referenceDay: string): string {
-  return referenceDay.slice(0, 7)
-}
-
-function monthRange(monthKey: string): { from: string; to: string } {
-  const [y, m] = monthKey.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
-  return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
-}
-
-/** Mês corrente: até hoje; meses fechados: 1º→último dia. */
+/** @deprecated use resolveMonthWindow — mantido para imports existentes. */
 export function monthToDateRange(
   monthKey: string,
   referenceDay = todayIso(),
 ): { from: string; to: string } {
-  const range = monthRange(monthKey)
-  return monthKey === currentMonthKey(referenceDay) ? { ...range, to: referenceDay } : range
+  const w = resolveMonthWindow(monthKey, referenceDay)
+  return { from: w.from, to: w.to }
 }
 
 function labelMonthPt(monthKey: string): string {
   const [y, m] = monthKey.split('-')
   const idx = Number(m) - 1
   return `${MONTH_PT[idx] ?? m}/${y}`
-}
-
-function previousMonthKey(monthKey: string): string {
-  const [y, m] = monthKey.split('-').map(Number)
-  const d = new Date(Date.UTC(y!, m! - 1, 1))
-  d.setUTCMonth(d.getUTCMonth() - 1)
-  return d.toISOString().slice(0, 7)
-}
-
-/** Espelha o recorte MTD do mês atual no mês comparado (ex.: Jul 1–27 → Jun 1–27). */
-function compareMonthToDateRange(
-  currentMonth: string,
-  compareMonth: string,
-  referenceDay = todayIso(),
-): { from: string; to: string } {
-  const range = monthRange(compareMonth)
-  if (currentMonth !== currentMonthKey(referenceDay)) return range
-  const dayNum = Number(referenceDay.slice(8, 10))
-  const last = Number(range.to.slice(8, 10))
-  const capped = Math.min(dayNum, last)
-  return { from: range.from, to: `${compareMonth}-${String(capped).padStart(2, '0')}` }
 }
 
 /**
@@ -197,19 +167,19 @@ export interface PeriodAnalytics {
 export async function computePeriodAnalytics(opts?: {
   month?: string
 }): Promise<PeriodAnalytics> {
-  const month = opts?.month ?? currentMonthKey(todayIso())
-  const { from, to } = monthToDateRange(month)
-  const prevMonth = previousMonthKey(month)
-  const prevRange = compareMonthToDateRange(month, prevMonth)
+  const month = opts?.month ?? todayIso().slice(0, 7)
+  const window = resolveMonthWindow(month)
+  const { from, to } = window
+  const prev = resolvePreviousComparableWindow(window)
   const [totals, loss, prevTotals, prevLoss, p1, p2, p3, prevP1] = await Promise.all([
     sumRevenueAndAttended(from, to),
     sumAttendanceLoss(from, to),
-    sumRevenueAndAttended(prevRange.from, prevRange.to),
-    sumAttendanceLoss(prevRange.from, prevRange.to),
+    sumRevenueAndAttended(prev.from, prev.to),
+    sumAttendanceLoss(prev.from, prev.to),
     getSalonP1DailyNear(to),
     getSalonP2DailyNear(to),
     getSalonP3DailyNear(to),
-    getSalonP1DailyNear(prevRange.to),
+    getSalonP1DailyNear(prev.to),
   ])
   const ticket_avg =
     totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
@@ -245,8 +215,8 @@ export async function computePeriodAnalytics(opts?: {
     top_professionals: professionals.slice(0, 8),
     top_services: (p1?.services ?? []).slice(0, 8),
     previous: {
-      month: prevMonth,
-      label: labelMonthPt(prevMonth),
+      month: prev.month,
+      label: prev.label,
       revenue: prevTotals.revenue,
       attended: prevTotals.attended,
       cancelled: prevLoss.cancelled,
