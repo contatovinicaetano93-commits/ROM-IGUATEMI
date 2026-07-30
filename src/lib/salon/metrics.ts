@@ -115,10 +115,8 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
  * (last_done_at). Alinha ao KPI Avec (abertos+pagos) — não contar só leftovers
  * após markServiceDone limpar scheduled_at.
  *
- * Novos do dia = contatos criados no ROM naquele dia, exceto importação em massa
- * da base Avec (`importado` / backfill 0004 / lake / last_done). Sync de
- * agenda/atendimento (primeira aparição no ROM) continua contando — não
- * confundir com dump 0004 ou reimport `avec_last_done_backfill`.
+ * Novos do dia = contatos **orgânicos** (WhatsApp/manual/webhook). Dump Avec NÃO
+ * conta — paridade BR (agenda/atendidos/retorno não inflam “novos”).
  */
 export async function recomputeSalonMetricsFromRom(day = todayIso()) {
   const sql = getSql()
@@ -154,6 +152,9 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
         and coalesce(source, '') not like 'avec_backfill%'
         and coalesce(source, '') not like 'avec_lake%'
         and coalesce(source, '') not like 'avec_last_done%'
+        and coalesce(source, '') not like 'avec_sync_appointments%'
+        and coalesce(source, '') not like 'avec_sync_attended%'
+        and coalesce(source, '') not like 'avec_sync_returning%'
     ` as unknown as Promise<{ n: number }[]>,
   ])
 
