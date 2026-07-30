@@ -15,6 +15,7 @@ import {
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
 import { getRomPanelId } from '@/lib/brand'
 import { toSalonDateIso } from '@/lib/salon/format'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 import { fetchLocal0011Quarter, fetchLocal0011QuarterPair } from './local-0011'
 import { matchDirectorProfessional } from './match-pro'
 import {
@@ -48,13 +49,16 @@ function resolveMapperId(mapper: string): string | null {
   return resolveReportId(def)
 }
 
-/** Intervalo dd/mm/yyyy do mês calendário (America/Sao_Paulo via YYYY-MM). */
-export function monthRangeBr(month: MonthKey): { inicio: string; fim: string } {
-  const [y, m] = month.split('-').map(Number)
-  if (!y || !m) throw new Error(`Mês inválido: ${month}`)
-  const start = new Date(y, m - 1, 1)
-  const end = new Date(y, m, 0)
-  return { inicio: fmtAvecDate(start), fim: fmtAvecDate(end) }
+/** Intervalo dd/mm/yyyy do mês (MTD no mês corrente — alinha Visão/Financeiro). */
+export function monthRangeBr(month: MonthKey, referenceDay?: string): { inicio: string; fim: string } {
+  const w = resolveMonthWindow(month, referenceDay)
+  const [fy, fm, fd] = w.from.split('-').map(Number)
+  const [ty, tm, td] = w.to.split('-').map(Number)
+  if (!fy || !fm || !fd || !ty || !tm || !td) throw new Error(`Mês inválido: ${month}`)
+  return {
+    inicio: fmtAvecDate(new Date(fy, fm - 1, fd)),
+    fim: fmtAvecDate(new Date(ty, tm - 1, td)),
+  }
 }
 
 /** Intervalo dd/mm/yyyy do trimestre (YYYY-Qn). */

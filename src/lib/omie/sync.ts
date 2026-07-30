@@ -24,6 +24,7 @@ import {
   upsertOmieExpense,
 } from '@/lib/omie/store'
 import type { OmieNormalizedExpense, OmieTituloEncontrado } from '@/lib/omie/types'
+import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 
 const CANCELLED_STATUSES = new Set(['CANCELADO', 'CANCELADA'])
 
@@ -297,7 +298,7 @@ async function syncKindForMonth(
   }
 }
 
-export async function syncOmieExpensesForMonth(month: string): Promise<OmieSyncResult> {
+async function syncOmieExpensesForMonthUnlocked(month: string): Promise<OmieSyncResult> {
   const range = omieFullMonthRange(month)
   const mock = isOmieMock()
   const configuredList = listConfiguredOmieCredentials()
@@ -359,8 +360,15 @@ export async function syncOmieExpensesForMonth(month: string): Promise<OmieSyncR
   }
 }
 
-/** Cron: mês atual + mês anterior (títulos reabertos / alterados). */
-export async function syncOmieExpensesRecent(): Promise<{
+export async function syncOmieExpensesForMonth(month: string): Promise<OmieSyncResult> {
+  return withSyncLock(
+    SYNC_LOCK_KEYS.omie,
+    () => syncOmieExpensesForMonthUnlocked(month),
+    { ttlMs: 6 * 60 * 1000, owner: `omie-${month}` },
+  )
+}
+
+async function syncOmieExpensesRecentUnlocked(): Promise<{
   runs: OmieSyncResult[]
   configured: boolean
 }> {
@@ -375,9 +383,21 @@ export async function syncOmieExpensesRecent(): Promise<{
   const prevDate = new Date(Date.UTC(y, m - 2, 1))
   const previous = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, '0')}`
 
+  // Unlocked internals — um único lease cobre mês anterior + atual.
   const runs = [
-    await syncOmieExpensesForMonth(previous),
-    await syncOmieExpensesForMonth(current),
+    await syncOmieExpensesForMonthUnlocked(previous),
+    await syncOmieExpensesForMonthUnlocked(current),
   ]
   return { runs, configured: true }
+}
+
+/** Cron: mês atual + mês anterior (títulos reabertos / alterados). */
+export async function syncOmieExpensesRecent(): Promise<{
+  runs: OmieSyncResult[]
+  configured: boolean
+}> {
+  return withSyncLock(SYNC_LOCK_KEYS.omie, () => syncOmieExpensesRecentUnlocked(), {
+    ttlMs: 6 * 60 * 1000,
+    owner: 'omie-recent',
+  })
 }

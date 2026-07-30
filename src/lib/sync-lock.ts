@@ -5,6 +5,7 @@ import { getSql } from '@/lib/db'
 export const SYNC_LOCK_KEYS = {
   avec: 'avec_sync',
   stock: 'stock_sync',
+  omie: 'omie_sync',
 } as const
 
 export type SyncLockKey = (typeof SYNC_LOCK_KEYS)[keyof typeof SYNC_LOCK_KEYS]

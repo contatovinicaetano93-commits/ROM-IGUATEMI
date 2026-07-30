@@ -1,6 +1,7 @@
 import { getSql } from '@/lib/db'
 import { todayIso } from '@/lib/salon/format'
 import { statusLabelPt, type MonthCloseStatus } from '@/lib/salon/month-status'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 
 export type { MonthCloseStatus }
 export { statusLabelPt }
@@ -99,10 +100,9 @@ export function labelMonthPt(monthKey: string): string {
   return `${MONTH_PT[idx] ?? m}/${y}`
 }
 
-export function monthRange(monthKey: string): { from: string; to: string } {
-  const [y, m] = monthKey.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
-  return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
+export function monthRange(monthKey: string, referenceDay = todayIso()): { from: string; to: string } {
+  const w = resolveMonthWindow(monthKey, referenceDay)
+  return { from: w.from, to: w.to }
 }
 
 function shiftDay(iso: string, delta: number): string {

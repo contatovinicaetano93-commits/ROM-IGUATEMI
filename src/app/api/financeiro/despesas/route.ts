@@ -4,11 +4,11 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireFinance } from '@/lib/auth'
 import { listExpenses, createExpense } from '@/lib/finance'
 import { todayIso } from '@/lib/salon/format'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 
 function monthRangeFromKey(month: string): { from: string; to: string } {
-  const [y, m] = month.split('-').map(Number)
-  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
-  return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, '0')}` }
+  const w = resolveMonthWindow(month)
+  return { from: w.from, to: w.to }
 }
 
 export async function GET(req: NextRequest) {
