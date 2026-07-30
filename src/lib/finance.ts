@@ -4,6 +4,7 @@ import {
   getFiscalSplitSummary,
   type FiscalSplitSummary,
 } from '@/lib/fiscal-split'
+import { omieFullMonthRange } from '@/lib/omie/dates'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
 import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
@@ -539,17 +540,20 @@ async function buildBucket(
   range?: { from: string; to: string; label?: string },
 ): Promise<FinanceKpiBucket> {
   const base = monthRange(monthKey)
+  // Receita/CMV/0081: janela operacional (MTD no mês corrente).
   const from = range?.from ?? base.from
   const to = range?.to ?? base.to
   const label = range?.label ?? labelMonthPt(monthKey)
+  // Despesas Omie: sempre mês calendário completo (mesma janela do sync por vencimento).
+  const expenseRange = omieFullMonthRange(monthKey)
   const [revenue, expenseBreakdown, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),
-      sumExpensesByCnpj(from, to),
+      sumExpensesByCnpj(expenseRange.from, expenseRange.to),
       getPaymentMixRange(from, to),
       getFiscalSplitSummary(from, to),
       sumAttended(from, to),
-      listDailyMetrics(from, to),
+      listDailyMetrics(expenseRange.from, expenseRange.to),
       sumStockCogs(from, to),
     ])
   const expenses = expenseBreakdown.total
