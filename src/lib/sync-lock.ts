@@ -34,6 +34,13 @@ async function ensureSyncLocksTable(): Promise<void> {
   if (!ensurePromise) {
     ensurePromise = (async () => {
       const sql = getSql()
+      // Skip DDL when table already exists — concurrent CREATE INDEX IF NOT EXISTS
+      // takes relation locks and starves tryAcquire (statement_timeout / Sync hang).
+      const exists = (await sql`
+        select to_regclass('public.sync_locks') is not null as ok
+      `) as { ok: boolean }[]
+      if (exists[0]?.ok) return
+
       await sql`
         create table if not exists sync_locks (
           key text primary key,
@@ -42,7 +49,11 @@ async function ensureSyncLocksTable(): Promise<void> {
           expires_at timestamptz not null
         )
       `
-      await sql`create index if not exists sync_locks_expires_at_idx on sync_locks (expires_at)`
+      try {
+        await sql`create index if not exists sync_locks_expires_at_idx on sync_locks (expires_at)`
+      } catch {
+        // index is optional for lock correctness
+      }
     })().catch((e) => {
       ensurePromise = null
       throw e
