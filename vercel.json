@@ -31,6 +31,10 @@
     {
       "path": "/api/reminders/aftercare",
       "schedule": "40 */2 * * *"
+    },
+    {
+      "path": "/api/financeiro/omie/sync",
+      "schedule": "45 8 * * *"
     }
   ]
 }

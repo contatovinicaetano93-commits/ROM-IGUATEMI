@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, X, Trash2, Download, Camera, Paperclip, FileText } from 'lucide-react'
+import { Plus, X, Trash2, Download, Camera, Paperclip, FileText, RefreshCw } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { CountBadge, PrimaryButton } from '../_components/ui'
 import {
@@ -49,6 +49,12 @@ interface CmvCoverage {
   any_cost_pct: number | null
   query_failed?: boolean
 }
+interface ExpenseCnpjBreakdown {
+  total: number
+  servicos: number
+  comercio: number
+  manual: number
+}
 interface FinanceKpiBucket {
   month: string
   label: string
@@ -56,6 +62,7 @@ interface FinanceKpiBucket {
   to: string
   revenue: number
   expenses: number
+  expenses_by_cnpj: ExpenseCnpjBreakdown
   attended: number
   ticket_avg: number | null
   daily: { day: string; revenue: number; attended: number; ticket_avg: number | null }[]
@@ -87,6 +94,10 @@ interface FinanceExpense {
   notes: string | null
   receipt_url: string | null
   created_at: string
+  source?: string
+  external_id?: string | null
+  omie_status?: string | null
+  omie_cnpj_kind?: 'servicos' | 'comercio' | null
 }
 
 function fmtDelta(current: number, previous: number, unit: 'currency' | 'pp' = 'currency') {
@@ -222,7 +233,16 @@ const FINANCE_LEGEND: { term: string; meaning: string }[] = [
   },
   {
     term: 'Despesas',
-    meaning: 'Gastos lançados manualmente no ROM neste mês (não vêm da Avec).',
+    meaning:
+      'Gastos Omie por categoria (vencimento), separados em 2 CNPJs: Serviços (salão) e Comércio (produtos), mais lançamentos manuais.',
+  },
+  {
+    term: 'CNPJ Serviços',
+    meaning: 'Despesas do CNPJ de serviços do salão (unha, corte, coloração etc.).',
+  },
+  {
+    term: 'CNPJ Comércio',
+    meaning: 'Despesas do CNPJ de comércio (venda de produtos: shampoo, creme, pomada etc.).',
   },
   {
     term: 'Margem bruta (%)',
@@ -300,6 +320,12 @@ function normalizeKpiBucket(bucket: FinanceKpiBucket): FinanceKpiBucket {
     payment_mix: bucket.payment_mix ?? [],
     payment_reconciliation: bucket.payment_reconciliation ?? EMPTY_RECONCILIATION,
     fiscal_split: bucket.fiscal_split ?? EMPTY_FISCAL_SPLIT,
+    expenses_by_cnpj: bucket.expenses_by_cnpj ?? {
+      total: bucket.expenses ?? 0,
+      servicos: 0,
+      comercio: 0,
+      manual: bucket.expenses ?? 0,
+    },
   }
 }
 
@@ -349,6 +375,8 @@ export default function FinanceiroPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [fiscalImporting, setFiscalImporting] = useState(false)
   const [fiscalImportMsg, setFiscalImportMsg] = useState<string | null>(null)
+  const [omieSyncing, setOmieSyncing] = useState(false)
+  const [omieSyncMsg, setOmieSyncMsg] = useState<string | null>(null)
   const [dailyOpen, setDailyOpen] = useSectionOpen('financeiro.section.receita-diaria.open', false)
   const [expensesOpen, setExpensesOpen] = useSectionOpen('financeiro.section.despesas.open', false)
 
@@ -533,7 +561,7 @@ export default function FinanceiroPage() {
       '',
       csvRow(
         'Observação',
-        'ROM é a fonte de fechamento do mês. Despesas são manuais. Receita/atendidos/ticket vêm de salon_daily_metrics (sync Avec + histórico). Overview completo em /relatorios.',
+        'ROM é a fonte de fechamento do mês. Despesas vêm do Omie (Contas a Pagar) + manuais. Receita/atendidos/ticket vêm de salon_daily_metrics (sync Avec + histórico). Overview completo em /relatorios.',
       ),
     ]
 
@@ -597,6 +625,51 @@ export default function FinanceiroPage() {
     }
   }
 
+  async function syncOmieExpenses() {
+    if (omieSyncing) return
+    setOmieSyncing(true)
+    setOmieSyncMsg(null)
+    try {
+      const res = await apiFetch('/api/financeiro/omie/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month }),
+        timeoutMs: 120_000,
+      })
+      const json = await res.json()
+      if (json.error) throw new Error(json.error)
+      const data = json.data as {
+        created?: number
+        updated?: number
+        skipped_cancelled?: number
+        removed?: number
+        fetched?: number
+        error?: string
+        kinds?: { kind: string; label: string; fetched: number; created: number; updated: number; error?: string }[]
+      }
+      if (data.error && !(data.fetched && data.fetched > 0)) throw new Error(data.error)
+      const kindBits =
+        data.kinds
+          ?.map(
+            (k) =>
+              `${k.label}: ${k.fetched} título(s) (+${k.created}/${k.updated})` +
+              (k.error ? ` ⚠ ${k.error}` : ''),
+          )
+          .join(' · ') ?? null
+      setOmieSyncMsg(
+        kindBits ??
+          `Omie: ${data.fetched ?? 0} título(s) · +${data.created ?? 0} novos · ${data.updated ?? 0} atualizados` +
+            (data.skipped_cancelled ? ` · ${data.skipped_cancelled} cancelados` : '') +
+            (data.removed ? ` · ${data.removed} removidos` : ''),
+      )
+      await load()
+    } catch (e) {
+      setOmieSyncMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setOmieSyncing(false)
+    }
+  }
+
   function categoryName(id: string | null) {
     return categories.find((c) => c.id === id)?.name ?? 'Sem categoria'
   }
@@ -641,8 +714,24 @@ export default function FinanceiroPage() {
           >
             <FileText size={14} /> PDF com gráficos
           </button>
+          <button
+            type="button"
+            onClick={syncOmieExpenses}
+            disabled={omieSyncing}
+            className="flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-medium text-gold transition-colors hover:bg-gold/20 disabled:opacity-50"
+            title="Puxa Contas a Pagar dos 2 CNPJs Omie (Serviços + Comércio)"
+          >
+            <RefreshCw size={14} className={omieSyncing ? 'animate-spin' : undefined} />
+            {omieSyncing ? 'Puxando Omie…' : 'Puxar despesas Omie'}
+          </button>
         </div>
       </div>
+
+      {omieSyncMsg && (
+        <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground/90">
+          {omieSyncMsg}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted">
@@ -707,7 +796,57 @@ export default function FinanceiroPage() {
           compareLabel={kpis?.previous.label ?? 'período comparado'}
           positive={kpis ? kpis.current.expenses <= kpis.previous.expenses : null}
           loading={loading}
-          source={formatKpiSources('manual')}
+          source={formatKpiSources('omie', 'manual')}
+        />
+        <FinanceKpiCard
+          label="Despesas Serviços"
+          value={
+            loading || !kpis
+              ? '—'
+              : formatCurrency(kpis.current.expenses_by_cnpj?.servicos ?? 0)
+          }
+          delta={
+            kpis
+              ? fmtDelta(
+                  kpis.current.expenses_by_cnpj?.servicos ?? 0,
+                  kpis.previous.expenses_by_cnpj?.servicos ?? 0,
+                )
+              : null
+          }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={
+            kpis
+              ? (kpis.current.expenses_by_cnpj?.servicos ?? 0) <=
+                (kpis.previous.expenses_by_cnpj?.servicos ?? 0)
+              : null
+          }
+          loading={loading}
+          source="CNPJ serviços · Omie"
+        />
+        <FinanceKpiCard
+          label="Despesas Comércio"
+          value={
+            loading || !kpis
+              ? '—'
+              : formatCurrency(kpis.current.expenses_by_cnpj?.comercio ?? 0)
+          }
+          delta={
+            kpis
+              ? fmtDelta(
+                  kpis.current.expenses_by_cnpj?.comercio ?? 0,
+                  kpis.previous.expenses_by_cnpj?.comercio ?? 0,
+                )
+              : null
+          }
+          compareLabel={kpis?.previous.label ?? 'período comparado'}
+          positive={
+            kpis
+              ? (kpis.current.expenses_by_cnpj?.comercio ?? 0) <=
+                (kpis.previous.expenses_by_cnpj?.comercio ?? 0)
+              : null
+          }
+          loading={loading}
+          source="CNPJ comércio · Omie"
         />
         <FinanceKpiCard
           label="Margem bruta"
@@ -736,6 +875,39 @@ export default function FinanceiroPage() {
           source={formatKpiSources('rom')}
         />
       </div>
+
+      {!loading && kpis && (
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <h2 className="text-sm font-medium">Despesas por CNPJ Omie</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Cada unidade tem 2 CNPJs no Omie. Serviços = operação do salão; Comércio = produtos
+            (shampoo, creme, pomada…). Categorias vêm do Omie.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/60 bg-surface/40 px-3 py-3">
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted">Serviços (salão)</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums">
+                {formatCurrency(kpis.current.expenses_by_cnpj?.servicos ?? 0)}
+              </p>
+              <p className="mt-0.5 text-[0.65rem] text-muted">Unha, corte, coloração…</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-surface/40 px-3 py-3">
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted">Comércio (produtos)</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums">
+                {formatCurrency(kpis.current.expenses_by_cnpj?.comercio ?? 0)}
+              </p>
+              <p className="mt-0.5 text-[0.65rem] text-muted">Revenda / insumos de prateleira</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-surface/40 px-3 py-3">
+              <p className="text-[0.65rem] uppercase tracking-wide text-muted">Manual (ROM)</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums">
+                {formatCurrency(kpis.current.expenses_by_cnpj?.manual ?? 0)}
+              </p>
+              <p className="mt-0.5 text-[0.65rem] text-muted">Lançadas à mão no painel</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:max-w-3xl">
         <FinanceKpiCard
@@ -993,7 +1165,7 @@ export default function FinanceiroPage() {
 
           {!loading && expenses.length === 0 && (
             <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
-              Nenhuma despesa cadastrada esse mês.
+              Nenhuma despesa esse mês — use &quot;Puxar despesas Omie&quot; ou cadastre manualmente.
             </div>
           )}
 
@@ -1008,6 +1180,13 @@ export default function FinanceiroPage() {
                   <p className="mt-0.5 text-xs text-muted">
                     {categoryName(e.category_id)} ·{' '}
                     {new Date(`${e.expense_date}T12:00:00`).toLocaleDateString('pt-BR')}
+                    {e.source === 'omie' && e.omie_cnpj_kind === 'servicos'
+                      ? ' · Serviços (salão)'
+                      : e.source === 'omie' && e.omie_cnpj_kind === 'comercio'
+                        ? ' · Comércio (produtos)'
+                        : e.source === 'omie'
+                          ? ` · Omie${e.omie_status ? ` (${e.omie_status})` : ''}`
+                          : ''}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
@@ -1023,14 +1202,27 @@ export default function FinanceiroPage() {
                     </a>
                   )}
                   <span className="text-sm font-semibold tabular-nums">{formatCurrency(e.amount)}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeExpense(e.id)}
-                    aria-label="Excluir despesa"
-                    className="text-muted transition-colors hover:text-danger"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {e.source === 'omie' ? (
+                    <span
+                      className="text-[0.65rem] uppercase tracking-wide text-muted"
+                      title={
+                        e.omie_cnpj_kind === 'comercio'
+                          ? 'CNPJ Comércio — produtos do salão'
+                          : 'CNPJ Serviços — operação do salão'
+                      }
+                    >
+                      {e.omie_cnpj_kind === 'comercio' ? 'Comércio' : 'Serviços'}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => removeExpense(e.id)}
+                      aria-label="Excluir despesa"
+                      className="text-muted transition-colors hover:text-danger"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

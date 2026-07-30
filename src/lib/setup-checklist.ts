@@ -151,6 +151,25 @@ export const SETUP_ITEMS: SetupItem[] = [
     ],
     link: { href: 'https://t.me/BotFather', label: '@BotFather' },
   },
+  {
+    id: 'omie',
+    label: 'Omie (2 CNPJs: serviços + comércio)',
+    envVars: [
+      'OMIE_SERVICOS_APP_KEY',
+      'OMIE_SERVICOS_APP_SECRET',
+      'OMIE_COMERCIO_APP_KEY',
+      'OMIE_COMERCIO_APP_SECRET',
+    ],
+    priority: 'quando_tiver',
+    steps: [
+      'Cada unidade tem 2 apps Omie: CNPJ Serviços (salão) e CNPJ Comércio (produtos)',
+      'Portal Omie → Chave de Integração de CADA app',
+      'Vercel → OMIE_SERVICOS_APP_KEY/SECRET + OMIE_COMERCIO_APP_KEY/SECRET → Redeploy',
+      'Financeiro → “Puxar despesas Omie” (sync dos dois CNPJs por vencimento/categoria)',
+      'Dashboard separa despesas Serviços vs Comércio',
+    ],
+    link: { href: 'https://developer.omie.com.br/', label: 'Portal Omie' },
+  },
 ]
 
 export function isItemConfigured(
@@ -170,6 +189,7 @@ export function isItemConfigured(
     }
     cron: { configured: boolean }
     auth: { enabled: boolean }
+    omie?: { configured?: boolean; servicos?: boolean; comercio?: boolean }
     deployment?: { panel: string }
     validation?: { ok: boolean }
     webhooks?: { avec_secret?: boolean }
@@ -202,6 +222,8 @@ export function isItemConfigured(
         Boolean(health.telegram.finance_bot_webhook_secret) &&
         Boolean(health.telegram.finance_bot_whitelist)
       )
+    case 'omie':
+      return Boolean(health.omie?.servicos && health.omie?.comercio)
     default:
       return false
   }

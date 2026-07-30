@@ -41,7 +41,14 @@ function mockBucketSql(opts: {
   const withZero = opts.with_zero ?? Math.max(0, saidas - withMov - withFb)
   sqlMock
     .mockResolvedValueOnce([{ revenue: opts.revenue }])
-    .mockResolvedValueOnce([{ total: opts.expenses }])
+    .mockResolvedValueOnce([
+      {
+        total: Number(opts.expenses),
+        servicos: Number(opts.expenses),
+        comercio: 0,
+        manual: 0,
+      },
+    ])
     .mockResolvedValueOnce([{ attended: opts.attended ?? 0 }])
     .mockResolvedValueOnce(opts.daily ?? [])
     .mockResolvedValueOnce([
@@ -123,7 +130,13 @@ describe('finance', () => {
       const { createExpense } = await import('@/lib/finance')
       const result = await createExpense(baseInput)
 
-      expect(result).toEqual(created)
+      expect(result).toEqual({
+        ...created,
+        source: 'manual',
+        external_id: null,
+        omie_status: null,
+        omie_cnpj_kind: null,
+      })
     })
   })
 
