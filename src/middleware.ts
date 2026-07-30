@@ -137,6 +137,7 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/avec/purge-snapshots' ||
     pathname === '/api/avec/refresh-token' ||
     pathname === '/api/estoque/sync' ||
+    pathname === '/api/financeiro/omie/sync' ||
     pathname === '/api/director-report' ||
     pathname === '/api/lgpd/purge' ||
     pathname === '/api/reminders/financeiro' ||
