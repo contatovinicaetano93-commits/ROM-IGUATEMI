@@ -656,6 +656,7 @@ export default function FinanceiroPage() {
         created?: number
         updated?: number
         skipped_cancelled?: number
+        skipped_non_operating?: number
         removed?: number
         fetched?: number
         error?: string
@@ -678,6 +679,9 @@ export default function FinanceiroPage() {
         kindBits ??
           `Omie: ${data.fetched ?? 0} título(s) · +${data.created ?? 0} novos · ${data.updated ?? 0} atualizados` +
             (data.skipped_cancelled ? ` · ${data.skipped_cancelled} cancelados` : '') +
+            (data.skipped_non_operating
+              ? ` · ${data.skipped_non_operating} transferências/não-operacionais ignorados`
+              : '') +
             (data.removed ? ` · ${data.removed} removidos` : ''),
       )
       await load()

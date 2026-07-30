@@ -5,6 +5,7 @@ import {
   type FiscalSplitSummary,
 } from '@/lib/fiscal-split'
 import { omieFullMonthRange } from '@/lib/omie/dates'
+import { isOmieNonOperatingExpense } from '@/lib/omie/expense-filter'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
 import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
@@ -76,6 +77,14 @@ export interface CreateExpenseInput {
 
 export async function listExpenses(from: string, to: string): Promise<FinanceExpense[]> {
   const sql = getSql()
+  const keepOperating = (rows: FinanceExpense[]) =>
+    rows.filter(
+      (e) =>
+        !isOmieNonOperatingExpense({
+          source: e.source,
+          description: e.description,
+        }),
+    )
   try {
     const rows = await sql`
       select
@@ -87,7 +96,7 @@ export async function listExpenses(from: string, to: string): Promise<FinanceExp
       where expense_date >= ${from}::date and expense_date <= ${to}::date
       order by expense_date desc, created_at desc
     `
-    return rows as FinanceExpense[]
+    return keepOperating(rows as FinanceExpense[])
   } catch {
     try {
       const rows = await sql`
@@ -100,10 +109,12 @@ export async function listExpenses(from: string, to: string): Promise<FinanceExp
         where expense_date >= ${from}::date and expense_date <= ${to}::date
         order by expense_date desc, created_at desc
       `
-      return (rows as Omit<FinanceExpense, 'omie_cnpj_kind'>[]).map((r) => ({
-        ...r,
-        omie_cnpj_kind: r.source === 'omie' ? 'servicos' : null,
-      }))
+      return keepOperating(
+        (rows as Omit<FinanceExpense, 'omie_cnpj_kind'>[]).map((r) => ({
+          ...r,
+          omie_cnpj_kind: r.source === 'omie' ? 'servicos' : null,
+        })),
+      )
     } catch {
       const rows = await sql`
         select
@@ -113,15 +124,17 @@ export async function listExpenses(from: string, to: string): Promise<FinanceExp
         where expense_date >= ${from}::date and expense_date <= ${to}::date
         order by expense_date desc, created_at desc
       `
-      return (
-        rows as Omit<FinanceExpense, 'source' | 'external_id' | 'omie_status' | 'omie_cnpj_kind'>[]
-      ).map((r) => ({
-        ...r,
-        source: 'manual',
-        external_id: null,
-        omie_status: null,
-        omie_cnpj_kind: null,
-      }))
+      return keepOperating(
+        (
+          rows as Omit<FinanceExpense, 'source' | 'external_id' | 'omie_status' | 'omie_cnpj_kind'>[]
+        ).map((r) => ({
+          ...r,
+          source: 'manual',
+          external_id: null,
+          omie_status: null,
+          omie_cnpj_kind: null,
+        })),
+      )
     }
   }
 }
@@ -209,12 +222,32 @@ async function sumRevenue(from: string, to: string): Promise<number> {
 
 async function sumExpenses(from: string, to: string): Promise<number> {
   const sql = getSql()
-  const rows = (await sql`
-    select coalesce(sum(amount), 0) as total
-    from finance_expenses
-    where expense_date >= ${from}::date and expense_date <= ${to}::date
-  `) as { total: string | number }[]
-  return Number(rows[0]?.total ?? 0) || 0
+  try {
+    const rows = (await sql`
+      select coalesce(sum(amount), 0) as total
+      from finance_expenses
+      where expense_date >= ${from}::date and expense_date <= ${to}::date
+        and not (
+          coalesce(source, 'manual') = 'omie'
+          and (
+            coalesce(omie_category_code, '') like '2.16%'
+            or coalesce(omie_category_code, '') like '2.18%'
+            or description ilike '%TED entre contas%'
+            or description ilike '%Adiantamento de Lucro%'
+          )
+        )
+    `) as { total: string | number }[]
+    return Number(rows[0]?.total ?? 0) || 0
+  } catch {
+    const rows = (await sql`
+      select coalesce(sum(amount), 0) as total
+      from finance_expenses
+      where expense_date >= ${from}::date and expense_date <= ${to}::date
+        and description not ilike '%TED entre contas%'
+        and description not ilike '%Adiantamento de Lucro%'
+    `) as { total: string | number }[]
+    return Number(rows[0]?.total ?? 0) || 0
+  }
 }
 
 export interface ExpenseCnpjBreakdown {
@@ -241,6 +274,15 @@ async function sumExpensesByCnpj(from: string, to: string): Promise<ExpenseCnpjB
         ), 0)::float as manual
       from finance_expenses
       where expense_date >= ${from}::date and expense_date <= ${to}::date
+        and not (
+          coalesce(source, 'manual') = 'omie'
+          and (
+            coalesce(omie_category_code, '') like '2.16%'
+            or coalesce(omie_category_code, '') like '2.18%'
+            or description ilike '%TED entre contas%'
+            or description ilike '%Adiantamento de Lucro%'
+          )
+        )
     `) as {
       total: number
       servicos: number
@@ -329,6 +371,12 @@ async function listDailyOmieExpenses(
       where source = 'omie'
         and expense_date >= ${from}::date
         and expense_date <= ${to}::date
+        and not (
+          coalesce(omie_category_code, '') like '2.16%'
+          or coalesce(omie_category_code, '') like '2.18%'
+          or description ilike '%TED entre contas%'
+          or description ilike '%Adiantamento de Lucro%'
+        )
       group by expense_date
       order by expense_date asc
     `) as { day: string; servicos: number; comercio: number }[]

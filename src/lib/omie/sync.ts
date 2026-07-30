@@ -17,6 +17,7 @@ import {
   type OmieCredentials,
 } from '@/lib/omie/client'
 import { omieBrToIso, omieFullMonthRange, omieIsoToBr } from '@/lib/omie/dates'
+import { isOmieNonOperatingExpense } from '@/lib/omie/expense-filter'
 import {
   deleteOmieExpenseByExternalId,
   ensureOmieExpenseSchema,
@@ -37,6 +38,8 @@ export interface OmieSyncKindResult {
   created: number
   updated: number
   skipped_cancelled: number
+  /** TED entre contas / adiantamento lucro etc. — fora do P&L operacional. */
+  skipped_non_operating: number
   removed: number
   pages: number
   error?: string
@@ -54,6 +57,7 @@ export interface OmieSyncResult {
   created: number
   updated: number
   skipped_cancelled: number
+  skipped_non_operating: number
   removed: number
   kinds: OmieSyncKindResult[]
   error?: string
@@ -208,6 +212,7 @@ async function syncKindForMonth(
     created: 0,
     updated: 0,
     skipped_cancelled: 0,
+    skipped_non_operating: 0,
     removed: 0,
     pages: 0,
   }
@@ -268,6 +273,19 @@ async function syncKindForMonth(
           continue
         }
 
+        if (
+          isOmieNonOperatingExpense({
+            source: 'omie',
+            categoryCode: normalized.categoryCode,
+            categoryName: normalized.categoryName,
+            description: normalized.description,
+          })
+        ) {
+          base.skipped_non_operating += 1
+          await deleteOmieExpenseByExternalId(kind, normalized.externalId)
+          continue
+        }
+
         const category = await createCategory(normalized.categoryName)
         const result = await upsertOmieExpense({
           externalId: normalized.externalId,
@@ -316,6 +334,7 @@ async function syncOmieExpensesForMonthUnlocked(month: string): Promise<OmieSync
     created: 0,
     updated: 0,
     skipped_cancelled: 0,
+    skipped_non_operating: 0,
     removed: 0,
     kinds: [],
   }
@@ -355,6 +374,7 @@ async function syncOmieExpensesForMonthUnlocked(month: string): Promise<OmieSync
     created: sum((k) => k.created),
     updated: sum((k) => k.updated),
     skipped_cancelled: sum((k) => k.skipped_cancelled),
+    skipped_non_operating: sum((k) => k.skipped_non_operating),
     removed: sum((k) => k.removed),
     kinds,
     error: errors.length ? errors.join(' · ') : undefined,
