@@ -210,6 +210,7 @@ export async function getLastAvecSync(
 export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<number> {
   const sql = getSql()
   const cutoff = new Date(Date.now() - maxAgeMs).toISOString()
+  // Progresso mid-flight ≠ sync completo — nunca promover a ok (mentiria saúde no Cérebro).
   const rows = (await sql`
     update avec_sync_runs
     set
@@ -221,21 +222,10 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
           + coalesce((stats->>'positions_synced')::int, 0)
           + coalesce((stats->>'alerts_active')::int, 0)
           + coalesce((stats->>'movements_synced')::int, 0) > 0
-        then 'ok'
+        then 'partial'
         else 'error'
       end,
-      error = case
-        when coalesce((stats->>'clients_upserted')::int, 0)
-          + coalesce((stats->>'appointments_synced')::int, 0)
-          + coalesce((stats->>'attendances_synced')::int, 0)
-          + coalesce((stats->>'revenue_rows')::int, 0)
-          + coalesce((stats->>'positions_synced')::int, 0)
-          + coalesce((stats->>'alerts_active')::int, 0)
-          + coalesce((stats->>'movements_synced')::int, 0) > 0
-        then null
-        else coalesce(error, 'abandoned_partial_timeout')
-      end,
-      -- Sem limpar running, beginAvecSyncRun regrava "Sync interrompido" em cima do ok.
+      error = coalesce(nullif(error, ''), 'abandoned_partial_timeout'),
       stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
     where status = 'partial'
       and created_at < ${cutoff}::timestamptz
@@ -1034,8 +1024,9 @@ async function syncReturningFrom0002(
       }
     }
 
-    if (!result.truncated) {
-      const days = mode === 'fast' ? [today] : listDaysInclusive(addCalendarDaysYmd(today, -7), today)
+    // Fast: NÃO grava returning — janela 1 dia faz total_visitas≈1 e zera o KPI do full.
+    if (!result.truncated && mode === 'full') {
+      const days = listDaysInclusive(addCalendarDaysYmd(today, -7), today)
       for (const day of days) {
         await upsertSalonMetrics(day, { returning_clients: returningByDay.get(day) ?? 0 })
       }
@@ -1065,7 +1056,8 @@ async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
 export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSyncRun> {
   // Fast e full compartilham o mesmo lease — evita overlap no Postgres entre cron/webhook.
   return withSyncLock(SYNC_LOCK_KEYS.avec, () => runAvecSyncUnlocked(mode), {
-    ttlMs: 6 * 60 * 1000,
+    // maxDuration route = 500s — lease precisa sobreviver a lambda ainda viva.
+    ttlMs: 10 * 60 * 1000,
     owner: `avec-${mode}`,
   })
 }
