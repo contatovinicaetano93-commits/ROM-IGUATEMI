@@ -15,7 +15,14 @@ function bucket(partial: {
   attended?: number
   ticket_avg?: number | null
   cmv?: number
-  daily?: { day: string; revenue: number; attended: number; ticket_avg: number | null }[]
+  daily?: {
+    day: string
+    revenue: number
+    attended: number
+    ticket_avg: number | null
+    expenses_servicos?: number
+    expenses_comercio?: number
+  }[]
 }): FinanceKpis['current'] {
   const expenses = partial.expenses ?? 0
   const revenue = partial.revenue
@@ -31,7 +38,11 @@ function bucket(partial: {
     expenses_by_cnpj: { total: expenses, servicos: expenses, comercio: 0, manual: 0 },
     attended,
     ticket_avg: partial.ticket_avg ?? (attended > 0 ? revenue / attended : null),
-    daily: partial.daily ?? [],
+    daily: (partial.daily ?? []).map((d) => ({
+      expenses_servicos: 0,
+      expenses_comercio: 0,
+      ...d,
+    })),
     cmv,
     cmv_coverage: {
       cmv,

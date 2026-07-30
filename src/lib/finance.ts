@@ -269,26 +269,100 @@ export interface FinanceDayPoint {
   revenue: number
   attended: number
   ticket_avg: number | null
+  /** Despesas Omie CNPJ serviços no dia (vencimento). */
+  expenses_servicos: number
+  /** Despesas Omie CNPJ comércio no dia (vencimento). */
+  expenses_comercio: number
+}
+
+/** Une dias de receita Avec + dias só com despesa Omie (zeros onde faltar). */
+export function mergeDailyFinanceSeries(
+  metrics: Array<{ day: string; revenue: number; attended: number; ticket_avg: number | null }>,
+  expenses: Array<{ day: string; servicos: number; comercio: number }>,
+): FinanceDayPoint[] {
+  const byDay = new Map<string, FinanceDayPoint>()
+  for (const m of metrics) {
+    const day = m.day.slice(0, 10)
+    byDay.set(day, {
+      day,
+      revenue: Math.round(Number(m.revenue) * 100) / 100,
+      attended: Number(m.attended) || 0,
+      ticket_avg: m.ticket_avg != null ? Math.round(Number(m.ticket_avg) * 100) / 100 : null,
+      expenses_servicos: 0,
+      expenses_comercio: 0,
+    })
+  }
+  for (const e of expenses) {
+    const day = e.day.slice(0, 10)
+    const existing = byDay.get(day)
+    const servicos = Math.round(Number(e.servicos) * 100) / 100
+    const comercio = Math.round(Number(e.comercio) * 100) / 100
+    if (existing) {
+      existing.expenses_servicos = servicos
+      existing.expenses_comercio = comercio
+    } else {
+      byDay.set(day, {
+        day,
+        revenue: 0,
+        attended: 0,
+        ticket_avg: null,
+        expenses_servicos: servicos,
+        expenses_comercio: comercio,
+      })
+    }
+  }
+  return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day))
+}
+
+async function listDailyOmieExpenses(
+  from: string,
+  to: string,
+): Promise<Array<{ day: string; servicos: number; comercio: number }>> {
+  const sql = getSql()
+  try {
+    const rows = (await sql`
+      select
+        expense_date::text as day,
+        coalesce(sum(amount) filter (
+          where coalesce(omie_cnpj_kind, 'servicos') = 'servicos'
+        ), 0)::float as servicos,
+        coalesce(sum(amount) filter (
+          where omie_cnpj_kind = 'comercio'
+        ), 0)::float as comercio
+      from finance_expenses
+      where source = 'omie'
+        and expense_date >= ${from}::date
+        and expense_date <= ${to}::date
+      group by expense_date
+      order by expense_date asc
+    `) as { day: string; servicos: number; comercio: number }[]
+    return rows.map((r) => ({
+      day: r.day.slice(0, 10),
+      servicos: Number(r.servicos) || 0,
+      comercio: Number(r.comercio) || 0,
+    }))
+  } catch {
+    return []
+  }
 }
 
 async function listDailyMetrics(from: string, to: string): Promise<FinanceDayPoint[]> {
   const sql = getSql()
-  const rows = (await sql`
-    select
-      day::text as day,
-      coalesce(revenue, 0)::float as revenue,
-      coalesce(attended, 0)::int as attended,
-      ticket_avg::float as ticket_avg
-    from salon_daily_metrics
-    where day >= ${from}::date and day <= ${to}::date
-    order by day asc
-  `) as { day: string; revenue: number; attended: number; ticket_avg: number | null }[]
-  return rows.map((r) => ({
-    day: r.day,
-    revenue: Math.round(Number(r.revenue) * 100) / 100,
-    attended: Number(r.attended) || 0,
-    ticket_avg: r.ticket_avg != null ? Math.round(Number(r.ticket_avg) * 100) / 100 : null,
-  }))
+  const [metricRows, expenseRows] = await Promise.all([
+    (async () =>
+      (await sql`
+        select
+          day::text as day,
+          coalesce(revenue, 0)::float as revenue,
+          coalesce(attended, 0)::int as attended,
+          ticket_avg::float as ticket_avg
+        from salon_daily_metrics
+        where day >= ${from}::date and day <= ${to}::date
+        order by day asc
+      `) as { day: string; revenue: number; attended: number; ticket_avg: number | null }[])(),
+    listDailyOmieExpenses(from, to),
+  ])
+  return mergeDailyFinanceSeries(metricRows, expenseRows)
 }
 
 async function sumAttended(from: string, to: string): Promise<number> {

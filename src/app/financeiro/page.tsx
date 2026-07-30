@@ -65,7 +65,14 @@ interface FinanceKpiBucket {
   expenses_by_cnpj: ExpenseCnpjBreakdown
   attended: number
   ticket_avg: number | null
-  daily: { day: string; revenue: number; attended: number; ticket_avg: number | null }[]
+  daily: {
+    day: string
+    revenue: number
+    attended: number
+    ticket_avg: number | null
+    expenses_servicos?: number
+    expenses_comercio?: number
+  }[]
   cmv: number
   cmv_coverage: CmvCoverage
   margin_after_cmv: number | null
@@ -313,7 +320,11 @@ function normalizeKpiBucket(bucket: FinanceKpiBucket): FinanceKpiBucket {
     ...bucket,
     attended: bucket.attended ?? 0,
     ticket_avg: bucket.ticket_avg ?? null,
-    daily: bucket.daily ?? [],
+    daily: (bucket.daily ?? []).map((d) => ({
+      ...d,
+      expenses_servicos: d.expenses_servicos ?? 0,
+      expenses_comercio: d.expenses_comercio ?? 0,
+    })),
     cmv: bucket.cmv ?? 0,
     cmv_coverage: bucket.cmv_coverage ?? EMPTY_CMV_COVERAGE,
     margin_after_cmv: bucket.margin_after_cmv ?? null,
@@ -1003,14 +1014,17 @@ export default function FinanceiroPage() {
           />
           <CollapsibleBody open={dailyOpen} className="mt-3">
             <p className="text-xs text-muted">
-              Fonte: salon_daily_metrics (sync Avec + histórico Lake).
+              Fonte: receita Avec (salon_daily_metrics); despesas Omie por vencimento (serviços /
+              comércio). Inclui dias só com despesa.
             </p>
-            <div className="mt-3 max-h-64 overflow-y-auto">
-              <table className="w-full text-left text-sm">
+            <div className="mt-3 max-h-64 overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[36rem] text-left text-sm">
                 <thead className="sticky top-0 bg-card text-[0.65rem] uppercase tracking-wide text-muted">
                   <tr>
                     <th className="py-1.5 font-medium">Dia</th>
                     <th className="py-1.5 font-medium">Receita</th>
+                    <th className="py-1.5 font-medium">Desp. serviços</th>
+                    <th className="py-1.5 font-medium">Desp. comércio</th>
                     <th className="py-1.5 font-medium">Atendidos</th>
                     <th className="py-1.5 font-medium">Ticket</th>
                   </tr>
@@ -1020,6 +1034,12 @@ export default function FinanceiroPage() {
                     <tr key={d.day} className="border-t border-border/60">
                       <td className="py-1.5 tabular-nums">{d.day.slice(8)}/{d.day.slice(5, 7)}</td>
                       <td className="py-1.5 tabular-nums">{formatCurrency(d.revenue)}</td>
+                      <td className="py-1.5 tabular-nums">
+                        {formatCurrency(d.expenses_servicos ?? 0)}
+                      </td>
+                      <td className="py-1.5 tabular-nums">
+                        {formatCurrency(d.expenses_comercio ?? 0)}
+                      </td>
                       <td className="py-1.5 tabular-nums">{d.attended}</td>
                       <td className="py-1.5 tabular-nums">
                         {d.ticket_avg != null ? formatCurrency(d.ticket_avg) : '—'}
