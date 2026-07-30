@@ -13,8 +13,8 @@ import { repairSalonP1JsonbEncoding } from '@/lib/salon/p1-metrics'
 import { repairSalonP2JsonbEncoding } from '@/lib/salon/p2-metrics'
 import { repairSalonP3JsonbEncoding } from '@/lib/salon/p3-metrics'
 
-/** Sync Avec pode demorar (vários relatórios). */
-export const maxDuration = 300
+/** Sync Avec pode demorar (vários relatórios). Pro permite até 800s. */
+export const maxDuration = 500
 
 async function authorize(req: NextRequest) {
   if (isCronAuthorized(req)) return { ok: true as const, cron: true as const }
