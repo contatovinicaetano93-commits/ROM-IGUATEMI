@@ -111,6 +111,12 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     to: range.to,
     revenue,
     expenses,
+    expenses_by_cnpj: {
+      total: expenses,
+      servicos: 0,
+      comercio: 0,
+      manual: expenses,
+    },
     attended,
     ticket_avg: row.ticket_avg != null ? Number(row.ticket_avg) : null,
     daily: [],
