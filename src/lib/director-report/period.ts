@@ -117,6 +117,39 @@ export function reportReferenceDate(report: DirectorReport): string {
   return last.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
 }
 
+/** Ano civil atual em America/Sao_Paulo. */
+export function currentYearSp(now = new Date()): number {
+  const y = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+  }).format(now)
+  return Number(y)
+}
+
+/**
+ * Pedido com período histórico (ex.: 2025 quando o calendário já está em 2026).
+ * Precisa de budget Avec completo — o caminho slim/55s da UI zera esses dados.
+ */
+export function isHistoricalDirectorPeriod(
+  opts: {
+    month?: string | null
+    quarter?: string | null
+    compare?: string | null
+    quarter0021?: string | null
+    compare0021?: string | null
+  },
+  now = new Date(),
+): boolean {
+  const year = currentYearSp(now)
+  const keys = [opts.month, opts.quarter, opts.compare, opts.quarter0021, opts.compare0021]
+  for (const key of keys) {
+    if (!key) continue
+    const y = Number(String(key).slice(0, 4))
+    if (Number.isFinite(y) && y < year) return true
+  }
+  return false
+}
+
 function subjectPrefix(report: DirectorReport) {
   if (report.source === 'mock') return '[DEMO] '
   if (report.source === 'partial') return '[PARCIAL] '

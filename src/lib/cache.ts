@@ -55,12 +55,15 @@ export async function cachedFetch<T>(
   key: string,
   fn: () => Promise<T>,
   ttlSeconds: number = 300,
+  opts?: { shouldCache?: (value: T) => boolean },
 ): Promise<T> {
   const cached = MemoryCache.get<T>(key)
   if (cached) return cached
 
   const value = await fn()
-  MemoryCache.set(key, value, ttlSeconds)
+  if (!opts?.shouldCache || opts.shouldCache(value)) {
+    MemoryCache.set(key, value, ttlSeconds)
+  }
   return value
 }
 

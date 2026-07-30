@@ -104,8 +104,22 @@ function previousQuarterKey(key: string) {
   return `${year}-Q${q - 1}`
 }
 
+/** Período com ano < ano civil atual (SP) — precisa de fetch Avec completo. */
+function isHistoricalSelection(keys: Array<string | null | undefined>): boolean {
+  const { year } = spNowParts()
+  for (const key of keys) {
+    if (!key) continue
+    const y = Number(String(key).slice(0, 4))
+    if (Number.isFinite(y) && y < year) return true
+  }
+  return false
+}
+
 const QUARTERS = buildQuarterOptions()
 const MONTHS = buildMonthOptions()
+/** Timeout do browser para anos históricos (servidor maxDuration 300s). */
+const HISTORICAL_FETCH_MS = 270_000
+const CURRENT_FETCH_MS = 90_000
 
 export default function RelatorioDiretoriaPage() {
   const [tab, setTab] = useState<StageTab>('0011')
@@ -147,10 +161,19 @@ export default function RelatorioDiretoriaPage() {
     const stage = tab === '0021' ? '0021' : '0011'
     setLoading(true)
     setError(null)
+    const historical = isHistoricalSelection([
+      month,
+      quarter,
+      compare,
+      quarter0021,
+      compareQuarter0021,
+    ])
+    const fetchMs = historical ? HISTORICAL_FETCH_MS : CURRENT_FETCH_MS
     try {
       const q = new URLSearchParams({
         stage,
-        slim: '1',
+        // Histórico: slim=0 — paginação Avec completa.
+        slim: historical ? '0' : '1',
         month,
         quarter_0021: quarter0021,
         compare_0021: compareQuarter0021,
@@ -164,7 +187,7 @@ export default function RelatorioDiretoriaPage() {
       if (stage === '0021' && proId0021) q.set('professional_id', proId0021)
       const res = await apiFetch(`/api/director-report?${q}`, {
         cache: 'no-store',
-        timeoutMs: 90_000,
+        timeoutMs: fetchMs,
       })
       const json = await res.json()
       if (!res.ok || json.error) {
@@ -230,9 +253,12 @@ export default function RelatorioDiretoriaPage() {
       })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      const secs = Math.round(fetchMs / 1000)
       setError(
         msg === 'Timeout' || (e instanceof DOMException && e.name === 'AbortError')
-          ? 'Relatório demorou demais (>90s). Tente de novo ou marque “Forçar demo”.'
+          ? historical
+            ? `Relatório histórico demorou demais (>${secs}s). Toque Atualizar — a Avec pode estar lenta para 2025.`
+            : `Relatório demorou demais (>${secs}s). Tente de novo ou marque “Forçar demo”.`
           : msg,
       )
     } finally {

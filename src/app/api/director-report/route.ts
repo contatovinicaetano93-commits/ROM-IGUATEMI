@@ -16,12 +16,13 @@ import {
   getDirectorReportRecipients,
   isDirectorEmailConfigured,
 } from '@/lib/director-report/email'
+import { isHistoricalDirectorPeriod } from '@/lib/director-report/period'
 import type { DirectorReport, DirectorReportStage, MonthKey, QuarterKey } from '@/lib/director-report/types'
 import { buildProfessionalProfileWorkbook } from '@/lib/director-report/xlsx-profile'
 
 export const maxDuration = 300
 
-/** Teto duro da UI — se Avec travar, devolve demo em vez de “Carregando…” infinito. */
+/** Teto duro da UI (mês/ano corrente) — se Avec travar, devolve vazio em vez de spinner infinito. */
 const DIRECTOR_UI_HARD_MS = 55_000
 
 async function buildForUi(
@@ -57,6 +58,23 @@ async function buildForUi(
     }
     throw e
   }
+}
+
+/** Anos históricos (ex. 2025): budget Avec completo, sem teto de 55s. */
+async function buildForHistorical(
+  opts: Parameters<typeof buildDirectorReport>[0],
+): Promise<DirectorReport> {
+  return buildDirectorReport({
+    ...opts,
+    interactive: false,
+    maxPages0011: undefined,
+    reactivationLimit: null,
+  })
+}
+
+function shouldCacheDirectorReport(report: DirectorReport): boolean {
+  // Não cachear casca vazia de timeout — gruda “2025 zerado” por minutos.
+  return report.source !== 'error'
 }
 
 function asMonth(v: string | null): MonthKey | undefined {
@@ -180,16 +198,30 @@ export async function GET(req: NextRequest) {
       stageParam === '0011' || stageParam === '0021' || stageParam === 'all'
         ? stageParam
         : 'all'
-    const slim = searchParams.get('slim') === '1'
     const professionalId = searchParams.get('professional_id') ?? undefined
     const forceMock = searchParams.get('mock') === '1'
+    const selectedMonth = asMonth(searchParams.get('month'))
+    const selectedQuarter0021 = asQuarter(searchParams.get('quarter_0021'))
+    const compareQuarter0021 = asQuarter(searchParams.get('compare_0021'))
+    const compareMonths = compareMonthsParam === null ? false : compareMonthsParam !== '0'
+    const selectedQuarter = asQuarter(searchParams.get('quarter'))
+    const compareQuarter = asQuarter(searchParams.get('compare'))
+    const historical = isHistoricalDirectorPeriod({
+      month: selectedMonth,
+      quarter: selectedQuarter,
+      compare: compareQuarter,
+      quarter0021: selectedQuarter0021,
+      compare0021: compareQuarter0021,
+    })
+    // Histórico: nunca slim — precisa do walk Avec completo ou o relatório fica zerado.
+    const slim = historical ? false : searchParams.get('slim') === '1'
     const buildOpts: BuildDirectorReportOptions = {
-      selectedMonth: asMonth(searchParams.get('month')),
-      selectedQuarter0021: asQuarter(searchParams.get('quarter_0021')),
-      compareQuarter0021: asQuarter(searchParams.get('compare_0021')),
-      compareMonths: compareMonthsParam === null ? false : compareMonthsParam !== '0',
-      selectedQuarter: asQuarter(searchParams.get('quarter')),
-      compareQuarter: asQuarter(searchParams.get('compare')),
+      selectedMonth,
+      selectedQuarter0021,
+      compareQuarter0021,
+      compareMonths,
+      selectedQuarter,
+      compareQuarter,
       professionalId,
       forceMock,
       stages,
@@ -204,9 +236,10 @@ export async function GET(req: NextRequest) {
       format === 'json'
         ? await cachedFetch(
             [
-              'director:json:v6-local0011',
+              'director:json:v7-hist',
               stages,
               `slim=${slim ? 1 : 0}`,
+              `hist=${historical ? 1 : 0}`,
               `m=${buildOpts.selectedMonth ?? ''}`,
               `q21=${buildOpts.selectedQuarter0021 ?? ''}`,
               `c21=${buildOpts.compareQuarter0021 ?? ''}`,
@@ -216,9 +249,10 @@ export async function GET(req: NextRequest) {
               `pro=${professionalId ?? ''}`,
               `mock=${forceMock ? 1 : 0}`,
             ].join(':'),
-            () => buildForUi(buildOpts),
+            () => (historical ? buildForHistorical(buildOpts) : buildForUi(buildOpts)),
             // Mock/demo não cacheia — UI_DEADLINE não deve “grudar” após Avec recuperar.
-            forceMock ? 0 : 45,
+            forceMock ? 0 : historical ? 300 : 45,
+            { shouldCache: shouldCacheDirectorReport },
           )
         : await buildDirectorReport({ ...buildOpts, interactive: false })
 
