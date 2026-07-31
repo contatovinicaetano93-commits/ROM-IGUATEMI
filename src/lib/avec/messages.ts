@@ -103,6 +103,8 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/fetch parcial/i.test(warning)) return true
   // Heal importado best-effort — não marca sync partial.
   if (/heal importado:/i.test(warning)) return true
+  // Snapshot archival falhou — não é KPI core (paridade BR).
+  if (/^snapshot\s/i.test(warning)) return true
   return false
 }
 

@@ -1,4 +1,5 @@
 import { getLastAvecSync } from '@/lib/avec/sync'
+import { pickNewestUsableAvecRun } from '@/lib/avec/sync-run-health'
 import { cachedFetch } from '@/lib/cache'
 import { kpiSourceFromSyncStatus } from '@/lib/kpi-source'
 
@@ -20,13 +21,12 @@ export type AvecSyncMeta = {
  * Metadados de sync para banners em Visão/Financeiro/Relatórios.
  * Full >24h OU fast >1h OU nunca syncou → stale.
  *
- * Timeout/kill não deve parecer "token expirado": se o último finished for
- * só "Sync interrompido" mas houver um ok/partial mais recente (mesmo orphan
- * já saneado), preferimos o mais recente com status real.
+ * Empty-kill (Sync interrompido / abandoned) não mascara ok/partial saudável
+ * entre os finished disponíveis — paridade Cérebro.
  */
 export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
   return cachedFetch(
-    'avec:sync-meta:v2',
+    'avec:sync-meta:v3',
     async () => {
       const [full, fast] = await Promise.all([
         getLastAvecSync('full', { finishedOnly: true }).catch(() => null),
@@ -47,12 +47,7 @@ export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
       const fastStale = fastAgeHours != null && fastAgeHours > 1
       const stale = never_synced || fullStale || fastStale
 
-      const latest =
-        full && fast
-          ? new Date(fast.created_at).getTime() >= new Date(full.created_at).getTime()
-            ? fast
-            : full
-          : (full ?? fast)
+      const latest = pickNewestUsableAvecRun([full, fast])
       const syncStatus = latest?.status ?? null
       const created_at = latest?.created_at ?? null
 
