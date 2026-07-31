@@ -90,6 +90,8 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/AVEC_UNIT_ID vazio/i.test(warning)) return true
   // Reconcile de agenda: informativo (órfãos limpos), sync pode ficar ok.
   if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
+  if (/agenda:\s*reconcile de órfãos adiado/i.test(warning)) return true
+  if (/sync:\s*orçamento esgotado/i.test(warning)) return true
   // TM 0223 catálogo / ignorado de propósito — não marca sync partial.
   if (/TM 0223:/i.test(warning)) return true
   // Truncamento que PULA métricas (recorrentes/agenda reconcile) é HARD.
