@@ -34,6 +34,28 @@ import {
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
+  avecHadCoreProgress,
+  resolveAvecFinishStatus,
+} from '@/lib/avec/sync-finish-status'
+import {
+  getActiveSyncDeadlineAt,
+  isSyncBudgetExhausted,
+  noteSyncBudgetExhausted,
+  setActiveSyncDeadlineAt,
+  syncBudgetExhausted,
+  markSyncBudgetExhausted,
+} from '@/lib/avec/sync-budget'
+
+export {
+  getActiveSyncDeadlineAt,
+  isSyncBudgetExhausted,
+  noteSyncBudgetExhausted,
+  syncBudgetExhausted,
+  markSyncBudgetExhausted,
+  resolveAvecFinishStatus,
+  avecHadCoreProgress,
+}
+import {
   normalizeClientRow,
   normalizeAppointmentRow,
   normalizeAttendanceRow,
@@ -257,62 +279,13 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
 /** Margem vs route maxDuration=800s — abort limpo em vez de kill mid-row. */
 const AVEC_SYNC_BUDGET_MS = 720_000
 
-/** Deadline do sync em voo — fetchAllAvecReport + loops checam isto. */
-let activeSyncDeadlineAt: number | null = null
-
-/** Getter para P1/P2/P3 (e testes) — passam `{ deadlineAt }` ao fetch. */
-export function getActiveSyncDeadlineAt(): number | null {
-  return activeSyncDeadlineAt
-}
-
-export function syncBudgetExhausted(): boolean {
-  return activeSyncDeadlineAt != null && Date.now() >= activeSyncDeadlineAt
-}
-
-export function markSyncBudgetExhausted(
-  stats: { aborted?: boolean; warnings?: string[] },
-  stage: string,
-) {
-  if (stats.aborted) return
-  stats.aborted = true
-  if (!stats.warnings) stats.warnings = []
-  stats.warnings.push(`sync: orçamento esgotado em ${stage} (abort limpo)`)
-}
-
-/** Status final do finish — shared com catch/partial e testes. */
-export function resolveAvecFinishStatus(stats: {
-  errors: string[]
-  warnings: string[]
-  aborted?: boolean
-  clients_upserted: number
-  appointments_synced: number
-  attendances_synced: number
-  revenue_rows: number
-  cancellation_rows: number
-}): AvecSyncRun['status'] {
-  const hardWarnings = hardAvecSyncWarnings(stats.warnings)
-  const hadCoreRows =
-    stats.clients_upserted +
-      stats.appointments_synced +
-      stats.attendances_synced +
-      stats.revenue_rows +
-      stats.cancellation_rows >
-    0
-  // Abort limpo ou progresso core → nunca 'error' puro (Cérebro/Hoje).
-  if (stats.errors.length > 0 && !hadCoreRows && !stats.aborted) return 'error'
-  if (stats.errors.length > 0 || hardWarnings.length > 0 || Boolean(stats.aborted)) {
-    return 'partial'
-  }
-  return 'ok'
-}
-
 async function fetchSyncReport(
   reportId: string,
   params: Parameters<typeof fetchAllAvecReport>[1] = {},
   maxPages?: number,
 ) {
   return fetchAllAvecReport(reportId, params, maxPages, {
-    deadlineAt: activeSyncDeadlineAt,
+    deadlineAt: getActiveSyncDeadlineAt(),
   })
 }
 
@@ -1267,7 +1240,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   const run = await beginAvecSyncRun(mode, stats)
   const syncRunId = run.id
   beginSyncServiceCache()
-  activeSyncDeadlineAt = Date.now() + AVEC_SYNC_BUDGET_MS
+  setActiveSyncDeadlineAt(Date.now() + AVEC_SYNC_BUDGET_MS)
   attendancesCoveredReturning = false
   attendancesFetched0002 = false
   step(`begin ${run.id}`)
@@ -1386,7 +1359,14 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
       stats.warnings.push(...softPeripheral)
     }
 
-    const status = resolveAvecFinishStatus(stats)
+    const hardWarnings = hardAvecSyncWarnings(stats.warnings)
+    const hadCoreRows = avecHadCoreProgress(stats)
+    const status = resolveAvecFinishStatus({
+      errorCount: stats.errors.length,
+      hardWarningCount: hardWarnings.length,
+      aborted: Boolean(stats.aborted),
+      hadCoreRows,
+    })
 
     // Superfície clara quando o token morreu (Admin/Hoje leem `error`, não só stats JSON).
     const authErr = stats.errors.find((e) => isAvecTokenExpiredError(e))
@@ -1411,10 +1391,16 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
     // Progresso checkpointado / abort limpo → partial (não pintar Cérebro de error falso).
-    const status = resolveAvecFinishStatus(stats)
+    const status = resolveAvecFinishStatus({
+      errorCount: stats.errors.length,
+      hardWarningCount: hardAvecSyncWarnings(stats.warnings).length,
+      aborted: Boolean(stats.aborted),
+      hadCoreRows: avecHadCoreProgress(stats),
+      thrown: true,
+    })
     return finishAvecSyncRun(run.id, status, stats, msg)
   } finally {
-    activeSyncDeadlineAt = null
+    setActiveSyncDeadlineAt(null)
     endSyncServiceCache()
   }
 }

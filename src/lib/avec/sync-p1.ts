@@ -10,7 +10,7 @@ import {
   getActiveSyncDeadlineAt,
   markSyncBudgetExhausted,
   syncBudgetExhausted,
-} from '@/lib/avec/sync'
+} from '@/lib/avec/sync-budget'
 import {
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,

@@ -9,7 +9,7 @@ import {
   getActiveSyncDeadlineAt,
   markSyncBudgetExhausted,
   syncBudgetExhausted,
-} from '@/lib/avec/sync'
+} from '@/lib/avec/sync-budget'
 import {
   normalizeP2BirthdayRow,
   normalizeP2ChannelRow,
