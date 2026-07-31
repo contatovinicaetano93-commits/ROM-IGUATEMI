@@ -12,6 +12,7 @@ import {
   normalizeP1OccupancyRow,
   normalizeP2ChannelRow,
   normalizePhone,
+  normalizeRevenueRow,
   parseAvecDateTime,
   parseOptionalMoney,
   parseServiceTempoMinutes,
@@ -267,5 +268,18 @@ describe('normalizeP2ChannelRow 0056', () => {
     expect(
       normalizeP2ChannelRow({ tipoAgendamento: 'Online', quantidade: 12 }),
     ).toEqual({ channel: 'Online', count: 12 })
+  })
+})
+
+describe('normalizeRevenueRow 0088', () => {
+  it('prioriza faturamento/comandaQtd sobre valor/total auxiliares', () => {
+    const row = normalizeRevenueRow({
+      faturamento: 1334,
+      comandaQtd: 1,
+      valor: 0.01,
+      total: 0.01,
+      data: '2026-07-31',
+    })
+    expect(row).toEqual({ day: '2026-07-31', revenue: 1334, attended: 1 })
   })
 })
