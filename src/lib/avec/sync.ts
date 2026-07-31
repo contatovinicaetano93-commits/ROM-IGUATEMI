@@ -443,7 +443,8 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   const today = todayIso()
   /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
   const todayOpenServiceIds: string[] = []
-  let todayBooked = 0
+  /** Movimento do dia = cabeças (contato único), não linhas 0051. */
+  const todayBookedHeads = new Set<string>()
   let todayRows = 0
   const upsertInBatch = createBatchContactUpserter()
 
@@ -498,11 +499,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       const scheduleOrigin: ScheduleOrigin =
         !appt.hasClockTime || serviceName === COMANDA_SERVICE_NAME ? 'comanda' : 'agenda'
 
-      if (apptDay === today) {
-        todayRows++
-        // Agendados = abertos + pagos (não misturar faltas/no-shows/negativos).
-        if (!isCancelled && !isNoShow && !isNegativeOutcome) todayBooked++
-      }
+      if (apptDay === today) todayRows++
 
       if (!appt.avecClientId && !appt.phone) {
         stats.warnings.push('agenda: linha sem avec_client_id e sem telefone — ignorada')
@@ -524,6 +521,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       if (contact.anonymized_at) {
         stats.appointments_synced++
         continue
+      }
+
+      // Cabeça do dia: 1 contato com ≥1 linha aberta/paga (ignora cancel/no-show).
+      if (apptDay === today && !isCancelled && !isNoShow && !isNegativeOutcome) {
+        todayBookedHeads.add(contact.id)
       }
 
       if (serviceName && scheduledAt) {
@@ -583,7 +585,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
     }
   }
 
-  // Reconcilia órfãos + KPI Agendados = abertos+pagos do dia (não só leftovers abertos).
+  // Reconcilia órfãos + KPI Movimento = cabeças (abertos+pagos) do dia.
   // Truncado: keep-set incompleto — não limpar (risco de apagar slots reais / ROM manual).
   if (todayRows > 0) {
     try {
@@ -597,7 +599,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         if (cleared > 0) {
           stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
         }
-        await upsertSalonMetrics(today, { appointments: todayBooked })
+        await upsertSalonMetrics(today, { appointments: todayBookedHeads.size })
       }
     } catch (e) {
       stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)

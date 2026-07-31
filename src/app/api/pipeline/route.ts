@@ -3,6 +3,7 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { cachedFetch } from '@/lib/cache'
 import { listTodayPipeline } from '@/lib/services'
+import { countDistinctContactIds } from '@/lib/salon/headcount'
 import { todayIso } from '@/lib/salon/format'
 
 export const maxDuration = 20
@@ -15,19 +16,28 @@ export async function GET(req: NextRequest) {
     const dayParam = req.nextUrl.searchParams.get('day')
     const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : todayIso()
     const payload = await cachedFetch(
-      `pipeline:v2:${day}`,
+      `pipeline:v3:${day}`,
       async () => {
         const { scheduled, walkIn, completed } = await listTodayPipeline(day)
+        const scheduledHeads = countDistinctContactIds(scheduled)
+        const walkInHeads = countDistinctContactIds(walkIn)
+        const completedHeads = countDistinctContactIds(completed)
+        // Total do dia = união de cabeças (não soma das colunas — mesma pessoa em 2 colunas conta 1).
+        const totalHeads = countDistinctContactIds([...scheduled, ...walkIn, ...completed])
         return {
           day,
           scheduled,
           walkIn,
           completed,
           counts: {
-            scheduled: scheduled.length,
-            walkIn: walkIn.length,
-            completed: completed.length,
-            total: scheduled.length + walkIn.length + completed.length,
+            scheduled: scheduledHeads,
+            walkIn: walkInHeads,
+            completed: completedHeads,
+            total: totalHeads,
+            /** Linhas de serviço (cards) — referência ops, não badge. */
+            scheduled_services: scheduled.length,
+            walkIn_services: walkIn.length,
+            completed_services: completed.length,
           },
         }
       },
