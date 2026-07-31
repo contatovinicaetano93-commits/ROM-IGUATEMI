@@ -118,11 +118,23 @@ async function recordSyncRun(kind: string, status: AvecSyncRun['status'], stats:
 async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<AvecSyncRun> {
   const sql = getSql()
   // Runs mortos por timeout/kill não devem bloquear o min-gap / status UI.
+  // Com progresso checkpointado → partial (não pintar Cérebro/Hoje de error falso).
   await sql`
     update avec_sync_runs
     set
-      status = 'error',
-      error = coalesce(error, 'Sync interrompido (timeout/kill)'),
+      status = case
+        when coalesce((stats->>'clients_upserted')::int, 0)
+          + coalesce((stats->>'appointments_synced')::int, 0)
+          + coalesce((stats->>'attendances_synced')::int, 0)
+          + coalesce((stats->>'revenue_rows')::int, 0)
+          + coalesce((stats->>'cancellation_rows')::int, 0)
+          + coalesce((stats->>'positions_synced')::int, 0)
+          + coalesce((stats->>'alerts_active')::int, 0)
+          + coalesce((stats->>'movements_synced')::int, 0) > 0
+        then 'partial'
+        else 'error'
+      end,
+      error = coalesce(nullif(error, ''), 'Sync interrompido (timeout/kill)'),
       stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
     where kind in ('fast', 'full')
       and coalesce(stats->>'running', 'false') = 'true'
@@ -225,6 +237,7 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
           + coalesce((stats->>'appointments_synced')::int, 0)
           + coalesce((stats->>'attendances_synced')::int, 0)
           + coalesce((stats->>'revenue_rows')::int, 0)
+          + coalesce((stats->>'cancellation_rows')::int, 0)
           + coalesce((stats->>'positions_synced')::int, 0)
           + coalesce((stats->>'alerts_active')::int, 0)
           + coalesce((stats->>'movements_synced')::int, 0) > 0
@@ -241,8 +254,8 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
   return rows.length
 }
 
-/** Margem vs route maxDuration=500s — abort limpo em vez de kill mid-row. */
-const AVEC_SYNC_BUDGET_MS = 450_000
+/** Margem vs route maxDuration=800s — abort limpo em vez de kill mid-row. */
+const AVEC_SYNC_BUDGET_MS = 720_000
 
 /** Deadline do sync em voo — fetchAllAvecReport + loops checam isto. */
 let activeSyncDeadlineAt: number | null = null
@@ -430,15 +443,17 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
 }
 
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
-  // Fast: hoje + 7d (Contatos Agendados / visão da semana). Full: ontem → +21d.
-  // Fast: hoje + 2d (Contatos próximo) — cabe no teto com cache/lean path.
-  // Semana completa (+21d) só no full (2×/dia). +7d no fast gerava 504 eterno.
-  const range = mode === 'fast' ? periodRange(0, 2) : periodRange(1, 21)
+  // Fast: hoje + amanhã (Hoje + lembrete curto). Semana (+21d) só no full 2×/dia.
+  // +7d no fast gerava 504 eterno; +2d ainda estourava o teto no BR (~350 linhas).
+  const range = mode === 'fast' ? periodRange(0, 1) : periodRange(1, 21)
   // 0051: site = origem Online/Local ("" = todos). Unidade vem do token (salon_id).
   const params = { ...range, site: '', profissional_id: '', limit: 250 }
   const result = await fetchSyncReport('0051', params)
   warnIfTruncated(stats, '0051', result)
-  await snapshotReport('0051', params, result.rows, stats, syncRunId)
+  // Snapshot pesado só no full — no fast o payload 0051 come budget sem valor operacional.
+  if (mode === 'full') {
+    await snapshotReport('0051', params, result.rows, stats, syncRunId)
+  }
 
   const today = todayIso()
   /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
@@ -589,9 +604,11 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   // Truncado: keep-set incompleto — não limpar (risco de apagar slots reais / ROM manual).
   if (todayRows > 0) {
     try {
-      if (result.truncated) {
+      if (result.truncated || stats.aborted) {
         stats.warnings.push(
-          'agenda: reconcile de órfãos adiado — 0051 truncado (keep-set incompleto)',
+          stats.aborted
+            ? 'agenda: reconcile de órfãos adiado — sync abortou no orçamento (keep-set incompleto)'
+            : 'agenda: reconcile de órfãos adiado — 0051 truncado (keep-set incompleto)',
         )
         // Não grava appointments parcial — keep-set incompleto distorce o KPI.
       } else {
@@ -640,6 +657,10 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   const returningByDay = new Map<string, number>()
 
   for (const row of result.rows) {
+    if (syncBudgetExhausted()) {
+      markSyncBudgetExhausted(stats, 'attendances')
+      break
+    }
     try {
       const att = normalizeAttendanceRow(row)
       if (!att) continue
@@ -713,6 +734,9 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
       }
 
       stats.attendances_synced++
+      if (syncRunId && stats.attendances_synced % 50 === 0) {
+        await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
+      }
     } catch (e) {
       stats.errors.push(`atendimento: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -725,9 +749,11 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     })
   }
 
-  if (result.truncated) {
+  if (result.truncated || stats.aborted) {
     stats.warnings.push(
-      'recorrentes 0002: truncado — métricas returning não atualizadas (evita zerar)',
+      stats.aborted
+        ? 'recorrentes 0002: abort no orçamento — métricas returning não atualizadas (evita zerar)'
+        : 'recorrentes 0002: truncado — métricas returning não atualizadas (evita zerar)',
     )
   } else {
     if (mode === 'fast') {
@@ -1131,8 +1157,8 @@ async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
 export async function runAvecSync(mode: AvecSyncMode = 'full'): Promise<AvecSyncRun> {
   // Fast e full compartilham o mesmo lease — evita overlap no Postgres entre cron/webhook.
   return withSyncLock(SYNC_LOCK_KEYS.avec, () => runAvecSyncUnlocked(mode), {
-    // maxDuration route = 500s — lease precisa sobreviver a lambda ainda viva.
-    ttlMs: 10 * 60 * 1000,
+    // maxDuration route = 800s — lease precisa sobreviver a lambda ainda viva.
+    ttlMs: 15 * 60 * 1000,
     owner: `avec-${mode}`,
   })
 }
@@ -1257,12 +1283,17 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     }
     if (!syncBudgetExhausted()) {
       await recomputeSalonMetricsFromRom()
+    } else {
+      markSyncBudgetExhausted(stats, 'antes de recompute')
     }
     // Returning: no-op se attendances já cobriu; senão fallback.
-    try {
-      await syncReturningFrom0002(stats, mode, syncRunId)
-    } catch (e) {
-      stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
+    // Com abort: não dispara 0002 extra — Hoje já tem caixa/agenda do checkpoint.
+    if (!syncBudgetExhausted()) {
+      try {
+        await syncReturningFrom0002(stats, mode, syncRunId)
+      } catch (e) {
+        stats.errors.push(`recorrentes 0002: ${e instanceof Error ? e.message : String(e)}`)
+      }
     }
 
     if (mode === 'full') {
