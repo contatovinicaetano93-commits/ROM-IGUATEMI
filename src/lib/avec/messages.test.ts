@@ -151,6 +151,7 @@ describe('isSoftAvecSyncWarning', () => {
     expect(isSoftAvecSyncWarning('Catálogo 0004 adiado — já sincronizado nas últimas 20h')).toBe(true)
     expect(isSoftAvecSyncWarning('0149: fetch parcial (2 pág., 100 linhas) — abort limpo')).toBe(true)
     expect(isSoftAvecSyncWarning('heal importado: connection reset')).toBe(true)
+    expect(isSoftAvecSyncWarning('snapshot 0004: disk full')).toBe(true)
     expect(
       isSoftAvecSyncWarning(
         'P1 0107: timeout/abort — reativação 90d adiada (The operation was aborted due to timeout)',
@@ -172,6 +173,7 @@ describe('isSoftAvecSyncWarning', () => {
     expect(
       hardAvecSyncWarnings([
         'AVEC_UNIT_ID vazio — sync sem filtro',
+        'snapshot 0051: erro',
         'Falha ao gravar snapshot',
         'Relatório movimentos de estoque (0044) atingiu o limite de 40 páginas',
         'Relatório atendimentos (0002) atingiu o limite de 80 páginas',
