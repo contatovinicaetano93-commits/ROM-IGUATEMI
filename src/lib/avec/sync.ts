@@ -73,6 +73,7 @@ import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
 import { getDeploymentContext } from '@/lib/deployment'
 import { getSalonMetrics, recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
+import { SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import {
   isAvecCancelledStatus,
   isAvecNegativeOutcomeStatus,
@@ -452,9 +453,10 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
 }
 
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
-  // Fast: hoje + amanhã (Hoje + lembrete curto). Semana (+21d) só no full 2×/dia.
-  // +7d no fast gerava 504 eterno; +2d ainda estourava o teto no BR (~350 linhas).
-  const range = mode === 'fast' ? periodRange(0, 1) : periodRange(1, 21)
+  // Fast: hoje → +SCHEDULED_SOON_DAYS (paridade Contatos Agendados).
+  // Budget 720s + abort limpo cobrem o volume; semana longa (+21d) só no full.
+  const range =
+    mode === 'fast' ? periodRange(0, SCHEDULED_SOON_DAYS) : periodRange(1, 21)
   // 0051: site = origem Online/Local ("" = todos). Unidade vem do token (salon_id).
   const params = { ...range, site: '', profissional_id: '', limit: 250 }
   const result = await fetchSyncReport('0051', params)

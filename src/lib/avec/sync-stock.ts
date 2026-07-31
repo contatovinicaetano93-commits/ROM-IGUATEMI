@@ -555,7 +555,15 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
     const raw = e instanceof Error ? e.message : String(e)
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
-    return await finishRun(run.id, 'error', stats, msg)
+    // Progresso checkpointado / abort → partial (paridade Avec catch).
+    const hadAnyData =
+      stats.positions_synced > 0 ||
+      stats.movements_synced > 0 ||
+      stats.alerts_active > 0 ||
+      stats.alerts_seeded_local > 0
+    const status: StockSyncRun['status'] =
+      hadAnyData || Boolean(stats.aborted) ? 'partial' : 'error'
+    return await finishRun(run.id, status, stats, msg)
   }
 }
 
