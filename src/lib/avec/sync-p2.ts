@@ -6,6 +6,11 @@ import {
   withRequiredAvecReportParams,
 } from '@/lib/avec/client'
 import {
+  getActiveSyncDeadlineAt,
+  markSyncBudgetExhausted,
+  syncBudgetExhausted,
+} from '@/lib/avec/sync'
+import {
   normalizeP2BirthdayRow,
   normalizeP2ChannelRow,
   normalizeP2PackageRow,
@@ -21,6 +26,7 @@ type SyncStatsLike = {
   snapshots_saved: number
   errors: string[]
   warnings?: string[]
+  aborted?: boolean
   p2_rows?: number
 }
 
@@ -131,6 +137,10 @@ export async function syncPaymentMixRange(
   const days = listDaysInclusive(fromIso, toIso)
 
   for (const day of days) {
+    if (syncBudgetExhausted()) {
+      markSyncBudgetExhausted(stats, 'P2 0081')
+      break
+    }
     const params = {
       inicio: isoToBr(day),
       fim: isoToBr(day),
@@ -138,7 +148,9 @@ export async function syncPaymentMixRange(
       limit: 250,
     }
     try {
-      const result = await fetchAllAvecReport(id0081, params)
+      const result = await fetchAllAvecReport(id0081, params, undefined, {
+        deadlineAt: getActiveSyncDeadlineAt(),
+      })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0081, result)
       await snapshotSafe(id0081, params, rows, stats, syncRunId)
@@ -184,13 +196,21 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const inicio = opts?.inicio ?? rolling.inicio
   const fim = opts?.fim ?? rolling.fim
   const params = { inicio, fim, limit: 250 }
+  const deadlineAt = () => getActiveSyncDeadlineAt()
+  const canFetch = (stage: string) => {
+    if (syncBudgetExhausted()) {
+      markSyncBudgetExhausted(stats, stage)
+      return false
+    }
+    return true
+  }
 
   const booking_channels: { channel: string; count: number }[] = []
   let bookingChannelsOk = false
   const id0056 = resolveId('booking_channels')
-  if (id0056) {
+  if (id0056 && canFetch('P2 antes de 0056')) {
     try {
-      const result = await fetchAllAvecReport(id0056, params)
+      const result = await fetchAllAvecReport(id0056, params, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0056, result)
       await snapshotSafe(id0056, params, rows, stats, syncRunId)
@@ -219,9 +239,9 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   let packages_sold = 0
   let packagesOk = false
   const id0061 = resolveId('packages')
-  if (id0061) {
+  if (id0061 && canFetch('P2 antes de 0061')) {
     try {
-      const result = await fetchAllAvecReport(id0061, params)
+      const result = await fetchAllAvecReport(id0061, params, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0061, result)
       await snapshotSafe(id0061, params, rows, stats, syncRunId)
@@ -249,9 +269,9 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   let ratings_count = 0
   let ratingsOk = false
   const id0104 = resolveId('ratings')
-  if (id0104) {
+  if (id0104 && canFetch('P2 antes de 0104')) {
     try {
-      const result = await fetchAllAvecReport(id0104, params)
+      const result = await fetchAllAvecReport(id0104, params, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0104, result)
       await snapshotSafe(id0104, params, rows, stats, syncRunId)
@@ -277,7 +297,7 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   let birthday_count = 0
   let birthdaysOk = false
   const id0001 = resolveId('birthdays')
-  if (id0001) {
+  if (id0001 && canFetch('P2 antes de 0001')) {
     try {
       // Aniversariantes do mês do snapshot (histórico) ou corrente.
       const reportParams = withRequiredAvecReportParams(id0001, {
@@ -285,7 +305,9 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
         inicio,
         fim,
       })
-      const result = await fetchAllAvecReport(id0001, reportParams)
+      const result = await fetchAllAvecReport(id0001, reportParams, undefined, {
+        deadlineAt: deadlineAt(),
+      })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0001, result)
       await snapshotSafe(id0001, reportParams, rows, stats, syncRunId)
@@ -334,7 +356,7 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
 
   // 0081: últimos 7 dias (full) — dia a dia para o Financeiro somar o mês sem double-count.
   // No backfill histórico pulamos aqui (usa syncPaymentMixRange no script).
-  if (opts?.includePaymentMix !== false && !opts?.asOf) {
+  if (opts?.includePaymentMix !== false && !opts?.asOf && canFetch('P2 antes de 0081')) {
     await syncPaymentMixRecent(stats, syncRunId, 7)
   }
 }

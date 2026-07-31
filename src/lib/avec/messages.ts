@@ -101,6 +101,8 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/sem retorno|retorno local indisponível/i.test(warning)) return true
   // Estoque: paginação parcial limpa por orçamento.
   if (/fetch parcial/i.test(warning)) return true
+  // Heal importado best-effort — não marca sync partial.
+  if (/heal importado:/i.test(warning)) return true
   return false
 }
 

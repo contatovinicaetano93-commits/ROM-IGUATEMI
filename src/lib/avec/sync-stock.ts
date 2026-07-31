@@ -79,13 +79,20 @@ function reportId(mapper: string): string | null {
 
 async function beginRun(kind: string, stats: StockSyncStats): Promise<StockSyncRun> {
   const sql = getSql()
-  // Abort limpo de runs mortos (timeout/kill do cron) — status/error claros.
+  // Abort limpo de runs mortos (timeout/kill do cron) — partial se houve progresso.
   await sql`
     update avec_sync_runs
     set
-      status = 'error',
-      error = coalesce(error, 'Sync estoque interrompido (timeout/kill)'),
-      stats = coalesce(stats, '{}'::jsonb) || '{"running":false,"aborted":true}'::jsonb
+      status = case
+        when coalesce((stats->>'positions_synced')::int, 0)
+          + coalesce((stats->>'alerts_active')::int, 0)
+          + coalesce((stats->>'movements_synced')::int, 0)
+          + coalesce((stats->>'purchases_enriched')::int, 0) > 0
+        then 'partial'
+        else 'error'
+      end,
+      error = coalesce(nullif(error, ''), 'Sync estoque interrompido (timeout/kill)'),
+      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
     where kind = ${kind}
       and coalesce(stats->>'running', 'false') = 'true'
   `
