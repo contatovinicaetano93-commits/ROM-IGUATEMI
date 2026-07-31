@@ -7,6 +7,11 @@ import {
   withRequiredAvecReportParams,
 } from '@/lib/avec/client'
 import {
+  getActiveSyncDeadlineAt,
+  markSyncBudgetExhausted,
+  syncBudgetExhausted,
+} from '@/lib/avec/sync-budget'
+import {
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
   normalizeP1ProfessionalRevenueRow,
@@ -24,6 +29,7 @@ type SyncStatsLike = {
   snapshots_saved: number
   errors: string[]
   warnings?: string[]
+  aborted?: boolean
   p1_rows?: number
 }
 
@@ -140,6 +146,14 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const inicio = opts?.inicio ?? rolling.inicio
   const fim = opts?.fim ?? rolling.fim
   const params = { inicio, fim, limit: 250 }
+  const deadlineAt = () => getActiveSyncDeadlineAt()
+  const canFetch = (stage: string) => {
+    if (syncBudgetExhausted()) {
+      markSyncBudgetExhausted(stats, stage)
+      return false
+    }
+    return true
+  }
 
   // professionals é alimentado por DOIS relatórios independentes (0021 revenue +
   // 0126 ocupação) fundidos no mesmo registro por nome normalizado / near-match.
@@ -149,11 +163,11 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   let professionalsAttempted = false
   let professionalsFailed = false
   const id0021 = resolveId('professionals_revenue')
-  if (id0021) {
+  if (id0021 && canFetch('P1 antes de 0021')) {
     professionalsAttempted = true
     try {
       const reportParams = withRequiredAvecReportParams(id0021, params)
-      const result = await fetchAllAvecReport(id0021, reportParams)
+      const result = await fetchAllAvecReport(id0021, reportParams, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0021, result)
       await snapshotSafe(id0021, reportParams, rows, stats, syncRunId)
@@ -179,11 +193,11 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   }
 
   const id0126 = resolveId('professionals_occupancy')
-  if (id0126) {
+  if (id0126 && canFetch('P1 antes de 0126')) {
     professionalsAttempted = true
     try {
       const reportParams = withRequiredAvecReportParams(id0126, params)
-      const result = await fetchAllAvecReport(id0126, reportParams)
+      const result = await fetchAllAvecReport(id0126, reportParams, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0126, result)
       await snapshotSafe(id0126, reportParams, rows, stats, syncRunId)
@@ -218,9 +232,9 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const services: { name: string; quantity: number; revenue: number }[] = []
   let servicesOk = false
   const id0032 = resolveId('top_services')
-  if (id0032) {
+  if (id0032 && canFetch('P1 antes de 0032')) {
     try {
-      const result = await fetchAllAvecReport(id0032, params)
+      const result = await fetchAllAvecReport(id0032, params, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0032, result)
       await snapshotSafe(id0032, params, rows, stats, syncRunId)
@@ -246,9 +260,9 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const acquisitionByChannel = new Map<string, number>()
   let acquisitionOk = false
   const id0003 = resolveId('acquisition')
-  if (id0003) {
+  if (id0003 && canFetch('P1 antes de 0003')) {
     try {
-      const result = await fetchAllAvecReport(id0003, params)
+      const result = await fetchAllAvecReport(id0003, params, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0003, result)
       await snapshotSafe(id0003, params, rows, stats, syncRunId)
@@ -274,10 +288,10 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   // 0107 = lista “sem retorno” (90d) — não é métrica do mês; no backfill histórico
   // só atrasa (paginação 5k+) e não entra no comparativo mensal.
   const id0107 = opts?.asOf ? null : resolveId('reactivation')
-  if (id0107) {
+  if (id0107 && canFetch('P1 antes de 0107')) {
     try {
       const reportParams = withRequiredAvecReportParams(id0107, { limit: 250 })
-      const result = await fetchAllAvecReport(id0107, reportParams)
+      const result = await fetchAllAvecReport(id0107, reportParams, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       await snapshotSafe(id0107, reportParams, rows, stats, syncRunId)
       reactivation_count = rows.length

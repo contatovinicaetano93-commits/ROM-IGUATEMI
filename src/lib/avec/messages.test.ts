@@ -150,6 +150,7 @@ describe('isSoftAvecSyncWarning', () => {
     expect(isSoftAvecSyncWarning('agenda: 3 agendamento(s) órfão(s) removido(s) do dia')).toBe(true)
     expect(isSoftAvecSyncWarning('Catálogo 0004 adiado — já sincronizado nas últimas 20h')).toBe(true)
     expect(isSoftAvecSyncWarning('0149: fetch parcial (2 pág., 100 linhas) — abort limpo')).toBe(true)
+    expect(isSoftAvecSyncWarning('heal importado: connection reset')).toBe(true)
     expect(
       isSoftAvecSyncWarning(
         'P1 0107: timeout/abort — reativação 90d adiada (The operation was aborted due to timeout)',

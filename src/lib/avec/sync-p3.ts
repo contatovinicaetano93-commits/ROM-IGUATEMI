@@ -6,6 +6,11 @@ import {
   withRequiredAvecReportParams,
 } from '@/lib/avec/client'
 import {
+  getActiveSyncDeadlineAt,
+  markSyncBudgetExhausted,
+  syncBudgetExhausted,
+} from '@/lib/avec/sync-budget'
+import {
   isP3NonReturnerRow,
   normalizeP3CurveRow,
   normalizeP3NewClientsRow,
@@ -20,6 +25,7 @@ type SyncStatsLike = {
   snapshots_saved: number
   errors: string[]
   warnings?: string[]
+  aborted?: boolean
   p3_rows?: number
 }
 
@@ -112,7 +118,9 @@ async function computeReturnRateFromAvec(
       limit: 250,
       como_conheceu: '',
     })
-    const result = await fetchAllAvecReport('0002', cohortParams)
+    const result = await fetchAllAvecReport('0002', cohortParams, undefined, {
+      deadlineAt: getActiveSyncDeadlineAt(),
+    })
     const cohortRows = asRows(result)
     const truncated = warnIfTruncated(stats, '0002', result)
     await snapshotSafe('0002', cohortParams, cohortRows, stats, syncRunId)
@@ -229,12 +237,20 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const inicio = opts?.inicio ?? rolling.inicio
   const fim = opts?.fim ?? rolling.fim
   const params = { inicio, fim, limit: 250 }
+  const deadlineAt = () => getActiveSyncDeadlineAt()
+  const canFetch = (stage: string) => {
+    if (syncBudgetExhausted()) {
+      markSyncBudgetExhausted(stats, stage)
+      return false
+    }
+    return true
+  }
 
   let return_rate = 0
   let returnRateOk = false
   let returnRateTruncated = false
   const id0007 = resolveId('return_rate')
-  if (id0007) {
+  if (id0007 && canFetch('P3 antes de 0007')) {
     try {
       // Paridade Brasil: 0007 = mês corrente (+45d). NÃO passar rolling 30d.
       // Backfill mensal: só então usa inicio/fim do mês do snapshot.
@@ -246,7 +262,9 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
               limit: 250,
             })
           : withRequiredAvecReportParams(id0007, { limit: 250 })
-      const result = await fetchAllAvecReport(id0007, reportParams)
+      const result = await fetchAllAvecReport(id0007, reportParams, undefined, {
+        deadlineAt: deadlineAt(),
+      })
       const rows = asRows(result)
       returnRateTruncated = warnIfTruncated(stats, id0007, result)
       await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
@@ -325,9 +343,9 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   let new_clients_period = 0
   let newClientsOk = false
   const id0017 = resolveId('new_clients_period')
-  if (id0017) {
+  if (id0017 && canFetch('P3 antes de 0017')) {
     try {
-      const result = await fetchAllAvecReport(id0017, params)
+      const result = await fetchAllAvecReport(id0017, params, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0017, result)
       await snapshotSafe(id0017, params, rows, stats, syncRunId)
@@ -352,9 +370,9 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const revenue_curve: { day: string; revenue: number }[] = []
   let revenueCurveOk = false
   const id0088 = resolveId('revenue_curve')
-  if (id0088) {
+  if (id0088 && canFetch('P3 antes de 0088')) {
     try {
-      const result = await fetchAllAvecReport(id0088, params)
+      const result = await fetchAllAvecReport(id0088, params, undefined, { deadlineAt: deadlineAt() })
       const rows = asRows(result)
       const truncated = warnIfTruncated(stats, id0088, result)
       await snapshotSafe(id0088, params, rows, stats, syncRunId)
