@@ -71,7 +71,7 @@ import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
 import { purgeAvecStorageBloat, saveReportSnapshot } from '@/lib/avec/snapshots'
 import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
 import { getDeploymentContext } from '@/lib/deployment'
-import { getSalonMetrics, recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
+import { getSalonMetrics, upsertSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import {
@@ -678,7 +678,9 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   let durationSumMinutes = 0
   let durationCount = 0
   const upsertInBatch = createBatchContactUpserter()
+  /** Mix do dia (Cérebro NOVOS·RECORRENTES): 0002 total_visitas na ultima_visita. */
   const returningByDay = new Map<string, number>()
+  const newByDay = new Map<string, number>()
 
   for (const row of result.rows) {
     if (syncBudgetExhausted()) {
@@ -690,8 +692,13 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
       if (!att) continue
 
       const visitDay = att.lastVisitDay
-      if (visitDay && (att.totalVisits ?? 0) > 1) {
-        returningByDay.set(visitDay, (returningByDay.get(visitDay) ?? 0) + 1)
+      const visits = att.totalVisits
+      if (visitDay && visits != null) {
+        if (visits > 1) {
+          returningByDay.set(visitDay, (returningByDay.get(visitDay) ?? 0) + 1)
+        } else if (visits === 1) {
+          newByDay.set(visitDay, (newByDay.get(visitDay) ?? 0) + 1)
+        }
       }
 
       const attendedDay = att.attendedAt ? toSalonDateIso(att.attendedAt) : visitDay
@@ -776,18 +783,22 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   if (result.truncated || stats.aborted) {
     stats.warnings.push(
       stats.aborted
-        ? 'recorrentes 0002: abort no orçamento — métricas returning não atualizadas (evita zerar)'
-        : 'recorrentes 0002: truncado — métricas returning não atualizadas (evita zerar)',
+        ? 'mix 0002: abort no orçamento — novos/recorrentes não atualizados (evita zerar)'
+        : 'mix 0002: truncado — novos/recorrentes não atualizados (evita zerar)',
     )
   } else {
     if (mode === 'fast') {
       await upsertSalonMetrics(today, {
+        new_clients: newByDay.get(today) ?? 0,
         returning_clients: returningByDay.get(today) ?? 0,
       })
     } else {
       const days = listDaysInclusive(addCalendarDaysYmd(today, -7), today)
       for (const day of days) {
-        await upsertSalonMetrics(day, { returning_clients: returningByDay.get(day) ?? 0 })
+        await upsertSalonMetrics(day, {
+          new_clients: newByDay.get(day) ?? 0,
+          returning_clients: returningByDay.get(day) ?? 0,
+        })
       }
       for (const row of result.rows) {
         try {
@@ -1160,20 +1171,27 @@ async function syncReturningFrom0002(
       return
     }
     const returningByDay = new Map<string, number>()
+    const newByDay = new Map<string, number>()
     for (const row of result.rows) {
       const att = normalizeAttendanceRow(row)
-      if (!att?.lastVisitDay) continue
-      if ((att.totalVisits ?? 0) > 1) {
+      if (!att?.lastVisitDay || att.totalVisits == null) continue
+      if (att.totalVisits > 1) {
         returningByDay.set(att.lastVisitDay, (returningByDay.get(att.lastVisitDay) ?? 0) + 1)
+      } else if (att.totalVisits === 1) {
+        newByDay.set(att.lastVisitDay, (newByDay.get(att.lastVisitDay) ?? 0) + 1)
       }
     }
     if (mode === 'fast') {
       await upsertSalonMetrics(today, {
+        new_clients: newByDay.get(today) ?? 0,
         returning_clients: returningByDay.get(today) ?? 0,
       })
     } else {
       for (const day of listDaysInclusive(from, today)) {
-        await upsertSalonMetrics(day, { returning_clients: returningByDay.get(day) ?? 0 })
+        await upsertSalonMetrics(day, {
+          new_clients: newByDay.get(day) ?? 0,
+          returning_clients: returningByDay.get(day) ?? 0,
+        })
       }
     }
   } catch (e) {
@@ -1325,11 +1343,9 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
         await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
       }
     }
-    if (!syncBudgetExhausted()) {
-      await recomputeSalonMetricsFromRom()
-    } else {
-      markSyncBudgetExhausted(stats, 'antes de recompute')
-    }
+    // Não rodar recomputeSalonMetricsFromRom aqui: ele sobrescrevia Agendados (0051)
+    // e, antes, zerava novos (count orgânico). Mix/agenda vêm do 0002/0051 acima.
+    // Webhook ainda chama recompute para feedback imediato até o fast sync.
     // Returning: no-op se attendances já cobriu; senão fallback.
     // Com abort: não dispara 0002 extra — Hoje já tem caixa/agenda do checkpoint.
     if (!syncBudgetExhausted()) {
