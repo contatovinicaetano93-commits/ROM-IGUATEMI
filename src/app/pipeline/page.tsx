@@ -29,7 +29,16 @@ interface PipelineData {
   scheduled: PipelineCard[]
   walkIn: PipelineCard[]
   completed: PipelineCard[]
-  counts: { scheduled: number; walkIn: number; completed: number; total: number }
+  counts: {
+    /** Badges = pessoas (cabeças). */
+    scheduled: number
+    walkIn: number
+    completed: number
+    total: number
+    scheduled_services?: number
+    walkIn_services?: number
+    completed_services?: number
+  }
 }
 
 function PipelineColumn({
@@ -165,8 +174,8 @@ export default function PipelinePage() {
             {dayLabel || 'Agenda do dia'}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Agendados = booking com horário. No salão = comanda/encaixe sem booking. Concluídos =
-            0002 + marcações no ROM.
+            Badges contam pessoas. Cards = linhas de serviço. Agendados = booking com horário · No
+            salão = comanda/encaixe · Concluídos = pagos do dia.
           </p>
         </div>
         <button

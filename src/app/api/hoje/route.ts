@@ -15,6 +15,7 @@ import { listTodaySchedules } from '@/lib/services'
 import { getLastAvecSync } from '@/lib/avec/sync'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { todayIso } from '@/lib/salon/format'
+import { countDistinctContactIds } from '@/lib/salon/headcount'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 import { getReactivationKpis } from '@/lib/salon/reactivation-kpi'
 
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     const day = todayIso()
 
     const payload = await ttlGetOrSet(
-      `hoje:v4:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
+      `hoje:v5:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
       HOJE_CACHE_TTL_MS,
       async () => {
         const sql = getSql()
@@ -74,6 +75,7 @@ export async function GET(req: NextRequest) {
         const playbook = playbookSlice.items
 
         const scheduleToday = [...scheduleRaw].sort(compareScheduleByTimeThenName)
+        const scheduleHeads = countDistinctContactIds(scheduleToday)
         const leads = leadRows[0] ?? { novos: 0, whatsapp_novos: 0 }
         // Sem linha de métricas do dia: não inventar 0 operacional — null → UI "—".
         const salonBase = salonRaw
@@ -81,7 +83,7 @@ export async function GET(req: NextRequest) {
           : {
               day,
               revenue: null as number | null,
-              appointments: scheduleToday.length,
+              appointments: scheduleHeads,
               attended: null as number | null,
               no_shows: null as number | null,
               cancelled: null as number | null,
@@ -122,6 +124,8 @@ export async function GET(req: NextRequest) {
           playbook_focus: playbookSlice.focus,
           playbook_audience: playbookSlice.audience,
           scheduleToday,
+          schedule_heads: scheduleHeads,
+          schedule_services: scheduleToday.length,
           leads: {
             novos: leads.novos,
             whatsapp_sem_resposta: leads.whatsapp_novos,

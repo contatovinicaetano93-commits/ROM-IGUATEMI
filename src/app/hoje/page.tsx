@@ -26,6 +26,7 @@ import { contactHref } from '@/lib/auth-redirect'
 import { usePersistedBool } from '@/lib/use-persisted-bool'
 import { deriveAvecSyncUi } from '@/lib/avec/messages'
 import { formatKpiSources, kpiSourceFromSyncStatus } from '@/lib/kpi-source'
+import { countDistinctContactIds } from '@/lib/salon/headcount'
 
 const HOJE_OPEN_SCHEDULE_KEY = 'hoje.section.agendamentos.open'
 const HOJE_OPEN_PLAYBOOK_KEY = 'hoje.section.playbook.open'
@@ -66,6 +67,10 @@ interface HojeData {
   playbook_focus?: string
   playbook_audience?: 'staff' | 'admin'
   scheduleToday: ScheduleItem[]
+  /** Pessoas com agenda aberta hoje (badge). */
+  schedule_heads?: number
+  /** Linhas de serviço abertas (lista). */
+  schedule_services?: number
   leads: { novos: number; whatsapp_sem_resposta: number }
   /** Contatos do playbook com atraso (fila do dia). */
   overdue_contacts?: number
@@ -175,7 +180,7 @@ export default function HojePage() {
           value={loading ? '—' : String(salon?.appointments ?? 0)}
           loading={loading}
           source={formatKpiSources('rom', 'avec', ...(syncSource ? [syncSource] : []))}
-          hint="Linhas da agenda (abertos + pagos) — não é o mesmo que Atendidos"
+          hint="Pessoas com agenda/comanda no dia (aberto ou pago) — conta cabeça"
         />
         <KpiCard
           icon={<TrendingUp size={16} />}
@@ -183,7 +188,7 @@ export default function HojePage() {
           value={loading ? '—' : salon?.attended == null ? '—' : String(salon.attended)}
           loading={loading}
           source={avecSource}
-          hint="Clientes únicos com atendimento no dia (Avec 0002/caixa)"
+          hint="Visitas/comandas fechadas no caixa Avec"
         />
         <KpiCard
           icon={<AlertTriangle size={16} />}
@@ -286,10 +291,17 @@ export default function HojePage() {
           className="flex w-full items-center justify-between gap-3 rounded-xl py-0.5 text-left active:opacity-90"
         >
           <h2 className="flex items-center gap-1.5 text-sm font-medium">
-            <Calendar size={15} className="text-sky-300" /> Agendamentos abertos hoje
+            <Calendar size={15} className="text-sky-300" /> Pessoas com agenda aberta
           </h2>
           <span className="flex items-center gap-2">
-            <CountBadge value={loading ? '—' : String(data?.scheduleToday.length ?? 0)} tone="gold" />
+            <CountBadge
+              value={
+                loading
+                  ? '—'
+                  : String(data?.schedule_heads ?? countDistinctContactIds(data?.scheduleToday ?? []))
+              }
+              tone="gold"
+            />
             <ChevronDown
               size={16}
               className={`shrink-0 text-muted transition-transform ${scheduleOpen ? 'rotate-180' : ''}`}
@@ -300,7 +312,9 @@ export default function HojePage() {
         {scheduleOpen && (
           <>
             <p className="text-[0.65rem] text-muted/70">
-              1 linha por serviço · horário em destaque · ordem cronológica
+              Badge = pessoas · lista ={' '}
+              {loading ? '…' : data?.schedule_services ?? data?.scheduleToday.length ?? 0} linha(s) de
+              serviço · ordem cronológica
             </p>
 
             {loading &&
@@ -481,7 +495,7 @@ function KpiCard({
   warn?: boolean
   /** Fonte curta (Avec / proxy / incompleto / desatualizado) — não polui o hero. */
   source?: string
-  /** Esclarece o que o número conta (ex.: movimento ≠ atendidos). */
+  /** Esclarece o que o número conta (ex.: movimento = cabeças). */
   hint?: string
 }) {
   return (
