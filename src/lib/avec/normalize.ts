@@ -483,10 +483,14 @@ export function parseOptionalMoney(raw: unknown): number | null {
 }
 
 export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAvecRevenue | null {
+  // 0088 manda `faturamento` / `comandaQtd` — priorizar antes de `valor`/`total` genéricos
+  // (alguns payloads trazem lixo em campos auxiliares e distorciam o KPI).
   const revenue = parseMoney(
-    pickRaw(row, ['valor', 'total', 'faturamento', 'receita', 'valor_total', 'amount', 'liquido'])
+    pickRaw(row, ['faturamento', 'receita', 'valor_total', 'valor', 'total', 'amount', 'liquido'])
   )
-  const attended = Number(pick(row, ['atendimentos', 'comandaQtd', 'comandas', 'qtd', 'quantidade', 'count']) ?? 0) || 0
+  const attended =
+    Number(pick(row, ['comandaQtd', 'atendimentos', 'comandas', 'qtd', 'quantidade', 'count']) ?? 0) ||
+    0
   const datePart = pick(row, ['data', 'dia', 'date', 'periodo'])
   const day = datePart ? toSalonDateIso(parseAvecDateTime(datePart)) : null
   if (revenue <= 0 && attended <= 0) return null

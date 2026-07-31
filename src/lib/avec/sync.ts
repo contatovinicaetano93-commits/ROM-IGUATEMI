@@ -453,10 +453,11 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
 }
 
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
-  // Fast: hoje → +SCHEDULED_SOON_DAYS (paridade Contatos Agendados).
+  // Fast: ontem → +SCHEDULED_SOON_DAYS — Contatos Agendados (semana) + corrige KPI
+  // Agendados do dia fechado (antes o fast só puxava a partir de hoje e o KPI de ontem ficava stale).
   // Budget 720s + abort limpo cobrem o volume; semana longa (+21d) só no full.
   const range =
-    mode === 'fast' ? periodRange(0, SCHEDULED_SOON_DAYS) : periodRange(1, 21)
+    mode === 'fast' ? periodRange(1, SCHEDULED_SOON_DAYS) : periodRange(1, 21)
   // 0051: site = origem Online/Local ("" = todos). Unidade vem do token (salon_id).
   const params = { ...range, site: '', profissional_id: '', limit: 250 }
   const result = await fetchSyncReport('0051', params)
@@ -467,11 +468,12 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   }
 
   const today = todayIso()
+  const yesterday = addCalendarDaysYmd(today, -1)
   /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
   const todayOpenServiceIds: string[] = []
-  /** Movimento do dia = cabeças (contato único), não linhas 0051. */
-  const todayBookedHeads = new Set<string>()
-  let todayRows = 0
+  /** Movimento por dia = cabeças (contato único), não linhas 0051. */
+  const bookedHeadsByDay = new Map<string, Set<string>>()
+  const rowsByDay = new Map<string, number>()
   const upsertInBatch = createBatchContactUpserter()
 
   for (const row of result.rows) {
@@ -525,7 +527,9 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       const scheduleOrigin: ScheduleOrigin =
         !appt.hasClockTime || serviceName === COMANDA_SERVICE_NAME ? 'comanda' : 'agenda'
 
-      if (apptDay === today) todayRows++
+      if (apptDay) {
+        rowsByDay.set(apptDay, (rowsByDay.get(apptDay) ?? 0) + 1)
+      }
 
       if (!appt.avecClientId && !appt.phone) {
         stats.warnings.push('agenda: linha sem avec_client_id e sem telefone — ignorada')
@@ -550,8 +554,13 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       }
 
       // Cabeça do dia: 1 contato com ≥1 linha aberta/paga (ignora cancel/no-show).
-      if (apptDay === today && !isCancelled && !isNoShow && !isNegativeOutcome) {
-        todayBookedHeads.add(contact.id)
+      if (apptDay && !isCancelled && !isNoShow && !isNegativeOutcome) {
+        let heads = bookedHeadsByDay.get(apptDay)
+        if (!heads) {
+          heads = new Set()
+          bookedHeadsByDay.set(apptDay, heads)
+        }
+        heads.add(contact.id)
       }
 
       if (serviceName && scheduledAt) {
@@ -611,29 +620,34 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
     }
   }
 
-  // Reconcilia órfãos + KPI Movimento = cabeças (abertos+pagos) do dia.
-  // Truncado: keep-set incompleto — não limpar (risco de apagar slots reais / ROM manual).
-  if (todayRows > 0) {
-    try {
-      if (result.truncated || stats.aborted) {
-        stats.warnings.push(
-          stats.aborted
-            ? 'agenda: reconcile de órfãos adiado — sync abortou no orçamento (keep-set incompleto)'
-            : 'agenda: reconcile de órfãos adiado — 0051 truncado (keep-set incompleto)',
-        )
-        // Não grava appointments parcial — keep-set incompleto distorce o KPI.
-      } else {
+  // Reconcilia órfãos de hoje + KPI Movimento por dia (hoje/ontem + dias com linha).
+  // Truncado/abort: keep-set incompleto — não limpar nem gravar KPI parcial.
+  try {
+    if (result.truncated || stats.aborted) {
+      stats.warnings.push(
+        stats.aborted
+          ? 'agenda: reconcile/KPI adiado — sync abortou no orçamento (keep-set incompleto)'
+          : 'agenda: reconcile/KPI adiado — 0051 truncado (keep-set incompleto)',
+      )
+    } else {
+      if ((rowsByDay.get(today) ?? 0) > 0) {
         const cleared = await clearOrphanSchedulesForDay(today, todayOpenServiceIds)
         if (cleared > 0) {
           stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
         }
-        await upsertSalonMetrics(today, { appointments: todayBookedHeads.size })
       }
-    } catch (e) {
-      stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)
+      const daysToWrite = new Set<string>([today, yesterday])
+      for (const day of rowsByDay.keys()) daysToWrite.add(day)
+      for (const day of bookedHeadsByDay.keys()) daysToWrite.add(day)
+      for (const day of daysToWrite) {
+        await upsertSalonMetrics(day, {
+          appointments: bookedHeadsByDay.get(day)?.size ?? 0,
+        })
+      }
     }
+  } catch (e) {
+    stats.errors.push(`agenda reconcile: ${e instanceof Error ? e.message : String(e)}`)
   }
-
 }
 
 function servicesCreatedRecently(service: { created_at: string }) {
