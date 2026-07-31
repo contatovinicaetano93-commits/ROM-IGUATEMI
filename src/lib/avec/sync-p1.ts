@@ -1,6 +1,7 @@
 import {
   fetchAllAvecReport,
   formatTruncationWarning,
+  isAvecFetchAbortError,
   periodRange,
   type AvecReportFetchResult,
   withRequiredAvecReportParams,
@@ -290,7 +291,15 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
         )
       }
     } catch (e) {
-      stats.errors.push(`P1 0107: ${e instanceof Error ? e.message : String(e)}`)
+      // 0107 = reativação 90d (periférico). Timeout/abort no full não deve
+      // pintar Hoje/KPIs como "incompleto" — core (0051/caixa/0002) já rodou.
+      const msg = e instanceof Error ? e.message : String(e)
+      if (isAvecFetchAbortError(e) || /aborted|timeout/i.test(msg)) {
+        stats.warnings = stats.warnings ?? []
+        stats.warnings.push(`P1 0107: timeout/abort — reativação 90d adiada (${msg})`)
+      } else {
+        stats.errors.push(`P1 0107: ${msg}`)
+      }
     }
   }
 

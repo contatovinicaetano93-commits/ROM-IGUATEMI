@@ -6,7 +6,9 @@ import {
   formatAvecUserMessage,
   hardAvecSyncWarnings,
   isAvecTokenExpiredError,
+  isSoftAvecPeripheralError,
   isSoftAvecSyncWarning,
+  isSoftOnlyPartialAvecRun,
 } from '@/lib/avec/messages'
 
 describe('isAvecTokenExpiredError', () => {
@@ -106,6 +108,24 @@ describe('deriveAvecSyncUi', () => {
     expect(ui.warnings).toHaveLength(1)
     expect(ui.warnings[0]).toContain('0046')
   })
+
+  it('não marca incompleto quando partial só por P1 0107 timeout', () => {
+    const ui = deriveAvecSyncUi({
+      configured: true,
+      now,
+      last: {
+        status: 'partial',
+        created_at: '2026-07-25T11:50:00.000Z',
+        error: 'abandoned_partial_timeout',
+        stats: {
+          errors: ['P1 0107: The operation was aborted due to timeout'],
+          warnings: ['Catálogo 0004 adiado — já sincronizado nas últimas 20h'],
+        },
+      },
+    })
+    expect(ui.status).toBe('ok')
+    expect(ui.tone).toBe('success')
+  })
 })
 
 describe('isSoftAvecSyncWarning', () => {
@@ -130,7 +150,24 @@ describe('isSoftAvecSyncWarning', () => {
     expect(isSoftAvecSyncWarning('agenda: 3 agendamento(s) órfão(s) removido(s) do dia')).toBe(true)
     expect(isSoftAvecSyncWarning('Catálogo 0004 adiado — já sincronizado nas últimas 20h')).toBe(true)
     expect(isSoftAvecSyncWarning('0149: fetch parcial (2 pág., 100 linhas) — abort limpo')).toBe(true)
+    expect(
+      isSoftAvecSyncWarning(
+        'P1 0107: timeout/abort — reativação 90d adiada (The operation was aborted due to timeout)',
+      ),
+    ).toBe(true)
     expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
+    expect(
+      isSoftAvecPeripheralError('P1 0107: The operation was aborted due to timeout'),
+    ).toBe(true)
+    expect(isSoftOnlyPartialAvecRun({
+      status: 'partial',
+      created_at: '2026-07-30T22:36:33.000Z',
+      error: 'abandoned_partial_timeout',
+      stats: {
+        errors: ['P1 0107: The operation was aborted due to timeout'],
+        warnings: ['Catálogo 0004 adiado — já sincronizado nas últimas 20h'],
+      },
+    })).toBe(true)
     expect(
       hardAvecSyncWarnings([
         'AVEC_UNIT_ID vazio — sync sem filtro',
