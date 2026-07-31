@@ -30,6 +30,7 @@ import {
   formatAvecErrorList,
   formatAvecUserMessage,
   hardAvecSyncWarnings,
+  isSoftAvecPeripheralError,
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
@@ -1289,6 +1290,12 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
     }
 
     stats.errors = formatAvecErrorList(stats.errors)
+    // P1 0107 timeout etc. → warning soft (não pinta Hoje como incompleto).
+    const softPeripheral = stats.errors.filter(isSoftAvecPeripheralError)
+    if (softPeripheral.length > 0) {
+      stats.errors = stats.errors.filter((e) => !isSoftAvecPeripheralError(e))
+      stats.warnings.push(...softPeripheral)
+    }
 
     // Truncamento / unit-id / órfãos ficam em warnings (UI), mas não impedem status ok.
     const hardWarnings = hardAvecSyncWarnings(stats.warnings)

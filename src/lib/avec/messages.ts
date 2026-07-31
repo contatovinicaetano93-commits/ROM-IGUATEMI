@@ -69,10 +69,16 @@ export function formatAvecErrorList(errors: string[]): string[] {
   return errors.map((e) => formatAvecUserMessage(e) ?? e)
 }
 
+/** Erros periféricos (P1 0107 timeout) que não devem sozinhos marcar sync partial. */
+export function isSoftAvecPeripheralError(error: string): boolean {
+  return /P1 0107:.*(timeout|abort)/i.test(error)
+}
+
 /**
  * Avisos informativos que NÃO devem sozinhos marcar o sync como partial.
  * Truncamento / unit id ausente ainda aparecem em stats.warnings na UI.
  */
+
 export function isSoftAvecSyncWarning(warning: string): boolean {
   // Truncamento de páginas: soft SÓ para catálogo/saldo/alertas/TM.
   // Core (0002/0051/caixa/0248/…) incompleto → HARD (sync partial).
@@ -80,6 +86,7 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
     return /\((0223|0004|0046|0149)\)/.test(warning)
   }
   if (/P1 0107 truncado/i.test(warning)) return true
+  if (/P1 0107:\s*timeout\/abort/i.test(warning)) return true
   if (/AVEC_UNIT_ID vazio/i.test(warning)) return true
   // Reconcile de agenda: informativo (órfãos limpos), sync pode ficar ok.
   if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
@@ -97,6 +104,18 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
 
 export function hardAvecSyncWarnings(warnings: string[]): string[] {
   return warnings.filter((w) => !isSoftAvecSyncWarning(w))
+}
+
+/**
+ * Full abandonado só por P1 0107 (reativação 90d) — core já sincronizou.
+ * UI não deve pintar todos os KPIs como "incompleto".
+ */
+export function isSoftOnlyPartialAvecRun(last: AvecSyncLastLike | null | undefined): boolean {
+  if (!last || last.status !== 'partial') return false
+  const errors = asStringArray(last.stats?.errors)
+  const hardW = hardAvecSyncWarnings(asStringArray(last.stats?.warnings))
+  if (hardW.length > 0 || errors.length === 0) return false
+  return errors.every(isSoftAvecPeripheralError)
 }
 
 
@@ -170,13 +189,17 @@ export function deriveAvecSyncUi(opts: {
     }
   }
 
-  if (last.status === 'partial') {
+  const softOnlyPartial = isSoftOnlyPartialAvecRun(last)
+  const softErrors = softOnlyPartial ? asStringArray(last.stats?.errors) : []
+  const uiWarnings = softErrors.length > 0 ? [...warnings, ...softErrors] : warnings
+
+  if (last.status === 'partial' && !softOnlyPartial) {
     return {
       status: 'partial',
       label: `Sync parcial ${ageLabel}`,
       tone: 'gold',
-      detail: warnings[0] ?? detail,
-      warnings,
+      detail: uiWarnings[0] ?? detail,
+      warnings: uiWarnings,
     }
   }
 
@@ -185,8 +208,10 @@ export function deriveAvecSyncUi(opts: {
       status: 'stale',
       label: `Sync atrasado ${ageLabel}`,
       tone: 'gold',
-      detail: 'Último sync bem-sucedido há mais de 2–3h',
-      warnings,
+      detail: softOnlyPartial
+        ? 'Full falhou só em relatório periférico (0107); fast/core ok — rode sync fast'
+        : 'Último sync bem-sucedido há mais de 2–3h',
+      warnings: uiWarnings,
     }
   }
 
@@ -194,7 +219,7 @@ export function deriveAvecSyncUi(opts: {
     status: 'ok',
     label: `Sync ok ${ageLabel}`,
     tone: 'success',
-    detail: warnings[0] ?? null,
-    warnings,
+    detail: uiWarnings[0] ?? null,
+    warnings: uiWarnings,
   }
 }
