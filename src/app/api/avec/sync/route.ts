@@ -200,7 +200,7 @@ export async function GET(req: NextRequest) {
           path: '/api/avec/sync?mode=full',
           note: '07:35 / 19:35 America/Sao_Paulo — offset vs BR (:20)',
         },
-        estoque_fast: { schedule: '35 * * * *', path: '/api/estoque/sync' },
+        estoque_fast: { schedule: '5 * * * *', path: '/api/estoque/sync' },
         estoque_full: { schedule: '55 11 * * *', path: '/api/estoque/sync?mode=full' },
         purge: {
           schedule: '25 7 * * *',
