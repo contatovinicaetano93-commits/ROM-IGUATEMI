@@ -224,7 +224,8 @@ async function updateContactRow(
         when status in ('importado', 'novo', 'em_atendimento') then ${input.status ?? null}
         when status = 'agendado' and ${input.status ?? null} = 'convertido' then 'convertido'
         when status = 'convertido' then 'convertido'
-        when status = 'perdido' and ${input.status ?? null} = 'convertido' then 'convertido'
+        when status = 'perdido' and ${input.status ?? null} in ('convertido', 'agendado', 'em_atendimento')
+          then ${input.status ?? null}
         else status
       end
     where id = ${id}::uuid
@@ -309,7 +310,8 @@ async function insertPhoneFirst(
           when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
           when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
           when contacts.status = 'convertido' then 'convertido'
-          when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
+          when contacts.status = 'perdido' and excluded.status in ('convertido', 'agendado', 'em_atendimento')
+            then excluded.status
           else contacts.status
         end
       where contacts.phone is not null
@@ -360,7 +362,8 @@ async function insertAvecOnly(sql: Sql, input: UpsertContactInput, avec: string)
           when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
           when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
           when contacts.status = 'convertido' then 'convertido'
-          when contacts.status = 'perdido' and excluded.status = 'convertido' then 'convertido'
+          when contacts.status = 'perdido' and excluded.status in ('convertido', 'agendado', 'em_atendimento')
+            then excluded.status
           else contacts.status
         end
       returning *
