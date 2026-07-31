@@ -636,10 +636,9 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
           stats.warnings.push(`agenda: ${cleared} agendamento(s) órfão(s) removido(s) do dia`)
         }
       }
-      const daysToWrite = new Set<string>([today, yesterday])
-      for (const day of rowsByDay.keys()) daysToWrite.add(day)
-      for (const day of bookedHeadsByDay.keys()) daysToWrite.add(day)
-      for (const day of daysToWrite) {
+      // Só hoje + ontem: evita insert de dias futuros com revenue=0 (ruído em Relatórios).
+      // Contatos Agendados usa client_services, não este KPI.
+      for (const day of [today, yesterday]) {
         await upsertSalonMetrics(day, {
           appointments: bookedHeadsByDay.get(day)?.size ?? 0,
         })
