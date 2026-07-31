@@ -96,6 +96,11 @@ export async function getSalonP2DailyNear(targetDay: string): Promise<SalonP2Dai
 
 export async function ensureSalonP2Table() {
   const sql = getSql()
+  const exists = (await sql`
+    select to_regclass('public.salon_p2_daily') is not null as ok
+  `) as { ok: boolean }[]
+  if (exists[0]?.ok) return
+
   await sql`
     create table if not exists salon_p2_daily (
       day date primary key,
