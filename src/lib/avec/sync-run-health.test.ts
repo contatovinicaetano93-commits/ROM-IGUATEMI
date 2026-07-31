@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { isEmptyKillAvecRun, pickNewestUsableAvecRun } from '@/lib/avec/sync-run-health'
+import {
+  isEmptyKillAvecRun,
+  pickHojeAvecSyncRun,
+  pickNewestUsableAvecRun,
+} from '@/lib/avec/sync-run-health'
 
 const NOW = Date.parse('2026-07-31T12:00:00.000Z')
 
@@ -54,5 +58,28 @@ describe('pickNewestUsableAvecRun', () => {
       },
     ])
     expect(picked?.kind).toBe('fast')
+  })
+})
+
+describe('pickHojeAvecSyncRun', () => {
+  it('prefere fast ok mesmo com full mais novo', () => {
+    const picked = pickHojeAvecSyncRun(
+      { status: 'ok', created_at: iso(40), error: null, kind: 'fast' },
+      { status: 'partial', created_at: iso(5), error: null, kind: 'full' },
+    )
+    expect(picked?.kind).toBe('fast')
+  })
+
+  it('pula fast empty-kill e usa full ok', () => {
+    const picked = pickHojeAvecSyncRun(
+      {
+        status: 'error',
+        created_at: iso(5),
+        error: 'Sync interrompido (timeout/kill)',
+        kind: 'fast',
+      },
+      { status: 'ok', created_at: iso(40), error: null, kind: 'full' },
+    )
+    expect(picked?.kind).toBe('full')
   })
 })
