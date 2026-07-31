@@ -1,4 +1,10 @@
-import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
+import {
+  fetchAllAvecReport,
+  formatTruncationWarning,
+  periodRange,
+  type AvecReportFetchResult,
+  withRequiredAvecReportParams,
+} from '@/lib/avec/client'
 import {
   isP3NonReturnerRow,
   normalizeP3CurveRow,
@@ -106,8 +112,11 @@ async function computeReturnRateFromAvec(
       limit: 250,
       como_conheceu: '',
     })
-    const cohortRows = asRows(await fetchAllAvecReport('0002', cohortParams))
+    const result = await fetchAllAvecReport('0002', cohortParams)
+    const cohortRows = asRows(result)
+    const truncated = warnIfTruncated(stats, '0002', result)
     await snapshotSafe('0002', cohortParams, cohortRows, stats, syncRunId)
+    if (truncated) return null
 
     const cohort = new Set<string>()
     for (const row of cohortRows) {
@@ -172,6 +181,17 @@ function asRows(result: unknown): Record<string, unknown>[] {
   return []
 }
 
+function warnIfTruncated(
+  stats: SyncStatsLike,
+  reportId: string,
+  result: AvecReportFetchResult,
+): boolean {
+  if (!result.truncated) return false
+  stats.warnings = stats.warnings ?? []
+  stats.warnings.push(formatTruncationWarning(reportId, result))
+  return true
+}
+
 async function snapshotSafe(
   reportId: string,
   params: Record<string, unknown>,
@@ -212,6 +232,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
 
   let return_rate = 0
   let returnRateOk = false
+  let returnRateTruncated = false
   const id0007 = resolveId('return_rate')
   if (id0007) {
     try {
@@ -225,51 +246,55 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
               limit: 250,
             })
           : withRequiredAvecReportParams(id0007, { limit: 250 })
-      const rows = asRows(await fetchAllAvecReport(id0007, reportParams))
+      const result = await fetchAllAvecReport(id0007, reportParams)
+      const rows = asRows(result)
+      returnRateTruncated = warnIfTruncated(stats, id0007, result)
       await snapshotSafe(id0007, reportParams, rows, stats, syncRunId)
-      let sum = 0
-      let n = 0
-      let nonReturners = 0
-      const nonReturnerRows: Record<string, unknown>[] = []
-      for (const row of rows) {
-        const r = normalizeP3ReturnRateRow(row)
-        if (r != null) {
-          stats.p3_rows = (stats.p3_rows ?? 0) + 1
-          sum += r
-          n++
-          continue
-        }
-        if (isP3NonReturnerRow(row)) {
-          nonReturners++
-          nonReturnerRows.push(row)
-        }
-      }
-      if (n > 0) {
-        return_rate = Math.round((sum / n) * 10000) / 10000
-        returnRateOk = true
-      } else if (nonReturners > 0) {
-        // Lista 0007 = sem retorno. Preferir cohort local; senão 0002 (P1) ∩ 0007; senão mix do mês.
-        const local = await computeLocalReturnRate(day)
-        const viaAvec =
-          local == null
-            ? await computeReturnRateFromAvec(nonReturnerRows, reportParams, stats, syncRunId)
-            : null
-        const viaMonth =
-          local == null && viaAvec == null ? await computeReturnRateFromMonthMetrics() : null
-        const rate = local ?? viaAvec ?? viaMonth
-        if (rate != null) {
-          return_rate = rate
-          returnRateOk = true
-          stats.p3_rows = (stats.p3_rows ?? 0) + nonReturners
-          if (local == null && viaAvec != null) {
-            stats.warnings?.push('P3 return_rate: usando cohort 0002 ∩ lista 0007')
-          } else if (local == null && viaMonth != null) {
-            stats.warnings?.push('P3 return_rate: usando mix returning/new do salon_month_metrics')
+      if (!returnRateTruncated) {
+        let sum = 0
+        let n = 0
+        let nonReturners = 0
+        const nonReturnerRows: Record<string, unknown>[] = []
+        for (const row of rows) {
+          const r = normalizeP3ReturnRateRow(row)
+          if (r != null) {
+            stats.p3_rows = (stats.p3_rows ?? 0) + 1
+            sum += r
+            n++
+            continue
           }
-        } else {
-          stats.warnings?.push(
-            `P3 0007: ${nonReturners} clientes sem retorno, sem taxa explícita — retorno indisponível`,
-          )
+          if (isP3NonReturnerRow(row)) {
+            nonReturners++
+            nonReturnerRows.push(row)
+          }
+        }
+        if (n > 0) {
+          return_rate = Math.round((sum / n) * 10000) / 10000
+          returnRateOk = true
+        } else if (nonReturners > 0) {
+          // Lista 0007 = sem retorno. Preferir cohort local; senão 0002 (P1) ∩ 0007; senão mix do mês.
+          const local = await computeLocalReturnRate(day)
+          const viaAvec =
+            local == null
+              ? await computeReturnRateFromAvec(nonReturnerRows, reportParams, stats, syncRunId)
+              : null
+          const viaMonth =
+            local == null && viaAvec == null ? await computeReturnRateFromMonthMetrics() : null
+          const rate = local ?? viaAvec ?? viaMonth
+          if (rate != null) {
+            return_rate = rate
+            returnRateOk = true
+            stats.p3_rows = (stats.p3_rows ?? 0) + nonReturners
+            if (local == null && viaAvec != null) {
+              stats.warnings?.push('P3 return_rate: usando cohort 0002 ∩ lista 0007')
+            } else if (local == null && viaMonth != null) {
+              stats.warnings?.push('P3 return_rate: usando mix returning/new do salon_month_metrics')
+            }
+          } else {
+            stats.warnings?.push(
+              `P3 0007: ${nonReturners} clientes sem retorno, sem taxa explícita — retorno indisponível`,
+            )
+          }
         }
       }
     } catch (e) {
@@ -278,7 +303,7 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   }
 
   // Fallback ROM se 0007 falhou/vazio
-  if (!returnRateOk) {
+  if (!returnRateOk && !returnRateTruncated) {
     try {
       const local = await computeLocalReturnRate(day)
       const fromMonth = local == null ? await computeReturnRateFromMonthMetrics() : null
@@ -302,19 +327,23 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const id0017 = resolveId('new_clients_period')
   if (id0017) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0017, params))
+      const result = await fetchAllAvecReport(id0017, params)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0017, result)
       await snapshotSafe(id0017, params, rows, stats, syncRunId)
-      for (const row of rows) {
-        const c = normalizeP3NewClientsRow(row)
-        if (c == null) continue
-        stats.p3_rows = (stats.p3_rows ?? 0) + 1
-        new_clients_period += c
+      if (!truncated) {
+        for (const row of rows) {
+          const c = normalizeP3NewClientsRow(row)
+          if (c == null) continue
+          stats.p3_rows = (stats.p3_rows ?? 0) + 1
+          new_clients_period += c
+        }
+        if (new_clients_period === 0 && rows.length > 0) {
+          new_clients_period = rows.length
+          stats.p3_rows = (stats.p3_rows ?? 0) + rows.length
+        }
+        newClientsOk = true
       }
-      if (new_clients_period === 0 && rows.length > 0) {
-        new_clients_period = rows.length
-        stats.p3_rows = (stats.p3_rows ?? 0) + rows.length
-      }
-      newClientsOk = true
     } catch (e) {
       stats.errors.push(`P3 0017: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -325,20 +354,24 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const id0088 = resolveId('revenue_curve')
   if (id0088) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0088, params))
+      const result = await fetchAllAvecReport(id0088, params)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0088, result)
       await snapshotSafe(id0088, params, rows, stats, syncRunId)
-      const byDay = new Map<string, number>()
-      for (const row of rows) {
-        const p = normalizeP3CurveRow(row)
-        if (!p) continue
-        stats.p3_rows = (stats.p3_rows ?? 0) + 1
-        byDay.set(p.day, (byDay.get(p.day) ?? 0) + p.revenue)
+      if (!truncated) {
+        const byDay = new Map<string, number>()
+        for (const row of rows) {
+          const p = normalizeP3CurveRow(row)
+          if (!p) continue
+          stats.p3_rows = (stats.p3_rows ?? 0) + 1
+          byDay.set(p.day, (byDay.get(p.day) ?? 0) + p.revenue)
+        }
+        for (const [d, revenue] of byDay) {
+          revenue_curve.push({ day: d, revenue: Math.round(revenue) })
+        }
+        revenue_curve.sort((a, b) => a.day.localeCompare(b.day))
+        revenueCurveOk = true
       }
-      for (const [d, revenue] of byDay) {
-        revenue_curve.push({ day: d, revenue: Math.round(revenue) })
-      }
-      revenue_curve.sort((a, b) => a.day.localeCompare(b.day))
-      revenueCurveOk = true
     } catch (e) {
       stats.errors.push(`P3 0088: ${e instanceof Error ? e.message : String(e)}`)
     }

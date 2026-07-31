@@ -1,4 +1,10 @@
-import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
+import {
+  fetchAllAvecReport,
+  formatTruncationWarning,
+  periodRange,
+  type AvecReportFetchResult,
+  withRequiredAvecReportParams,
+} from '@/lib/avec/client'
 import {
   normalizeP2BirthdayRow,
   normalizeP2ChannelRow,
@@ -62,6 +68,17 @@ function asRows(result: unknown): Record<string, unknown>[] {
   return []
 }
 
+function warnIfTruncated(
+  stats: SyncStatsLike,
+  reportId: string,
+  result: AvecReportFetchResult,
+): boolean {
+  if (!result.truncated) return false
+  stats.warnings = stats.warnings ?? []
+  stats.warnings.push(formatTruncationWarning(reportId, result))
+  return true
+}
+
 async function snapshotSafe(
   reportId: string,
   params: Record<string, unknown>,
@@ -123,13 +140,9 @@ export async function syncPaymentMixRange(
     try {
       const result = await fetchAllAvecReport(id0081, params)
       const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0081, result)
       await snapshotSafe(id0081, params, rows, stats, syncRunId)
-      if (result.truncated) {
-        stats.warnings?.push(
-          `P2 0081 ${day}: truncado — payment_mix não atualizado (evita undercount)`,
-        )
-        continue
-      }
+      if (truncated) continue
       const payment_mix = aggregatePaymentMix(rows)
       stats.p2_rows = (stats.p2_rows ?? 0) + payment_mix.length
       await upsertSalonP2Daily(day, { payment_mix })
@@ -177,21 +190,25 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const id0056 = resolveId('booking_channels')
   if (id0056) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0056, params))
+      const result = await fetchAllAvecReport(id0056, params)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0056, result)
       await snapshotSafe(id0056, params, rows, stats, syncRunId)
-      for (const row of rows) {
-        const c = normalizeP2ChannelRow(row)
-        if (!c) continue
-        stats.p2_rows = (stats.p2_rows ?? 0) + 1
-        booking_channels.push(c)
-      }
-      booking_channels.sort((a, b) => b.count - a.count)
-      bookingChannelsOk = true
-      if (rows.length > 0 && booking_channels.length === 0) {
-        const sample = rows[0] && typeof rows[0] === 'object' ? Object.keys(rows[0] as object) : []
-        ;(stats.warnings ??= []).push(
-          `P2 0056: ${rows.length} linhas sem mapear (keys: ${sample.join(',')})`,
-        )
+      if (!truncated) {
+        for (const row of rows) {
+          const c = normalizeP2ChannelRow(row)
+          if (!c) continue
+          stats.p2_rows = (stats.p2_rows ?? 0) + 1
+          booking_channels.push(c)
+        }
+        booking_channels.sort((a, b) => b.count - a.count)
+        bookingChannelsOk = true
+        if (rows.length > 0 && booking_channels.length === 0) {
+          const sample = rows[0] && typeof rows[0] === 'object' ? Object.keys(rows[0] as object) : []
+          ;(stats.warnings ??= []).push(
+            `P2 0056: ${rows.length} linhas sem mapear (keys: ${sample.join(',')})`,
+          )
+        }
       }
     } catch (e) {
       stats.errors.push(`P2 0056: ${e instanceof Error ? e.message : String(e)}`)
@@ -204,21 +221,25 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const id0061 = resolveId('packages')
   if (id0061) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0061, params))
+      const result = await fetchAllAvecReport(id0061, params)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0061, result)
       await snapshotSafe(id0061, params, rows, stats, syncRunId)
-      for (const row of rows) {
-        const p = normalizeP2PackageRow(row)
-        if (!p) continue
-        stats.p2_rows = (stats.p2_rows ?? 0) + 1
-        packages.push({
-          name: p.name,
-          quantity: p.quantity,
-          revenue: Math.round(p.revenue),
-        })
-        packages_sold += p.quantity
+      if (!truncated) {
+        for (const row of rows) {
+          const p = normalizeP2PackageRow(row)
+          if (!p) continue
+          stats.p2_rows = (stats.p2_rows ?? 0) + 1
+          packages.push({
+            name: p.name,
+            quantity: p.quantity,
+            revenue: Math.round(p.revenue),
+          })
+          packages_sold += p.quantity
+        }
+        packages.sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
+        packagesOk = true
       }
-      packages.sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
-      packagesOk = true
     } catch (e) {
       stats.errors.push(`P2 0061: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -230,20 +251,24 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const id0104 = resolveId('ratings')
   if (id0104) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0104, params))
+      const result = await fetchAllAvecReport(id0104, params)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0104, result)
       await snapshotSafe(id0104, params, rows, stats, syncRunId)
-      let sum = 0
-      let n = 0
-      for (const row of rows) {
-        const r = normalizeP2RatingRow(row)
-        if (!r) continue
-        stats.p2_rows = (stats.p2_rows ?? 0) + 1
-        sum += r.score * Math.max(1, r.count)
-        n += Math.max(1, r.count)
+      if (!truncated) {
+        let sum = 0
+        let n = 0
+        for (const row of rows) {
+          const r = normalizeP2RatingRow(row)
+          if (!r) continue
+          stats.p2_rows = (stats.p2_rows ?? 0) + 1
+          sum += r.score * Math.max(1, r.count)
+          n += Math.max(1, r.count)
+        }
+        ratings_count = n
+        ratings_avg = n > 0 ? Math.round((sum / n) * 100) / 100 : 0
+        ratingsOk = true
       }
-      ratings_count = n
-      ratings_avg = n > 0 ? Math.round((sum / n) * 100) / 100 : 0
-      ratingsOk = true
     } catch (e) {
       stats.errors.push(`P2 0104: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -260,15 +285,19 @@ export async function syncP2Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
         inicio,
         fim,
       })
-      const rows = asRows(await fetchAllAvecReport(id0001, reportParams))
+      const result = await fetchAllAvecReport(id0001, reportParams)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0001, result)
       await snapshotSafe(id0001, reportParams, rows, stats, syncRunId)
-      let counted = 0
-      for (const row of rows) {
-        if (normalizeP2BirthdayRow(row)) counted++
+      if (!truncated) {
+        let counted = 0
+        for (const row of rows) {
+          if (normalizeP2BirthdayRow(row)) counted++
+        }
+        birthday_count = counted || rows.length
+        stats.p2_rows = (stats.p2_rows ?? 0) + birthday_count
+        birthdaysOk = true
       }
-      birthday_count = counted || rows.length
-      stats.p2_rows = (stats.p2_rows ?? 0) + birthday_count
-      birthdaysOk = true
     } catch (e) {
       stats.errors.push(`P2 0001: ${e instanceof Error ? e.message : String(e)}`)
     }

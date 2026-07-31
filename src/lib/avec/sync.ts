@@ -48,7 +48,7 @@ import { getDailyReports, resolveReportId } from '@/lib/avec/registry'
 import { purgeAvecStorageBloat, saveReportSnapshot } from '@/lib/avec/snapshots'
 import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
 import { getDeploymentContext } from '@/lib/deployment'
-import { recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
+import { getSalonMetrics, recomputeSalonMetricsFromRom, upsertSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import {
   isAvecCancelledStatus,
@@ -611,6 +611,8 @@ function servicesCreatedRecently(service: { created_at: string }) {
 
 /** True quando syncAttendances já gravou returning (+ last_done no full) — evita 2º fetch 0002. */
 let attendancesCoveredReturning = false
+/** True quando syncAttendances já buscou 0002 — truncado ou não, não refaz fallback. */
+let attendancesFetched0002 = false
 
 async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   const today = todayIso()
@@ -625,6 +627,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     limit: 250,
   }
   const result = await fetchSyncReport('0002', params)
+  attendancesFetched0002 = true
   warnIfTruncated(stats, '0002', result)
   await snapshotReport('0002', params, result.rows, stats, syncRunId)
 
@@ -874,17 +877,18 @@ export async function syncRevenueDateRange(
 
       const attendedInt = Math.round(attended)
       const revenueRounded = Math.round(revenue * 100) / 100
-      if (revenueRounded > 0 || attendedInt > 0) {
-        await upsertSalonMetrics(day, {
-          revenue: revenueRounded,
-          // 0 → undefined: coalesce no upsert preserva attended já gravado.
-          attended: attendedInt || undefined,
-          ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
-        })
-      } else {
-        // Relatório vazio = dia sem caixa Avec — zera receita e atendidos (não manter stale).
-        await upsertSalonMetrics(day, { revenue: 0, attended: 0, ticket_avg: null })
+      // 0 preenche dia faltante; não zera métricas já gravadas se o payload veio vazio/ilegível.
+      if (revenueRounded === 0 && attendedInt === 0) {
+        const existing = await getSalonMetrics(day)
+        if (existing && (Number(existing.revenue) > 0 || Number(existing.attended) > 0)) {
+          continue
+        }
       }
+      await upsertSalonMetrics(day, {
+        revenue: revenueRounded,
+        attended: attendedInt,
+        ticket_avg: attendedInt > 0 ? Math.round((revenue / attendedInt) * 100) / 100 : null,
+      })
     } catch (e) {
       stats.errors.push(`receita ${day}: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -1056,7 +1060,7 @@ async function syncReturningFrom0002(
   mode: AvecSyncMode,
   syncRunId?: string,
 ) {
-  if (attendancesCoveredReturning) return
+  if (attendancesFetched0002 || attendancesCoveredReturning) return
   if (syncBudgetExhausted()) {
     markSyncBudgetExhausted(stats, 'recorrentes 0002')
     return
@@ -1180,6 +1184,7 @@ async function runAvecSyncUnlocked(mode: AvecSyncMode): Promise<AvecSyncRun> {
   beginSyncServiceCache()
   activeSyncDeadlineAt = Date.now() + AVEC_SYNC_BUDGET_MS
   attendancesCoveredReturning = false
+  attendancesFetched0002 = false
   step(`begin ${run.id}`)
 
   try {

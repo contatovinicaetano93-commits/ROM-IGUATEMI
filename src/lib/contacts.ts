@@ -220,12 +220,19 @@ async function updateContactRow(
       end,
       status = case
         when ${input.status ?? null}::text is null then status
-        when ${input.status ?? null} = 'importado' and status <> 'importado' then status
-        when status in ('importado', 'novo', 'em_atendimento') then ${input.status ?? null}
-        when status = 'agendado' and ${input.status ?? null} = 'convertido' then 'convertido'
-        when status = 'convertido' then 'convertido'
+        when ${input.status ?? null} = 'perdido' then 'perdido'
+        when status = 'novo' and ${input.status ?? null} = 'importado' then 'importado'
+        when status = 'importado' and ${input.status ?? null} = 'novo' then 'importado'
         when status = 'perdido' and ${input.status ?? null} in ('convertido', 'agendado', 'em_atendimento')
           then ${input.status ?? null}
+        when status = 'perdido' then status
+        when status = 'convertido' then 'convertido'
+        when status = 'agendado' and ${input.status ?? null} = 'convertido' then 'convertido'
+        when status = 'agendado' then 'agendado'
+        when status = 'em_atendimento' and ${input.status ?? null} in ('agendado', 'convertido')
+          then ${input.status ?? null}
+        when status = 'em_atendimento' then 'em_atendimento'
+        when status in ('importado', 'novo') then ${input.status ?? null}
         else status
       end
     where id = ${id}::uuid
@@ -306,12 +313,20 @@ async function insertPhoneFirst(
           else excluded.avec_client_id
         end,
         status = case
-          when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
-          when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
-          when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
-          when contacts.status = 'convertido' then 'convertido'
+          when excluded.status is null then contacts.status
+          when excluded.status = 'perdido' then 'perdido'
+          when contacts.status = 'novo' and excluded.status = 'importado' then 'importado'
+          when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
           when contacts.status = 'perdido' and excluded.status in ('convertido', 'agendado', 'em_atendimento')
             then excluded.status
+          when contacts.status = 'perdido' then contacts.status
+          when contacts.status = 'convertido' then 'convertido'
+          when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
+          when contacts.status = 'agendado' then 'agendado'
+          when contacts.status = 'em_atendimento' and excluded.status in ('agendado', 'convertido')
+            then excluded.status
+          when contacts.status = 'em_atendimento' then 'em_atendimento'
+          when contacts.status in ('importado', 'novo') then excluded.status
           else contacts.status
         end
       where contacts.phone is not null
@@ -358,12 +373,20 @@ async function insertAvecOnly(sql: Sql, input: UpsertContactInput, avec: string)
         name = coalesce(excluded.name, contacts.name),
         email = coalesce(excluded.email, contacts.email),
         status = case
-          when excluded.status = 'importado' and contacts.status <> 'importado' then contacts.status
-          when contacts.status in ('importado', 'novo', 'em_atendimento') then coalesce(excluded.status, contacts.status)
-          when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
-          when contacts.status = 'convertido' then 'convertido'
+          when excluded.status is null then contacts.status
+          when excluded.status = 'perdido' then 'perdido'
+          when contacts.status = 'novo' and excluded.status = 'importado' then 'importado'
+          when contacts.status = 'importado' and excluded.status = 'novo' then 'importado'
           when contacts.status = 'perdido' and excluded.status in ('convertido', 'agendado', 'em_atendimento')
             then excluded.status
+          when contacts.status = 'perdido' then contacts.status
+          when contacts.status = 'convertido' then 'convertido'
+          when contacts.status = 'agendado' and excluded.status = 'convertido' then 'convertido'
+          when contacts.status = 'agendado' then 'agendado'
+          when contacts.status = 'em_atendimento' and excluded.status in ('agendado', 'convertido')
+            then excluded.status
+          when contacts.status = 'em_atendimento' then 'em_atendimento'
+          when contacts.status in ('importado', 'novo') then excluded.status
           else contacts.status
         end
       returning *

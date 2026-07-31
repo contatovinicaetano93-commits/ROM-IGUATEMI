@@ -74,11 +74,12 @@ export function formatAvecErrorList(errors: string[]): string[] {
  * Truncamento / unit id ausente ainda aparecem em stats.warnings na UI.
  */
 export function isSoftAvecSyncWarning(warning: string): boolean {
-  // Truncamento de páginas: soft SÓ para catálogo/estoque/TM.
+  // Truncamento de páginas: soft SÓ para catálogo/saldo/alertas/TM.
   // Core (0002/0051/caixa/0248/…) incompleto → HARD (sync partial).
   if (/atingiu o limite de \d+ páginas/i.test(warning)) {
-    return /\((0223|0004|0046|0149|0044)\)/.test(warning)
+    return /\((0223|0004|0046|0149)\)/.test(warning)
   }
+  if (/P1 0107 truncado/i.test(warning)) return true
   if (/AVEC_UNIT_ID vazio/i.test(warning)) return true
   // Reconcile de agenda: informativo (órfãos limpos), sync pode ficar ok.
   if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true

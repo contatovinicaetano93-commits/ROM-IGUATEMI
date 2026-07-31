@@ -109,7 +109,7 @@ describe('deriveAvecSyncUi', () => {
 })
 
 describe('isSoftAvecSyncWarning', () => {
-  it('trata truncamento de catálogo/estoque como soft; core como hard', () => {
+  it('trata truncamento de catálogo/saldo/alertas como soft; core e movimentos como hard', () => {
     expect(
       isSoftAvecSyncWarning(
         'Relatório 0223 (0223) atingiu o limite de 400 páginas (100000 linhas, 250/página). Pode haver dados não sincronizados — aumente AVEC_SYNC_MAX_PAGES na Vercel.',
@@ -117,10 +117,16 @@ describe('isSoftAvecSyncWarning', () => {
     ).toBe(true)
     expect(
       isSoftAvecSyncWarning(
+        'Relatório movimentos de estoque (0044) atingiu o limite de 40 páginas (10000 linhas, 250/página).',
+      ),
+    ).toBe(false)
+    expect(
+      isSoftAvecSyncWarning(
         'Relatório atendimentos (0002) atingiu o limite de 80 páginas (20000 linhas, 250/página).',
       ),
     ).toBe(false)
     expect(isSoftAvecSyncWarning('AVEC_UNIT_ID vazio — sync sem filtro')).toBe(true)
+    expect(isSoftAvecSyncWarning('P1 0107 truncado: 5000 linhas (teto de paginação)')).toBe(true)
     expect(isSoftAvecSyncWarning('agenda: 3 agendamento(s) órfão(s) removido(s) do dia')).toBe(true)
     expect(isSoftAvecSyncWarning('Catálogo 0004 adiado — já sincronizado nas últimas 20h')).toBe(true)
     expect(isSoftAvecSyncWarning('0149: fetch parcial (2 pág., 100 linhas) — abort limpo')).toBe(true)
@@ -129,10 +135,12 @@ describe('isSoftAvecSyncWarning', () => {
       hardAvecSyncWarnings([
         'AVEC_UNIT_ID vazio — sync sem filtro',
         'Falha ao gravar snapshot',
+        'Relatório movimentos de estoque (0044) atingiu o limite de 40 páginas',
         'Relatório atendimentos (0002) atingiu o limite de 80 páginas',
       ]),
     ).toEqual([
       'Falha ao gravar snapshot',
+      'Relatório movimentos de estoque (0044) atingiu o limite de 40 páginas',
       'Relatório atendimentos (0002) atingiu o limite de 80 páginas',
     ])
   })

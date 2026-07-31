@@ -1,4 +1,10 @@
-import { fetchAllAvecReport, periodRange, withRequiredAvecReportParams } from '@/lib/avec/client'
+import {
+  fetchAllAvecReport,
+  formatTruncationWarning,
+  periodRange,
+  type AvecReportFetchResult,
+  withRequiredAvecReportParams,
+} from '@/lib/avec/client'
 import {
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
@@ -41,6 +47,17 @@ function asRows(result: unknown): Record<string, unknown>[] {
     }
   }
   return []
+}
+
+function warnIfTruncated(
+  stats: SyncStatsLike,
+  reportId: string,
+  result: AvecReportFetchResult,
+): boolean {
+  if (!result.truncated) return false
+  stats.warnings = stats.warnings ?? []
+  stats.warnings.push(formatTruncationWarning(reportId, result))
+  return true
 }
 
 async function snapshotSafe(
@@ -135,18 +152,24 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
     professionalsAttempted = true
     try {
       const reportParams = withRequiredAvecReportParams(id0021, params)
-      const rows = asRows(await fetchAllAvecReport(id0021, reportParams))
+      const result = await fetchAllAvecReport(id0021, reportParams)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0021, result)
       await snapshotSafe(id0021, reportParams, rows, stats, syncRunId)
-      for (const row of rows) {
-        const p = normalizeP1ProfessionalRevenueRow(row)
-        if (!p) continue
-        stats.p1_rows = (stats.p1_rows ?? 0) + 1
-        const cur = getOrCreatePro(byPro, p.name)
-        cur.revenue += p.revenue
-        cur.attended += p.attended
-        cur.ticket_avg = cur.attended > 0 ? cur.revenue / cur.attended : p.ticketAvg
-        // Prefere o nome do faturamento (geralmente mais completo).
-        if (p.name.length >= cur.name.length) cur.name = p.name
+      if (truncated) {
+        professionalsFailed = true
+      } else {
+        for (const row of rows) {
+          const p = normalizeP1ProfessionalRevenueRow(row)
+          if (!p) continue
+          stats.p1_rows = (stats.p1_rows ?? 0) + 1
+          const cur = getOrCreatePro(byPro, p.name)
+          cur.revenue += p.revenue
+          cur.attended += p.attended
+          cur.ticket_avg = cur.attended > 0 ? cur.revenue / cur.attended : p.ticketAvg
+          // Prefere o nome do faturamento (geralmente mais completo).
+          if (p.name.length >= cur.name.length) cur.name = p.name
+        }
       }
     } catch (e) {
       professionalsFailed = true
@@ -159,13 +182,19 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
     professionalsAttempted = true
     try {
       const reportParams = withRequiredAvecReportParams(id0126, params)
-      const rows = asRows(await fetchAllAvecReport(id0126, reportParams))
+      const result = await fetchAllAvecReport(id0126, reportParams)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0126, result)
       await snapshotSafe(id0126, reportParams, rows, stats, syncRunId)
-      for (const row of rows) {
-        const o = normalizeP1OccupancyRow(row)
-        if (!o || o.occupancy == null) continue
-        stats.p1_rows = (stats.p1_rows ?? 0) + 1
-        applyOccupancy(byPro, o.name, o.occupancy)
+      if (truncated) {
+        professionalsFailed = true
+      } else {
+        for (const row of rows) {
+          const o = normalizeP1OccupancyRow(row)
+          if (!o || o.occupancy == null) continue
+          stats.p1_rows = (stats.p1_rows ?? 0) + 1
+          applyOccupancy(byPro, o.name, o.occupancy)
+        }
       }
     } catch (e) {
       professionalsFailed = true
@@ -190,20 +219,24 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const id0032 = resolveId('top_services')
   if (id0032) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0032, params))
+      const result = await fetchAllAvecReport(id0032, params)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0032, result)
       await snapshotSafe(id0032, params, rows, stats, syncRunId)
-      for (const row of rows) {
-        const s = normalizeP1ServiceRow(row)
-        if (!s) continue
-        stats.p1_rows = (stats.p1_rows ?? 0) + 1
-        services.push({
-          name: s.name,
-          quantity: s.quantity,
-          revenue: Math.round(s.revenue),
-        })
+      if (!truncated) {
+        for (const row of rows) {
+          const s = normalizeP1ServiceRow(row)
+          if (!s) continue
+          stats.p1_rows = (stats.p1_rows ?? 0) + 1
+          services.push({
+            name: s.name,
+            quantity: s.quantity,
+            revenue: Math.round(s.revenue),
+          })
+        }
+        services.sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
+        servicesOk = true
       }
-      services.sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
-      servicesOk = true
     } catch (e) {
       stats.errors.push(`P1 0032: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -214,15 +247,19 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
   const id0003 = resolveId('acquisition')
   if (id0003) {
     try {
-      const rows = asRows(await fetchAllAvecReport(id0003, params))
+      const result = await fetchAllAvecReport(id0003, params)
+      const rows = asRows(result)
+      const truncated = warnIfTruncated(stats, id0003, result)
       await snapshotSafe(id0003, params, rows, stats, syncRunId)
-      for (const row of rows) {
-        const a = normalizeP1AcquisitionRow(row)
-        if (!a) continue
-        stats.p1_rows = (stats.p1_rows ?? 0) + 1
-        acquisitionByChannel.set(a.channel, (acquisitionByChannel.get(a.channel) ?? 0) + a.clients)
+      if (!truncated) {
+        for (const row of rows) {
+          const a = normalizeP1AcquisitionRow(row)
+          if (!a) continue
+          stats.p1_rows = (stats.p1_rows ?? 0) + 1
+          acquisitionByChannel.set(a.channel, (acquisitionByChannel.get(a.channel) ?? 0) + a.clients)
+        }
+        acquisitionOk = true
       }
-      acquisitionOk = true
     } catch (e) {
       stats.errors.push(`P1 0003: ${e instanceof Error ? e.message : String(e)}`)
     }
