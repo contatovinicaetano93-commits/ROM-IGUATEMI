@@ -30,3 +30,16 @@ export function pickNewestUsableAvecRun<T extends AvecRunHealthRow>(
   const candidates = withoutEmptyKills.length > 0 ? withoutEmptyKills : finished
   return candidates.reduce((latest, row) => (runTime(row) >= runTime(latest) ? row : latest))
 }
+
+/**
+ * Badge Hoje: preferir fast usável (caixa/agenda); full só se fast for empty-kill/ausente.
+ * Evita full parcial em analytics pintar Hoje quando o fast ok ainda vale.
+ */
+export function pickHojeAvecSyncRun<T extends AvecRunHealthRow>(
+  fast: T | null | undefined,
+  full: T | null | undefined,
+): T | null {
+  if (fast != null && !isEmptyKillAvecRun(fast)) return fast
+  if (full != null && !isEmptyKillAvecRun(full)) return full
+  return fast ?? full ?? null
+}
