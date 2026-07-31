@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
       const referenceDay = month ? monthToDateRange(month).to : todayIso()
       const tm = {
         ...(await fetchTmComparison(referenceDay)),
-        note: 'Média do tempo cadastrado no Avec (0223) — não é duração cronometrada do atendimento.',
+        note: 'Média da duração real do atendimento (início/fim no 0002) — catálogo 0223 não entra no KPI.',
       }
 
       // 3) Ranking profissionais (mesma lógica de /api/kpis/performance)
