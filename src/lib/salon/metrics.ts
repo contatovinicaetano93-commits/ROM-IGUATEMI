@@ -107,21 +107,19 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
 }
 
 /**
- * Recalcula métricas ROM (agendamentos + novos).
- * Retornos (`returning_clients`) vêm do relatório 0002 no sync Avec — não sobrescreve
- * aqui para não zerar o KPI quando `contacts.created_at` é recente (import/sync).
+ * Recalcula Agendados/Movimento do dia a partir do ROM (fallback/webhook).
  *
- * Movimento/Agendados do dia = cabeças (DISTINCT contact_id) com aberto
- * (scheduled_at) ou concluído (last_done_at) no dia — não linhas de serviço.
+ * Mix novos/recorrentes (`new_clients` / `returning_clients`) vem do 0002 no sync
+ * Avec (`total_visitas` na `ultima_visita`) — NÃO sobrescrever aqui: o dump Avec
+ * cria contacts com source avec_* e o count orgânico zerava o card no Cérebro.
  *
- * Novos do dia = contatos **orgânicos** (WhatsApp/manual/webhook). Dump Avec NÃO
- * conta — paridade BR (agenda/atendidos/retorno não inflam “novos”).
+ * Movimento/Agendados = cabeças (DISTINCT contact_id) com aberto (scheduled_at)
+ * ou concluído (last_done_at) no dia — não linhas de serviço.
  */
 export async function recomputeSalonMetricsFromRom(day = todayIso()) {
   const sql = getSql()
 
-  const [apptRows, newRows] = await Promise.all([
-    sql`
+  const apptRows = (await sql`
       select count(distinct cs.contact_id)::int as n
       from client_services cs
       join contacts c on c.id = cs.contact_id
@@ -141,24 +139,9 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
             and (cs.last_done_at at time zone 'America/Sao_Paulo')::date = ${day}::date
           )
         )
-    ` as unknown as Promise<{ n: number }[]>,
-    sql`
-      select count(*)::int as n from contacts
-      where (created_at at time zone 'America/Sao_Paulo')::date = ${day}::date
-        and status <> 'importado'
-        and anonymized_at is null
-        and coalesce(source, '') not like 'avec_sync_clients%'
-        and coalesce(source, '') not like 'avec_backfill%'
-        and coalesce(source, '') not like 'avec_lake%'
-        and coalesce(source, '') not like 'avec_last_done%'
-        and coalesce(source, '') not like 'avec_sync_appointments%'
-        and coalesce(source, '') not like 'avec_sync_attended%'
-        and coalesce(source, '') not like 'avec_sync_returning%'
-    ` as unknown as Promise<{ n: number }[]>,
-  ])
+    `) as unknown as { n: number }[]
 
   await upsertSalonMetrics(day, {
     appointments: apptRows[0].n,
-    new_clients: newRows[0].n,
   })
 }
