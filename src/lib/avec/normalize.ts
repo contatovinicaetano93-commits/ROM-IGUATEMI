@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { toSalonDateIso } from '@/lib/salon/format'
 
 // Normalização defensiva — colunas dos relatórios Avec variam por unidade/versão.
@@ -1083,6 +1084,8 @@ export interface NormalizedStockMovement {
   cost: number | null
   reason: string | null
   occurredAt: string | null
+  /** Fingerprint estável da linha 0044 para dedup entre syncs e imports em lote. */
+  dedupKey: string
 }
 
 const ENTRADA_HINTS = ['entrada', 'compra', 'recebimento', 'devolucao', 'devolução', 'ajuste_positivo']
@@ -1099,6 +1102,36 @@ function inferMovementType(row: Record<string, unknown>): 'entrada' | 'saida' | 
   if (ENTRADA_HINTS.some((h) => reason.includes(h))) return 'entrada'
   if (SAIDA_HINTS.some((h) => reason.includes(h))) return 'saida'
   return null
+}
+
+function stableStockMovementText(value: string | null): string {
+  return (value ?? '').trim().toLowerCase()
+}
+
+function stableStockMovementNumber(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return ''
+  return String(Math.round(value * 1_000_000) / 1_000_000)
+}
+
+function stockMovementDedupKey(input: {
+  avecProductId: string
+  type: 'entrada' | 'saida'
+  quantity: number
+  datePart: string | null
+  timePart: string | null
+  reason: string | null
+  cost: number | null
+}): string {
+  const stable = [
+    stableStockMovementText(input.avecProductId),
+    input.type,
+    stableStockMovementNumber(input.quantity),
+    stableStockMovementText(input.datePart),
+    stableStockMovementText(input.timePart),
+    stableStockMovementText(input.reason),
+    stableStockMovementNumber(input.cost),
+  ].join('|')
+  return `avec_0044:${createHash('sha1').update(stable).digest('hex')}`
 }
 
 /** 0044 — Entradas e saídas por motivos (fonte mestra do histórico de movimentação). */
@@ -1133,8 +1166,17 @@ export function normalizeStockMovementRow(row: Record<string, unknown>): Normali
   const datePart = pick(row, ['data', 'data_movimento', 'dia', 'date', 'datacad'])
   const timePart = pick(row, ['hora', 'horario', 'horário'])
   const occurredAt = parseAvecDateTime(datePart, timePart)
+  const dedupKey = stockMovementDedupKey({
+    avecProductId,
+    type,
+    quantity,
+    datePart,
+    timePart,
+    reason,
+    cost,
+  })
 
-  return { avecProductId, name, type, quantity, cost, reason, occurredAt }
+  return { avecProductId, name, type, quantity, cost, reason, occurredAt, dedupKey }
 }
 
 export interface NormalizedStockPurchase {

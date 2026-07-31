@@ -255,21 +255,6 @@ export async function upsertStockProductFromPosition(
   return { productId: rows[0]!.id, previousQty }
 }
 
-async function ensureProductExists(avecProductId: string, name: string): Promise<string> {
-  const sql = getSql()
-  const existing = (await sql`
-    select id from stock_products where avec_product_id = ${avecProductId} limit 1
-  `) as { id: string }[]
-  if (existing[0]) return existing[0].id
-  const rows = (await sql`
-    insert into stock_products (avec_product_id, name, current_qty)
-    values (${avecProductId}, ${name}, 0)
-    on conflict (avec_product_id) do update set name = excluded.name
-    returning id
-  `) as { id: string }[]
-  return rows[0]!.id
-}
-
 // ---------------------------------------------------------------------------
 // Alertas — vindos do relatório 0046 (a Avec já calcula a sugestão de reposição).
 // ---------------------------------------------------------------------------
@@ -450,7 +435,7 @@ export async function acknowledgeAlert(id: string, user: string): Promise<void> 
 // fallback, sempre marcado como tal (nunca confundido com o dado oficial).
 // ---------------------------------------------------------------------------
 
-function movementDedupKey(
+function legacyMovementDedupKey(
   productId: string,
   type: string,
   quantity: number,
@@ -460,7 +445,16 @@ function movementDedupKey(
   return `${productId}|${type}|${quantity}|${occurredAt}|${source}`
 }
 
-/** Aplica uma linha de 0044. Dedup por produto+tipo+quantidade+data+origem (idempotente entre syncs). */
+function movementDedupKey(
+  productId: string,
+  mv: NormalizedStockMovement,
+  occurredAt: string,
+  source: string,
+): string {
+  return mv.dedupKey || legacyMovementDedupKey(productId, mv.type, mv.quantity, occurredAt, source)
+}
+
+/** Aplica uma linha de 0044. Dedup por fingerprint Avec, com fallback legado produto+tipo+quantidade+data+origem. */
 export async function applyStockMovement(
   mv: NormalizedStockMovement,
   source: 'avec_0044'
@@ -533,8 +527,9 @@ export async function applyStockMovementsBatch(
   }
 
   const existingKeys = new Set<string>()
+  const existingLegacyKeys = new Set<string>()
   const existingRows = (await sql`
-    select product_id, type, quantity::float as quantity, occurred_at, source
+    select product_id, type, quantity::float as quantity, occurred_at, source, created_by
     from stock_movements
     where source = ${source}
       and occurred_at >= ${minAt}::timestamptz
@@ -545,12 +540,17 @@ export async function applyStockMovementsBatch(
     quantity: number
     occurred_at: string
     source: string
+    created_by: string | null
   }[]
   for (const row of existingRows) {
+    if (row.created_by) {
+      existingKeys.add(row.created_by)
+      continue
+    }
     const at = new Date(row.occurred_at).toISOString()
-    existingKeys.add(
-      movementDedupKey(row.product_id, row.type, Number(row.quantity), at, row.source),
-    )
+    const legacyKey = legacyMovementDedupKey(row.product_id, row.type, Number(row.quantity), at, row.source)
+    existingKeys.add(legacyKey)
+    existingLegacyKeys.add(legacyKey)
   }
 
   type InsertRow = {
@@ -561,6 +561,7 @@ export async function applyStockMovementsBatch(
     reason: string | null
     source: string
     occurred_at: string
+    created_by: string | null
   }
   const toInsert: InsertRow[] = []
   let skipped = movements.length - valid.length
@@ -572,8 +573,9 @@ export async function applyStockMovementsBatch(
       continue
     }
     const occurredAt = new Date(mv.occurredAt!).toISOString()
-    const key = movementDedupKey(product.id, mv.type, mv.quantity, occurredAt, source)
-    if (existingKeys.has(key)) {
+    const key = movementDedupKey(product.id, mv, occurredAt, source)
+    const legacyKey = legacyMovementDedupKey(product.id, mv.type, mv.quantity, occurredAt, source)
+    if (existingKeys.has(key) || existingLegacyKeys.has(legacyKey)) {
       skipped += 1
       continue
     }
@@ -595,6 +597,7 @@ export async function applyStockMovementsBatch(
       reason: mv.reason,
       source,
       occurred_at: occurredAt,
+      created_by: mv.dedupKey || null,
     })
   }
 
@@ -608,8 +611,9 @@ export async function applyStockMovementsBatch(
     const reasons = slice.map((r) => r.reason)
     const sources = slice.map((r) => r.source)
     const occurredAts = slice.map((r) => r.occurred_at)
+    const createdBys = slice.map((r) => r.created_by)
     await sql`
-      insert into stock_movements (product_id, type, quantity, cost, reason, source, occurred_at)
+      insert into stock_movements (product_id, type, quantity, cost, reason, source, occurred_at, created_by)
       select *
       from unnest(
         ${productIds}::uuid[],
@@ -618,8 +622,9 @@ export async function applyStockMovementsBatch(
         ${costs}::float8[],
         ${reasons}::text[],
         ${sources}::text[],
-        ${occurredAts}::timestamptz[]
-      ) as t(product_id, type, quantity, cost, reason, source, occurred_at)
+        ${occurredAts}::timestamptz[],
+        ${createdBys}::text[]
+      ) as t(product_id, type, quantity, cost, reason, source, occurred_at, created_by)
     `
     synced += slice.length
   }
