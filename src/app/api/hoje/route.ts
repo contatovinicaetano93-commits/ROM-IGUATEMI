@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     const day = todayIso()
 
     const payload = await ttlGetOrSet(
-      `hoje:v5:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
+      `hoje:v6:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
       HOJE_CACHE_TTL_MS,
       async () => {
         const sql = getSql()
@@ -78,12 +78,15 @@ export async function GET(req: NextRequest) {
         const scheduleHeads = countDistinctContactIds(scheduleToday)
         const leads = leadRows[0] ?? { novos: 0, whatsapp_novos: 0 }
         // Sem linha de métricas do dia: não inventar 0 operacional — null → UI "—".
+        // Se a métrica veio 0 (sync morto / insert parcial) mas a agenda ROM tem
+        // cabeças hoje, usa o maior — evita KPI Movimento=0 com lista cheia.
+        const appointmentsHeads = Math.max(Number(salonRaw?.appointments ?? 0) || 0, scheduleHeads)
         const salonBase = salonRaw
-          ? salonRaw
+          ? { ...salonRaw, appointments: appointmentsHeads }
           : {
               day,
               revenue: null as number | null,
-              appointments: scheduleHeads,
+              appointments: appointmentsHeads,
               attended: null as number | null,
               no_shows: null as number | null,
               cancelled: null as number | null,
