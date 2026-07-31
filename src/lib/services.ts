@@ -7,6 +7,7 @@ import {
   type ScheduleOrigin,
 } from '@/lib/salon/schedule-origin'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
+import { logEvent } from '@/lib/contacts'
 
 export const SERVICE_CATEGORIES = ['corte', 'tratamento', 'coloracao', 'bem_estar', 'produto', 'outro'] as const
 export type ServiceCategory = (typeof SERVICE_CATEGORIES)[number]
@@ -187,7 +188,30 @@ export async function markServiceDone(
     const newDay = toSalonDateIso(service.last_done_at)
     // Aftercare no máx. 1× por dia SP do serviço.
     if (prevDay !== newDay) {
-      await enqueueAftercare(service).catch(() => undefined)
+      try {
+        await enqueueAftercare(service)
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        console.error('[aftercare] failed to enqueue message', {
+          contactId: service.contact_id,
+          serviceId: service.id,
+          error: message,
+        })
+        await logEvent({
+          contactId: service.contact_id,
+          channel: 'whatsapp',
+          direction: 'out',
+          handledBy: 'system',
+          payload: {
+            kind: 'aftercare_enqueue_failed',
+            client_service_id: service.id,
+            service_name: service.name,
+          },
+          error: message,
+        }).catch((logError) => {
+          console.error('[aftercare] failed to log enqueue error', logError)
+        })
+      }
     }
   }
   return service

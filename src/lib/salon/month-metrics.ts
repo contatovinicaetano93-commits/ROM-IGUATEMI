@@ -15,6 +15,11 @@ export async function ensureSalonMonthMetricsTable(): Promise<void> {
   if (!monthMetricsTableReady) {
     monthMetricsTableReady = (async () => {
       const sql = getSql()
+      const exists = (await sql`
+        select to_regclass('public.salon_month_metrics') is not null as ok
+      `) as { ok: boolean }[]
+      if (exists[0]?.ok) return
+
       await sql`
         create table if not exists salon_month_metrics (
           month text primary key,

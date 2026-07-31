@@ -6,6 +6,11 @@ let ensureTablePromise: Promise<void> | null = null
 
 async function createFiscalSplitTable(): Promise<void> {
   const sql = getSql()
+  const exists = (await sql`
+    select to_regclass('public.finance_fiscal_splits') is not null as ok
+  `) as { ok: boolean }[]
+  if (exists[0]?.ok) return
+
   await sql`
     create table if not exists finance_fiscal_splits (
       id uuid primary key default gen_random_uuid(),

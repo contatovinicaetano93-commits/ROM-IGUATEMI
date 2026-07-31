@@ -6,34 +6,49 @@ import type { ClientService } from '@/lib/services'
 
 const AFTERCARE_DELAY_HOURS = 2
 
+let ensureAftercareTablePromise: Promise<void> | null = null
+
 export async function ensureAftercareTable() {
-  const sql = getSql()
-  await sql`
-    create table if not exists whatsapp_aftercare_messages (
-      id uuid primary key default gen_random_uuid(),
-      contact_id uuid not null references contacts(id) on delete cascade,
-      client_service_id uuid not null references client_services(id) on delete cascade,
-      service_name text not null,
-      cadence_days int,
-      done_at timestamptz not null,
-      send_after timestamptz not null,
-      status text not null default 'pending'
-        check (status in ('pending', 'sent', 'skipped', 'failed')),
-      skip_reason text,
-      error text,
-      sent_at timestamptz,
-      created_at timestamptz not null default now()
-    )
-  `
-  await sql`
-    create unique index if not exists whatsapp_aftercare_dedupe_idx
-      on whatsapp_aftercare_messages (client_service_id, done_at)
-  `
-  await sql`
-    create index if not exists whatsapp_aftercare_due_idx
-      on whatsapp_aftercare_messages (send_after)
-      where status = 'pending'
-  `
+  if (!ensureAftercareTablePromise) {
+    ensureAftercareTablePromise = (async () => {
+      const sql = getSql()
+      const exists = (await sql`
+        select to_regclass('public.whatsapp_aftercare_messages') is not null as ok
+      `) as { ok: boolean }[]
+      if (exists[0]?.ok) return
+
+      await sql`
+        create table if not exists whatsapp_aftercare_messages (
+          id uuid primary key default gen_random_uuid(),
+          contact_id uuid not null references contacts(id) on delete cascade,
+          client_service_id uuid not null references client_services(id) on delete cascade,
+          service_name text not null,
+          cadence_days int,
+          done_at timestamptz not null,
+          send_after timestamptz not null,
+          status text not null default 'pending'
+            check (status in ('pending', 'sent', 'skipped', 'failed')),
+          skip_reason text,
+          error text,
+          sent_at timestamptz,
+          created_at timestamptz not null default now()
+        )
+      `
+      await sql`
+        create unique index if not exists whatsapp_aftercare_dedupe_idx
+          on whatsapp_aftercare_messages (client_service_id, done_at)
+      `
+      await sql`
+        create index if not exists whatsapp_aftercare_due_idx
+          on whatsapp_aftercare_messages (send_after)
+          where status = 'pending'
+      `
+    })().catch((e) => {
+      ensureAftercareTablePromise = null
+      throw e
+    })
+  }
+  return ensureAftercareTablePromise
 }
 
 /** Enfileira WhatsApp pós-visita (2h). Idempotente por (serviço, done_at). */
