@@ -16,6 +16,11 @@ const MEM_TOKEN_TTL_MS = 60_000
 
 export async function ensureTokenStore(): Promise<void> {
   const sql = getSql()
+  const exists = (await sql`
+    select to_regclass('public.app_runtime_secrets') is not null as ok
+  `) as { ok: boolean }[]
+  if (exists[0]?.ok) return
+
   await sql`
     create table if not exists app_runtime_secrets (
       key text primary key,
