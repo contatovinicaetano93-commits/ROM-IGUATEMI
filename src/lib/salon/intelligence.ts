@@ -66,6 +66,7 @@ export function computeSalonIntelligence(metrics: SalonDailyMetrics | null): Sal
         ? revenue / attended
         : null
 
+  // appointments = cabeças; attended = comandas (0088) — cap 1 evita >100%.
   const attendance_rate =
     appointments > 0 ? Math.min(1, attended / appointments) : attended > 0 ? 1 : null
 
