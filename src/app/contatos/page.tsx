@@ -231,7 +231,7 @@ export default function ContatosPage() {
           }`
         : 'busque na base'
       : mode === 'novos'
-        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} hoje (fora da Avec)`
+        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} hoje (sem cliente Avec)`
         : `${visible.length} na fila${
             totalInBase != null && totalInBase > visible.length ? ` · ${totalInBase} no total` : ''
           }`
@@ -242,7 +242,7 @@ export default function ContatosPage() {
         ? 'Nenhum contato encontrado.'
         : 'Digite um nome ou telefone para buscar na base.'
       : mode === 'novos'
-        ? 'Nenhum contato novo hoje fora da Avec.'
+        ? 'Nenhum lead Avec hoje sem cliente cadastrado.'
         : queue === 'overdue'
           ? 'Nenhum atrasado (cadência vencida com visita registrada).'
           : queue === 'due_soon'
@@ -259,7 +259,7 @@ export default function ContatosPage() {
             {mode === 'reactivate'
               ? 'Reative quem está atrasado, vencendo ou agendado'
               : mode === 'novos'
-                ? 'Contatos do dia que ainda não estão na Avec'
+                ? 'Lead Avec do dia sem cliente cadastrado na Avec ainda'
                 : 'Busque por nome ou telefone em toda a base'}
             {' · '}
             {countLabel}
@@ -289,7 +289,7 @@ export default function ContatosPage() {
             Novos contatos
           </p>
           <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
-            WhatsApp/manual de hoje — ainda sem cadastro na Avec
+            Vieram da Avec hoje, mas ainda sem cliente no banco Avec
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-gold/15 px-3 py-1 text-sm font-semibold tabular-nums text-gold">
@@ -371,8 +371,8 @@ export default function ContatosPage() {
 
       {mode === 'novos' && (
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
-          Novos: entrada real no ROM hoje (WhatsApp, manual etc.), sem channel/source Avec e sem
-          avec_client_id — ainda não viraram cliente na agenda.
+          Novos: lead que chegou pela Avec (agenda/atendimento), mas o ROM abriu cadastro novo
+          porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio).
         </p>
       )}
 

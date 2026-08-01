@@ -525,9 +525,10 @@ function normalizeDayKey(raw: string | null | undefined): string {
 }
 
 /**
- * Contatos novos do dia que ainda não estão na Avec.
- * Só entrada ROM real (WhatsApp/manual/etc.) — exclui qualquer source/channel Avec,
- * inclusive sync de agenda/atendidos sem avec_client_id.
+ * Contatos novos do dia sem cliente na Avec ainda.
+ * O lead pode vir da Avec (agenda/atendimento), mas o ROM cria cadastro novo
+ * porque ainda não existe no banco Avec (`avec_client_id` nulo).
+ * Exclui só dump em massa (clients/backfill/lake) — não o sync operacional.
  */
 export async function countNewContactsNotInAvec(opts?: {
   day?: string | null
@@ -540,15 +541,16 @@ export async function countNewContactsNotInAvec(opts?: {
     where anonymized_at is null
       and avec_client_id is null
       and status <> 'importado'
-      and channel <> 'avec'
-      and coalesce(source, '') not like 'avec_%'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
       and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
   `) as { n: number }[]
   return Number(rows[0]?.n ?? 0) || 0
 }
 
-/** Lista novos do dia sem vínculo Avec (mais recentes primeiro). */
+/** Lista novos do dia sem cliente Avec ainda (mais recentes primeiro). */
 export async function listNewContactsNotInAvec(opts?: {
   day?: string | null
   limit?: number
@@ -562,8 +564,9 @@ export async function listNewContactsNotInAvec(opts?: {
     where anonymized_at is null
       and avec_client_id is null
       and status <> 'importado'
-      and channel <> 'avec'
-      and coalesce(source, '') not like 'avec_%'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
       and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
   `) as { n: number }[]
@@ -574,8 +577,9 @@ export async function listNewContactsNotInAvec(opts?: {
     where anonymized_at is null
       and avec_client_id is null
       and status <> 'importado'
-      and channel <> 'avec'
-      and coalesce(source, '') not like 'avec_%'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
       and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
     order by created_at desc
