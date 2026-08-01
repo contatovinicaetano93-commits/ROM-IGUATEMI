@@ -113,7 +113,23 @@ export default function DashboardPage() {
           cache: 'no-store',
           timeoutMs: 45_000,
         })
-        const dashJson = await dashRes.json()
+        const raw = await dashRes.text()
+        let dashJson: {
+          error?: string
+          data?: Record<string, unknown>
+        }
+        try {
+          dashJson = raw ? (JSON.parse(raw) as typeof dashJson) : {}
+        } catch {
+          if (cancelled) return
+          setError(
+            dashRes.status === 504 || dashRes.status === 503
+              ? 'Timeout ao carregar (banco/sync ocupado). Atualize em alguns segundos.'
+              : `Resposta inválida da API (${dashRes.status || 'rede'}). Confirme se o banco está configurado.`,
+          )
+          setWarn(null)
+          return
+        }
         if (cancelled) return
         if (dashJson.error) {
           setError(dashJson.error)
