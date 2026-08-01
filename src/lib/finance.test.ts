@@ -40,7 +40,13 @@ function mockBucketSql(opts: {
   const withFb = opts.with_product_fallback ?? (opts.cmv ? 4 : 0)
   const withZero = opts.with_zero ?? Math.max(0, saidas - withMov - withFb)
   sqlMock
-    .mockResolvedValueOnce([{ revenue: opts.revenue }])
+    .mockResolvedValueOnce([
+      {
+        revenue: opts.revenue,
+        // count(revenue) — 1 = há dia conhecido (mesmo se valor 0).
+        revenue_days: 1,
+      },
+    ])
     .mockResolvedValueOnce([
       {
         total: Number(opts.expenses),
@@ -49,7 +55,7 @@ function mockBucketSql(opts: {
         manual: 0,
       },
     ])
-    .mockResolvedValueOnce([{ attended: opts.attended ?? 0 }])
+    .mockResolvedValueOnce([{ attended: opts.attended ?? 0, attended_days: 1 }])
     .mockResolvedValueOnce(opts.daily ?? [])
     .mockResolvedValueOnce([]) // despesas Omie diárias (listDailyOmieExpenses)
     .mockResolvedValueOnce([

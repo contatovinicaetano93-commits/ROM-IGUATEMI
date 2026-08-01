@@ -49,9 +49,10 @@ describe('period-analytics', () => {
 
   it('monta bucket comercial do período', async () => {
     sqlMock
-      .mockResolvedValueOnce([{ revenue: 10000, attended: 50 }])
+      // *_days > 0 = há dia conhecido; sem isso sumPeriodBase devolve null.
+      .mockResolvedValueOnce([{ revenue: 10000, attended: 50, revenue_days: 1, attended_days: 1 }])
       .mockResolvedValueOnce([{ cancelled: 2, no_shows: 3 }])
-      .mockResolvedValueOnce([{ revenue: 8000, attended: 40 }])
+      .mockResolvedValueOnce([{ revenue: 8000, attended: 40, revenue_days: 1, attended_days: 1 }])
       .mockResolvedValueOnce([{ cancelled: 1, no_shows: 1 }])
     getSalonP1DailyNear.mockResolvedValue({
       day: '2026-07-31',

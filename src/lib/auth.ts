@@ -122,24 +122,20 @@ export function getSessionSigningSecret() {
   return getAdminPassword()
 }
 
-/** HMAC-SHA256 compatível com Edge Runtime (Web Crypto). */
+/** Validade da sessão — alinhada ao maxAge do cookie no login. */
+export const SESSION_TTL_MS = 60 * 60 * 24 * 30 * 1000
+
 /** Cache de tokens esperados por conta — evita N HMACs por request no middleware + handlers. */
 const expectedTokenCache = new Map<string, { token: string; expiresAt: number }>()
 const EXPECTED_TOKEN_TTL_MS = 5 * 60_000
+const EXPECTED_TOKEN_CACHE_MAX = 500
 
 /** Cache cookie → sessão (mesmo isolate serverless). */
 const sessionByCookie = new Map<string, { session: AuthSession; expiresAt: number }>()
 const SESSION_COOKIE_TTL_MS = 60_000
 
-export async function createSessionToken(user: string, role: AuthRole) {
-  const account = listAccounts().find((a) => a.role === role && timingSafeEqual(a.user, user))
-  if (!account) return ''
-  const secret = getSessionSigningSecret()
-  if (!secret) return ''
-  const cacheKey = `${role}:${user}:${secret.slice(0, 8)}`
-  const hit = expectedTokenCache.get(cacheKey)
-  if (hit && hit.expiresAt > Date.now()) return hit.token
-
+/** HMAC-SHA256 compatível com Edge Runtime (Web Crypto). */
+async function hmacHex(secret: string, payload: string) {
   const enc = new TextEncoder()
   const key = await crypto.subtle.importKey(
     'raw',
@@ -148,12 +144,42 @@ export async function createSessionToken(user: string, role: AuthRole) {
     false,
     ['sign'],
   )
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(`rom-session:${role}:${user}`))
-  const token = Array.from(new Uint8Array(sig))
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload))
+  return Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
+}
+
+/**
+ * Token `v2.<expiraEmMs>.<hmac>` — a assinatura cobre a expiração, então adulterar
+ * o `exp` invalida o token. Sem `expiresAtMs` emite sessão nova (login);
+ * com `expiresAtMs` recalcula o esperado para verificar um cookie existente.
+ */
+export async function createSessionToken(user: string, role: AuthRole, expiresAtMs?: number) {
+  const account = listAccounts().find((a) => a.role === role && timingSafeEqual(a.user, user))
+  if (!account) return ''
+  const secret = getSessionSigningSecret()
+  if (!secret) return ''
+  const exp = expiresAtMs ?? Date.now() + SESSION_TTL_MS
+  const cacheKey = `${role}:${user}:${secret.slice(0, 8)}:${exp}`
+  const hit = expectedTokenCache.get(cacheKey)
+  if (hit && hit.expiresAt > Date.now()) return hit.token
+
+  const sig = await hmacHex(secret, `rom-session:${role}:${user}:${exp}`)
+  const token = `v2.${exp}.${sig}`
+  // Cada login gera um exp novo — limpa antes de crescer sem limite.
+  if (expectedTokenCache.size >= EXPECTED_TOKEN_CACHE_MAX) expectedTokenCache.clear()
   expectedTokenCache.set(cacheKey, { token, expiresAt: Date.now() + EXPECTED_TOKEN_TTL_MS })
   return token
+}
+
+/** Lê o `exp` de um token v2. Token legado, malformado ou vencido → null. */
+function parseSessionToken(token: string): { exp: number } | null {
+  const [version, expRaw, sig] = token.split('.')
+  if (version !== 'v2' || !expRaw || !sig) return null
+  const exp = Number(expRaw)
+  if (!Number.isSafeInteger(exp) || exp <= Date.now()) return null
+  return { exp }
 }
 
 export function validateCredentials(
@@ -184,19 +210,25 @@ export async function getSession(req: NextRequest): Promise<AuthSession | null> 
   const cached = sessionByCookie.get(cookie)
   if (cached && cached.expiresAt > Date.now()) return cached.session
 
+  // Expiração vem do próprio token; adulterar o exp invalida a assinatura.
+  const parsed = parseSessionToken(cookie)
+  if (!parsed) return null
+
   for (const account of listAccounts()) {
-    const expected = await createSessionToken(account.user, account.role)
+    const expected = await createSessionToken(account.user, account.role, parsed.exp)
     if (expected && timingSafeEqual(cookie, expected)) {
       const session: AuthSession = {
         user: account.user,
         role: account.role,
         can_view_revenue: canViewRevenue(account.role),
       }
-      sessionByCookie.set(cookie, { session, expiresAt: Date.now() + SESSION_COOKIE_TTL_MS })
+      // O cache nunca pode estender a validade do token.
+      const cacheUntil = Math.min(Date.now() + SESSION_COOKIE_TTL_MS, parsed.exp)
+      sessionByCookie.set(cookie, { session, expiresAt: cacheUntil })
       return session
     }
   }
-  // Cookie antigo (pré dual-login / pré ROM_SESSION_SECRET) — invalida silenciosamente
+  // Cookie antigo (pré v2) ou de outra conta — invalida silenciosamente
   return null
 }
 
