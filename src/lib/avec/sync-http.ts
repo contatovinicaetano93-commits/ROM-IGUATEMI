@@ -105,7 +105,9 @@ export async function executeAvecSync(
       }
     }
 
-    if (effectiveMode === 'full') {
+    // Repair jsonb só em admin force — no cron full competia com o pooler e
+    // atrasava o beginAvecSyncRun (request “viva” sem row em avec_sync_runs).
+    if (effectiveMode === 'full' && opts?.force && !opts?.cron) {
       try {
         await Promise.all([
           repairSalonP1JsonbEncoding(),
