@@ -17,6 +17,7 @@ import { pickHojeAvecSyncRun } from '@/lib/avec/sync-run-health'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { todayIso } from '@/lib/salon/format'
 import { countDistinctContactIds } from '@/lib/salon/headcount'
+import { resolveAppointmentsHeads } from '@/lib/salon/resolve-appointments'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 import { getReactivationKpis } from '@/lib/salon/reactivation-kpi'
 
@@ -81,9 +82,12 @@ export async function GET(req: NextRequest) {
         const scheduleHeads = countDistinctContactIds(scheduleToday)
         const leads = leadRows[0] ?? { novos: 0, whatsapp_novos: 0 }
         // Sem linha de métricas do dia: não inventar 0 operacional — null → UI "—".
-        // Se a métrica veio 0 (sync morto / insert parcial) mas a agenda ROM tem
-        // cabeças hoje, usa o maior — evita KPI Movimento=0 com lista cheia.
-        const appointmentsHeads = Math.max(Number(salonRaw?.appointments ?? 0) || 0, scheduleHeads)
+        // Paridade Cérebro: CS/agenda vs metrics Avec (nunca appointments < attended).
+        const appointmentsHeads = resolveAppointmentsHeads({
+          metricAppt: salonRaw?.appointments,
+          scheduleHeads,
+          attended: salonRaw?.attended,
+        })
         const salonBase = salonRaw
           ? { ...salonRaw, appointments: appointmentsHeads }
           : {

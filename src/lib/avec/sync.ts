@@ -770,20 +770,19 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     }
   }
 
-  if (durationCount > 0) {
-    await upsertSalonMetrics(today, {
-      service_duration_sum_minutes: durationSumMinutes,
-      service_duration_count: durationCount,
-    })
-  }
-
   if (result.truncated || stats.aborted) {
     stats.warnings.push(
       stats.aborted
-        ? 'mix 0002: abort no orçamento — novos/recorrentes não atualizados (evita zerar)'
-        : 'mix 0002: truncado — novos/recorrentes não atualizados (evita zerar)',
+        ? 'mix 0002: abort no orçamento — novos/recorrentes/TM não atualizados (evita zerar)'
+        : 'mix 0002: truncado — novos/recorrentes/TM não atualizados (evita zerar)',
     )
   } else {
+    if (durationCount > 0) {
+      await upsertSalonMetrics(today, {
+        service_duration_sum_minutes: durationSumMinutes,
+        service_duration_count: durationCount,
+      })
+    }
     if (mode === 'fast') {
       // Fast 0002 cobre ontem+hoje — gravar mix dos dois dias (não só today).
       for (const day of [addCalendarDaysYmd(today, -1), today]) {
@@ -875,6 +874,11 @@ function listDaysInclusive(fromIso: string, toIso: string): string[] {
   return out
 }
 
+/** Hoje primeiro — se o budget estourar, prioriza KPI do dia corrente. */
+function listDaysNewestFirst(fromIso: string, toIso: string): string[] {
+  return listDaysInclusive(fromIso, toIso).reverse()
+}
+
 /** Janela de backfill diário: AVEC_REVENUE_DAYS_BACK override; senão fast=1, full=7. */
 function revenueDaysBack(mode: AvecSyncMode): number {
   const raw = process.env.AVEC_REVENUE_DAYS_BACK?.trim()
@@ -905,7 +909,7 @@ export async function syncRevenueDateRange(
     return
   }
 
-  const days = listDaysInclusive(from, to)
+  const days = listDaysNewestFirst(from, to)
 
   for (const day of days) {
     if (syncBudgetExhausted()) {
@@ -999,7 +1003,7 @@ export async function syncCancellationsDateRange(
     return
   }
 
-  const days = listDaysInclusive(from, to)
+  const days = listDaysNewestFirst(from, to)
 
   for (const day of days) {
     if (syncBudgetExhausted()) {
@@ -1024,16 +1028,20 @@ export async function syncCancellationsDateRange(
         continue
       }
 
-      let cancelled = 0
+      // Cabeças (DISTINCT cliente) — rates vs Agendados; orphan rows sem id somam 1.
+      const cancelledHeads = new Set<string>()
+      let cancelledOrphans = 0
       for (const row of result.rows) {
         const c = normalizeCancellationRow(row)
         if (!c) continue
         stats.cancellation_rows++
         if (!c.day || c.day === day) {
-          cancelled += c.cancelled
-          // c.noShow ignorado — métrica no_shows só via 0248
+          if (c.cancelled <= 0) continue
+          if (c.avecClientId) cancelledHeads.add(c.avecClientId)
+          else cancelledOrphans += c.cancelled
         }
       }
+      const cancelled = cancelledHeads.size + cancelledOrphans
 
       await upsertSalonMetrics(day, { cancelled })
     } catch (e) {
@@ -1087,7 +1095,9 @@ export async function syncNoShows0248DateRange(
       return
     }
 
-    const byDay = new Map<string, number>()
+    // Cabeças por dia (DISTINCT cliente_id); orphan sem id soma 1.
+    const byDay = new Map<string, Set<string>>()
+    const orphansByDay = new Map<string, number>()
     for (const row of result.rows) {
       const appt = normalizeAppointmentRow(row)
       const day =
@@ -1095,10 +1105,21 @@ export async function syncNoShows0248DateRange(
         (typeof row.data === 'string' ? toSalonDateIso(parseAvecDateTime(String(row.data))) : null)
       if (!day) continue
       // Endpoint já filtrado por status=0.6 (Faltou).
-      byDay.set(day, (byDay.get(day) ?? 0) + 1)
+      if (appt?.avecClientId) {
+        let set = byDay.get(day)
+        if (!set) {
+          set = new Set()
+          byDay.set(day, set)
+        }
+        set.add(appt.avecClientId)
+      } else {
+        orphansByDay.set(day, (orphansByDay.get(day) ?? 0) + 1)
+      }
     }
 
-    for (const [day, no_shows] of byDay) {
+    const daysWithNoshow = new Set([...byDay.keys(), ...orphansByDay.keys()])
+    for (const day of daysWithNoshow) {
+      const no_shows = (byDay.get(day)?.size ?? 0) + (orphansByDay.get(day) ?? 0)
       if (syncBudgetExhausted()) {
         markSyncBudgetExhausted(stats, 'no-shows 0248 upsert')
         break
@@ -1107,12 +1128,12 @@ export async function syncNoShows0248DateRange(
     }
 
     // Zera dias do intervalo sem falta (evita KPI stale após correção Avec).
-    for (const day of listDaysInclusive(from, to)) {
+    for (const day of listDaysNewestFirst(from, to)) {
       if (syncBudgetExhausted()) {
         markSyncBudgetExhausted(stats, 'no-shows 0248 zero')
         break
       }
-      if (!byDay.has(day)) {
+      if (!daysWithNoshow.has(day)) {
         await upsertSalonMetrics(day, { no_shows: 0 })
       }
     }

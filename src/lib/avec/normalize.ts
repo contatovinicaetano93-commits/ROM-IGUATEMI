@@ -145,6 +145,8 @@ export interface NormalizedAvecCancellation {
   day: string | null
   cancelled: number
   noShow: number
+  /** Para contar cabeças (DISTINCT) em rates vs Agendados. */
+  avecClientId?: string | null
 }
 
 /** Brasil sem horário de verão desde 2019 — wall-clock Avec = UTC−3. */
@@ -501,16 +503,22 @@ export function normalizeCancellationRow(row: Record<string, unknown>): Normaliz
   const status = (pick(row, ['status', 'situacao', 'situação']) ?? '').toLowerCase()
   const datePart = pick(row, ['data', 'data_agendamento', 'dia', 'date'])
   const day = datePart ? toSalonDateIso(parseAvecDateTime(datePart)) : null
+  const avecClientId = pick(row, ['cliente_id', 'client_id', 'id_cliente', 'codigo_cliente'])
   const isNoShow = status.includes('falta') || status.includes('no-show') || status.includes('noshow')
   const isCancelled = status.includes('cancel')
 
   // Relatório 0052: uma linha por agendamento cancelado — sem status → conta como cancelado
   if (!status && (datePart || pick(row, ['cliente_id', 'cliente', 'nome', 'nome_cliente']))) {
-    return { day, cancelled: 1, noShow: 0 }
+    return { day, cancelled: 1, noShow: 0, avecClientId }
   }
 
   if (!isCancelled && !isNoShow) return null
-  return { day, cancelled: isCancelled && !isNoShow ? 1 : 0, noShow: isNoShow ? 1 : 0 }
+  return {
+    day,
+    cancelled: isCancelled && !isNoShow ? 1 : 0,
+    noShow: isNoShow ? 1 : 0,
+    avecClientId,
+  }
 }
 
 /** Serviço de unha / manicure / pedicure — usado para preferência de manicure. */
