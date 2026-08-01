@@ -9,7 +9,7 @@
       "schedule": "10,30,50 * * * *"
     },
     {
-      "path": "/api/avec/sync?mode=full",
+      "path": "/api/avec/sync/full",
       "schedule": "35 10,22 * * *"
     },
     {

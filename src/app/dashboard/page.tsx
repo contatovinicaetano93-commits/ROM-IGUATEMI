@@ -150,7 +150,7 @@ export default function DashboardPage() {
               ? 'Nenhum sync Avec registrado ainda — confira Admin / cron'
               : sync.fast_stale
                 ? 'Sync Avec fast desatualizado (>1h) — números do dia podem estar velhos'
-                : 'Sync Avec full desatualizado (>24h) — números podem estar velhos',
+                : 'Snapshot Avec (ocupação/canais/pacotes) >24h — receita do dia ok via sync fast',
           )
         } else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
         else if (sync?.status === 'error') {
