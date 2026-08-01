@@ -249,9 +249,22 @@ export default function DashboardPage() {
         <InsightCard
           icon={<TrendingUp size={15} />}
           label={`Receita · mês acum. · ${period?.label ?? '—'}`}
-          value={loading || !period ? '—' : formatCurrency(period.revenue)}
+          value={
+            loading || !period
+              ? '—'
+              : period.revenue != null && period.revenue > 0
+                ? formatCurrency(period.revenue)
+                : period.revenue === 0
+                  ? 'sem receita'
+                  : period.mtd
+                    ? 'aguardando caixa'
+                    : 'sem dado'
+          }
           compare={
-            !loading && period?.previous
+            !loading &&
+            period?.previous &&
+            period.revenue != null &&
+            period.previous.revenue != null
               ? {
                   text: `${fmtSignedCurrency(period.revenue - period.previous.revenue)} vs ${period.previous.label}`,
                   positive: period.revenue - period.previous.revenue >= 0,
@@ -262,9 +275,20 @@ export default function DashboardPage() {
         <InsightCard
           icon={<Users size={15} />}
           label="Atendidos · mês acum."
-          value={loading || !period ? '—' : String(period.attended ?? 0)}
+          value={
+            loading || !period
+              ? '—'
+              : period.attended != null
+                ? String(period.attended)
+                : period.mtd
+                  ? 'aguardando'
+                  : 'sem dado'
+          }
           compare={
-            !loading && period?.previous
+            !loading &&
+            period?.previous &&
+            period.attended != null &&
+            period.previous.attended != null
               ? {
                   text: `${fmtSignedNumber(period.attended - period.previous.attended)} vs ${period.previous.label}`,
                   positive: period.attended - period.previous.attended >= 0,
@@ -338,12 +362,20 @@ export default function DashboardPage() {
           icon={<TrendingUp size={15} />}
           label={period?.previous ? `Vs ${period.previous.label}` : 'Vs mês anterior'}
           value={
-            loading || !period?.previous
+            loading ||
+            !period?.previous ||
+            period.revenue == null ||
+            period.previous.revenue == null
               ? '—'
               : fmtSignedCurrency(period.revenue - period.previous.revenue)
           }
           compare={
-            !loading && period?.previous
+            !loading &&
+            period?.previous &&
+            period.revenue != null &&
+            period.previous.revenue != null &&
+            period.attended != null &&
+            period.previous.attended != null
               ? {
                   text: `${period.label} ${formatCurrency(period.revenue)} · ${period.attended} atend. vs ${period.previous.label} ${formatCurrency(period.previous.revenue)} · ${period.previous.attended} atend.`,
                   positive: period.revenue - period.previous.revenue >= 0,
@@ -355,17 +387,22 @@ export default function DashboardPage() {
         />
       </div>
 
-      {period?.previous && !loading && (
+      {period?.previous && !loading && period.revenue != null && period.previous.revenue != null ? (
         <p className="text-xs text-muted">
-          Comparativo MTD: {period.label} {formatCurrency(period.revenue)} · {period.attended} atend.
-          vs {period.previous.label} {formatCurrency(period.previous.revenue)} ·{' '}
-          {period.previous.attended} atend.
+          Comparativo MTD: {period.label} {formatCurrency(period.revenue)} ·{' '}
+          {period.attended ?? '—'} atend. vs {period.previous.label}{' '}
+          {formatCurrency(period.previous.revenue)} · {period.previous.attended ?? '—'} atend.
           {period.return_rate != null
             ? ` · Retorno ${formatPercentPoints(period.return_rate * 100, 0)}`
             : ' · Retorno — (sem cohort confiável no ROM)'}
           . Canais/pacotes/tops vêm do snapshot Avec do mês.
         </p>
-      )}
+      ) : period && !loading && period.revenue == null && period.mtd ? (
+        <p className="text-xs text-muted">
+          Aguardando faturamento pago no Avec neste mês — agenda pode já estar ok; o MoM aparece
+          quando houver caixa conhecido.
+        </p>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <InsightCard

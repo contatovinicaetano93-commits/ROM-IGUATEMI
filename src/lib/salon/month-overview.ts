@@ -110,6 +110,7 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     from: range.from,
     to: range.to,
     revenue,
+    revenue_source: revenue > 0 ? 'metrics' : 'empty',
     expenses,
     expenses_by_cnpj: {
       total: expenses,

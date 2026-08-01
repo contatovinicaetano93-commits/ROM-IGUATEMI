@@ -34,6 +34,7 @@ function bucket(partial: {
     from: `${partial.month}-01`,
     to: `${partial.month}-28`,
     revenue,
+    revenue_source: revenue > 0 ? 'metrics' : 'empty',
     expenses,
     expenses_by_cnpj: { total: expenses, servicos: expenses, comercio: 0, manual: 0 },
     attended,

@@ -210,13 +210,17 @@ function labelMonthPt(monthKey: string): string {
   return `${MONTH_PT[idx] ?? m}/${y}`
 }
 
-async function sumRevenue(from: string, to: string): Promise<number> {
+async function sumRevenue(from: string, to: string): Promise<number | null> {
   const sql = getSql()
   const rows = (await sql`
-    select coalesce(sum(revenue), 0) as revenue
+    select
+      sum(revenue) as revenue,
+      count(revenue)::int as revenue_days
     from salon_daily_metrics
     where day >= ${from}::date and day <= ${to}::date
-  `) as { revenue: string | number }[]
+  `) as { revenue: string | number | null; revenue_days: number }[]
+  const days = Number(rows[0]?.revenue_days ?? 0)
+  if (days <= 0) return null
   return Number(rows[0]?.revenue ?? 0) || 0
 }
 
@@ -431,13 +435,17 @@ async function listDailyMetrics(from: string, to: string): Promise<FinanceDayPoi
   return mergeDailyFinanceSeries(metricRows, expenseRows)
 }
 
-async function sumAttended(from: string, to: string): Promise<number> {
+async function sumAttended(from: string, to: string): Promise<number | null> {
   const sql = getSql()
   const rows = (await sql`
-    select coalesce(sum(attended), 0)::int as attended
+    select
+      sum(attended)::float as attended,
+      count(attended)::int as attended_days
     from salon_daily_metrics
     where day >= ${from}::date and day <= ${to}::date
-  `) as { attended: number }[]
+  `) as { attended: number | null; attended_days: number }[]
+  const days = Number(rows[0]?.attended_days ?? 0)
+  if (days <= 0) return null
   return Number(rows[0]?.attended ?? 0) || 0
 }
 
@@ -574,6 +582,13 @@ export interface FinanceKpiBucket {
   from: string
   to: string
   revenue: number
+  /**
+   * Origem da receita do bucket:
+   * - metrics = salon_daily_metrics
+   * - payments_0081 = fallback quando métricas estão vazias mas 0081 tem valor
+   * - empty = sem métricas nem pagamentos (ex.: dia 1 aguardando caixa)
+   */
+  revenue_source: 'metrics' | 'payments_0081' | 'empty'
   expenses: number
   /** Split por CNPJ Omie (serviços / comércio) + manuais. */
   expenses_by_cnpj: ExpenseCnpjBreakdown
@@ -616,7 +631,7 @@ async function buildBucket(
   const label = range?.label ?? labelMonthPt(monthKey)
   // Despesas Omie: sempre mês calendário completo (mesma janela do sync por vencimento).
   const expenseRange = omieFullMonthRange(monthKey)
-  const [revenue, expenseBreakdown, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
+  const [metricsRevenue, expenseBreakdown, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),
       sumExpensesByCnpj(expenseRange.from, expenseRange.to),
@@ -628,11 +643,26 @@ async function buildBucket(
     ])
   const expenses = expenseBreakdown.total
   const cmv = cmvCoverage.cmv
+  const paymentsTotal =
+    Math.round(payment_mix.reduce((s, p) => s + Number(p.amount || 0), 0) * 100) / 100
+  let revenue = metricsRevenue ?? 0
+  let revenue_source: FinanceKpiBucket['revenue_source'] = 'metrics'
+  if ((metricsRevenue == null || metricsRevenue <= 0) && paymentsTotal > 0) {
+    revenue = paymentsTotal
+    revenue_source = 'payments_0081'
+  } else if (metricsRevenue == null || metricsRevenue <= 0) {
+    revenue_source = 'empty'
+    revenue = 0
+  }
   const revenueRounded = Math.round(revenue * 100) / 100
   const expensesRounded = Math.round(expenses * 100) / 100
+  const attendedKnown = attended ?? 0
   const gross_margin =
     revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
-  const ticket_avg = attended > 0 ? Math.round((revenueRounded / attended) * 100) / 100 : null
+  const ticket_avg =
+    revenue_source === 'metrics' && attended != null && attended > 0
+      ? Math.round((revenueRounded / attended) * 100) / 100
+      : null
   const margin_after_cmv =
     revenue > 0 ? Math.round(((revenue - expenses - cmv) / revenue) * 1000) / 10 : null
 
@@ -642,9 +672,10 @@ async function buildBucket(
     from,
     to,
     revenue: revenueRounded,
+    revenue_source,
     expenses: expensesRounded,
     expenses_by_cnpj: expenseBreakdown,
-    attended,
+    attended: attendedKnown,
     ticket_avg,
     daily,
     cmv,
