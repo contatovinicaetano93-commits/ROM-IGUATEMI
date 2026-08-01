@@ -114,10 +114,8 @@ export default function DashboardPage() {
           timeoutMs: 45_000,
         })
         const raw = await dashRes.text()
-        let dashJson: {
-          error?: string
-          data?: Record<string, unknown>
-        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let dashJson: { error?: string; data?: any }
         try {
           dashJson = raw ? (JSON.parse(raw) as typeof dashJson) : {}
         } catch {
