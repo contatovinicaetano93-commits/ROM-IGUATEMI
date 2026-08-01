@@ -78,22 +78,33 @@ export function estimateLostRevenue(
 async function sumRevenueAndAttended(
   from: string,
   to: string,
-): Promise<{ revenue: number; attended: number }> {
+): Promise<{ revenue: number | null; attended: number | null }> {
   const sql = getSql()
   try {
     const rows = (await sql`
       select
-        coalesce(sum(revenue), 0)::float as revenue,
-        coalesce(sum(attended), 0)::int as attended
+        sum(revenue)::float as revenue,
+        count(revenue)::int as revenue_days,
+        sum(attended)::float as attended,
+        count(attended)::int as attended_days
       from salon_daily_metrics
       where day >= ${from}::date and day <= ${to}::date
-    `) as { revenue: number; attended: number }[]
+    `) as {
+      revenue: number | null
+      revenue_days: number
+      attended: number | null
+      attended_days: number
+    }[]
+    const revenueDays = Number(rows[0]?.revenue_days ?? 0)
+    const attendedDays = Number(rows[0]?.attended_days ?? 0)
     return {
-      revenue: Math.round(Number(rows[0]?.revenue ?? 0) * 100) / 100,
-      attended: Number(rows[0]?.attended ?? 0) || 0,
+      // Sem nenhum dia com receita conhecida → null (não inventar R$0 / MoM falso).
+      revenue:
+        revenueDays > 0 ? Math.round(Number(rows[0]?.revenue ?? 0) * 100) / 100 : null,
+      attended: attendedDays > 0 ? Number(rows[0]?.attended ?? 0) || 0 : null,
     }
   } catch {
-    return { revenue: 0, attended: 0 }
+    return { revenue: null, attended: null }
   }
 }
 
@@ -122,8 +133,10 @@ async function sumAttendanceLoss(
 export interface PeriodCompareBucket {
   month: string
   label: string
-  revenue: number
-  attended: number
+  /** null = nenhum dia com receita conhecida no intervalo. */
+  revenue: number | null
+  /** null = nenhum dia com atendidos conhecidos no intervalo. */
+  attended: number | null
   cancelled: number
   no_shows: number
   ticket_avg: number | null
@@ -139,9 +152,14 @@ export interface PeriodAnalytics {
   to: string
   /** Snapshot P1 day used for rankings / occupancy / acquisition. */
   snapshot_day: string | null
-  /** Soma de salon_daily_metrics no mês (acumulado ROM / Avec 0088). */
-  revenue: number
-  attended: number
+  /**
+   * Soma de salon_daily_metrics no mês (acumulado ROM / Avec 0088).
+   * null = nenhum dia com valor conhecido (ex.: dia 1 sem caixa Avec).
+   */
+  revenue: number | null
+  attended: number | null
+  /** true se a janela atual é MTD (mês corrente). */
+  mtd: boolean
   occupancy_avg: number | null
   cancelled: number
   no_shows: number
@@ -182,9 +200,11 @@ export async function computePeriodAnalytics(opts?: {
     getSalonP1DailyNear(prev.to),
   ])
   const ticket_avg =
-    totals.attended > 0 ? Math.round((totals.revenue / totals.attended) * 100) / 100 : null
+    totals.revenue != null && totals.attended != null && totals.attended > 0
+      ? Math.round((totals.revenue / totals.attended) * 100) / 100
+      : null
   const prev_ticket_avg =
-    prevTotals.attended > 0
+    prevTotals.revenue != null && prevTotals.attended != null && prevTotals.attended > 0
       ? Math.round((prevTotals.revenue / prevTotals.attended) * 100) / 100
       : null
   const professionals = p1?.professionals ?? []
@@ -200,6 +220,7 @@ export async function computePeriodAnalytics(opts?: {
     snapshot_day: p1?.day ?? p2?.day ?? p3?.day ?? null,
     revenue: totals.revenue,
     attended: totals.attended,
+    mtd: window.mtd,
     occupancy_avg: averageOccupancy(professionals),
     cancelled: loss.cancelled,
     no_shows: loss.no_shows,
