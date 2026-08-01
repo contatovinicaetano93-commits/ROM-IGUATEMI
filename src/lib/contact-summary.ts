@@ -42,6 +42,12 @@ export interface UrgencyQueueCounts {
   scheduled: number
 }
 
+/** Filas da tela Contatos — urgência + novos do dia sem Avec. */
+export interface ContactQueueCounts extends UrgencyQueueCounts {
+  /** Contatos criados no dia (SP) ainda sem avec_client_id. */
+  novos: number
+}
+
 export interface ContactListResult {
   items: ContactListItem[]
   /** Total na base que casa o filtro (antes do limit da página). */
@@ -511,4 +517,84 @@ export async function listContactsWithSummary(
       and (${channel}::text is null or channel = ${channel})
   `) as { n: number }[]
   return { items, total: totalRows[0]?.n ?? items.length }
+}
+
+function normalizeDayKey(raw: string | null | undefined): string {
+  if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+  return todayIso()
+}
+
+/**
+ * Contatos novos do dia que ainda não estão na Avec.
+ * Critério: sem avec_client_id + não é dump importado/backfill/lake.
+ */
+export async function countNewContactsNotInAvec(opts?: {
+  day?: string | null
+}): Promise<number> {
+  const sql = getSql()
+  const day = normalizeDayKey(opts?.day)
+  const rows = (await sql`
+    select count(*)::int as n
+    from contacts
+    where anonymized_at is null
+      and avec_client_id is null
+      and status <> 'importado'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
+      and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+      and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+  `) as { n: number }[]
+  return Number(rows[0]?.n ?? 0) || 0
+}
+
+/** Lista novos do dia sem vínculo Avec (mais recentes primeiro). */
+export async function listNewContactsNotInAvec(opts?: {
+  day?: string | null
+  limit?: number
+}): Promise<ContactListResult> {
+  const sql = getSql()
+  const day = normalizeDayKey(opts?.day)
+  const limit = Math.min(Math.max(1, opts?.limit ?? 250), 500)
+  const countRows = (await sql`
+    select count(*)::int as n
+    from contacts
+    where anonymized_at is null
+      and avec_client_id is null
+      and status <> 'importado'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
+      and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+      and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+  `) as { n: number }[]
+  const total = Number(countRows[0]?.n ?? 0) || 0
+  const contacts = (await sql`
+    select *
+    from contacts
+    where anonymized_at is null
+      and avec_client_id is null
+      and status <> 'importado'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
+      and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+      and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+    order by created_at desc
+    limit ${limit}
+  `) as ContactRow[]
+  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+  return { items: withUrgency(contacts, byContact), total }
+}
+
+/** Totais das filas Contatos (reativar + novos do dia sem Avec). */
+export async function countContactQueues(opts?: {
+  channel?: string | null
+  day?: string | null
+}): Promise<ContactQueueCounts> {
+  const [urgency, novos] = await Promise.all([
+    countUrgencyQueues({ channel: opts?.channel }),
+    countNewContactsNotInAvec({ day: opts?.day }),
+  ])
+  return { ...urgency, novos }
 }

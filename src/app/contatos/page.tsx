@@ -11,6 +11,7 @@ import {
   Clock,
   Calendar,
   MessageSquare,
+  UserPlus,
 } from 'lucide-react'
 import { Avatar, PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
@@ -35,7 +36,7 @@ interface Contact {
   next_scheduled_at?: string | null
 }
 
-type ListMode = 'reactivate' | 'search'
+type ListMode = 'reactivate' | 'novos' | 'search'
 type ReactivateQueue = 'overdue' | 'due_soon' | 'scheduled'
 
 function contactQueue(c: Contact): ReactivateQueue | null {
@@ -63,7 +64,14 @@ function serviceLine(c: Contact, queue: ReactivateQueue | null): string {
   return action || 'Sem sinal de retorno'
 }
 
-function urgencyBadge(queue: ReactivateQueue | null) {
+function urgencyBadge(queue: ReactivateQueue | null | 'novos') {
+  if (queue === 'novos') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] font-semibold text-gold">
+        <UserPlus size={10} /> Novo
+      </span>
+    )
+  }
   if (queue === 'overdue') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-danger/15 px-2 py-0.5 text-[0.65rem] font-semibold text-danger">
@@ -86,6 +94,23 @@ function urgencyBadge(queue: ReactivateQueue | null) {
     )
   }
   return null
+}
+
+function channelLabel(channel: string): string {
+  switch (channel) {
+    case 'whatsapp':
+      return 'WhatsApp'
+    case 'telegram':
+      return 'Telegram'
+    case 'instagram':
+      return 'Instagram'
+    case 'manual':
+      return 'Manual'
+    case 'avec':
+      return 'Avec'
+    default:
+      return channel || '—'
+  }
 }
 
 function logOutreach(contactId: string) {
@@ -117,7 +142,8 @@ export default function ContatosPage() {
     overdue: number
     due_soon: number
     scheduled: number
-  }>({ overdue: 0, due_soon: 0, scheduled: 0 })
+    novos: number
+  }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0 })
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -137,15 +163,29 @@ export default function ContatosPage() {
         setError(null)
         setContacts([])
         setTotalInBase(null)
+        // Ainda puxa contagem de novos para o card.
+        const countsRes = await apiFetch('/api/contacts?counts=1', { cache: 'no-store' })
+        const countsJson = await countsRes.json()
+        const q = countsJson.meta?.queues
+        if (q && typeof q.novos === 'number') {
+          setQueueCounts((prev) => ({
+            overdue: typeof q.overdue === 'number' ? q.overdue : prev.overdue,
+            due_soon: typeof q.due_soon === 'number' ? q.due_soon : prev.due_soon,
+            scheduled: typeof q.scheduled === 'number' ? q.scheduled : prev.scheduled,
+            novos: q.novos,
+          }))
+        }
         return
       }
       const params = new URLSearchParams({
-        sort: 'urgency',
-        limit: mode === 'reactivate' ? '250' : '100',
+        sort: mode === 'novos' ? 'name' : 'urgency',
+        limit: mode === 'search' ? '100' : '250',
       })
       if (mode === 'reactivate') {
         params.set('pending', 'true')
         params.set('queue', queue)
+      } else if (mode === 'novos') {
+        params.set('new_not_avec', '1')
       } else {
         params.set('q', debouncedQuery)
       }
@@ -163,7 +203,10 @@ export default function ContatosPage() {
             overdue: q.overdue,
             due_soon: q.due_soon,
             scheduled: q.scheduled,
+            novos: typeof q.novos === 'number' ? q.novos : 0,
           })
+        } else if (mode === 'novos' && typeof total === 'number') {
+          setQueueCounts((prev) => ({ ...prev, novos: total }))
         }
       }
     } catch (e) {
@@ -187,20 +230,24 @@ export default function ContatosPage() {
             totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
         : 'busque na base'
-      : `${visible.length} na fila${
-          totalInBase != null && totalInBase > visible.length ? ` · ${totalInBase} no total` : ''
-        }`
+      : mode === 'novos'
+        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} hoje (fora da Avec)`
+        : `${visible.length} na fila${
+            totalInBase != null && totalInBase > visible.length ? ` · ${totalInBase} no total` : ''
+          }`
 
   const emptyCopy =
     mode === 'search'
       ? debouncedQuery
         ? 'Nenhum contato encontrado.'
         : 'Digite um nome ou telefone para buscar na base.'
-      : queue === 'overdue'
-        ? 'Nenhum atrasado (cadência vencida com visita registrada).'
-        : queue === 'due_soon'
-          ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
-          : `Nenhum agendado hoje ou nos próximos ${SCHEDULED_SOON_DAYS} dias.`
+      : mode === 'novos'
+        ? 'Nenhum contato novo hoje fora da Avec.'
+        : queue === 'overdue'
+          ? 'Nenhum atrasado (cadência vencida com visita registrada).'
+          : queue === 'due_soon'
+            ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
+            : `Nenhum agendado hoje ou nos próximos ${SCHEDULED_SOON_DAYS} dias.`
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -211,7 +258,9 @@ export default function ContatosPage() {
           <p className="mt-0.5 text-xs text-muted">
             {mode === 'reactivate'
               ? 'Reative quem está atrasado, vencendo ou agendado'
-              : 'Busque por nome ou telefone em toda a base'}
+              : mode === 'novos'
+                ? 'Contatos do dia que ainda não estão na Avec'
+                : 'Busque por nome ou telefone em toda a base'}
             {' · '}
             {countLabel}
           </p>
@@ -224,14 +273,39 @@ export default function ContatosPage() {
         </div>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setMode('novos')}
+        aria-pressed={mode === 'novos'}
+        className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition-colors ${
+          mode === 'novos'
+            ? 'border-gold/50 bg-gold/10'
+            : 'border-border bg-card hover:border-gold/30'
+        }`}
+      >
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <UserPlus size={16} className="text-gold" />
+            Novos contatos
+          </p>
+          <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
+            Entraram hoje e ainda não estão cadastrados na Avec
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-gold/15 px-3 py-1 text-sm font-semibold tabular-nums text-gold">
+          {queueCounts.novos}
+        </span>
+      </button>
+
       <div
         role="tablist"
         aria-label="Modo da lista"
-        className="grid grid-cols-2 rounded-2xl border border-border bg-card p-1"
+        className="grid grid-cols-3 rounded-2xl border border-border bg-card p-1"
       >
         {(
           [
             { id: 'reactivate' as const, label: 'Reativar' },
+            { id: 'novos' as const, label: 'Novos' },
             { id: 'search' as const, label: 'Buscar' },
           ] as const
         ).map((tab) => {
@@ -248,6 +322,9 @@ export default function ContatosPage() {
               }`}
             >
               {tab.label}
+              {tab.id === 'novos' ? (
+                <span className="ml-1 tabular-nums opacity-80">{queueCounts.novos}</span>
+              ) : null}
             </button>
           )
         })}
@@ -290,6 +367,13 @@ export default function ContatosPage() {
                 : `Agendados: agenda Avec + comanda aberta do dia (mesmo sem horário de booking), hoje até +${SCHEDULED_SOON_DAYS}d. Conta pessoa.`}
           </p>
         </div>
+      )}
+
+      {mode === 'novos' && (
+        <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
+          Novos: criados hoje no ROM (WhatsApp, manual etc.) sem vínculo Avec — ainda não viraram
+          cliente na agenda.
+        </p>
       )}
 
       {mode === 'search' && (
@@ -341,7 +425,7 @@ export default function ContatosPage() {
           <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
             <p className="text-sm text-muted">{emptyCopy}</p>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              {mode === 'reactivate' && (
+              {(mode === 'reactivate' || mode === 'novos') && (
                 <button
                   type="button"
                   onClick={() => setMode('search')}
@@ -380,6 +464,11 @@ export default function ContatosPage() {
               dayKey && dayKey !== prevDayKey && c.next_scheduled_at
                 ? fmtScheduleParts(c.next_scheduled_at).day
                 : null
+            const createdParts = mode === 'novos' ? fmtScheduleParts(c.created_at) : null
+            const secondaryLine =
+              mode === 'novos'
+                ? `${channelLabel(c.channel)}${createdParts ? ` · ${createdParts.time}` : ''}`
+                : serviceLine(c, mode === 'reactivate' ? queue : q)
             return (
               <div key={c.id}>
                 {dayHeader && (
@@ -398,7 +487,9 @@ export default function ContatosPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-sm font-medium">{c.name || c.phone || 'Sem nome'}</p>
-                        {urgencyBadge(mode === 'reactivate' ? queue : q)}
+                        {urgencyBadge(
+                          mode === 'novos' ? 'novos' : mode === 'reactivate' ? queue : q,
+                        )}
                       </div>
                       <p className="mt-0.5 truncate text-xs text-muted">
                         {c.phone ? (
@@ -410,9 +501,7 @@ export default function ContatosPage() {
                           'Sem telefone'
                         )}
                         <span aria-hidden> · </span>
-                        <span className="text-foreground/80">
-                          {serviceLine(c, mode === 'reactivate' ? queue : q)}
-                        </span>
+                        <span className="text-foreground/80">{secondaryLine}</span>
                       </p>
                     </div>
                   </Link>
@@ -422,11 +511,17 @@ export default function ContatosPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => logOutreach(c.id)}
-                      aria-label={`Reativar ${c.name || 'contato'} no WhatsApp`}
+                      aria-label={
+                        mode === 'novos'
+                          ? `Chamar ${c.name || 'contato'} no WhatsApp`
+                          : `Reativar ${c.name || 'contato'} no WhatsApp`
+                      }
                       className="flex shrink-0 items-center justify-center gap-1.5 self-center rounded-xl border border-success/40 bg-success/10 px-3 py-2.5 text-xs font-semibold text-success active:scale-[0.98]"
                     >
                       <MessageSquare size={14} />
-                      <span className="hidden sm:inline">Reativar</span>
+                      <span className="hidden sm:inline">
+                        {mode === 'novos' ? 'Chamar' : 'Reativar'}
+                      </span>
                     </a>
                   ) : (
                     <span className="flex shrink-0 items-center self-center px-2 text-[0.65rem] text-muted">
