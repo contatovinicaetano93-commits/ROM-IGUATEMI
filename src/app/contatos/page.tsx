@@ -289,7 +289,7 @@ export default function ContatosPage() {
             Novos contatos
           </p>
           <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
-            Entraram hoje e ainda não estão cadastrados na Avec
+            WhatsApp/manual de hoje — ainda sem cadastro na Avec
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-gold/15 px-3 py-1 text-sm font-semibold tabular-nums text-gold">
@@ -371,8 +371,8 @@ export default function ContatosPage() {
 
       {mode === 'novos' && (
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
-          Novos: criados hoje no ROM (WhatsApp, manual etc.) sem vínculo Avec — ainda não viraram
-          cliente na agenda.
+          Novos: entrada real no ROM hoje (WhatsApp, manual etc.), sem channel/source Avec e sem
+          avec_client_id — ainda não viraram cliente na agenda.
         </p>
       )}
 
