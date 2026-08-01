@@ -43,6 +43,7 @@ interface PipelineData {
 
 function PipelineColumn({
   title,
+  hint,
   count,
   tone,
   items,
@@ -51,6 +52,8 @@ function PipelineColumn({
   storageKey,
 }: {
   title: string
+  /** Uma linha sob o título — definição operacional da coluna. */
+  hint?: string
   count: number
   tone: 'gold' | 'success' | 'sky'
   items: PipelineCard[]
@@ -72,6 +75,7 @@ function PipelineColumn({
           open={open}
           onToggle={() => setOpen((v) => !v)}
         />
+        {hint ? <p className="mt-1.5 text-[0.7rem] leading-snug text-muted">{hint}</p> : null}
       </header>
       <CollapsibleBody open={open} className="flex flex-1 flex-col gap-2 p-3">
         {items.length === 0 ? (
@@ -175,7 +179,8 @@ export default function PipelinePage() {
           </h1>
           <p className="mt-1 text-sm text-muted">
             Badges contam pessoas. Cards = linhas de serviço. Agendados = booking com horário · No
-            salão = comanda/encaixe · Concluídos = pagos do dia.
+            salão = sem agendamento prévio (comanda aberta na hora / encaixe) · Concluídos = pagos
+            do dia.
           </p>
         </div>
         <button
@@ -198,6 +203,7 @@ export default function PipelinePage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <PipelineColumn
           title="Agendados"
+          hint="Clientes com horário marcado na agenda."
           storageKey="pipeline.section.agendados.open"
           count={loading ? 0 : (data?.counts.scheduled ?? 0)}
           tone="gold"
@@ -207,6 +213,7 @@ export default function PipelinePage() {
         />
         <PipelineColumn
           title="No salão"
+          hint="Não agendaram: abriram comanda na hora para consumir ou entrar num encaixe."
           storageKey="pipeline.section.nosalao.open"
           count={loading ? 0 : (data?.counts.walkIn ?? 0)}
           tone="sky"
@@ -216,6 +223,7 @@ export default function PipelinePage() {
         />
         <PipelineColumn
           title="Concluídos"
+          hint="Atendimentos já pagos/fechados no dia."
           storageKey="pipeline.section.concluidos.open"
           count={loading ? 0 : (data?.counts.completed ?? 0)}
           tone="success"
