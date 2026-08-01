@@ -1,7 +1,11 @@
 import { NextRequest } from 'next/server'
 import { ok, okCached, handleError, err } from '@/lib/api-response'
 import { cachedFetch, MemoryCache } from '@/lib/cache'
-import { countUrgencyQueues, listContactsWithSummary } from '@/lib/contact-summary'
+import {
+  countContactQueues,
+  listContactsWithSummary,
+  listNewContactsNotInAvec,
+} from '@/lib/contact-summary'
 import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
 import { addService } from '@/lib/services'
 import { SERVICE_CATEGORIES } from '@/lib/services'
@@ -51,18 +55,51 @@ export async function GET(req: NextRequest) {
     const channel = searchParams.get('channel')
     const urgencyQueue = parseUrgencyQueue(searchParams.get('queue'))
     const countsOnly = searchParams.get('counts') === '1' || searchParams.get('counts') === 'true'
+    const newNotAvec =
+      searchParams.get('new_not_avec') === '1' ||
+      searchParams.get('new_not_avec') === 'true' ||
+      searchParams.get('queue') === 'novos'
+    const dayRaw = searchParams.get('day')
+    const day = dayRaw && /^\d{4}-\d{2}-\d{2}$/.test(dayRaw) ? dayRaw : null
 
     const rawLimit = Number(searchParams.get('limit') ?? 100)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 100
 
     if (countsOnly) {
-      const cacheKey = `contacts:queue-counts:v1:ch=${channel ?? ''}`
-      const queues = await cachedFetch(cacheKey, () => countUrgencyQueues({ channel }), 30)
+      const cacheKey = `contacts:queue-counts:v2:ch=${channel ?? ''}:day=${day ?? 'today'}`
+      const queues = await cachedFetch(
+        cacheKey,
+        () => countContactQueues({ channel, day }),
+        30,
+      )
       return okCached(null, 30, { queues })
     }
 
+    if (newNotAvec) {
+      const cacheKey = `contacts:novos:v1:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      const result = await cachedFetch(
+        cacheKey,
+        async () => {
+          const listed = await listNewContactsNotInAvec({ day, limit })
+          const queues = await countContactQueues({ channel, day })
+          return { items: listed.items, total: listed.total, queues }
+        },
+        30,
+      )
+      return okCached(result.items, 30, {
+        total: result.total,
+        limit,
+        status: 'novos',
+        channel: channel ?? 'all',
+        pending: false,
+        queue: 'novos',
+        day: day ?? 'today',
+        queues: result.queues,
+      })
+    }
+
     const cacheKey = [
-      'contacts:list:v8',
+      'contacts:list:v9',
       `lim=${limit}`,
       `sort=${sort}`,
       `pend=${pendingOnly ? 1 : 0}`,
@@ -91,9 +128,9 @@ export async function GET(req: NextRequest) {
         }
 
         let queueTotal = total
-        let queues: Awaited<ReturnType<typeof countUrgencyQueues>> | null = null
+        let queues: Awaited<ReturnType<typeof countContactQueues>> | null = null
         if (pendingOnly) {
-          queues = await countUrgencyQueues({ channel })
+          queues = await countContactQueues({ channel, day })
           if (urgencyQueue) queueTotal = queues[urgencyQueue]
         }
 
