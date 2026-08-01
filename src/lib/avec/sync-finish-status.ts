@@ -42,8 +42,12 @@ export function resolveAvecFinishStatus(
   }
   // Abort limpo sem core ainda é partial (dados parciais / orçamento).
   if (input.errorCount > 0 && !input.hadCoreRows && !input.aborted) return 'error'
-  if (input.errorCount > 0 || input.hardWarningCount > 0 || input.aborted) {
+  if (input.errorCount > 0 || input.hardWarningCount > 0) {
     return 'partial'
+  }
+  // Abort limpo com core + só soft warnings → ok (não assusta Visão/Cérebro).
+  if (input.aborted) {
+    return input.hadCoreRows ? 'ok' : 'partial'
   }
   return 'ok'
 }

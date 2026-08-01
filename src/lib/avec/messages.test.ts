@@ -142,37 +142,45 @@ describe('isSoftAvecSyncWarning', () => {
     ).toBe(false)
     expect(
       isSoftAvecSyncWarning(
-        'Relatório atendimentos (0002) atingiu o limite de 80 páginas (20000 linhas, 250/página).',
+        'Relatório atendimentos (0002) atingiu o limite de 80 páginas (20000 linhas, 250/página). Pode haver dados não sincronizados — aumente AVEC_SYNC_MAX_PAGES na Vercel.',
+      ),
+    ).toBe(false)
+    expect(
+      isSoftAvecSyncWarning(
+        'Relatório agendamentos (0051) atingiu o limite de 80 páginas (20000 linhas, 250/página).',
       ),
     ).toBe(false)
     expect(isSoftAvecSyncWarning('AVEC_UNIT_ID vazio — sync sem filtro')).toBe(true)
-    expect(isSoftAvecSyncWarning('P1 0107 truncado: 5000 linhas (teto de paginação)')).toBe(true)
     expect(isSoftAvecSyncWarning('agenda: 3 agendamento(s) órfão(s) removido(s) do dia')).toBe(true)
     expect(isSoftAvecSyncWarning('Catálogo 0004 adiado — já sincronizado nas últimas 20h')).toBe(true)
-    expect(isSoftAvecSyncWarning('0149: fetch parcial (2 pág., 100 linhas) — abort limpo')).toBe(true)
-    expect(isSoftAvecSyncWarning('heal importado: connection reset')).toBe(true)
-    expect(isSoftAvecSyncWarning('snapshot 0004: disk full')).toBe(true)
+    expect(isSoftAvecSyncWarning('P1 0107 truncado: 5000 linhas (teto de paginação) — UI deve mostrar 5000+')).toBe(true)
     expect(
       isSoftAvecSyncWarning(
         'P1 0107: timeout/abort — reativação 90d adiada (The operation was aborted due to timeout)',
       ),
     ).toBe(true)
+    expect(isSoftAvecSyncWarning('TM 0223: nenhum tempo cadastrado')).toBe(true)
+    expect(isSoftAvecSyncWarning('heal importado: timeout no update')).toBe(true)
+    expect(isSoftAvecSyncWarning('snapshot 0004: disk full')).toBe(true)
     expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
     expect(
       isSoftAvecPeripheralError('P1 0107: The operation was aborted due to timeout'),
     ).toBe(true)
-    expect(isSoftOnlyPartialAvecRun({
-      status: 'partial',
-      created_at: '2026-07-30T22:36:33.000Z',
-      error: 'abandoned_partial_timeout',
-      stats: {
-        errors: ['P1 0107: The operation was aborted due to timeout'],
-        warnings: ['Catálogo 0004 adiado — já sincronizado nas últimas 20h'],
-      },
-    })).toBe(true)
+    expect(
+      isSoftOnlyPartialAvecRun({
+        status: 'partial',
+        created_at: '2026-07-30T22:36:33.000Z',
+        error: 'abandoned_partial_timeout',
+        stats: {
+          errors: ['P1 0107: The operation was aborted due to timeout'],
+          warnings: ['Catálogo 0004 adiado — já sincronizado nas últimas 20h'],
+        },
+      }),
+    ).toBe(true)
     expect(
       hardAvecSyncWarnings([
         'AVEC_UNIT_ID vazio — sync sem filtro',
+        'heal importado: falha',
         'snapshot 0051: erro',
         'Falha ao gravar snapshot',
         'Relatório movimentos de estoque (0044) atingiu o limite de 40 páginas',

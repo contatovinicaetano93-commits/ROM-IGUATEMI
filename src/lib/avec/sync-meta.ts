@@ -1,4 +1,5 @@
 import { getLastAvecSync } from '@/lib/avec/sync'
+import { isCleanBudgetAbortPartial } from '@/lib/avec/messages'
 import { pickNewestUsableAvecRun } from '@/lib/avec/sync-run-health'
 import { cachedFetch } from '@/lib/cache'
 import { kpiSourceFromSyncStatus } from '@/lib/kpi-source'
@@ -26,7 +27,7 @@ export type AvecSyncMeta = {
  */
 export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
   return cachedFetch(
-    'avec:sync-meta:v3',
+    'avec:sync-meta:v4',
     async () => {
       const [full, fast] = await Promise.all([
         getLastAvecSync('full', { finishedOnly: true }).catch(() => null),
@@ -48,7 +49,11 @@ export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
       const stale = never_synced || fullStale || fastStale
 
       const latest = pickNewestUsableAvecRun([full, fast])
-      const syncStatus = latest?.status ?? null
+      // Abort limpo por orçamento (comum no BR) não deve acender “parcial” na Visão.
+      const syncStatus =
+        latest != null && isCleanBudgetAbortPartial(latest)
+          ? 'ok'
+          : (latest?.status ?? null)
       const created_at = latest?.created_at ?? null
 
       return {
