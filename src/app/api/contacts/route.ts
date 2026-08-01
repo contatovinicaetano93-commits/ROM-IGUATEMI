@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 100
 
     if (countsOnly) {
-      const cacheKey = `contacts:queue-counts:v2:ch=${channel ?? ''}:day=${day ?? 'today'}`
+      const cacheKey = `contacts:queue-counts:v3:ch=${channel ?? ''}:day=${day ?? 'today'}`
       const queues = await cachedFetch(
         cacheKey,
         () => countContactQueues({ channel, day }),
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (newNotAvec) {
-      const cacheKey = `contacts:novos:v1:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      const cacheKey = `contacts:novos:v2:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
       const result = await cachedFetch(
         cacheKey,
         async () => {
