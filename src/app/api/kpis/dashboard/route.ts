@@ -29,7 +29,7 @@ interface ProfessionalWithDelta extends P1ProfessionalRow {
  * Bootstrap da Visão: um lambda, queries sequenciais.
  * Evita waterfall de 4 rotas × pooler max:1 no browser.
  */
-export const maxDuration = 30
+export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
   try {
