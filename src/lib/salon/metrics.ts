@@ -3,13 +3,14 @@ import { todayIso } from '@/lib/salon/format'
 
 export interface SalonDailyMetrics {
   day: string
-  revenue: number
-  appointments: number
-  attended: number
-  no_shows: number
-  cancelled: number
-  new_clients: number
-  returning_clients: number
+  /** null = ainda não sincronizado (não inventar 0 no INSERT parcial). */
+  revenue: number | null
+  appointments: number | null
+  attended: number | null
+  no_shows: number | null
+  cancelled: number | null
+  new_clients: number | null
+  returning_clients: number | null
   ticket_avg: number | null
   service_duration_sum_minutes: number
   service_duration_count: number
@@ -64,13 +65,13 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
     )
     values (
       ${day}::date,
-      coalesce(${revenue}::numeric, 0::numeric),
-      coalesce(${appointments}::int, 0),
-      coalesce(${attended}::int, 0),
-      coalesce(${no_shows}::int, 0),
-      coalesce(${cancelled}::int, 0),
-      coalesce(${new_clients}::int, 0),
-      coalesce(${returning_clients}::int, 0),
+      ${revenue}::numeric,
+      ${appointments}::int,
+      ${attended}::int,
+      ${no_shows}::int,
+      ${cancelled}::int,
+      ${new_clients}::int,
+      ${returning_clients}::int,
       ${ticket_avg}::numeric,
       coalesce(${service_duration_sum_minutes}::numeric, 0::numeric),
       coalesce(${service_duration_count}::int, 0),

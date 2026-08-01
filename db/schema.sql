@@ -156,13 +156,14 @@ create index if not exists avec_report_snapshots_report_idx on avec_report_snaps
 -- KPIs operacionais do salão (faturamento, comparecimento, no-show).
 create table if not exists salon_daily_metrics (
   day date primary key,
-  revenue numeric(12, 2) not null default 0,
-  appointments int not null default 0,
-  attended int not null default 0,
-  no_shows int not null default 0,
-  cancelled int not null default 0,
-  new_clients int not null default 0,
-  returning_clients int not null default 0,
+  -- NULL = ainda não sincronizado (não inventar 0 no 1º INSERT parcial).
+  revenue numeric(12, 2),
+  appointments int,
+  attended int,
+  no_shows int,
+  cancelled int,
+  new_clients int,
+  returning_clients int,
   ticket_avg numeric(10, 2),
   service_duration_sum_minutes numeric(12, 2) not null default 0,
   service_duration_count int not null default 0,

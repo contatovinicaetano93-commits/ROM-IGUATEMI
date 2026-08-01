@@ -1,5 +1,4 @@
 import { isAvecConfigured } from '@/lib/avec/client'
-import { recomputeSalonMetricsFromRom } from '@/lib/salon/metrics'
 
 /** Eventos que disparam pull Avec fast (agenda/caixa do dia). Full fica só no cron 2×/dia. */
 const FAST_EVENTS = new Set([
@@ -39,13 +38,12 @@ async function postSyncFast(baseUrl: string) {
  * Efeitos pós-webhook Avec — tempo real nas duas unidades (cada deploy Vercel
  * dispara sync só do seu banco/token).
  *
- * 1. Recompute local imediato (salon_daily_metrics a partir do ROM)
- * 2. Fast sync em background (agenda/atendidos/receita do dia)
+ * Só dispara fast sync em background (agenda/atendidos/receita do dia).
+ * NÃO recomputa Agendados a partir do ROM aqui: se o fast for pulado (gap),
+ * o recompute local sobrescrevia o KPI 0051 com um snapshot incompleto.
  * Full (P1/P2/P3/catálogo) NÃO dispara aqui — só cron 2×/dia (evita 403/DB).
  */
 export async function runAvecWebhookSideEffects(event: string) {
-  await recomputeSalonMetricsFromRom().catch(() => {})
-
   if (!isAvecConfigured()) return
 
   if (!process.env.CRON_SECRET?.trim()) {

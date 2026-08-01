@@ -25,6 +25,7 @@
     { "id": "022_contacts_unique_full", "file": "delta-contacts-unique-full.sql", "panels": ["brasil", "iguatemi"] },
     { "id": "023_kpi_funnel_real", "file": "delta-kpi-funnel-real.sql", "panels": ["brasil", "iguatemi"] },
     { "id": "024_contacts_phone_dedupe", "file": "delta-contacts-phone-dedupe.sql", "panels": ["brasil", "iguatemi"] },
-    { "id": "025_omie_expenses", "file": "delta-omie-expenses.sql", "panels": ["brasil", "iguatemi"] }
+    { "id": "025_omie_expenses", "file": "delta-omie-expenses.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "026_nullable_daily_kpis", "file": "delta-nullable-daily-kpis.sql", "panels": ["brasil", "iguatemi"] }
   ]
 }
