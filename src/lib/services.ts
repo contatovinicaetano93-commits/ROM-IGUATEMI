@@ -479,7 +479,12 @@ export async function listUpcomingSchedules(days = 7, limit = 20): Promise<Sched
   `) as ScheduledServiceRow[]
 }
 
-/** Pipeline do dia: agenda marcada | no salão/encaixe | concluídos. */
+/**
+ * Pipeline do dia:
+ * - scheduled = booking com horário
+ * - walkIn ("No salão") = sem agendamento prévio: comanda aberta na hora / encaixe
+ * - completed = pagos/fechados no dia
+ */
 export async function listTodayPipeline(day: string): Promise<{
   scheduled: ScheduledServiceRow[]
   walkIn: ScheduledServiceRow[]
