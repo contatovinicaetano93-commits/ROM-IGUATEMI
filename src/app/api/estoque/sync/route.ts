@@ -3,7 +3,7 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireStock } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isAvecConfigured } from '@/lib/avec/client'
-import { runStockSync, type StockSyncMode } from '@/lib/avec/sync-stock'
+import { runStockSync, stockPaginationPlan, type StockSyncMode } from '@/lib/avec/sync-stock'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
@@ -23,10 +23,26 @@ async function execute(req: NextRequest, cron: boolean) {
   }
 
   const mode = parseMode(req)
+  const continueSync = req.nextUrl.searchParams.get('continue') === '1'
+  const reportParam = req.nextUrl.searchParams.get('report')?.trim()
+  const startPageParam = req.nextUrl.searchParams.get('startPage')
 
   try {
+    if (continueSync) {
+      const continueFrom =
+        reportParam && startPageParam
+          ? { [reportParam]: Number(startPageParam) }
+          : 'auto'
+      const run = await runStockSync('full', { continueFrom })
+      return ok({
+        ...run,
+        mode: 'full',
+        continued: true,
+        pagination: stockPaginationPlan(run),
+      })
+    }
     const run = await runStockSync(mode)
-    return ok({ ...run, mode })
+    return ok({ ...run, mode, pagination: stockPaginationPlan(run) })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
       if (cron) {

@@ -148,11 +148,16 @@ describe('pagination truncation', () => {
       pagesFetched: 20,
       maxPages: 20,
       limit: 250,
+      startPage: 1,
+      endPage: 20,
+      hasMore: true,
+      nextPage: 21,
     }
     const msg = formatTruncationWarning('0004', result)
     expect(msg).toContain('clientes')
     expect(msg).toContain('5000')
-    expect(msg).toContain('AVEC_SYNC_MAX_PAGES')
+    expect(msg).toContain('páginas 1–20')
+    expect(msg).toContain('Continuar sync')
   })
 
   it('nomeia relatórios de estoque no aviso de truncamento', () => {
@@ -162,9 +167,14 @@ describe('pagination truncation', () => {
       pagesFetched: 200,
       maxPages: 200,
       limit: 250,
+      startPage: 1,
+      endPage: 200,
+      hasMore: true,
+      nextPage: 201,
     }
     expect(formatTruncationWarning('0046', result)).toContain('alertas de estoque')
     expect(formatTruncationWarning('0149', result)).toContain('posição de estoque')
+    expect(formatTruncationWarning('0046', result)).toContain('página 201')
   })
 
   it('usa padrão 80 páginas e respeita env', () => {
@@ -177,6 +187,22 @@ describe('pagination truncation', () => {
     expect(getAvecSyncMaxPages()).toBe(500)
     if (prev === undefined) delete process.env.AVEC_SYNC_MAX_PAGES
     else process.env.AVEC_SYNC_MAX_PAGES = prev
+  })
+
+  it('calcula hasMore/nextPage a partir do lote (startPage + maxPages)', () => {
+    const startPage = 201
+    const maxPages = 200
+    const endPage = 400
+    const hasMore = wasPaginationTruncated(250, 250, maxPages, maxPages)
+    const nextPage = hasMore ? endPage + 1 : null
+    expect(hasMore).toBe(true)
+    expect(nextPage).toBe(401)
+    expect(endPage - startPage + 1).toBe(maxPages)
+  })
+
+  it('nextPage fica null quando última página não está cheia', () => {
+    const hasMore = wasPaginationTruncated(100, 250, 4, 10)
+    expect(hasMore).toBe(false)
   })
 })
 
