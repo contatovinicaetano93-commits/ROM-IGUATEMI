@@ -351,6 +351,21 @@ function buildQuarterResult(
   }
 }
 
+/** Páginas 0002 por trimestre: full = cohort real; slim UI = amostra rápida. */
+export function local0011PagesPerPeriod(budget: Local0011Budget): number {
+  if (budget.deadlineAt == null) {
+    return Math.max(8, Math.min(40, budget.maxPages || 40))
+  }
+  return Math.max(1, Math.min(2, Math.floor(budget.maxPages / 2) || 2))
+}
+
+function local0011Pages0007(budget: Local0011Budget, slimPages: number): number {
+  if (budget.deadlineAt == null) {
+    return Math.max(8, Math.min(24, Math.floor((budget.maxPages || 40) / 2) || 8))
+  }
+  return slimPages
+}
+
 /** Busca 0011 local para um trimestre (P1 = tri anterior, P2 = tri). */
 export async function fetchLocal0011Quarter(
   quarter: QuarterKey,
@@ -358,13 +373,13 @@ export async function fetchLocal0011Quarter(
   budget: Local0011Budget,
 ): Promise<Local0011QuarterResult> {
   const prior = previousQuarterKey(quarter)
-  // UI: poucas páginas — Avec 0002 pode levar >20s/página em tris cheios.
-  const pagesPerPeriod = Math.max(1, Math.min(2, Math.floor(budget.maxPages / 2) || 2))
+  const pagesPerPeriod = local0011PagesPerPeriod(budget)
+  const pages0007 = local0011Pages0007(budget, 2)
 
   const [p1Result, p2Result, r7] = await Promise.all([
     fetch0002QuarterClients(prior, budget, pagesPerPeriod),
     fetch0002QuarterClients(quarter, budget, pagesPerPeriod),
-    fetch0007SalonAndNonReturners(quarter, budget, 2),
+    fetch0007SalonAndNonReturners(quarter, budget, pages0007),
   ])
 
   return buildQuarterResult(
@@ -381,7 +396,7 @@ export async function fetchLocal0011Quarter(
 /**
  * Pair selected/compare compartilhando o 0002 do trimestre do meio
  * (ex.: Q2 vs Q1 → busca Q0, Q1, Q2 uma vez cada).
- * Avec 0002 pode levar ~30s/página — 1 página + allSettled evita derrubar o relatório.
+ * Full budget: várias páginas. Slim UI: 1 página p/ não estourar timeout.
  */
 export async function fetchLocal0011QuarterPair(
   selectedQuarter: QuarterKey,
@@ -394,7 +409,9 @@ export async function fetchLocal0011QuarterPair(
   // Prioriza o trimestre foco (selected + prior). Compare completo só se couber no budget.
   const primary = [...new Set([selPrior, selectedQuarter])]
   const secondary = [cmpPrior, compareQuarter].filter((q) => !primary.includes(q))
-  const pagesPerPeriod = 1
+  const pagesPerPeriod = local0011PagesPerPeriod(budget)
+  const pages0007Sel = local0011Pages0007(budget, 3)
+  const pages0007Cmp = local0011Pages0007(budget, 2)
 
   const byQuarter = new Map<QuarterKey, { clients: AvecClientRow[]; truncated: boolean }>()
   const empty = { clients: [] as AvecClientRow[], truncated: true }
@@ -403,9 +420,8 @@ export async function fetchLocal0011QuarterPair(
   for (const q of [...primary, ...secondary]) {
     if (budget.deadlineAt != null && Date.now() >= budget.deadlineAt) break
     // Secondary só se ainda houver folga (~20s) para não estourar o teto da UI.
-    if (secondary.includes(q)) {
-      const left =
-        budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
+    if (secondary.includes(q) && budget.deadlineAt != null) {
+      const left = budget.deadlineAt - Date.now()
       if (left < 20_000) break
     }
     try {
@@ -415,8 +431,8 @@ export async function fetchLocal0011QuarterPair(
     }
   }
 
-  // 0007 do foco primeiro (taxa + não-retornados); compare só taxa se sobrar tempo.
-  const sel7 = await fetch0007SalonAndNonReturners(selectedQuarter, budget, 3)
+  // 0007 do foco primeiro (taxa + não-retornados); compare se sobrar tempo (sempre no full).
+  const sel7 = await fetch0007SalonAndNonReturners(selectedQuarter, budget, pages0007Sel)
   let cmp7: { rate: number | null; nonReturnerKeys: Set<string> } = {
     rate: null,
     nonReturnerKeys: new Set(),
@@ -424,7 +440,7 @@ export async function fetchLocal0011QuarterPair(
   const left7 =
     budget.deadlineAt == null ? Number.POSITIVE_INFINITY : budget.deadlineAt - Date.now()
   if (left7 > 12_000) {
-    cmp7 = await fetch0007SalonAndNonReturners(compareQuarter, budget, 2)
+    cmp7 = await fetch0007SalonAndNonReturners(compareQuarter, budget, pages0007Cmp)
   }
 
   return {

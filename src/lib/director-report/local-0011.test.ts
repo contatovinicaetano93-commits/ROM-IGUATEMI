@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   aggregateLocal0011ByPro,
   local0011ClientKey,
+  local0011PagesPerPeriod,
   previousQuarterKey,
   splitAvecProfessionalNames,
 } from './local-0011'
@@ -28,6 +29,13 @@ describe('previousQuarterKey', () => {
   it('volta um trimestre', () => {
     expect(previousQuarterKey('2026-Q2')).toBe('2026-Q1')
     expect(previousQuarterKey('2026-Q1')).toBe('2025-Q4')
+  })
+})
+
+describe('local0011PagesPerPeriod', () => {
+  it('full budget usa muitas páginas; slim fica em 1–2', () => {
+    expect(local0011PagesPerPeriod({ deadlineAt: null, maxPages: 80 })).toBe(40)
+    expect(local0011PagesPerPeriod({ deadlineAt: Date.now() + 45_000, maxPages: 6 })).toBe(2)
   })
 })
 
