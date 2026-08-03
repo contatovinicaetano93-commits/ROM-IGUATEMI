@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server'
 import { okCached, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { ttlGetOrSet } from '@/lib/ttl-cache'
-import { getSql } from '@/lib/db'
 import { getSalonMetrics } from '@/lib/salon/metrics'
 import { computeSalonIntelligence } from '@/lib/salon/intelligence'
 import { listActionItems } from '@/lib/salon/recommendations'
@@ -20,6 +19,7 @@ import { countDistinctContactIds } from '@/lib/salon/headcount'
 import { resolveAppointmentsHeads } from '@/lib/salon/resolve-appointments'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 import { getReactivationKpis } from '@/lib/salon/reactivation-kpi'
+import { countWhatsappNovosToday, countNovosHoje } from '@/lib/hoje-leads'
 
 /** Painel Hoje — métricas vêm do sync (read-only); cache curto no isolate. */
 export const maxDuration = 30
@@ -36,31 +36,18 @@ export async function GET(req: NextRequest) {
     const day = todayIso()
 
     const payload = await ttlGetOrSet(
-      `hoje:v6:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
+      `hoje:v7:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
       HOJE_CACHE_TTL_MS,
       async () => {
-        const sql = getSql()
-
         // Sequencial no pooler max:1 — Promise.all competia consigo mesmo e com outras lambdas.
         const salonRaw = await getSalonMetrics(day)
         const playbookAll = await listActionItems({ limit: 60 })
         const scheduleRaw = await listTodaySchedules(day, 200)
-        const leadRows = (await sql`
-          select
-            count(*) filter (
-              where status <> 'importado'
-                and coalesce(source, '') not like 'avec_sync_clients%'
-                and coalesce(source, '') not like 'avec_backfill%'
-                and coalesce(source, '') not like 'avec_lake%'
-            )::int as novos,
-            count(*) filter (
-              where channel = 'whatsapp' and status = 'novo'
-            )::int as whatsapp_novos
-          from contacts
-          where anonymized_at is null
-            and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
-            and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
-        `) as { novos: number; whatsapp_novos: number }[]
+        // novos: paridade Contatos Novos (main), janela = hoje apenas.
+        const [novos, whatsapp_novos] = await Promise.all([
+          countNovosHoje(day),
+          countWhatsappNovosToday(day),
+        ])
         // Hoje = caixa/agenda: badge pelo fast. Full só entra se não houver fast
         // (evita full parcial em P1 0107 pintar KPIs "incompleto" por horas).
         // Full KPI = ops/agenda/legado all — nunca catalog (dump não é analytics).
@@ -84,7 +71,7 @@ export async function GET(req: NextRequest) {
 
         const scheduleToday = [...scheduleRaw].sort(compareScheduleByTimeThenName)
         const scheduleHeads = countDistinctContactIds(scheduleToday)
-        const leads = leadRows[0] ?? { novos: 0, whatsapp_novos: 0 }
+        const leads = { novos, whatsapp_novos }
         // Sem linha de métricas do dia: não inventar 0 operacional — null → UI "—".
         // Paridade Cérebro: CS/agenda vs metrics Avec (nunca appointments < attended).
         const appointmentsHeads = resolveAppointmentsHeads({
