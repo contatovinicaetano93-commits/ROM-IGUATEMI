@@ -703,10 +703,8 @@ export function pickStockPaginationPlan(
   const fullPlan = stockPaginationPlan(full)
   const fastPlan = stockPaginationPlan(fast)
   if (fullPlan.some((p) => p.hasMore)) return fullPlan
-  if (fullPlan.length === 0 && fastPlan.some((p) => p.hasMore)) return fastPlan
-  const fullAt = full?.created_at ? Date.parse(full.created_at) : 0
-  const fastAt = fast?.created_at ? Date.parse(fast.created_at) : 0
-  if (fullPlan.length > 0 && fullAt >= fastAt) return fullPlan
-  if (fastPlan.length > 0) return fastPlan
-  return fullPlan
+  // Full sem pendência: não deixar o fast horário “ressuscitar” o banner.
+  if (fullPlan.length > 0) return fullPlan
+  if (fastPlan.some((p) => p.hasMore)) return fastPlan
+  return fastPlan
 }
