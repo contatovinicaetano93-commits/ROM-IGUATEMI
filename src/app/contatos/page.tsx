@@ -551,7 +551,7 @@ function ContatosPageContent() {
             const createdParts = mode === 'novos' ? fmtScheduleParts(c.created_at) : null
             const secondaryLine =
               mode === 'novos'
-                ? `${channelLabel(c.channel)}${createdParts ? ` · ${createdParts.time}` : ''}`
+                ? `${channelLabel(c.channel)}${createdParts ? ` · ${createdParts.date} ${createdParts.time}` : ''}`
                 : serviceLine(c, mode === 'reactivate' ? queue : q)
             return (
               <div key={c.id}>
