@@ -113,11 +113,24 @@ interface SyncRun {
     errors?: string[]
   } | null
 }
+interface StockPaginationItem {
+  reportId: string
+  label: string
+  startPage: number
+  endPage: number
+  nextPage: number | null
+  hasMore: boolean
+  rowsThisBatch: number
+  maxPages: number
+  limit: number
+  batchLabel: string
+}
 interface SyncStatus {
   configured: boolean
   stock_auth_configured: boolean
   last_fast: SyncRun | null
   last_full: SyncRun | null
+  pagination?: StockPaginationItem[]
 }
 
 function SyncBadge({ status }: { status: SyncStatus | null }) {
@@ -347,11 +360,40 @@ export default function EstoquePage() {
 
   async function triggerSync() {
     setSyncing(true)
+    setError(null)
     try {
-      await apiFetch('/api/estoque/sync?mode=full', { method: 'POST' })
+      const res = await apiFetch('/api/estoque/sync?mode=full', { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.error) {
+        throw new Error(json.error ?? 'Falha no sync de estoque')
+      }
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setSyncing(false)
-      load()
+    }
+  }
+
+  async function triggerContinueSync(reportId?: string, startPage?: number) {
+    setSyncing(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams({ mode: 'full', continue: '1' })
+      if (reportId && startPage != null) {
+        params.set('report', reportId)
+        params.set('startPage', String(startPage))
+      }
+      const res = await apiFetch(`/api/estoque/sync?${params}`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.error) {
+        throw new Error(json.error ?? 'Falha ao continuar sync de estoque')
+      }
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -359,6 +401,8 @@ export default function EstoquePage() {
     !loading && syncStatus && (!syncStatus.stock_auth_configured || !syncStatus.last_fast)
 
   const truncationWarnings = stockSyncWarnings(syncStatus)
+  const paginationItems = syncStatus?.pagination ?? []
+  const pendingPagination = paginationItems.filter((p) => p.hasMore)
   const lastRunError =
     syncStatus?.last_fast?.error ?? syncStatus?.last_full?.error ?? null
   const tokenExpired = isAvecTokenExpiredError(lastRunError)
@@ -408,6 +452,43 @@ export default function EstoquePage() {
               {w}
             </p>
           ))}
+        </div>
+      )}
+
+      {paginationItems.length > 0 && (
+        <div className="space-y-2 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <p className="font-medium">Sincronização por lotes de páginas</p>
+          {paginationItems.map((item) => (
+            <div
+              key={item.reportId}
+              className="flex flex-wrap items-center justify-between gap-2 text-xs opacity-90"
+            >
+              <span>
+                {item.reportId} {item.label}: páginas {item.startPage}–{item.endPage} sincronizadas
+                {item.rowsThisBatch > 0 ? ` (${item.rowsThisBatch} linhas)` : ''}
+              </span>
+              {item.hasMore && item.nextPage != null && (
+                <button
+                  type="button"
+                  onClick={() => triggerContinueSync(item.reportId, item.nextPage!)}
+                  disabled={syncing}
+                  className="rounded-full border border-warning/50 px-2.5 py-1 text-[0.65rem] font-medium transition-colors hover:bg-warning/20 disabled:opacity-50"
+                >
+                  {item.batchLabel}
+                </button>
+              )}
+            </div>
+          ))}
+          {pendingPagination.length > 1 && (
+            <button
+              type="button"
+              onClick={() => triggerContinueSync()}
+              disabled={syncing}
+              className="mt-1 rounded-full border border-warning/50 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-warning/20 disabled:opacity-50"
+            >
+              Continuar todos os relatórios pendentes
+            </button>
+          )}
         </div>
       )}
 

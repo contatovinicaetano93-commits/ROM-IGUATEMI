@@ -8,8 +8,11 @@ import {
   fetchAllAvecReport,
   formatTruncationWarning,
   fmtAvecDate,
+  getAvecSyncMaxPages,
   isAvecFetchAbortError,
   periodRange,
+  AVEC_REPORT_LABELS,
+  type AvecReportFetchResult,
   type AvecReportParams,
 } from '@/lib/avec/client'
 import {
@@ -40,6 +43,18 @@ import {
 
 export type StockSyncMode = 'fast' | 'full'
 
+export interface StockReportPagination {
+  reportId: string
+  label: string
+  startPage: number
+  endPage: number
+  nextPage: number | null
+  hasMore: boolean
+  rowsThisBatch: number
+  maxPages: number
+  limit: number
+}
+
 export interface StockSyncStats {
   positions_synced: number
   alerts_active: number
@@ -53,6 +68,7 @@ export interface StockSyncStats {
   warnings: string[]
   running?: boolean
   aborted?: boolean
+  pagination?: Record<string, StockReportPagination>
 }
 
 export interface StockSyncRun {
@@ -75,6 +91,31 @@ const STOCK_FULL_BUDGET_MS = 250_000
 function reportId(mapper: string): string | null {
   const def = getStockReports().find((r) => r.mapper === mapper)
   return def?.id ?? null
+}
+
+function recordReportPagination(stats: StockSyncStats, reportId: string, result: AvecReportFetchResult) {
+  if (!stats.pagination) stats.pagination = {}
+  stats.pagination[reportId] = {
+    reportId,
+    label: AVEC_REPORT_LABELS[reportId] ?? reportId,
+    startPage: result.startPage,
+    endPage: result.endPage,
+    nextPage: result.nextPage,
+    hasMore: result.hasMore,
+    rowsThisBatch: result.rows.length,
+    maxPages: result.maxPages,
+    limit: result.limit,
+  }
+}
+
+type StockPageOpts = {
+  maxPages: number
+  pageLimit: number
+  deadlineAt: number | null
+  /** Fast com teto baixo: truncamento é esperado, não vira warning. */
+  expectTruncation?: boolean
+  skipSnapshot?: boolean
+  startPages?: Record<string, number>
 }
 
 async function beginRun(kind: string, stats: StockSyncStats): Promise<StockSyncRun> {
@@ -158,15 +199,6 @@ async function snapshotSafe(
   }
 }
 
-type StockPageOpts = {
-  maxPages: number
-  pageLimit: number
-  deadlineAt: number | null
-  /** Fast com teto baixo: truncamento é esperado, não vira warning. */
-  expectTruncation?: boolean
-  skipSnapshot?: boolean
-}
-
 async function syncPositions(stats: StockSyncStats, syncRunId: string, opts: StockPageOpts) {
   const id = reportId('stock_position')
   if (!id) return
@@ -185,9 +217,12 @@ async function syncPositions(stats: StockSyncStats, syncRunId: string, opts: Sto
     site: avecSiteParam(),
   }
   try {
+    const startPage = opts.startPages?.[id] ?? 1
     const result = await fetchAllAvecReport(id, params, opts.maxPages, {
       deadlineAt: opts.deadlineAt,
+      startPage,
     })
+    recordReportPagination(stats, id, result)
     if (result.truncated && !opts.expectTruncation) {
       stats.warnings.push(formatTruncationWarning(id, result))
     }
@@ -258,9 +293,12 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string, opts: StockP
   }
   const params = { site: avecSiteParam(), limit: opts.pageLimit }
   try {
+    const startPage = opts.startPages?.[id] ?? 1
     const result = await fetchAllAvecReport(id, params, opts.maxPages, {
       deadlineAt: opts.deadlineAt,
+      startPage,
     })
+    recordReportPagination(stats, id, result)
     if (result.truncated && !opts.expectTruncation) {
       stats.warnings.push(formatTruncationWarning(id, result))
     }
@@ -290,7 +328,7 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string, opts: StockP
     stats.alerts_active = active
     // Só resolve stale quando o match funcionou (active>0) ou o relatório veio
     // vazio de verdade — se 0046 trouxe linhas e nenhuma aplicou, não zera alertas.
-    if (result.truncated) {
+    if (result.hasMore) {
       stats.warnings.push(
         '0046: truncado — alertas stale NÃO resolvidos (evita limpar alertas das páginas omitidas)',
       )
@@ -348,9 +386,14 @@ async function syncAlerts(stats: StockSyncStats, syncRunId: string, opts: StockP
   }
 }
 
-async function syncMovements(stats: StockSyncStats, syncRunId: string, deadlineAt: number | null) {
+async function syncMovements(
+  stats: StockSyncStats,
+  syncRunId: string,
+  deadlineAt: number | null,
+  startPages?: Record<string, number>,
+) {
   const { inicio, fim } = periodRange(3, 0)
-  await syncMovementsDateRange(stats, syncRunId, inicio, fim, deadlineAt)
+  await syncMovementsDateRange(stats, syncRunId, inicio, fim, deadlineAt, startPages)
 }
 
 /**
@@ -362,6 +405,7 @@ export async function syncMovementsDateRange(
   inicioBr: string,
   fimBr: string,
   deadlineAt: number | null = null,
+  startPages?: Record<string, number>,
 ) {
   const id = reportId('stock_movement')
   if (!id) return
@@ -372,7 +416,9 @@ export async function syncMovementsDateRange(
   }
   const params = { inicio: inicioBr, fim: fimBr, site: avecSiteParam(), limit: 250 }
   try {
-    const result = await fetchAllAvecReport(id, params, undefined, { deadlineAt })
+    const startPage = startPages?.[id] ?? 1
+    const result = await fetchAllAvecReport(id, params, undefined, { deadlineAt, startPage })
+    recordReportPagination(stats, id, result)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
     if (deadlineAt != null && Date.now() >= deadlineAt && result.rows.length === 0) {
       stats.aborted = true
@@ -399,7 +445,12 @@ export async function syncMovementsDateRange(
   }
 }
 
-async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string, deadlineAt: number | null) {
+async function syncPurchaseOrigin(
+  stats: StockSyncStats,
+  syncRunId: string,
+  deadlineAt: number | null,
+  startPages?: Record<string, number>,
+) {
   const id = reportId('stock_purchase')
   if (!id) return
   if (deadlineAt != null && Date.now() >= deadlineAt) {
@@ -410,7 +461,9 @@ async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string, dead
   const { inicio, fim } = periodRange(3, 0)
   const params = { inicio, fim, site: avecSiteParam(), limit: 250 }
   try {
-    const result = await fetchAllAvecReport(id, params, undefined, { deadlineAt })
+    const startPage = startPages?.[id] ?? 1
+    const result = await fetchAllAvecReport(id, params, undefined, { deadlineAt, startPage })
+    recordReportPagination(stats, id, result)
     if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
     if (deadlineAt != null && Date.now() >= deadlineAt && result.rows.length === 0) {
       stats.aborted = true
@@ -438,7 +491,12 @@ async function syncPurchaseOrigin(stats: StockSyncStats, syncRunId: string, dead
 }
 
 /** Valorização (0045/0242/0243/0142) — snapshot com payload (único caso que a UI ainda lê). */
-async function syncValuation(stats: StockSyncStats, syncRunId: string, deadlineAt: number | null) {
+async function syncValuation(
+  stats: StockSyncStats,
+  syncRunId: string,
+  deadlineAt: number | null,
+  startPages?: Record<string, number>,
+) {
   const site = avecSiteParam()
   const jobs: { mapper: string; params: AvecReportParams }[] = [
     { mapper: 'stock_valuation_total', params: { tipo_produto: 'Todos', site, limit: 250 } },
@@ -455,7 +513,9 @@ async function syncValuation(stats: StockSyncStats, syncRunId: string, deadlineA
       return
     }
     try {
-      const result = await fetchAllAvecReport(id, job.params, undefined, { deadlineAt })
+      const startPage = startPages?.[id] ?? 1
+      const result = await fetchAllAvecReport(id, job.params, undefined, { deadlineAt, startPage })
+      recordReportPagination(stats, id, result)
       if (result.truncated) stats.warnings.push(formatTruncationWarning(id, result))
       if (deadlineAt != null && Date.now() >= deadlineAt && result.rows.length === 0) {
         stats.aborted = true
@@ -489,25 +549,64 @@ function emptyStats(): StockSyncStats {
  * saldo+alerta; só busca movimentos/compras/valorização em full — evita gap
  * de saldo desatualizado entre os dois modos.
  */
-export async function runStockSync(mode: StockSyncMode = 'fast'): Promise<StockSyncRun> {
-  return withSyncLock(SYNC_LOCK_KEYS.stock, () => runStockSyncUnlocked(mode), {
+export type StockSyncContinueOpts = {
+  continueFrom?: Record<string, number> | 'auto'
+}
+
+export async function runStockSync(
+  mode: StockSyncMode = 'fast',
+  opts?: StockSyncContinueOpts,
+): Promise<StockSyncRun> {
+  return withSyncLock(SYNC_LOCK_KEYS.stock, () => runStockSyncUnlocked(mode, opts), {
     ttlMs: 10 * 60 * 1000,
     owner: `stock-${mode}`,
   })
 }
 
-async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> {
-  const kind = mode === 'full' ? 'stock_full' : 'stock_fast'
+async function resolveContinueStartPages(
+  continueFrom: Record<string, number> | 'auto' | undefined,
+): Promise<Record<string, number>> {
+  if (!continueFrom) return {}
+  if (continueFrom !== 'auto') return continueFrom
+  const [full, fast] = await Promise.all([
+    getLastStockSync('stock_full', { finishedOnly: true }),
+    getLastStockSync('stock_fast', { finishedOnly: true }),
+  ])
+  const plan = stockPaginationPlan(full)
+  const source = plan.length > 0 ? full : stockPaginationPlan(fast).length > 0 ? fast : null
+  if (!source?.stats?.pagination) return {}
+  const pages: Record<string, number> = {}
+  for (const entry of Object.values(source.stats.pagination)) {
+    if (entry.hasMore && entry.nextPage != null) {
+      pages[entry.reportId] = entry.nextPage
+    }
+  }
+  return pages
+}
+
+async function runStockSyncUnlocked(
+  mode: StockSyncMode,
+  opts?: StockSyncContinueOpts,
+): Promise<StockSyncRun> {
+  const isContinue = opts?.continueFrom !== undefined
+  const effectiveMode: StockSyncMode = isContinue ? 'full' : mode
+  const kind = effectiveMode === 'full' ? 'stock_full' : 'stock_fast'
   const stats = emptyStats()
   const run = await beginRun(kind, stats)
   const deadlineAt =
-    Date.now() + (mode === 'fast' ? STOCK_FAST_BUDGET_MS : STOCK_FULL_BUDGET_MS)
+    Date.now() + (effectiveMode === 'fast' ? STOCK_FAST_BUDGET_MS : STOCK_FULL_BUDGET_MS)
+  const startPages = await resolveContinueStartPages(opts?.continueFrom)
   const pageOpts: StockPageOpts = {
-    maxPages: mode === 'fast' ? STOCK_FAST_MAX_PAGES : 40,
-    pageLimit: mode === 'fast' ? STOCK_FAST_PAGE_LIMIT : 250,
+    maxPages: isContinue
+      ? getAvecSyncMaxPages()
+      : effectiveMode === 'fast'
+        ? STOCK_FAST_MAX_PAGES
+        : 40,
+    pageLimit: isContinue ? 250 : effectiveMode === 'fast' ? STOCK_FAST_PAGE_LIMIT : 250,
     deadlineAt,
-    expectTruncation: mode === 'fast',
-    skipSnapshot: mode === 'fast',
+    expectTruncation: effectiveMode === 'fast' && !isContinue,
+    skipSnapshot: effectiveMode === 'fast' && !isContinue,
+    startPages,
   }
 
   try {
@@ -516,10 +615,10 @@ async function runStockSyncUnlocked(mode: StockSyncMode): Promise<StockSyncRun> 
     await syncAlerts(stats, run.id, pageOpts)
     await syncPositions(stats, run.id, pageOpts)
 
-    if (mode === 'full') {
-      await syncMovements(stats, run.id, deadlineAt)
-      await syncPurchaseOrigin(stats, run.id, deadlineAt)
-      await syncValuation(stats, run.id, deadlineAt)
+    if (effectiveMode === 'full') {
+      await syncMovements(stats, run.id, deadlineAt, startPages)
+      await syncPurchaseOrigin(stats, run.id, deadlineAt, startPages)
+      await syncValuation(stats, run.id, deadlineAt, startPages)
     }
 
     stats.errors = formatAvecErrorList(stats.errors)
@@ -572,5 +671,19 @@ export function describeStockSyncPlan() {
   return {
     fast: getFastStockReports().map((r) => ({ id: r.id, name: r.name })),
     full: getFullStockReports().map((r) => ({ id: r.id, name: r.name })),
+    batchSize: getAvecSyncMaxPages(),
   }
+}
+
+export type StockPaginationPlanItem = StockReportPagination & { batchLabel: string }
+
+export function stockPaginationPlan(lastRun: StockSyncRun | null): StockPaginationPlanItem[] {
+  if (!lastRun?.stats?.pagination) return []
+  return Object.values(lastRun.stats.pagination).map((entry) => ({
+    ...entry,
+    batchLabel:
+      entry.hasMore && entry.nextPage != null
+        ? `Próximas ${entry.nextPage}–${entry.nextPage + entry.maxPages - 1}`
+        : `Páginas ${entry.startPage}–${entry.endPage} sincronizadas`,
+  }))
 }

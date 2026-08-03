@@ -398,6 +398,10 @@ export interface AvecReportFetchResult {
   pagesFetched: number
   maxPages: number
   limit: number
+  startPage: number
+  endPage: number
+  hasMore: boolean
+  nextPage: number | null
 }
 
 export const AVEC_PAGE_LIMIT = 250
@@ -428,22 +432,34 @@ export function wasPaginationTruncated(rowsOnLastPage: number, limit: number, pa
 
 export function formatTruncationWarning(reportId: string, result: AvecReportFetchResult) {
   const label = AVEC_REPORT_LABELS[reportId] ?? reportId
-  return `Relatório ${label} (${reportId}) atingiu o limite de ${result.maxPages} páginas (${result.rows.length} linhas, ${result.limit}/página). Pode haver dados não sincronizados — aumente AVEC_SYNC_MAX_PAGES na Vercel.`
+  const range =
+    result.endPage >= result.startPage
+      ? ` (páginas ${result.startPage}–${result.endPage})`
+      : ''
+  const continueHint =
+    result.hasMore && result.nextPage != null
+      ? ` Use "Continuar sync" para buscar a partir da página ${result.nextPage}.`
+      : ' Pode haver dados não sincronizados — use "Continuar sync" ou aumente AVEC_SYNC_MAX_PAGES na Vercel.'
+  return `Relatório ${label} (${reportId}) atingiu o limite de ${result.maxPages} páginas neste lote${range} (${result.rows.length} linhas, ${result.limit}/página).${continueHint}`
 }
 
 export async function fetchAllAvecReport(
   reportId: string,
   params: AvecReportParams = {},
   maxPages = getAvecSyncMaxPages(),
-  opts?: { deadlineAt?: number | null },
+  opts?: { deadlineAt?: number | null; startPage?: number },
 ): Promise<AvecReportFetchResult> {
   const limit = params.limit ?? AVEC_PAGE_LIMIT
+  const startPage = opts?.startPage ?? 1
   const all: Record<string, unknown>[] = []
   let pagesFetched = 0
+  let endPage = startPage - 1
   let truncated = false
+  let hasMore = false
   const deadlineAt = opts?.deadlineAt ?? null
 
-  for (let page = 1; page <= maxPages; page++) {
+  for (let i = 0; i < maxPages; i++) {
+    const page = startPage + i
     if (deadlineAt != null && Date.now() >= deadlineAt) {
       truncated = true
       break
@@ -460,12 +476,27 @@ export async function fetchAllAvecReport(
       throw e
     }
     const rows = extractRows(payload)
-    pagesFetched = page
     if (rows.length === 0) break
+    pagesFetched = i + 1
+    endPage = page
     all.push(...rows)
     if (rows.length < limit) break
-    if (wasPaginationTruncated(rows.length, limit, page, maxPages)) truncated = true
+    if (wasPaginationTruncated(rows.length, limit, i + 1, maxPages)) {
+      truncated = true
+      hasMore = true
+    }
   }
 
-  return { rows: all, truncated, pagesFetched, maxPages, limit }
+  const nextPage = hasMore ? endPage + 1 : null
+  return {
+    rows: all,
+    truncated,
+    pagesFetched,
+    maxPages,
+    limit,
+    startPage,
+    endPage,
+    hasMore,
+    nextPage,
+  }
 }
