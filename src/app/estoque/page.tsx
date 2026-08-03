@@ -28,6 +28,7 @@ import { formatCurrency } from '@/lib/salon/format'
 import {
   deriveAvecSyncUi,
   formatAvecUserMessage,
+  hardAvecSyncWarnings,
   isAvecTokenExpiredError,
 } from '@/lib/avec/messages'
 import {
@@ -425,9 +426,11 @@ export default function EstoquePage() {
   const notOnboarded =
     !loading && syncStatus && (!syncStatus.stock_auth_configured || !syncStatus.last_fast)
 
-  const truncationWarnings = stockSyncWarnings(syncStatus)
+  // Soft (ex.: 0046 no fast horário) não pinta “incompleto”; só hard ou lote pendente.
+  const truncationWarnings = hardAvecSyncWarnings(stockSyncWarnings(syncStatus))
   const paginationItems = syncStatus?.pagination ?? []
   const pendingPagination = paginationItems.filter((p) => p.hasMore)
+  const showTruncationBanner = truncationWarnings.length > 0 && pendingPagination.length === 0
   const lastRunError =
     syncStatus?.last_fast?.error ?? syncStatus?.last_full?.error ?? null
   const tokenExpired = isAvecTokenExpiredError(lastRunError)
@@ -469,7 +472,7 @@ export default function EstoquePage() {
         </div>
       )}
 
-      {truncationWarnings.length > 0 && (
+      {showTruncationBanner && (
         <div className="space-y-1 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
           <p className="font-medium">Sync de estoque incompleto (limite de páginas)</p>
           {truncationWarnings.map((w) => (
@@ -480,10 +483,10 @@ export default function EstoquePage() {
         </div>
       )}
 
-      {paginationItems.length > 0 && (
+      {pendingPagination.length > 0 && (
         <div className="space-y-2 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
-          <p className="font-medium">Sincronização por lotes de páginas</p>
-          {paginationItems.map((item) => (
+          <p className="font-medium">Sync de estoque incompleto — continue o próximo lote</p>
+          {pendingPagination.map((item) => (
             <div
               key={item.reportId}
               className="flex flex-wrap items-center justify-between gap-2 text-xs opacity-90"
@@ -492,7 +495,7 @@ export default function EstoquePage() {
                 {item.reportId} {item.label}: páginas {item.startPage}–{item.endPage} sincronizadas
                 {item.rowsThisBatch > 0 ? ` (${item.rowsThisBatch} linhas)` : ''}
               </span>
-              {item.hasMore && item.nextPage != null && (
+              {item.nextPage != null && (
                 <button
                   type="button"
                   onClick={() => triggerContinueSync(item.reportId, item.nextPage!)}
