@@ -111,6 +111,12 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/^snapshot\s/i.test(warning)) return true
   // Webhook scope=kpi — agenda fica para o cron; não marca sync partial.
   if (/fast\/kpi:/i.test(warning)) return true
+  // Caixa do dia ainda não lançou na Avec — mantém NULL no KPI; não é falha de sync.
+  if (/0088 vazio\s*—\s*não grava R\$?0/i.test(warning)) return true
+  // Linhas órfãs puladas no upsert (sem phone/avec) — já esperadas; não pintam parcial.
+  if (/linha sem avec_client_id e sem telefone/i.test(warning)) return true
+  // Estoque: truncamento de alertas sem limpar stale — proteção, não falha de caixa/Visão.
+  if (/0046:\s*truncado/i.test(warning)) return true
   return false
 }
 
@@ -145,6 +151,24 @@ export function isCleanBudgetAbortPartial(last: AvecSyncLastLike | null | undefi
   return aborted || budgetWarn
 }
 
+/**
+ * Partial no DB só com avisos soft (ex.: 0088 vazio de manhã) — sem erro hard.
+ * Cobre runs antigos gravados antes do warning virar soft; e abort+órfãos.
+ */
+export function isSoftWarningsOnlyPartial(last: AvecSyncLastLike | null | undefined): boolean {
+  if (!last || last.status !== 'partial') return false
+  if (asStringArray(last.stats?.errors).length > 0) return false
+  return hardAvecSyncWarnings(asStringArray(last.stats?.warnings)).length === 0
+}
+
+/** Qualquer partial “calmo” — não acende banner Visão/Hoje/Financeiro. */
+export function isCalmPartialAvecRun(last: AvecSyncLastLike | null | undefined): boolean {
+  return (
+    isSoftOnlyPartialAvecRun(last) ||
+    isCleanBudgetAbortPartial(last) ||
+    isSoftWarningsOnlyPartial(last)
+  )
+}
 
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
@@ -218,7 +242,7 @@ export function deriveAvecSyncUi(opts: {
 
   const softOnlyPartial = isSoftOnlyPartialAvecRun(last)
   const cleanBudgetAbort = isCleanBudgetAbortPartial(last)
-  const calmPartial = softOnlyPartial || cleanBudgetAbort
+  const calmPartial = isCalmPartialAvecRun(last)
   const softErrors = softOnlyPartial ? asStringArray(last.stats?.errors) : []
   const uiWarnings = softErrors.length > 0 ? [...warnings, ...softErrors] : warnings
 
