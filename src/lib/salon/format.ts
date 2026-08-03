@@ -159,9 +159,13 @@ export function formatPercent(value: number | null | undefined, digits = 0) {
 
 function whatsAppDigits(phone: string | null): string | null {
   if (!phone) return null
+  const hasPlus = phone.trim().startsWith('+')
   let digits = phone.replace(/\D/g, '')
   if (digits.length < 10) return null
-  // Celular BR sem DDI → assume 55
+  // Já BR com DDI, ou E.164 com + (ex.: +1 NANP) — não prefixar 55 de novo.
+  if (digits.startsWith('55') && digits.length >= 12) return digits
+  if (hasPlus && digits.length >= 11) return digits
+  // Celular BR local sem DDI → assume 55
   if (digits.length <= 11 && !digits.startsWith('55')) digits = `55${digits}`
   return digits
 }

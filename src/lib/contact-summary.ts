@@ -539,6 +539,7 @@ export async function countNewContactsNotInAvec(opts?: {
     select count(*)::int as n
     from contacts
     where anonymized_at is null
+      and channel = 'avec'
       and avec_client_id is null
       and status <> 'importado'
       and coalesce(source, '') not like 'avec_sync_clients%'
@@ -550,6 +551,21 @@ export async function countNewContactsNotInAvec(opts?: {
   return Number(rows[0]?.n ?? 0) || 0
 }
 
+/** Novos não usam badges de urgência — zera campos sem carregar client_services. */
+function asNovosListItem(c: ContactRow): ContactListItem {
+  return {
+    ...c,
+    overdue: 0,
+    max_overdue_days: 0,
+    due_soon: 0,
+    scheduled_soon: 0,
+    pending_actions: 0,
+    urgency_score: 0,
+    top_action: null,
+    next_scheduled_at: null,
+  }
+}
+
 /** Lista novos do dia sem cliente Avec ainda (mais recentes primeiro). */
 export async function listNewContactsNotInAvec(opts?: {
   day?: string | null
@@ -558,23 +574,28 @@ export async function listNewContactsNotInAvec(opts?: {
   const sql = getSql()
   const day = normalizeDayKey(opts?.day)
   const limit = Math.min(Math.max(1, opts?.limit ?? 250), 500)
-  const countRows = (await sql`
-    select count(*)::int as n
+  // Um round-trip: colunas da lista + total via window (sem select * / services / urgency).
+  const rows = (await sql`
+    select
+      id,
+      name,
+      phone,
+      email,
+      channel,
+      source,
+      status,
+      avec_client_id,
+      notes,
+      preferred_manicurist,
+      preferred_hairstylist,
+      first_contact_at,
+      last_contact_at,
+      created_at,
+      anonymized_at,
+      count(*) over()::int as total
     from contacts
     where anonymized_at is null
-      and avec_client_id is null
-      and status <> 'importado'
-      and coalesce(source, '') not like 'avec_sync_clients%'
-      and coalesce(source, '') not like 'avec_backfill%'
-      and coalesce(source, '') not like 'avec_lake%'
-      and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
-      and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
-  `) as { n: number }[]
-  const total = Number(countRows[0]?.n ?? 0) || 0
-  const contacts = (await sql`
-    select *
-    from contacts
-    where anonymized_at is null
+      and channel = 'avec'
       and avec_client_id is null
       and status <> 'importado'
       and coalesce(source, '') not like 'avec_sync_clients%'
@@ -584,9 +605,10 @@ export async function listNewContactsNotInAvec(opts?: {
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
     order by created_at desc
     limit ${limit}
-  `) as ContactRow[]
-  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
-  return { items: withUrgency(contacts, byContact), total }
+  `) as (ContactRow & { total: number })[]
+  const total = Number(rows[0]?.total ?? 0) || 0
+  const items = rows.map(({ total: _t, ...c }) => asNovosListItem(c))
+  return { items, total }
 }
 
 /** Totais das filas Contatos (reativar + novos do dia sem Avec). */
