@@ -16,6 +16,7 @@ import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
 import { getRomPanelId } from '@/lib/brand'
 import { toSalonDateIso } from '@/lib/salon/format'
 import { resolveMonthWindow } from '@/lib/salon/month-window'
+import { tryFetch0011QuarterPairFromDb } from './from-db'
 import { fetchLocal0011Quarter, fetchLocal0011QuarterPair } from './local-0011'
 import { matchDirectorProfessional } from './match-pro'
 import {
@@ -643,7 +644,41 @@ export async function fetchLiveDirectorBlocks(
   }
 
   if (want0011) {
-    if (shouldSkipAvec0011() && professionals.length > 0) {
+    let usedDb = false
+    if (professionals.length > 0) {
+      try {
+        const fromDb = await tryFetch0011QuarterPairFromDb(
+          selectedQuarter,
+          compareQuarter,
+          professionals,
+        )
+        if (fromDb && fromDb.selected.source === 'local' && fromDb.compare.source === 'local') {
+          selectedQ = {
+            byPro: fromDb.selected.byPro,
+            salonRates: fromDb.selected.salonRates,
+            truncated: fromDb.selected.truncated,
+            source: 'local',
+            note: fromDb.selected.note,
+          }
+          compareQ = {
+            byPro: fromDb.compare.byPro,
+            salonRates: fromDb.compare.salonRates,
+            truncated: fromDb.compare.truncated,
+            source: 'local',
+            note: fromDb.compare.note,
+          }
+          usedDb = true
+          warnings.push('0011 via banco interno (visitas 0002 sincronizadas)')
+          if (selectedQ.note) warnings.push(selectedQ.note)
+        }
+      } catch (e) {
+        warnings.push(
+          `0011 DB: ${e instanceof Error ? e.message : String(e)}`.slice(0, 160),
+        )
+      }
+    }
+
+    if (!usedDb && shouldSkipAvec0011() && professionals.length > 0) {
       try {
         const pair = await fetchLocal0011QuarterPair(
           selectedQuarter,
@@ -675,7 +710,7 @@ export async function fetchLiveDirectorBlocks(
           `0011 local: ${e instanceof Error ? e.message : String(e)}`,
         )
       }
-    } else {
+    } else if (!usedDb) {
       const [selResult, cmpResult] = await Promise.allSettled([
         fetch0011Quarter(selectedQuarter, budget, professionals),
         fetch0011Quarter(compareQuarter, budget, professionals),
