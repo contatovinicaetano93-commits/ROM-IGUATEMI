@@ -18,6 +18,7 @@ import { SectionCard, CountBadge, PrimaryButton } from '../../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { formatCurrency, formatPercent, whatsAppWebUrl } from '@/lib/salon/format'
 import type { DirectorReport } from '@/lib/director-report/types'
+import { isHistoricalDirectorPeriod } from '@/lib/director-report/period'
 import { buildRecallWhatsAppMessage } from '@/lib/director-report/recall-message'
 
 type StageTab = '0011' | '0021' | 'estoque'
@@ -104,17 +105,6 @@ function previousQuarterKey(key: string) {
   return `${year}-Q${q - 1}`
 }
 
-/** Período com ano < ano civil atual (SP) — precisa de fetch Avec completo. */
-function isHistoricalSelection(keys: Array<string | null | undefined>): boolean {
-  const { year } = spNowParts()
-  for (const key of keys) {
-    if (!key) continue
-    const y = Number(String(key).slice(0, 4))
-    if (Number.isFinite(y) && y < year) return true
-  }
-  return false
-}
-
 const QUARTERS = buildQuarterOptions()
 const MONTHS = buildMonthOptions()
 /** Timeout do browser para anos históricos (servidor maxDuration 300s). */
@@ -163,17 +153,23 @@ export default function RelatorioDiretoriaPage() {
     setError(null)
     const historical =
       stage === '0011'
-        ? isHistoricalSelection([quarter, compare])
-        : isHistoricalSelection([
+        ? isHistoricalDirectorPeriod({
+            quarter,
+            compare,
+            stage: '0011',
+          })
+        : isHistoricalDirectorPeriod({
             month,
             quarter0021,
-            compareMonths ? compareQuarter0021 : null,
-          ])
+            compare0021: compareQuarter0021,
+            compareMonths,
+            stage: '0021',
+          })
     const fetchMs = historical ? HISTORICAL_FETCH_MS : CURRENT_FETCH_MS
     try {
       const q = new URLSearchParams({
         stage,
-        // Histórico: slim=0 — paginação Avec completa.
+        // Fechado/histórico: slim=0 — paginação Avec completa.
         slim: historical ? '0' : '1',
         month,
         quarter_0021: quarter0021,

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { currentYearSp, isHistoricalDirectorPeriod } from './period'
+import {
+  currentQuarterKeySp,
+  currentYearSp,
+  isHistoricalDirectorPeriod,
+} from './period'
 
 describe('isHistoricalDirectorPeriod', () => {
   it('marca 2025 como histórico quando o calendário SP já está em 2026+', () => {
@@ -10,14 +14,35 @@ describe('isHistoricalDirectorPeriod', () => {
     ).toBe(true)
   })
 
-  it('não marca o ano corrente como histórico', () => {
-    const now = new Date('2026-07-30T15:00:00.000Z')
+  it('marca trimestre fechado do ano corrente como full-budget', () => {
+    const now = new Date('2026-08-03T18:00:00.000Z')
+    expect(currentQuarterKeySp(now)).toBe('2026-Q3')
     expect(
       isHistoricalDirectorPeriod(
-        { month: '2026-07', quarter: '2026-Q2', compare: '2026-Q1' },
+        { quarter: '2026-Q2', compare: '2026-Q1', stage: '0011' },
+        now,
+      ),
+    ).toBe(true)
+  })
+
+  it('trimestre aberto corrente sozinho pode ficar slim', () => {
+    const now = new Date('2026-08-03T18:00:00.000Z')
+    expect(
+      isHistoricalDirectorPeriod(
+        { quarter: '2026-Q3', compare: '2026-Q3', stage: '0011' },
         now,
       ),
     ).toBe(false)
+  })
+
+  it('marca full-budget se o comparativo for trimestre fechado', () => {
+    const now = new Date('2026-08-03T18:00:00.000Z')
+    expect(
+      isHistoricalDirectorPeriod(
+        { quarter: '2026-Q3', compare: '2026-Q2', stage: '0011' },
+        now,
+      ),
+    ).toBe(true)
   })
 
   it('marca histórico se qualquer chave de período for de ano anterior', () => {
@@ -31,11 +56,11 @@ describe('isHistoricalDirectorPeriod', () => {
   })
 
   it('stage 0021 ignora trimestre 0011 histórico da outra aba', () => {
-    const now = new Date('2026-07-30T15:00:00.000Z')
+    const now = new Date('2026-08-03T18:00:00.000Z')
     expect(
       isHistoricalDirectorPeriod(
         {
-          month: '2026-07',
+          month: '2026-08',
           quarter0021: '2026-Q3',
           quarter: '2025-Q4',
           compare: '2025-Q3',
@@ -48,13 +73,13 @@ describe('isHistoricalDirectorPeriod', () => {
   })
 
   it('stage 0011 ignora mês 0021 histórico', () => {
-    const now = new Date('2026-07-30T15:00:00.000Z')
+    const now = new Date('2026-08-03T18:00:00.000Z')
     expect(
       isHistoricalDirectorPeriod(
         {
           month: '2025-06',
-          quarter: '2026-Q2',
-          compare: '2026-Q1',
+          quarter: '2026-Q3',
+          compare: '2026-Q3',
           stage: '0011',
         },
         now,
@@ -63,11 +88,11 @@ describe('isHistoricalDirectorPeriod', () => {
   })
 
   it('compareMonths=false ignora compare0021 histórico', () => {
-    const now = new Date('2026-07-30T15:00:00.000Z')
+    const now = new Date('2026-08-03T18:00:00.000Z')
     expect(
       isHistoricalDirectorPeriod(
         {
-          month: '2026-07',
+          month: '2026-08',
           quarter0021: '2026-Q3',
           compare0021: '2025-Q4',
           stage: '0021',

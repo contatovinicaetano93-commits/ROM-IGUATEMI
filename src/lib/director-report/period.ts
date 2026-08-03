@@ -126,12 +126,43 @@ export function currentYearSp(now = new Date()): number {
   return Number(y)
 }
 
+/** Mês YYYY-MM atual em America/Sao_Paulo. */
+export function currentMonthKeySp(now = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+  })
+    .format(now)
+    .slice(0, 7)
+}
+
+/** Trimestre YYYY-Qn atual em America/Sao_Paulo. */
+export function currentQuarterKeySp(now = new Date()): QuarterKey {
+  const monthKey = currentMonthKeySp(now)
+  const month = Number(monthKey.slice(5, 7))
+  const year = Number(monthKey.slice(0, 4))
+  const q = Math.ceil(month / 3) as 1 | 2 | 3 | 4
+  return `${year}-Q${q}` as QuarterKey
+}
+
 /**
- * Pedido com período histórico (ex.: 2025 quando o calendário já está em 2026).
- * Precisa de budget Avec completo — o caminho slim/55s da UI zera esses dados.
+ * Período já fechado (mês/trimestre anterior ao corrente em SP).
+ * Comparação lexicográfica funciona para YYYY-MM e YYYY-Qn.
+ */
+export function isClosedDirectorPeriodKey(key: string, now = new Date()): boolean {
+  if (key.includes('-Q')) return key < currentQuarterKeySp(now)
+  if (/^\d{4}-\d{2}$/.test(key)) return key < currentMonthKeySp(now)
+  return false
+}
+
+/**
+ * Pedido que precisa de budget Avec completo (não slim/55s).
+ * - Ano anterior ao corrente, OU
+ * - Mês/trimestre já fechado no ano corrente (ex.: 2026-Q2 em ago/2026).
  *
- * `stage` limita quais chaves entram: evita que filtro da outra aba (ex. 0011 em
- * 2025-Q4) force caminho histórico no 0021 do ano corrente.
+ * `stage` limita quais chaves entram: evita que filtro da outra aba force
+ * caminho completo na etapa que o usuário não está vendo.
  */
 export function isHistoricalDirectorPeriod(
   opts: {
@@ -168,6 +199,7 @@ export function isHistoricalDirectorPeriod(
     if (!key) continue
     const y = Number(String(key).slice(0, 4))
     if (Number.isFinite(y) && y < year) return true
+    if (isClosedDirectorPeriodKey(String(key), now)) return true
   }
   return false
 }
