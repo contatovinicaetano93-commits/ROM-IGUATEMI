@@ -4,7 +4,9 @@ import { isAvecConfigured } from '@/lib/avec/client'
 import {
   runAvecSync,
   getLastAvecSync,
+  parseAvecSyncScope,
   type AvecSyncMode,
+  type AvecSyncScope,
   type AvecSyncStage,
 } from '@/lib/avec/sync'
 import { requireAdmin, isAuthEnabled } from '@/lib/auth'
@@ -70,6 +72,8 @@ export async function executeAvecSync(
     forceMode?: AvecSyncMode
     /** Fatia do full (ops/agenda/catalog). Default all. */
     forceStage?: AvecSyncStage
+    /** Escopo do fast: webhook usa kpi (caixa só). */
+    forceScope?: AvecSyncScope
     cron?: boolean
     webhook?: boolean
   },
@@ -77,6 +81,11 @@ export async function executeAvecSync(
   const mode = opts?.forceMode ?? parseAvecSyncMode(req, opts?.defaultMode ?? 'fast')
   const stage: AvecSyncStage =
     mode === 'full' ? (opts?.forceStage ?? 'all') : 'all'
+  const scope: AvecSyncScope =
+    mode === 'fast'
+      ? (opts?.forceScope ??
+        (opts?.webhook ? 'kpi' : parseAvecSyncScope(req.nextUrl.searchParams.get('scope'))))
+      : 'all'
 
   if (!isAvecConfigured()) {
     if (opts?.cron) {
@@ -85,6 +94,7 @@ export async function executeAvecSync(
         reason: 'aguardando_avec_token',
         mode,
         stage,
+        scope,
         note: 'AVEC_API_TOKEN ausente — cron ignorado até terça',
       })
     }
@@ -94,6 +104,12 @@ export async function executeAvecSync(
   const effectiveMode: AvecSyncMode = opts?.webhook && mode === 'full' ? 'fast' : mode
   const effectiveStage: AvecSyncStage =
     effectiveMode === 'full' ? stage : 'all'
+  const effectiveScope: AvecSyncScope =
+    effectiveMode === 'fast'
+      ? opts?.webhook
+        ? (opts.forceScope ?? 'kpi')
+        : scope
+      : 'all'
 
   if (!opts?.force) {
     const last = await getLastAvecSync(effectiveMode, {
@@ -116,12 +132,15 @@ export async function executeAvecSync(
           reason: 'sync_recente',
           mode: effectiveMode,
           stage: effectiveStage,
+          scope: effectiveScope,
           last,
           schedule: effectiveMode === 'full' ? 'full' : 'intraday',
           note: `Último sync ${effectiveMode}${
             effectiveMode === 'full' && effectiveStage !== 'all'
               ? `/${effectiveStage}`
-              : ''
+              : effectiveMode === 'fast' && effectiveScope === 'kpi'
+                ? '/kpi'
+                : ''
           } há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
         })
       }
@@ -158,16 +177,20 @@ export async function executeAvecSync(
 
     const run = await runAvecSync(effectiveMode, {
       stage: effectiveStage,
+      scope: effectiveScope,
     })
     return ok({
       ...run,
       skipped: false,
       mode: effectiveMode,
       stage: effectiveStage,
+      scope: effectiveScope,
       schedule: effectiveMode === 'fast' ? 'intraday' : 'full',
       note:
         effectiveMode === 'fast'
-          ? 'Sync fast — agenda/caixa do dia (sem P1–P3)'
+          ? effectiveScope === 'kpi'
+            ? 'Sync fast/kpi — caixa/cancel/noshow (agenda via webhook/cron)'
+            : 'Sync fast — agenda/caixa do dia (sem P1–P3)'
           : fullStageNote(effectiveStage),
     })
   } catch (e) {
@@ -177,6 +200,7 @@ export async function executeAvecSync(
         reason: 'sync_em_andamento',
         mode: effectiveMode,
         stage: effectiveStage,
+        scope: effectiveScope,
         holder: e.holder,
         expires_at: e.expiresAt,
         note: 'Outro sync Avec já está em execução (lock distribuído)',
@@ -189,6 +213,7 @@ export async function executeAvecSync(
           reason: 'db_quota',
           mode: effectiveMode,
           stage: effectiveStage,
+          scope: effectiveScope,
           note: dbQuotaUserMessage(e),
         })
       }

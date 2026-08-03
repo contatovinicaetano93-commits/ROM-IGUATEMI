@@ -254,16 +254,24 @@ export async function ingestAvecWebhook(rawBody: unknown) {
   const isCancelledEvent =
     event === 'appointment.cancelled' || payload.status === 'perdido'
 
-  const contact = await upsertContact({
+  const upsertInput = {
     phone: payload.phone,
     name: payload.name,
     email: payload.email,
-    channel: 'avec',
+    channel: 'avec' as const,
     source: 'avec_webhook',
     avecClientId: payload.client_id,
     // Cancel: status perdido só depois de checar se ainda há slot aberto.
     status: isCancelledEvent ? undefined : payload.status,
-  })
+  }
+  let contact = await upsertContact(upsertInput)
+
+  // Claim avec_client_id no match por telefone — Contatos Novos some quando
+  // o lead WhatsApp ganha id Avec. Retry se corrida unique zerou o claim.
+  const avecId = payload.client_id?.trim() || null
+  if (avecId && payload.phone && contact.avec_client_id !== avecId) {
+    contact = await upsertContact({ ...upsertInput, avecClientId: avecId })
+  }
 
   // Tombstone LGPD: não reescreve serviços, prefs nem eventos com PII.
   if (contact.anonymized_at) {

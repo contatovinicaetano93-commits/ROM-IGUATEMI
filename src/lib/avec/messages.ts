@@ -109,6 +109,8 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/heal importado:/i.test(warning)) return true
   // Snapshot archival falhou — não é KPI core (paridade BR).
   if (/^snapshot\s/i.test(warning)) return true
+  // Webhook scope=kpi — agenda fica para o cron; não marca sync partial.
+  if (/fast\/kpi:/i.test(warning)) return true
   return false
 }
 
