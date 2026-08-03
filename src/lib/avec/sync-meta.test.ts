@@ -99,3 +99,44 @@ describe('loadAvecSyncMeta (stage-aware)', () => {
     expect(meta.stale).toBe(true)
   })
 })
+
+describe('surface stale gates', () => {
+  const opsOnlyStale = {
+    never_synced: false,
+    ops_stale: true,
+    fast_stale: false,
+  }
+  const fastOnlyStale = {
+    never_synced: false,
+    ops_stale: false,
+    fast_stale: true,
+  }
+
+  it('Financeiro só reage a fast_stale', async () => {
+    const { isFinanceiroStale, financeiroSyncStaleMessage } = await import('@/lib/avec/sync-meta')
+    expect(isFinanceiroStale(opsOnlyStale)).toBe(false)
+    expect(isFinanceiroStale(fastOnlyStale)).toBe(true)
+    expect(financeiroSyncStaleMessage(fastOnlyStale)).toContain('fast desatualizado')
+    expect(financeiroSyncStaleMessage(opsOnlyStale)).toBeNull()
+  })
+
+  it('Visão só reage a ops_stale; fast vira info suave', async () => {
+    const { isVisaoStale, visaoSyncStaleMessage, visaoSyncFastInfoMessage } = await import(
+      '@/lib/avec/sync-meta',
+    )
+    expect(isVisaoStale(opsOnlyStale)).toBe(true)
+    expect(isVisaoStale(fastOnlyStale)).toBe(false)
+    expect(visaoSyncStaleMessage(opsOnlyStale)).toContain('P1/P2/P3')
+    expect(visaoSyncStaleMessage(fastOnlyStale)).toBeNull()
+    expect(visaoSyncFastInfoMessage(fastOnlyStale)).toContain('fast desatualizado')
+    expect(visaoSyncFastInfoMessage(opsOnlyStale)).toBeNull()
+  })
+
+  it('Relatórios reage a ops ou fast', async () => {
+    const { isRelatoriosStale, relatoriosSyncStaleMessage } = await import('@/lib/avec/sync-meta')
+    expect(isRelatoriosStale(opsOnlyStale)).toBe(true)
+    expect(isRelatoriosStale(fastOnlyStale)).toBe(true)
+    expect(relatoriosSyncStaleMessage(opsOnlyStale)).toContain('P1/P2/P3')
+    expect(relatoriosSyncStaleMessage(fastOnlyStale)).toContain('caixa')
+  })
+})

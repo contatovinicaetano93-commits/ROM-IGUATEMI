@@ -241,7 +241,7 @@ export function deriveAvecSyncUi(opts: {
         ? 'Full falhou só em relatório periférico (0107); fast/core ok — rode sync fast'
         : cleanBudgetAbort
           ? 'Último full abortou no orçamento com core ok — rode sync fast se Hoje estiver velho'
-          : 'Último sync bem-sucedido há mais de 2–3h',
+          : 'Último sync bem-sucedido há mais de 1h',
       warnings: uiWarnings,
     }
   }
