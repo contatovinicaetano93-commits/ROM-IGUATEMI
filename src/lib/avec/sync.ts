@@ -73,7 +73,6 @@ import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
 import { getDeploymentContext } from '@/lib/deployment'
 import { getSalonMetrics, upsertSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
-import { SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import {
   isAvecCancelledStatus,
   isAvecNegativeOutcomeStatus,
@@ -489,11 +488,10 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
 }
 
 async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
-  // Fast: ontem → +SCHEDULED_SOON_DAYS — Contatos Agendados (semana) + corrige KPI
-  // Agendados do dia fechado (antes o fast só puxava a partir de hoje e o KPI de ontem ficava stale).
-  // Budget 720s + abort limpo cobrem o volume; semana longa (+21d) só no full.
-  const range =
-    mode === 'fast' ? periodRange(1, SCHEDULED_SOON_DAYS) : periodRange(1, 21)
+  // Fast: ontem → amanhã — Hoje/KPI + operação do dia seguinte.
+  // Semana (+7 Contatos Agendados) e horizonte +21d ficam no full/agenda —
+  // no BR a janela de 7d estourava o orçamento e abortava reconcile/KPI.
+  const range = mode === 'fast' ? periodRange(1, 1) : periodRange(1, 21)
   // 0051: site = origem Online/Local ("" = todos). Unidade vem do token (salon_id).
   const params = { ...range, site: '', profissional_id: '', limit: 250 }
   const result = await fetchSyncReport('0051', params)
@@ -695,7 +693,10 @@ let attendancesCoveredReturning = false
 async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRunId?: string) {
   const today = todayIso()
   // Uma janela serve attendances + returning (colapsa duplo 0002 no budget).
-  const fetchFrom = mode === 'fast' ? `${today.slice(0, 7)}-01` : addCalendarDaysYmd(today, -90)
+  // Fast: ontem+hoje (é o que gravamos em mix). Full: 90d (last_done histórico).
+  // Antes o fast puxava MTD inteiro só para escrever 2 dias — caro no BR.
+  const fetchFrom =
+    mode === 'fast' ? addCalendarDaysYmd(today, -1) : addCalendarDaysYmd(today, -90)
   const attendanceFrom = mode === 'fast' ? today : addCalendarDaysYmd(today, -7)
   const params = {
     inicio: isoToBr(fetchFrom),
@@ -1216,9 +1217,9 @@ async function syncReturningFrom0002(
     markSyncBudgetExhausted(stats, 'recorrentes 0002')
     return
   }
-  // Attendances não rodou: fetch mínimo MTD (fast) / 7d metrics (full sem last_done 90d).
+  // Attendances não rodou: fetch mínimo ontem+hoje (fast) / 7d metrics (full sem last_done 90d).
   const today = todayIso()
-  const from = mode === 'fast' ? `${today.slice(0, 7)}-01` : addCalendarDaysYmd(today, -7)
+  const from = mode === 'fast' ? addCalendarDaysYmd(today, -1) : addCalendarDaysYmd(today, -7)
   const params = {
     inicio: isoToBr(from),
     fim: isoToBr(today),
@@ -1291,8 +1292,10 @@ export async function runAvecSync(
   opts?: { stage?: AvecSyncStage },
 ): Promise<AvecSyncRun> {
   const stage: AvecSyncStage = mode === 'full' ? (opts?.stage ?? 'all') : 'all'
-  // Fast e full compartilham o mesmo lease — evita overlap no Postgres entre cron/webhook.
-  return withSyncLock(SYNC_LOCK_KEYS.avec, () => runAvecSyncUnlocked(mode, stage), {
+  // Locks separados: full/ops às 10:35 não deve matar o fast de :50 (Hoje).
+  // Estágios full ainda compartilham avecFull (evita duas fatias no mesmo DB).
+  const lockKey = mode === 'fast' ? SYNC_LOCK_KEYS.avecFast : SYNC_LOCK_KEYS.avecFull
+  return withSyncLock(lockKey, () => runAvecSyncUnlocked(mode, stage), {
     // maxDuration route = 800s — lease precisa sobreviver a lambda ainda viva.
     ttlMs: 15 * 60 * 1000,
     owner: stage === 'all' ? `avec-${mode}` : `avec-${mode}-${stage}`,
