@@ -80,4 +80,22 @@ describe('loadAvecSyncMeta (stage-aware)', () => {
     expect(meta.ops_created_at).toBeTruthy()
     expect(meta.stale).toBe(false)
   })
+
+  it('marca stale quando ops/agenda frescos mas fast >1h (caixa do dia)', async () => {
+    getLastAvecSync.mockImplementation(async (kind: string, opts?: { stage?: string }) => {
+      if (kind === 'fast') return run('fast', 90)
+      if (kind === 'full' && opts?.stage === 'ops') return run('full', 60, 'ops')
+      if (kind === 'full' && opts?.stage === 'agenda') return run('full', 45, 'agenda')
+      if (kind === 'full' && opts?.stage === 'catalog') return run('full', 30, 'catalog')
+      if (kind === 'full' && opts?.stage === 'all') return null
+      return null
+    })
+
+    const { loadAvecSyncMeta } = await import('@/lib/avec/sync-meta')
+    const meta = await loadAvecSyncMeta()
+    expect(meta.ops_stale).toBe(false)
+    expect(meta.agenda_stale).toBe(false)
+    expect(meta.fast_stale).toBe(true)
+    expect(meta.stale).toBe(true)
+  })
 })
