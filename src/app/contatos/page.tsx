@@ -17,7 +17,12 @@ import {
 import { Avatar, PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { fmtSchedule, fmtScheduleParts, toSalonDateIso, whatsAppUrl } from '@/lib/salon/format'
-import { CATEGORY_LABEL, DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
+import {
+  CATEGORY_LABEL,
+  DUE_SOON_DAYS,
+  NOVOS_WINDOW_DAYS,
+  SCHEDULED_SOON_DAYS,
+} from '@/lib/salon/constants'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
 
 interface Contact {
@@ -358,7 +363,7 @@ function ContatosPageContent() {
             Novos contatos
           </p>
           <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
-            Vieram da Avec hoje, mas ainda sem cliente no banco Avec
+            Últimos {NOVOS_WINDOW_DAYS} dias, ainda sem cliente no banco Avec
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-gold/15 px-3 py-1 text-sm font-semibold tabular-nums text-gold">
@@ -444,7 +449,9 @@ function ContatosPageContent() {
       {mode === 'novos' && (
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
           Novos: lead que chegou pela Avec (agenda/atendimento), mas o ROM abriu cadastro novo
-          porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio).
+          porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio). Fica aqui por{' '}
+          {NOVOS_WINDOW_DAYS} dias; sai antes se fizer um serviço com cadência, e aí passa a
+          aparecer em Vencendo/Atrasados.
         </p>
       )}
 

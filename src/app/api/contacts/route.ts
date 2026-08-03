@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (countsOnly) {
-      const cacheKey = `contacts:queue-counts:v4:ch=${channel ?? ''}:day=${day ?? 'today'}`
+      const cacheKey = `contacts:queue-counts:v5:ch=${channel ?? ''}:day=${day ?? 'today'}`
       const queues = await cachedFetch(
         cacheKey,
         () => countContactQueues({ channel, day }),

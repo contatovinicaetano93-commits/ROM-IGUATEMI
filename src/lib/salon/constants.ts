@@ -17,3 +17,10 @@ export const DUE_SOON_DAYS = 30
 
 /** Janela de agendamentos próximos na fila Reativar. */
 export const SCHEDULED_SOON_DAYS = 7
+
+/**
+ * Janela da aba Novos (dias corridos, incluindo hoje).
+ * Era 1 dia: o lead que não fechava nada sumia em 24h e não aparecia em lugar
+ * nenhum — Vencendo/Atrasados só pega quem já tem serviço feito com cadência.
+ */
+export const NOVOS_WINDOW_DAYS = 30

@@ -1,7 +1,7 @@
 import { CONTACT_STATUSES, type ContactRow, type ContactStatus } from '@/lib/contacts'
 import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
-import { DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
+import { DUE_SOON_DAYS, NOVOS_WINDOW_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import { compareByOverdueThenName, urgencyForServices } from '@/lib/salon/urgency'
 
@@ -42,9 +42,9 @@ export interface UrgencyQueueCounts {
   scheduled: number
 }
 
-/** Filas da tela Contatos — urgência + novos do dia sem Avec. */
+/** Filas da tela Contatos — urgência + novos da janela sem Avec. */
 export interface ContactQueueCounts extends UrgencyQueueCounts {
-  /** Contatos criados no dia (SP) ainda sem avec_client_id. */
+  /** Contatos criados na janela Novos (SP) ainda sem avec_client_id. */
   novos: number
 }
 
@@ -525,10 +525,18 @@ function normalizeDayKey(raw: string | null | undefined): string {
 }
 
 /**
- * Contatos novos do dia sem cliente na Avec ainda.
+ * Contatos novos dos últimos NOVOS_WINDOW_DAYS dias sem cliente na Avec ainda.
  * O lead pode vir da Avec (agenda/atendimento), mas o ROM cria cadastro novo
  * porque ainda não existe no banco Avec (`avec_client_id` nulo).
  * Exclui só dump em massa (clients/backfill/lake) — não o sync operacional.
+ *
+ * Sai da lista quem já entrou no funil de cadência (serviço ativo com
+ * `last_done_at` e `cadence_days`) — mesma condição que faz o contato contar em
+ * Vencendo/Atrasados. Sem isso ele apareceria nas duas filas e as contagens
+ * ficariam infladas. Quem fez serviço SEM cadência continua aqui, porque o
+ * funil de reativação não pega esse caso.
+ *
+ * `day` é o fim da janela (default hoje), não um dia isolado.
  */
 export async function countNewContactsNotInAvec(opts?: {
   day?: string | null
@@ -545,12 +553,21 @@ export async function countNewContactsNotInAvec(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
-      and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+      and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      and not exists (
+        select 1
+        from client_services cs
+        where cs.contact_id = contacts.id
+          and cs.active = true
+          and cs.last_done_at is not null
+          and cs.cadence_days is not null
+      )
   `) as { n: number }[]
   return Number(rows[0]?.n ?? 0) || 0
 }
 
+<<<<<<< HEAD
 /** Novos não usam badges de urgência — zera campos sem carregar client_services. */
 function asNovosListItem(c: ContactRow): ContactListItem {
   return {
@@ -567,6 +584,9 @@ function asNovosListItem(c: ContactRow): ContactListItem {
 }
 
 /** Lista novos do dia sem cliente Avec ainda (mais recentes primeiro). */
+=======
+/** Lista novos da janela sem cliente Avec ainda (mais recentes primeiro). */
+>>>>>>> ec889d3 (feat(contatos): aba Novos passa a cobrir 30 dias, não só o dia)
 export async function listNewContactsNotInAvec(opts?: {
   day?: string | null
   limit?: number
@@ -574,6 +594,7 @@ export async function listNewContactsNotInAvec(opts?: {
   const sql = getSql()
   const day = normalizeDayKey(opts?.day)
   const limit = Math.min(Math.max(1, opts?.limit ?? 250), 500)
+<<<<<<< HEAD
   // Um round-trip: colunas da lista + total via window (sem select * / services / urgency).
   const rows = (await sql`
     select
@@ -593,6 +614,31 @@ export async function listNewContactsNotInAvec(opts?: {
       created_at,
       anonymized_at,
       count(*) over()::int as total
+=======
+  const countRows = (await sql`
+    select count(*)::int as n
+    from contacts
+    where anonymized_at is null
+      and avec_client_id is null
+      and status <> 'importado'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
+      and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
+      and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      and not exists (
+        select 1
+        from client_services cs
+        where cs.contact_id = contacts.id
+          and cs.active = true
+          and cs.last_done_at is not null
+          and cs.cadence_days is not null
+      )
+  `) as { n: number }[]
+  const total = Number(countRows[0]?.n ?? 0) || 0
+  const contacts = (await sql`
+    select *
+>>>>>>> ec889d3 (feat(contatos): aba Novos passa a cobrir 30 dias, não só o dia)
     from contacts
     where anonymized_at is null
       and channel = 'avec'
@@ -601,8 +647,16 @@ export async function listNewContactsNotInAvec(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
-      and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
+      and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      and not exists (
+        select 1
+        from client_services cs
+        where cs.contact_id = contacts.id
+          and cs.active = true
+          and cs.last_done_at is not null
+          and cs.cadence_days is not null
+      )
     order by created_at desc
     limit ${limit}
   `) as (ContactRow & { total: number })[]
@@ -611,7 +665,7 @@ export async function listNewContactsNotInAvec(opts?: {
   return { items, total }
 }
 
-/** Totais das filas Contatos (reativar + novos do dia sem Avec). */
+/** Totais das filas Contatos (reativar + novos da janela sem Avec). */
 export async function countContactQueues(opts?: {
   channel?: string | null
   day?: string | null
