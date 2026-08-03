@@ -464,7 +464,7 @@ export default function HojePage() {
 
       {!loading && (data?.leads.novos ?? 0) > 0 && (
         <Link
-          href="/contatos"
+          href={`/contatos?queue=novos&day=${encodeURIComponent(data!.day)}`}
           className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 active:bg-surface"
         >
           <div className="flex items-center gap-3">
