@@ -11,6 +11,7 @@ import { addService } from '@/lib/services'
 import { SERVICE_CATEGORIES } from '@/lib/services'
 import { compareByOverdueThenName } from '@/lib/salon/urgency'
 import { requireAuth } from '@/lib/auth'
+import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 import { z } from 'zod'
 
 export const maxDuration = 25
@@ -65,6 +66,14 @@ export async function GET(req: NextRequest) {
     const rawLimit = Number(searchParams.get('limit') ?? 100)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 100
 
+    const syncMeta = await loadAvecSyncMeta()
+    const syncPayload = {
+      agenda_stale: syncMeta.agenda_stale,
+      agenda_created_at: syncMeta.agenda_created_at,
+      fast_stale: syncMeta.fast_stale,
+      never_synced: syncMeta.never_synced,
+    }
+
     if (countsOnly) {
       const cacheKey = `contacts:queue-counts:v4:ch=${channel ?? ''}:day=${day ?? 'today'}`
       const queues = await cachedFetch(
@@ -72,7 +81,7 @@ export async function GET(req: NextRequest) {
         () => countContactQueues({ channel, day }),
         30,
       )
-      return okCached(null, 30, { queues })
+      return okCached(null, 30, { queues, sync: syncPayload })
     }
 
     if (newNotAvec) {
@@ -99,6 +108,7 @@ export async function GET(req: NextRequest) {
         queue: 'novos',
         day: day ?? 'today',
         queues: result.queues,
+        sync: syncPayload,
       })
     }
 
@@ -154,6 +164,7 @@ export async function GET(req: NextRequest) {
         pending: pendingOnly,
         queue: urgencyQueue ?? 'all',
         queues: result.queues ?? undefined,
+        sync: syncPayload,
       },
     )
   } catch (e) {
