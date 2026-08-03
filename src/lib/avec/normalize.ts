@@ -69,10 +69,15 @@ function pickNested(row: Record<string, unknown>, paths: string[][]): string | n
 
 export function normalizePhone(raw: string | null): string | null {
   if (!raw) return null
-  const digits = raw.replace(/\D/g, '')
+  const trimmed = raw.trim()
+  const hasPlus = trimmed.startsWith('+')
+  const digits = trimmed.replace(/\D/g, '')
   if (digits.length < 10) return null
-  if (digits.length === 11 || digits.length === 10) return `+55${digits}`
+  // Já veio com DDI explícito (+1 NANP, +55 BR, etc.) — não forçar 55.
+  if (hasPlus) return `+${digits}`
   if (digits.startsWith('55') && digits.length >= 12) return `+${digits}`
+  // Local BR (DDD+número) sem + no input.
+  if (digits.length === 10 || digits.length === 11) return `+55${digits}`
   return `+${digits}`
 }
 

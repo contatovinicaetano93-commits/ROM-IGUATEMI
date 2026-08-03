@@ -419,6 +419,12 @@ async function upsertContactUnlocked(input: UpsertContactInput): Promise<Contact
   if (phone) return insertPhoneFirst(sql, input, phone)
   if (avec) return insertAvecOnly(sql, input, avec)
 
+  // Sync/webhook sem chave vira órfão (Sem WA / Sem telefone em Novos).
+  // Manual (formulário) ainda pode criar só com nome.
+  if (input.channel !== 'manual') {
+    throw new Error('upsertContact: exige telefone ou avec_client_id')
+  }
+
   const rows = (await sql`
     insert into contacts (name, phone, email, channel, source, status)
     values (
