@@ -6,8 +6,8 @@
 export const AVEC_TOKEN_EXPIRED_MESSAGE =
   'Token Avec expirado — o refresh automático (a cada 3h) falhou; force em Admin ou /api/avec/refresh-token?force=1'
 
-/** Último sync bem-sucedido há mais que isto → badge "stale". */
-export const AVEC_SYNC_STALE_MS = 2.5 * 60 * 60 * 1000
+/** Último sync bem-sucedido há mais que isto → badge "stale" (paridade Cérebro fast / 1h). */
+export const AVEC_SYNC_STALE_MS = 1 * 60 * 60 * 1000
 
 export type AvecSyncUiStatus = 'ok' | 'partial' | 'error' | 'stale' | 'never' | 'off'
 
@@ -168,7 +168,7 @@ function timeAgoShort(iso: string, now: number): string {
 
 /**
  * Estado compacto do sync para badge (Hoje / Admin / Estoque).
- * stale = último sync com sucesso há mais de ~2,5h.
+ * stale = último sync com sucesso há mais de 1h (caixa do dia / fast).
  */
 export function deriveAvecSyncUi(opts: {
   configured: boolean

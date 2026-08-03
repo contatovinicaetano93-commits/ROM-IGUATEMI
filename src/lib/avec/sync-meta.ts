@@ -43,7 +43,7 @@ export async function getLastFullStage(stage: AvecSyncStage): Promise<AvecSyncRu
 /**
  * Metadados de sync para banners em Visão/Financeiro/Relatórios.
  *
- * Stale top-level: nunca syncou OU ops >24h OU (agenda stage velha E fast >1h).
+ * Stale top-level (Visão/Financeiro): nunca syncou OU ops >24h OU fast >1h (caixa do dia).
  * Catalog velho não assusta Visão (só campo dedicado).
  *
  * Empty-kill (Sync interrompido / abandoned) não mascara ok/partial saudável
@@ -75,8 +75,8 @@ export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
       const catalog_stale =
         never_synced || catalog == null || (catalogAge != null && catalogAge > 24)
 
-      // Visão: ops velho assusta; caixa do dia só se fast/agenda falharam juntos.
-      const stale = never_synced || ops_stale || (agenda_stale && fast_stale)
+      // Visão/Financeiro: ops >24h OU fast >1h (caixa do dia) — agenda_stale fica só no campo dedicado.
+      const stale = never_synced || ops_stale || fast_stale
 
       const latest = pickNewestUsableAvecRun([ops, agenda, fast])
       // Abort limpo por orçamento (comum no BR) não deve acender “parcial” na Visão.
