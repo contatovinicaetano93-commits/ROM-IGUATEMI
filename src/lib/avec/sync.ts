@@ -100,6 +100,16 @@ export type AvecSyncMode = 'fast' | 'full'
  */
 export type AvecSyncStage = 'all' | 'ops' | 'agenda' | 'catalog'
 
+/**
+ * Escopo do fast: `kpi` = só caixa/cancel/noshow (webhook após ingest já
+ * atualizou o contato). `all` = agenda+atendidos também (cron).
+ */
+export type AvecSyncScope = 'all' | 'kpi'
+
+export function parseAvecSyncScope(value: string | null | undefined): AvecSyncScope {
+  return value === 'kpi' ? 'kpi' : 'all'
+}
+
 export function parseAvecSyncStage(value: string | null | undefined): AvecSyncStage {
   if (value === 'ops' || value === 'agenda' || value === 'catalog' || value === 'all') {
     return value
@@ -1289,22 +1299,29 @@ async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
 
 export async function runAvecSync(
   mode: AvecSyncMode = 'full',
-  opts?: { stage?: AvecSyncStage },
+  opts?: { stage?: AvecSyncStage; scope?: AvecSyncScope },
 ): Promise<AvecSyncRun> {
   const stage: AvecSyncStage = mode === 'full' ? (opts?.stage ?? 'all') : 'all'
+  const scope: AvecSyncScope = mode === 'fast' ? (opts?.scope ?? 'all') : 'all'
   // Locks separados: full/ops às 10:35 não deve matar o fast de :50 (Hoje).
   // Estágios full ainda compartilham avecFull (evita duas fatias no mesmo DB).
   const lockKey = mode === 'fast' ? SYNC_LOCK_KEYS.avecFast : SYNC_LOCK_KEYS.avecFull
-  return withSyncLock(lockKey, () => runAvecSyncUnlocked(mode, stage), {
+  return withSyncLock(lockKey, () => runAvecSyncUnlocked(mode, stage, scope), {
     // maxDuration route = 800s — lease precisa sobreviver a lambda ainda viva.
     ttlMs: 15 * 60 * 1000,
-    owner: stage === 'all' ? `avec-${mode}` : `avec-${mode}-${stage}`,
+    owner:
+      mode === 'fast' && scope === 'kpi'
+        ? 'avec-fast-kpi'
+        : stage === 'all'
+          ? `avec-${mode}`
+          : `avec-${mode}-${stage}`,
   })
 }
 
 async function runAvecSyncUnlocked(
   mode: AvecSyncMode,
   stage: AvecSyncStage,
+  scope: AvecSyncScope,
 ): Promise<AvecSyncRun> {
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
@@ -1382,23 +1399,32 @@ async function runAvecSyncUnlocked(
       } else {
         markSyncBudgetExhausted(stats, 'após revenue')
       }
-      if (!syncBudgetExhausted()) {
-        step('appointments…')
-        await syncAppointments(stats, mode, syncRunId)
-        await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
-        step(`appointments=${stats.appointments_synced}`)
+      // Webhook: ingest já agendou/concluiu o contato — só precisa caixa/KPI.
+      // Cron fast (scope=all) ainda reconcilia agenda/atendidos.
+      if (scope === 'all') {
+        if (!syncBudgetExhausted()) {
+          step('appointments…')
+          await syncAppointments(stats, mode, syncRunId)
+          await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
+          step(`appointments=${stats.appointments_synced}`)
+        } else {
+          markSyncBudgetExhausted(stats, 'antes de appointments')
+        }
+        if (!syncBudgetExhausted()) {
+          step('attendances…')
+          await syncAttendances(stats, mode, syncRunId)
+          step(`attendances=${stats.attendances_synced}`)
+        } else {
+          markSyncBudgetExhausted(stats, 'antes de attendances')
+        }
+        // TM 0223 + P2 0081 só no full — no fast estouravam os 300s (Sync interrompido).
+        step('fast core done (0223/0081 deferred to full)')
       } else {
-        markSyncBudgetExhausted(stats, 'antes de appointments')
+        stats.warnings.push(
+          'fast/kpi: agenda/atendidos pulados — webhook já aplicou o contato (cron reconcilia)',
+        )
+        step('fast/kpi done (appointments skipped)')
       }
-      if (!syncBudgetExhausted()) {
-        step('attendances…')
-        await syncAttendances(stats, mode, syncRunId)
-        step(`attendances=${stats.attendances_synced}`)
-      } else {
-        markSyncBudgetExhausted(stats, 'antes de attendances')
-      }
-      // TM 0223 + P2 0081 só no full — no fast estouravam os 300s (Sync interrompido).
-      step('fast core done (0223/0081 deferred to full)')
     } else {
       // Full fatiado: ops (P1–P3/TM) → agenda (caixa) → catalog (0004).
       const opsSteps = [
@@ -1437,7 +1463,10 @@ async function runAvecSyncUnlocked(
     // Webhook ainda chama recompute para feedback imediato até o fast sync.
     // Returning: no-op se attendances já cobriu; senão fallback.
     // Com abort: não dispara 0002 extra — Hoje já tem caixa/agenda do checkpoint.
-    if ((mode === 'fast' || runAgenda) && !syncBudgetExhausted()) {
+    if (
+      (mode === 'fast' ? scope === 'all' : runAgenda) &&
+      !syncBudgetExhausted()
+    ) {
       try {
         await syncReturningFrom0002(stats, mode, syncRunId)
       } catch (e) {

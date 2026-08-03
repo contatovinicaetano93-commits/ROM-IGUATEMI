@@ -21,18 +21,19 @@ describe('scheduleAvecWebhookSideEffects', () => {
     await runAvecWebhookSideEffects('appointment.created')
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1)
-    expect(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[0])).toContain(
-      'mode=fast',
-    )
+    const url = String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[0])
+    expect(url).toContain('mode=fast')
+    expect(url).toContain('scope=kpi')
   })
 
-  it('dispara só fast em service.completed (full fica no cron)', async () => {
+  it('dispara só fast/kpi em service.completed (full fica no cron)', async () => {
     const { runAvecWebhookSideEffects } = await import('@/lib/avec/sync-trigger')
     await runAvecWebhookSideEffects('service.completed')
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1)
     const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] ?? []
     expect(String(url)).toContain('mode=fast')
+    expect(String(url)).toContain('scope=kpi')
     expect((init as RequestInit)?.headers).toMatchObject({
       'x-rom-sync-reason': 'webhook',
     })

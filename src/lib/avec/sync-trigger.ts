@@ -22,7 +22,8 @@ async function postSyncFast(baseUrl: string) {
   const secret = process.env.CRON_SECRET?.trim()
   if (!secret) return
 
-  await fetch(`${baseUrl}/api/avec/sync?mode=fast`, {
+  // scope=kpi: caixa/cancel/noshow — agenda do contato já veio no ingest.
+  await fetch(`${baseUrl}/api/avec/sync?mode=fast&scope=kpi`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${secret}`,

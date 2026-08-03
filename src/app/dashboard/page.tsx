@@ -91,6 +91,7 @@ export default function DashboardPage() {
       stale: boolean
       hint: string | null
       fast_stale?: boolean
+      ops_stale?: boolean
       never_synced?: boolean
     }
   }) | null>(null)
@@ -150,7 +151,9 @@ export default function DashboardPage() {
               ? 'Nenhum sync Avec registrado ainda — confira Admin / cron'
               : sync.fast_stale
                 ? 'Sync Avec fast desatualizado (>1h) — números do dia podem estar velhos'
-                : 'Snapshot Avec (ocupação/canais/pacotes) >24h — receita do dia ok via sync fast',
+                : sync.ops_stale
+                  ? 'Snapshot Visão (P1/P2/P3) >24h — receita do dia ok via sync fast'
+                  : 'Snapshot Avec (ocupação/canais/pacotes) >24h — receita do dia ok via sync fast',
           )
         } else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
         else if (sync?.status === 'error') {
