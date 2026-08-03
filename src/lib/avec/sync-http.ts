@@ -1,7 +1,12 @@
 import { NextRequest } from 'next/server'
 import { ok, err } from '@/lib/api-response'
 import { isAvecConfigured } from '@/lib/avec/client'
-import { runAvecSync, getLastAvecSync, type AvecSyncMode } from '@/lib/avec/sync'
+import {
+  runAvecSync,
+  getLastAvecSync,
+  type AvecSyncMode,
+  type AvecSyncStage,
+} from '@/lib/avec/sync'
 import { requireAdmin, isAuthEnabled } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
@@ -19,6 +24,23 @@ const FULL_MIN_GAP_MS = 5 * 60 * 60_000
 const FULL_RETRY_MIN_GAP_MS = 45 * 60_000
 /** Webhook: gap curto — não flooda, mas atualiza caixa após evento. */
 const WEBHOOK_FAST_MIN_GAP_MS = 90_000
+
+function fullStageNote(stage: AvecSyncStage): string {
+  switch (stage) {
+    case 'ops':
+      return 'Sync full/ops — P1/P2/P3 + TM'
+    case 'agenda':
+      return 'Sync full/agenda — appointments/attendances/caixa/cancel/noshow'
+    case 'catalog':
+      return 'Sync full/catalog — catálogo 0004 + purge'
+    case 'all':
+      return 'Sync full — catálogo + P1/P2/P3'
+    default: {
+      const _exhaustive: never = stage
+      return _exhaustive
+    }
+  }
+}
 
 export async function authorizeAvecSync(req: NextRequest) {
   if (isCronAuthorized(req)) return { ok: true as const, cron: true as const }
@@ -46,11 +68,15 @@ export async function executeAvecSync(
     defaultMode?: AvecSyncMode
     /** Ignora query `mode` — usado por /api/avec/sync/full. */
     forceMode?: AvecSyncMode
+    /** Fatia do full (ops/agenda/catalog). Default all. */
+    forceStage?: AvecSyncStage
     cron?: boolean
     webhook?: boolean
   },
 ) {
   const mode = opts?.forceMode ?? parseAvecSyncMode(req, opts?.defaultMode ?? 'fast')
+  const stage: AvecSyncStage =
+    mode === 'full' ? (opts?.forceStage ?? 'all') : 'all'
 
   if (!isAvecConfigured()) {
     if (opts?.cron) {
@@ -58,6 +84,7 @@ export async function executeAvecSync(
         skipped: true,
         reason: 'aguardando_avec_token',
         mode,
+        stage,
         note: 'AVEC_API_TOKEN ausente — cron ignorado até terça',
       })
     }
@@ -65,9 +92,14 @@ export async function executeAvecSync(
   }
 
   const effectiveMode: AvecSyncMode = opts?.webhook && mode === 'full' ? 'fast' : mode
+  const effectiveStage: AvecSyncStage =
+    effectiveMode === 'full' ? stage : 'all'
 
   if (!opts?.force) {
-    const last = await getLastAvecSync(effectiveMode, { finishedOnly: true })
+    const last = await getLastAvecSync(effectiveMode, {
+      finishedOnly: true,
+      ...(effectiveMode === 'full' ? { stage: effectiveStage } : {}),
+    })
     if (last?.created_at) {
       const age = Date.now() - new Date(last.created_at).getTime()
       const minGap =
@@ -83,9 +115,14 @@ export async function executeAvecSync(
           skipped: true,
           reason: 'sync_recente',
           mode: effectiveMode,
+          stage: effectiveStage,
           last,
           schedule: effectiveMode === 'full' ? 'full' : 'intraday',
-          note: `Último sync ${effectiveMode} há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
+          note: `Último sync ${effectiveMode}${
+            effectiveMode === 'full' && effectiveStage !== 'all'
+              ? `/${effectiveStage}`
+              : ''
+          } há ${Math.round(age / 1000)}s — aguardando janela de ${minGap / 1000}s`,
         })
       }
     }
@@ -119,16 +156,19 @@ export async function executeAvecSync(
       }
     }
 
-    const run = await runAvecSync(effectiveMode)
+    const run = await runAvecSync(effectiveMode, {
+      stage: effectiveStage,
+    })
     return ok({
       ...run,
       skipped: false,
       mode: effectiveMode,
+      stage: effectiveStage,
       schedule: effectiveMode === 'fast' ? 'intraday' : 'full',
       note:
         effectiveMode === 'fast'
           ? 'Sync fast — agenda/caixa do dia (sem P1–P3)'
-          : 'Sync full — catálogo + P1/P2/P3',
+          : fullStageNote(effectiveStage),
     })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
@@ -136,6 +176,7 @@ export async function executeAvecSync(
         skipped: true,
         reason: 'sync_em_andamento',
         mode: effectiveMode,
+        stage: effectiveStage,
         holder: e.holder,
         expires_at: e.expiresAt,
         note: 'Outro sync Avec já está em execução (lock distribuído)',
@@ -147,6 +188,7 @@ export async function executeAvecSync(
           skipped: true,
           reason: 'db_quota',
           mode: effectiveMode,
+          stage: effectiveStage,
           note: dbQuotaUserMessage(e),
         })
       }

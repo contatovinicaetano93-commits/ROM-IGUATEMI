@@ -2,12 +2,12 @@ import { NextRequest } from 'next/server'
 import { err, handleError } from '@/lib/api-response'
 import { authorizeAvecSync, executeAvecSync } from '@/lib/avec/sync-http'
 
-/** Sync Avec full — Pro permite até 800s. */
+/** Sync Avec full/ops — P1/P2/P3 + TM. Pro permite até 800s. */
 export const maxDuration = 800
 
 /**
- * Sync full monolítico (admin / legado) — path sem query string.
- * Cron de mercado usa /full/ops|/agenda|/catalog (fatias no orçamento).
+ * Cron fatiado do sync full — path sem query string.
+ * Isola KPIs de Visão do peso de agenda/catálogo.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     return await executeAvecSync(req, {
       defaultMode: 'full',
       forceMode: 'full',
-      forceStage: 'all',
+      forceStage: 'ops',
       cron: auth.cron,
       force: !auth.cron,
     })

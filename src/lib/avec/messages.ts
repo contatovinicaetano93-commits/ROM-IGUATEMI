@@ -215,10 +215,12 @@ export function deriveAvecSyncUi(opts: {
   }
 
   const softOnlyPartial = isSoftOnlyPartialAvecRun(last)
+  const cleanBudgetAbort = isCleanBudgetAbortPartial(last)
+  const calmPartial = softOnlyPartial || cleanBudgetAbort
   const softErrors = softOnlyPartial ? asStringArray(last.stats?.errors) : []
   const uiWarnings = softErrors.length > 0 ? [...warnings, ...softErrors] : warnings
 
-  if (last.status === 'partial' && !softOnlyPartial) {
+  if (last.status === 'partial' && !calmPartial) {
     return {
       status: 'partial',
       label: `Sync parcial ${ageLabel}`,
@@ -235,7 +237,9 @@ export function deriveAvecSyncUi(opts: {
       tone: 'gold',
       detail: softOnlyPartial
         ? 'Full falhou só em relatório periférico (0107); fast/core ok — rode sync fast'
-        : 'Último sync bem-sucedido há mais de 2–3h',
+        : cleanBudgetAbort
+          ? 'Último full abortou no orçamento com core ok — rode sync fast se Hoje estiver velho'
+          : 'Último sync bem-sucedido há mais de 2–3h',
       warnings: uiWarnings,
     }
   }

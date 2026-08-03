@@ -8,6 +8,10 @@ export type AvecCoreProgressStats = {
   attendances_synced: number
   revenue_rows: number
   cancellation_rows: number
+  /** Full/ops — P1/P2/P3 contam como progresso (sem agenda/caixa). */
+  p1_rows?: number
+  p2_rows?: number
+  p3_rows?: number
 }
 
 export function avecHadCoreProgress(stats: AvecCoreProgressStats): boolean {
@@ -16,7 +20,10 @@ export function avecHadCoreProgress(stats: AvecCoreProgressStats): boolean {
       stats.appointments_synced +
       stats.attendances_synced +
       stats.revenue_rows +
-      stats.cancellation_rows >
+      stats.cancellation_rows +
+      (stats.p1_rows ?? 0) +
+      (stats.p2_rows ?? 0) +
+      (stats.p3_rows ?? 0) >
     0
   )
 }

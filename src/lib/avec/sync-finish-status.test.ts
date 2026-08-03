@@ -28,6 +28,19 @@ describe('avecHadCoreProgress', () => {
       }),
     ).toBe(true)
   })
+
+  it('é true com P1/P2/P3 no estágio ops', () => {
+    expect(
+      avecHadCoreProgress({
+        clients_upserted: 0,
+        appointments_synced: 0,
+        attendances_synced: 0,
+        revenue_rows: 0,
+        cancellation_rows: 0,
+        p1_rows: 12,
+      }),
+    ).toBe(true)
+  })
 })
 
 describe('resolveAvecFinishStatus', () => {
