@@ -23,6 +23,7 @@ import { fmtSignedCurrency, fmtSignedNumber, momCompareLine } from '@/lib/salon/
 
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
+import { visaoSyncFastInfoMessage, visaoSyncStaleMessage } from '@/lib/avec/sync-meta'
 import type { PeriodAnalytics } from '@/lib/salon/period-analytics'
 import { buildContactsPerDayChart, contactKpiWindow } from '@/lib/salon/contact-kpi-chart'
 import { displayServiceName, serviceTicketAvg } from '@/lib/salon/service-display'
@@ -145,16 +146,12 @@ export default function DashboardPage() {
 
         const warnings: string[] = []
         const sync = bundle.period?.sync
-        if (sync?.stale) {
-          warnings.push(
-            sync.never_synced
-              ? 'Nenhum sync Avec registrado ainda — confira Admin / cron'
-              : sync.fast_stale
-                ? 'Sync Avec fast desatualizado (>1h) — números do dia podem estar velhos'
-                : sync.ops_stale
-                  ? 'Snapshot Visão (P1/P2/P3) >24h — receita do dia ok via sync fast'
-                  : 'Snapshot Avec (ocupação/canais/pacotes) >24h — receita do dia ok via sync fast',
-          )
+        const visaoStaleMsg = sync ? visaoSyncStaleMessage(sync) : null
+        const fastInfoMsg = sync ? visaoSyncFastInfoMessage(sync) : null
+        if (visaoStaleMsg) {
+          warnings.push(visaoStaleMsg)
+        } else if (fastInfoMsg) {
+          warnings.push(fastInfoMsg)
         } else if (sync?.status === 'partial') warnings.push('Último sync Avec parcial — confira Admin')
         else if (sync?.status === 'error') {
           const errMsg = typeof sync.error === 'string' ? sync.error.toLowerCase() : ''
