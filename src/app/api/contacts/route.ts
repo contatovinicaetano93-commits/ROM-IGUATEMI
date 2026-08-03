@@ -76,13 +76,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (newNotAvec) {
-      const cacheKey = `contacts:novos:v3:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      // v4: list-only (no countContactQueues / urgency scan); UI keeps prev overdue counts
+      const cacheKey = `contacts:novos:v4:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
       const result = await cachedFetch(
         cacheKey,
         async () => {
           const listed = await listNewContactsNotInAvec({ day, limit })
-          const queues = await countContactQueues({ channel, day })
-          return { items: listed.items, total: listed.total, queues }
+          return {
+            items: listed.items,
+            total: listed.total,
+            queues: { novos: listed.total },
+          }
         },
         30,
       )
@@ -197,6 +201,7 @@ export async function POST(req: NextRequest) {
 
     MemoryCache.deletePrefix('contacts:list:')
     MemoryCache.deletePrefix('contacts:queue-counts:')
+    MemoryCache.deletePrefix('contacts:novos:')
     return ok(contact, undefined, 201)
   } catch (e) {
     return handleError(e)
