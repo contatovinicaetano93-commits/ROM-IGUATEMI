@@ -63,40 +63,47 @@ export function isDirectorVisitQuarterKey(v: string): v is QuarterKey {
 async function upsertVisitBatch(batch: VisitUpsert[]): Promise<void> {
   if (batch.length === 0) return
   const sql = getSql()
-  // sql.query / $1::jsonb — o tagged template do postgres.js serializa string
-  // como jsonb escalar ("[...]"), e jsonb_to_recordset exige array.
-  await sql.query(
-    `
+  const keys = batch.map((b) => b.client_key)
+  const days = batch.map((b) => b.visited_on)
+  const names = batch.map((b) => b.client_name)
+  const phones = batch.map((b) => b.phone)
+  const mobiles = batch.map((b) => b.mobile)
+  const emails = batch.map((b) => b.email)
+  // text[] de JSON — evita text[][] e jsonb_to_recordset (binding frágil).
+  const prosJson = batch.map((b) => JSON.stringify(b.professional_names ?? []))
+  const sources = batch.map((b) => b.source_report)
+
+  await sql`
     insert into salon_client_visits (
       client_key, visited_on, client_name, phone, mobile, email,
       professional_names, source_report, synced_at
     )
     select
-      x.client_key,
-      x.visited_on::date,
-      x.client_name,
-      x.phone,
-      x.mobile,
-      x.email,
+      k,
+      d::date,
+      n,
+      p,
+      m,
+      e,
       coalesce(
         (
-          select array_agg(p)
-          from jsonb_array_elements_text(coalesce(x.professional_names, '[]'::jsonb)) as p
+          select array_agg(x)
+          from jsonb_array_elements_text(pr::jsonb) as x
         ),
         '{}'::text[]
       ),
-      x.source_report,
+      s,
       now()
-    from jsonb_to_recordset($1::jsonb) as x(
-      client_key text,
-      visited_on text,
-      client_name text,
-      phone text,
-      mobile text,
-      email text,
-      professional_names jsonb,
-      source_report text
-    )
+    from unnest(
+      ${keys}::text[],
+      ${days}::text[],
+      ${names}::text[],
+      ${phones}::text[],
+      ${mobiles}::text[],
+      ${emails}::text[],
+      ${prosJson}::text[],
+      ${sources}::text[]
+    ) as t(k, d, n, p, m, e, pr, s)
     on conflict (client_key, visited_on, source_report) do update set
       client_name = excluded.client_name,
       phone = coalesce(excluded.phone, salon_client_visits.phone),
@@ -104,9 +111,7 @@ async function upsertVisitBatch(batch: VisitUpsert[]): Promise<void> {
       email = coalesce(excluded.email, salon_client_visits.email),
       professional_names = excluded.professional_names,
       synced_at = now()
-    `,
-    [JSON.stringify(batch)],
-  )
+  `
 }
 
 async function coverageIsFresh(quarter: QuarterKey): Promise<boolean> {
