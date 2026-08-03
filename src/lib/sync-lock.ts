@@ -1,9 +1,14 @@
 import { randomUUID } from 'crypto'
 import { getSql } from '@/lib/db'
 
-/** Chaves estáveis — fast e full compartilham o mesmo lock do domínio. */
+/**
+ * Chaves estáveis por domínio.
+ * Fast e full Avec usam locks distintos — um cron full/ops não deve
+ * pular o fast de Hoje (nem o contrário) por `sync_em_andamento`.
+ */
 export const SYNC_LOCK_KEYS = {
-  avec: 'avec_sync',
+  avecFast: 'avec_sync_fast',
+  avecFull: 'avec_sync_full',
   stock: 'stock_sync',
   omie: 'omie_sync',
 } as const

@@ -52,10 +52,10 @@ export async function GET(req: NextRequest) {
       cron: {
         fast: { schedule: '10,30,50 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: {
-          schedule: '35 10,22 * * *',
+          schedule: 'ops/agenda/catalog 2×/dia (offset BR)',
           mode: 'full',
-          path: '/api/avec/sync/full',
-          note: '07:35 / 19:35 America/Sao_Paulo — offset vs BR (:20); path sem query',
+          path: '/api/avec/sync/full/{ops,agenda,catalog}',
+          note: 'full fatiado — /full monolítico só admin; lock separado do fast',
         },
         estoque_fast: { schedule: '5 * * * *', path: '/api/estoque/sync' },
         estoque_full: { schedule: '55 11 * * *', path: '/api/estoque/sync?mode=full' },
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
         },
         token: { schedule: '30 */3 * * *', path: '/api/avec/refresh-token' },
         cadence:
-          'fast ~20 min (offset BR) · full 2×/dia · estoque horário · token 3h · purge diário — webhook só fast',
+          'fast ~20 min (offset BR) · full fatiado 2×/dia · estoque horário · token 3h · purge diário — webhook só fast',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),
