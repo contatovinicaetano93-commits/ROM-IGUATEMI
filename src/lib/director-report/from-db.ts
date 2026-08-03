@@ -7,7 +7,7 @@ import { getSql } from '@/lib/db'
 import { aggregateLocal0011ByPro, previousQuarterKey } from './local-0011'
 import type { Local0011Agg, Local0011QuarterResult } from './local-0011'
 import { labelQuarter } from './period'
-import { listDirectorReportProfessionals } from './professionals'
+import { DIRECTOR_FLOOR_ROLES, listDirectorProfessionals } from './professionals'
 import type { DirectorProfessional, QuarterKey } from './types'
 
 type DbVisitRow = {
@@ -200,7 +200,7 @@ export async function probe0011FromDb(
     na_lista_unicos: number
   } | null
 }> {
-  const professionals = listDirectorReportProfessionals(true)
+  const professionals = listDirectorProfessionals(true, { roles: DIRECTOR_FLOOR_ROLES })
   const selPrior = previousQuarterKey(selectedQuarter)
   const cmpPrior = previousQuarterKey(compareQuarter)
   const needed = [...new Set([selectedQuarter, selPrior, compareQuarter, cmpPrior])]
