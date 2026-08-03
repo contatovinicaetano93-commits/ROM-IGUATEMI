@@ -2,15 +2,21 @@ import { NextRequest } from 'next/server'
 import { err, handleError, ok } from '@/lib/api-response'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
-import { syncDirectorVisits } from '@/lib/avec/sync-director-visits'
+import {
+  isDirectorVisitQuarterKey,
+  syncDirectorVisits,
+} from '@/lib/avec/sync-director-visits'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
 import { getDeploymentContext } from '@/lib/deployment'
 import { listVisitCoverage } from '@/lib/director-report/from-db'
+import type { QuarterKey } from '@/lib/director-report/types'
 
 /**
  * Sync só das visitas 0002 → salon_client_visits (Relatório gerência offline).
  * Separado do full/agenda para não depender do min-gap nem do budget das outras etapas.
+ *
+ * Query: `?status=1` só cobertura · `?quarter=2026-Q2` um trimestre · `?force=1` refaz.
  */
 export const maxDuration = 800
 
@@ -34,6 +40,15 @@ function emptyStats(): AvecSyncStats {
   }
 }
 
+function parseQuarterParam(req: NextRequest): QuarterKey[] | undefined {
+  const raw = req.nextUrl.searchParams.get('quarter')
+  if (!raw) return undefined
+  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  const bad = parts.find((p) => !isDirectorVisitQuarterKey(p))
+  if (bad) throw Object.assign(new Error(`Trimestre inválido: ${bad}`), { status: 400 })
+  return parts as QuarterKey[]
+}
+
 /** GET — cron/admin: sincroniza visitas. `?status=1` só consulta cobertura. */
 export async function GET(req: NextRequest) {
   try {
@@ -49,7 +64,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return await runSync()
+    return await runSync(req)
   } catch (e) {
     return handleError(e)
   }
@@ -60,21 +75,33 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await authorizeAvecSync(req)
     if (!auth.ok) return err(auth.message, auth.status)
-    return await runSync()
+    return await runSync(req)
   } catch (e) {
     return handleError(e)
   }
 }
 
-async function runSync() {
+async function runSync(req: NextRequest) {
   if (!isAvecConfigured()) {
     return err('Avec não configurado (AVEC_API_TOKEN)', 503)
   }
 
+  let quarters: QuarterKey[] | undefined
+  try {
+    quarters = parseQuarterParam(req)
+  } catch (e) {
+    const status = e && typeof e === 'object' && 'status' in e ? Number((e as { status: number }).status) : 400
+    return err(e instanceof Error ? e.message : 'Trimestre inválido', status)
+  }
+
+  const force =
+    req.nextUrl.searchParams.get('force') === '1' ||
+    req.nextUrl.searchParams.get('force') === 'true'
+
   await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {})
 
   const stats = emptyStats()
-  await syncDirectorVisits(stats)
+  await syncDirectorVisits(stats, undefined, { quarters, force })
   const status = await listVisitCoverage()
 
   const okRun = stats.errors.length === 0
@@ -82,6 +109,8 @@ async function runSync() {
     ran: true,
     status: okRun ? (stats.warnings.some((w) => /truncado/i.test(w)) ? 'partial' : 'ok') : 'error',
     director_visits_upserted: stats.director_visits_upserted ?? 0,
+    quarters: quarters ?? null,
+    force,
     warnings: stats.warnings,
     errors: stats.errors,
     coverage: status.coverage,
