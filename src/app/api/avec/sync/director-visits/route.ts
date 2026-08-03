@@ -9,7 +9,9 @@ import {
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
 import { getDeploymentContext } from '@/lib/deployment'
-import { listVisitCoverage } from '@/lib/director-report/from-db'
+import { listVisitCoverage, probe0011FromDb } from '@/lib/director-report/from-db'
+import { previousQuarterKey } from '@/lib/director-report/local-0011'
+import { currentQuarterKeySp } from '@/lib/director-report/period'
 import type { QuarterKey } from '@/lib/director-report/types'
 
 /**
@@ -57,10 +59,30 @@ export async function GET(req: NextRequest) {
 
     if (req.nextUrl.searchParams.get('status') === '1') {
       const status = await listVisitCoverage()
+      const probe =
+        req.nextUrl.searchParams.get('probe_0011') === '1' ||
+        req.nextUrl.searchParams.get('probe_0011') === 'true'
+      let report_probe: Awaited<ReturnType<typeof probe0011FromDb>> | null = null
+      if (probe) {
+        const selected =
+          (req.nextUrl.searchParams.get('selected') as QuarterKey | null) &&
+          isDirectorVisitQuarterKey(req.nextUrl.searchParams.get('selected')!)
+            ? (req.nextUrl.searchParams.get('selected') as QuarterKey)
+            : previousQuarterKey(currentQuarterKeySp())
+        const compareRaw = req.nextUrl.searchParams.get('compare')
+        const compare =
+          compareRaw && isDirectorVisitQuarterKey(compareRaw)
+            ? compareRaw
+            : previousQuarterKey(selected)
+        report_probe = await probe0011FromDb(selected, compare)
+      }
       return ok({
         ...status,
         ready: status.coverage.some((c) => !c.truncated && c.row_count > 0),
-        note: 'Cobertura do warehouse 0011. POST ou GET sem status=1 para sincronizar.',
+        report_probe,
+        note: probe
+          ? 'Cobertura + probe 0011 do warehouse (Na lista / taxas).'
+          : 'Cobertura do warehouse 0011. POST ou GET sem status=1 para sincronizar. Use probe_0011=1 para totais.',
       })
     }
 

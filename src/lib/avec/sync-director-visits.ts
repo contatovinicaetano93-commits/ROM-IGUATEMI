@@ -48,12 +48,21 @@ function avecBrToIso(ddmmYYYY: string): string {
   return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
 }
 
+/**
+ * UI default 0011 = trimestre fechado vs anterior (ex. 2026-Q2 vs 2026-Q1).
+ * Precisa de Q, prev(Q) e prev(prev(Q)) — não só corrente + YoY.
+ * Cobre também YoY do fechado (2026-Q2 vs 2025-Q2 → precisa 2026-Q1 e 2025-Q1).
+ */
 function quartersToSync(now = new Date()): QuarterKey[] {
   const current = currentQuarterKeySp(now)
-  const prior = previousQuarterKey(current)
-  const yoy = `${Number(current.slice(0, 4)) - 1}-${current.slice(5)}` as QuarterKey
-  const yoyPrior = previousQuarterKey(yoy)
-  return [...new Set([current, prior, yoy, yoyPrior])]
+  const out: QuarterKey[] = []
+  let cursor = current
+  // corrente + 5 anteriores (= 6 tris) cobre default UI + priors + YoY recente
+  for (let i = 0; i < 6; i++) {
+    out.push(cursor)
+    cursor = previousQuarterKey(cursor)
+  }
+  return [...new Set(out)]
 }
 
 export function isDirectorVisitQuarterKey(v: string): v is QuarterKey {

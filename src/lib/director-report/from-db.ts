@@ -7,6 +7,7 @@ import { getSql } from '@/lib/db'
 import { aggregateLocal0011ByPro, previousQuarterKey } from './local-0011'
 import type { Local0011Agg, Local0011QuarterResult } from './local-0011'
 import { labelQuarter } from './period'
+import { listDirectorReportProfessionals } from './professionals'
 import type { DirectorProfessional, QuarterKey } from './types'
 
 type DbVisitRow = {
@@ -172,5 +173,104 @@ export async function tryFetch0011QuarterPairFromDb(
     }
   } catch {
     return null
+  }
+}
+
+/** Probe ops: totais “Na lista” a partir do warehouse (sem Avec). */
+export async function probe0011FromDb(
+  selectedQuarter: QuarterKey,
+  compareQuarter: QuarterKey,
+): Promise<{
+  ok: boolean
+  missing_coverage: QuarterKey[]
+  professionals: number
+  selected: {
+    quarter: QuarterKey
+    note: string | null
+    na_lista_soma_pros: number
+    na_lista_unicos: number
+    pros_com_lista: number
+    taxa_media: number | null
+    top: Array<{ pro: string; na_lista: number; taxa: number | null }>
+  } | null
+  compare: {
+    quarter: QuarterKey
+    note: string | null
+    na_lista_soma_pros: number
+    na_lista_unicos: number
+  } | null
+}> {
+  const professionals = listDirectorReportProfessionals(true)
+  const selPrior = previousQuarterKey(selectedQuarter)
+  const cmpPrior = previousQuarterKey(compareQuarter)
+  const needed = [...new Set([selectedQuarter, selPrior, compareQuarter, cmpPrior])]
+  const coverages = await Promise.all(needed.map((q) => getVisitCoverage(q)))
+  const missing = needed.filter((_, i) => !isVisitCoverageReady(coverages[i]))
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      missing_coverage: missing,
+      professionals: professionals.length,
+      selected: null,
+      compare: null,
+    }
+  }
+
+  const pair = await tryFetch0011QuarterPairFromDb(
+    selectedQuarter,
+    compareQuarter,
+    professionals,
+  )
+  if (!pair) {
+    return {
+      ok: false,
+      missing_coverage: [],
+      professionals: professionals.length,
+      selected: null,
+      compare: null,
+    }
+  }
+
+  const summarize = (q: QuarterKey, result: Local0011QuarterResult) => {
+    const unique = new Set<string>()
+    let sum = 0
+    const rates: number[] = []
+    const top: Array<{ pro: string; na_lista: number; taxa: number | null }> = []
+    for (const [pro, agg] of result.byPro) {
+      const n = agg.clients.length
+      sum += n
+      for (const c of agg.clients) unique.add(`${c.name}|${c.phone ?? ''}|${c.email ?? ''}`)
+      const taxa = agg.returnRates[0] ?? null
+      if (taxa != null) rates.push(taxa)
+      top.push({ pro, na_lista: n, taxa })
+    }
+    top.sort((a, b) => b.na_lista - a.na_lista)
+    const taxa_media =
+      rates.length > 0 ? Math.round((rates.reduce((a, b) => a + b, 0) / rates.length) * 1000) / 1000 : null
+    return {
+      quarter: q,
+      note: result.note,
+      na_lista_soma_pros: sum,
+      na_lista_unicos: unique.size,
+      pros_com_lista: top.filter((t) => t.na_lista > 0).length,
+      taxa_media,
+      top: top.slice(0, 12),
+    }
+  }
+
+  const selected = summarize(selectedQuarter, pair.selected)
+  const compare = summarize(compareQuarter, pair.compare)
+
+  return {
+    ok: pair.selected.source === 'local' && pair.compare.source === 'local',
+    missing_coverage: [],
+    professionals: professionals.length,
+    selected,
+    compare: {
+      quarter: compare.quarter,
+      note: compare.note,
+      na_lista_soma_pros: compare.na_lista_soma_pros,
+      na_lista_unicos: compare.na_lista_unicos,
+    },
   }
 }
