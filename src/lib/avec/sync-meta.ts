@@ -1,5 +1,5 @@
 import { getLastAvecSync, type AvecSyncRun, type AvecSyncStage } from '@/lib/avec/sync'
-import { isCleanBudgetAbortPartial } from '@/lib/avec/messages'
+import { isCalmPartialAvecRun } from '@/lib/avec/messages'
 import { pickNewestUsableAvecRun } from '@/lib/avec/sync-run-health'
 import type { AvecSyncMeta } from '@/lib/avec/sync-meta-surface'
 import { cachedFetch } from '@/lib/cache'
@@ -68,11 +68,9 @@ export async function loadAvecSyncMeta(): Promise<AvecSyncMeta> {
       const stale = never_synced || ops_stale || fast_stale
 
       const latest = pickNewestUsableAvecRun([ops, agenda, fast])
-      // Abort limpo por orçamento (comum no BR) não deve acender “parcial” na Visão.
+      // Soft-only / 0088 vazio / abort limpo → não acende “parcial” na Visão.
       const syncStatus =
-        latest != null && isCleanBudgetAbortPartial(latest)
-          ? 'ok'
-          : (latest?.status ?? null)
+        latest != null && isCalmPartialAvecRun(latest) ? 'ok' : (latest?.status ?? null)
       const created_at = latest?.created_at ?? null
 
       return {
