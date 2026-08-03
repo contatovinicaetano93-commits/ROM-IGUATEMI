@@ -13,6 +13,7 @@ import {
   Calendar,
   MessageSquare,
   UserPlus,
+  HelpCircle,
 } from 'lucide-react'
 import { Avatar, PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
@@ -42,7 +43,7 @@ interface Contact {
   next_scheduled_at?: string | null
 }
 
-type ListMode = 'reactivate' | 'novos' | 'search'
+type ListMode = 'reactivate' | 'novos' | 'sem_servicos' | 'search'
 type ReactivateQueue = 'overdue' | 'due_soon' | 'scheduled'
 
 type ContactsSyncMeta = {
@@ -77,11 +78,18 @@ function serviceLine(c: Contact, queue: ReactivateQueue | null): string {
   return action || 'Sem sinal de retorno'
 }
 
-function urgencyBadge(queue: ReactivateQueue | null | 'novos') {
+function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos') {
   if (queue === 'novos') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] font-semibold text-gold">
         <UserPlus size={10} /> Novo
+      </span>
+    )
+  }
+  if (queue === 'sem_servicos') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-muted/15 px-2 py-0.5 text-[0.65rem] font-semibold text-muted">
+        <HelpCircle size={10} /> Sem retorno
       </span>
     )
   }
@@ -185,7 +193,8 @@ function ContatosPageContent() {
     due_soon: number
     scheduled: number
     novos: number
-  }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0 })
+    sem_servicos: number
+  }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0, sem_servicos: 0 })
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [syncMeta, setSyncMeta] = useState<ContactsSyncMeta | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -237,12 +246,19 @@ function ContatosPageContent() {
               due_soon: typeof q.due_soon === 'number' ? q.due_soon : prev.due_soon,
               scheduled: typeof q.scheduled === 'number' ? q.scheduled : prev.scheduled,
               novos: q.novos,
+              sem_servicos:
+                typeof q.sem_servicos === 'number' ? q.sem_servicos : prev.sem_servicos,
             }))
           }
           return
         }
         const params = new URLSearchParams({
-          sort: mode === 'novos' ? 'name' : mode === 'search' && hasUrlFilter ? 'name' : 'urgency',
+          sort:
+            mode === 'novos' || mode === 'sem_servicos'
+              ? 'name'
+              : mode === 'search' && hasUrlFilter
+                ? 'name'
+                : 'urgency',
           limit: mode === 'search' ? '100' : '250',
         })
         if (mode === 'reactivate') {
@@ -250,6 +266,9 @@ function ContatosPageContent() {
           params.set('queue', queue)
         } else if (mode === 'novos') {
           params.set('queue', 'novos')
+          if (novosDay) params.set('day', novosDay)
+        } else if (mode === 'sem_servicos') {
+          params.set('no_services', '1')
           if (novosDay) params.set('day', novosDay)
         } else {
           if (debouncedQuery) params.set('q', debouncedQuery)
@@ -274,9 +293,12 @@ function ContatosPageContent() {
               due_soon: q.due_soon,
               scheduled: q.scheduled,
               novos: typeof q.novos === 'number' ? q.novos : 0,
+              sem_servicos: typeof q.sem_servicos === 'number' ? q.sem_servicos : 0,
             })
           } else if (mode === 'novos' && typeof total === 'number') {
             setQueueCounts((prev) => ({ ...prev, novos: total }))
+          } else if (mode === 'sem_servicos' && typeof total === 'number') {
+            setQueueCounts((prev) => ({ ...prev, sem_servicos: total }))
           }
         }
       } catch (e) {
@@ -301,10 +323,16 @@ function ContatosPageContent() {
           }`
         : 'busque na base'
       : mode === 'novos'
-        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} hoje (sem cliente Avec)`
-        : `${visible.length} na fila${
-            totalInBase != null && totalInBase > visible.length ? ` · ${totalInBase} no total` : ''
+        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} em ${NOVOS_WINDOW_DAYS} dias${
+            totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
+        : mode === 'sem_servicos'
+          ? `${visible.length} sem serviço${
+              totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
+            }`
+          : `${visible.length} na fila${
+              totalInBase != null && totalInBase > visible.length ? ` · ${totalInBase} no total` : ''
+            }`
 
   const emptyCopy =
     mode === 'search'
@@ -312,12 +340,14 @@ function ContatosPageContent() {
         ? 'Nenhum contato encontrado.'
         : 'Digite um nome ou telefone para buscar na base.'
       : mode === 'novos'
-        ? 'Nenhum lead Avec hoje sem cliente cadastrado.'
-        : queue === 'overdue'
-          ? 'Nenhum atrasado (cadência vencida com visita registrada).'
-          : queue === 'due_soon'
-            ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
-            : `Nenhum agendado hoje ou nos próximos ${SCHEDULED_SOON_DAYS} dias.`
+        ? `Nenhum lead novo nos últimos ${NOVOS_WINDOW_DAYS} dias.`
+        : mode === 'sem_servicos'
+          ? 'Ninguém fora do funil — todo contato tem retorno previsto.'
+          : queue === 'overdue'
+            ? 'Nenhum atrasado (cadência vencida com visita registrada).'
+            : queue === 'due_soon'
+              ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
+              : `Nenhum agendado hoje ou nos próximos ${SCHEDULED_SOON_DAYS} dias.`
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -329,12 +359,14 @@ function ContatosPageContent() {
             {mode === 'reactivate'
               ? 'Reative quem está atrasado, vencendo ou agendado'
               : mode === 'novos'
-                ? 'Lead Avec do dia sem cliente cadastrado na Avec ainda'
-                : hasUrlFilter
-                  ? `Filtro${urlChannel ? ` ${channelLabel(urlChannel)}` : ''}${
-                      urlStatus ? ` · status ${urlStatus}` : ''
-                    }`
-                  : 'Busque por nome ou telefone em toda a base'}
+                ? `Lead dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda`
+                : mode === 'sem_servicos'
+                  ? 'Passou dos 30 dias e segue sem retorno previsto — triar ou marcar perdido'
+                  : hasUrlFilter
+                    ? `Filtro${urlChannel ? ` ${channelLabel(urlChannel)}` : ''}${
+                        urlStatus ? ` · status ${urlStatus}` : ''
+                      }`
+                    : 'Busque por nome ou telefone em toda a base'}
             {' · '}
             {countLabel}
           </p>
@@ -374,12 +406,13 @@ function ContatosPageContent() {
       <div
         role="tablist"
         aria-label="Modo da lista"
-        className="grid grid-cols-3 rounded-2xl border border-border bg-card p-1"
+        className="grid grid-cols-4 rounded-2xl border border-border bg-card p-1"
       >
         {(
           [
             { id: 'reactivate' as const, label: 'Reativar' },
             { id: 'novos' as const, label: 'Novos' },
+            { id: 'sem_servicos' as const, label: 'Sem serviço' },
             { id: 'search' as const, label: 'Buscar' },
           ] as const
         ).map((tab) => {
@@ -391,13 +424,15 @@ function ContatosPageContent() {
               role="tab"
               aria-selected={active}
               onClick={() => selectMode(tab.id)}
-              className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+              className={`rounded-xl py-2.5 text-xs font-semibold transition-colors sm:text-sm ${
                 active ? 'bg-gold/15 text-gold' : 'text-muted active:text-foreground'
               }`}
             >
               {tab.label}
               {tab.id === 'novos' ? (
                 <span className="ml-1 tabular-nums opacity-80">{queueCounts.novos}</span>
+              ) : tab.id === 'sem_servicos' ? (
+                <span className="ml-1 tabular-nums opacity-80">{queueCounts.sem_servicos}</span>
               ) : null}
             </button>
           )
@@ -452,6 +487,14 @@ function ContatosPageContent() {
           porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio). Fica aqui por{' '}
           {NOVOS_WINDOW_DAYS} dias; sai antes se fizer um serviço com cadência, e aí passa a
           aparecer em Vencendo/Atrasados.
+        </p>
+      )}
+
+      {mode === 'sem_servicos' && (
+        <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
+          Sem serviço: passou dos {NOVOS_WINDOW_DAYS} dias e continua sem retorno previsto (nenhum
+          serviço ativo com visita e cadência). Ninguém vai cobrar essas pessoas sozinho — ou você
+          reativa, ou marca como Perdido na ficha, que é o que tira da lista.
         </p>
       )}
 
@@ -555,11 +598,16 @@ function ContatosPageContent() {
               dayKey && dayKey !== prevDayKey && c.next_scheduled_at
                 ? fmtScheduleParts(c.next_scheduled_at).day
                 : null
-            const createdParts = mode === 'novos' ? fmtScheduleParts(c.created_at) : null
+            const createdParts =
+              mode === 'novos' || mode === 'sem_servicos'
+                ? fmtScheduleParts(c.created_at)
+                : null
             const secondaryLine =
               mode === 'novos'
                 ? `${channelLabel(c.channel)}${createdParts ? ` · ${createdParts.date} ${createdParts.time}` : ''}`
-                : serviceLine(c, mode === 'reactivate' ? queue : q)
+                : mode === 'sem_servicos'
+                  ? `${channelLabel(c.channel)}${createdParts ? ` · entrou ${createdParts.date}` : ''}`
+                  : serviceLine(c, mode === 'reactivate' ? queue : q)
             return (
               <div key={c.id}>
                 {dayHeader && (
@@ -579,7 +627,13 @@ function ContatosPageContent() {
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-sm font-medium">{c.name || c.phone || 'Sem nome'}</p>
                         {urgencyBadge(
-                          mode === 'novos' ? 'novos' : mode === 'reactivate' ? queue : q,
+                          mode === 'novos'
+                            ? 'novos'
+                            : mode === 'sem_servicos'
+                              ? 'sem_servicos'
+                              : mode === 'reactivate'
+                                ? queue
+                                : q,
                         )}
                       </div>
                       <p className="mt-0.5 truncate text-xs text-muted">
@@ -603,7 +657,7 @@ function ContatosPageContent() {
                       rel="noopener noreferrer"
                       onClick={() => logOutreach(c.id)}
                       aria-label={
-                        mode === 'novos'
+                        mode === 'novos' || mode === 'sem_servicos'
                           ? `Chamar ${c.name || 'contato'} no WhatsApp`
                           : `Reativar ${c.name || 'contato'} no WhatsApp`
                       }
@@ -611,7 +665,7 @@ function ContatosPageContent() {
                     >
                       <MessageSquare size={14} />
                       <span className="hidden sm:inline">
-                        {mode === 'novos' ? 'Chamar' : 'Reativar'}
+                        {mode === 'novos' || mode === 'sem_servicos' ? 'Chamar' : 'Reativar'}
                       </span>
                     </a>
                   ) : (

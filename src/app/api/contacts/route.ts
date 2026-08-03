@@ -4,6 +4,7 @@ import { cachedFetch, MemoryCache } from '@/lib/cache'
 import {
   countContactQueues,
   listContactsWithSummary,
+  listContactsWithoutServices,
   listNewContactsNotInAvec,
 } from '@/lib/contact-summary'
 import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
@@ -60,6 +61,10 @@ export async function GET(req: NextRequest) {
       searchParams.get('new_not_avec') === '1' ||
       searchParams.get('new_not_avec') === 'true' ||
       searchParams.get('queue') === 'novos'
+    const withoutServices =
+      searchParams.get('no_services') === '1' ||
+      searchParams.get('no_services') === 'true' ||
+      searchParams.get('queue') === 'sem_servicos'
     const dayRaw = searchParams.get('day')
     const day = dayRaw && /^\d{4}-\d{2}-\d{2}$/.test(dayRaw) ? dayRaw : null
 
@@ -109,6 +114,29 @@ export async function GET(req: NextRequest) {
         day: day ?? 'today',
         queues: result.queues,
         sync: syncPayload,
+      })
+    }
+
+    if (withoutServices) {
+      const cacheKey = `contacts:sem-servicos:v1:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      const result = await cachedFetch(
+        cacheKey,
+        async () => {
+          const listed = await listContactsWithoutServices({ day, limit })
+          const queues = await countContactQueues({ channel, day })
+          return { items: listed.items, total: listed.total, queues }
+        },
+        30,
+      )
+      return okCached(result.items, 30, {
+        total: result.total,
+        limit,
+        status: 'sem_servicos',
+        channel: channel ?? 'all',
+        pending: false,
+        queue: 'sem_servicos',
+        day: day ?? 'today',
+        queues: result.queues,
       })
     }
 

@@ -42,10 +42,12 @@ export interface UrgencyQueueCounts {
   scheduled: number
 }
 
-/** Filas da tela Contatos — urgência + novos da janela sem Avec. */
+/** Filas da tela Contatos — urgência + novos da janela + sem serviço. */
 export interface ContactQueueCounts extends UrgencyQueueCounts {
   /** Contatos criados na janela Novos (SP) ainda sem avec_client_id. */
   novos: number
+  /** Passou da janela Novos e segue sem next_due — fora do funil de cadência. */
+  sem_servicos: number
 }
 
 export interface ContactListResult {
@@ -567,7 +569,6 @@ export async function countNewContactsNotInAvec(opts?: {
   return Number(rows[0]?.n ?? 0) || 0
 }
 
-<<<<<<< HEAD
 /** Novos não usam badges de urgência — zera campos sem carregar client_services. */
 function asNovosListItem(c: ContactRow): ContactListItem {
   return {
@@ -583,10 +584,7 @@ function asNovosListItem(c: ContactRow): ContactListItem {
   }
 }
 
-/** Lista novos do dia sem cliente Avec ainda (mais recentes primeiro). */
-=======
 /** Lista novos da janela sem cliente Avec ainda (mais recentes primeiro). */
->>>>>>> ec889d3 (feat(contatos): aba Novos passa a cobrir 30 dias, não só o dia)
 export async function listNewContactsNotInAvec(opts?: {
   day?: string | null
   limit?: number
@@ -594,7 +592,6 @@ export async function listNewContactsNotInAvec(opts?: {
   const sql = getSql()
   const day = normalizeDayKey(opts?.day)
   const limit = Math.min(Math.max(1, opts?.limit ?? 250), 500)
-<<<<<<< HEAD
   // Um round-trip: colunas da lista + total via window (sem select * / services / urgency).
   const rows = (await sql`
     select
@@ -614,31 +611,6 @@ export async function listNewContactsNotInAvec(opts?: {
       created_at,
       anonymized_at,
       count(*) over()::int as total
-=======
-  const countRows = (await sql`
-    select count(*)::int as n
-    from contacts
-    where anonymized_at is null
-      and avec_client_id is null
-      and status <> 'importado'
-      and coalesce(source, '') not like 'avec_sync_clients%'
-      and coalesce(source, '') not like 'avec_backfill%'
-      and coalesce(source, '') not like 'avec_lake%'
-      and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
-      and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
-      and not exists (
-        select 1
-        from client_services cs
-        where cs.contact_id = contacts.id
-          and cs.active = true
-          and cs.last_done_at is not null
-          and cs.cadence_days is not null
-      )
-  `) as { n: number }[]
-  const total = Number(countRows[0]?.n ?? 0) || 0
-  const contacts = (await sql`
-    select *
->>>>>>> ec889d3 (feat(contatos): aba Novos passa a cobrir 30 dias, não só o dia)
     from contacts
     where anonymized_at is null
       and channel = 'avec'
@@ -665,14 +637,90 @@ export async function listNewContactsNotInAvec(opts?: {
   return { items, total }
 }
 
-/** Totais das filas Contatos (reativar + novos da janela sem Avec). */
+/**
+ * Fatia complementar à de Novos: já passou da janela e continua fora do funil
+ * de cadência (sem serviço ativo com `last_done_at` + `cadence_days`).
+ *
+ * O recorte é por AUSÊNCIA de `next_due`, não por "nunca fez serviço". Quem fez
+ * serviço sem cadência também não é pego por Vencendo/Atrasados — se o critério
+ * fosse "sem serviço", essa pessoa escaparia das duas listas.
+ *
+ * Junto com `countNewContactsNotInAvec` a divisão é exaustiva: ou o contato tem
+ * `next_due` (funil de cadência), ou está em Novos (janela), ou está aqui.
+ *
+ * Fora: anonimizados, dump em massa da Avec, `importado` e `perdido` — este
+ * último é a porta de saída, acionada na tela de detalhe do contato.
+ */
+export async function countContactsWithoutServices(opts?: {
+  day?: string | null
+}): Promise<number> {
+  const sql = getSql()
+  const day = normalizeDayKey(opts?.day)
+  const rows = (await sql`
+    select count(*)::int as n
+    from contacts
+    where anonymized_at is null
+      and status <> 'importado'
+      and status <> 'perdido'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
+      and created_at < ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
+      and not exists (
+        select 1
+        from client_services cs
+        where cs.contact_id = contacts.id
+          and cs.active = true
+          and cs.last_done_at is not null
+          and cs.cadence_days is not null
+      )
+  `) as { n: number }[]
+  return Number(rows[0]?.n ?? 0) || 0
+}
+
+/** Lista os sem serviço (mais recentes primeiro) — sem limite de período. */
+export async function listContactsWithoutServices(opts?: {
+  day?: string | null
+  limit?: number
+}): Promise<ContactListResult> {
+  const sql = getSql()
+  const day = normalizeDayKey(opts?.day)
+  const limit = Math.min(Math.max(1, opts?.limit ?? 250), 500)
+  const total = await countContactsWithoutServices({ day })
+  const contacts = (await sql`
+    select *
+    from contacts
+    where anonymized_at is null
+      and status <> 'importado'
+      and status <> 'perdido'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
+      and created_at < ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
+      and not exists (
+        select 1
+        from client_services cs
+        where cs.contact_id = contacts.id
+          and cs.active = true
+          and cs.last_done_at is not null
+          and cs.cadence_days is not null
+      )
+    order by created_at desc
+    limit ${limit}
+  `) as ContactRow[]
+  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+  return { items: withUrgency(contacts, byContact), total }
+}
+
+/** Totais das filas Contatos (reativar + novos da janela + sem serviço). */
 export async function countContactQueues(opts?: {
   channel?: string | null
   day?: string | null
 }): Promise<ContactQueueCounts> {
-  const [urgency, novos] = await Promise.all([
+  const [urgency, novos, sem_servicos] = await Promise.all([
     countUrgencyQueues({ channel: opts?.channel }),
     countNewContactsNotInAvec({ day: opts?.day }),
+    countContactsWithoutServices({ day: opts?.day }),
   ])
-  return { ...urgency, novos }
+  return { ...urgency, novos, sem_servicos }
 }
