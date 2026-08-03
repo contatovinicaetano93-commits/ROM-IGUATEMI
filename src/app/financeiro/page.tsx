@@ -19,8 +19,8 @@ import {
   todayIso,
 } from '@/lib/salon/format'
 import { formatKpiSources } from '@/lib/kpi-source'
-import type { AvecSyncMeta } from '@/lib/avec/sync-meta'
-import { financeiroSyncStaleMessage, isFinanceiroStale } from '@/lib/avec/sync-meta'
+import type { AvecSyncMeta } from '@/lib/avec/sync-meta-surface'
+import { financeiroSyncStaleMessage, isFinanceiroStale } from '@/lib/avec/sync-meta-surface'
 import { buildFinanceComparePrintHtml } from '@/lib/finance-compare-export'
 import { openPrintHtml } from '@/lib/salon/month-overview-export'
 import { getBrand } from '@/lib/brand'

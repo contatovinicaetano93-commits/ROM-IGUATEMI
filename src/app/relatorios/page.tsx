@@ -16,8 +16,8 @@ import {
   openPrintHtml,
 } from '@/lib/salon/month-overview-export'
 import type { MonthOverview } from '@/lib/salon/month-overview'
-import type { AvecSyncMeta } from '@/lib/avec/sync-meta'
-import { isRelatoriosStale, relatoriosSyncStaleMessage } from '@/lib/avec/sync-meta'
+import type { AvecSyncMeta } from '@/lib/avec/sync-meta-surface'
+import { isRelatoriosStale, relatoriosSyncStaleMessage } from '@/lib/avec/sync-meta-surface'
 
 function currentMonthKey() {
   return todayIso().slice(0, 7)
