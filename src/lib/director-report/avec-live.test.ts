@@ -14,7 +14,17 @@ describe('monthRangeBr', () => {
 
 describe('quarterRangeBr', () => {
   it('cobre os 3 meses do trimestre', () => {
-    expect(quarterRangeBr('2026-Q1')).toEqual({ inicio: '01/01/2026', fim: '31/03/2026' })
+    expect(quarterRangeBr('2026-Q1', '2026-08-03')).toEqual({
+      inicio: '01/01/2026',
+      fim: '31/03/2026',
+    })
+  })
+
+  it('trimestre aberto fecha no dia de referência', () => {
+    expect(quarterRangeBr('2026-Q3', '2026-08-03')).toEqual({
+      inicio: '01/07/2026',
+      fim: '03/08/2026',
+    })
   })
 })
 
@@ -27,5 +37,25 @@ describe('resolveDirectorReturnRate', () => {
         salonRate: 0.669,
       }),
     ).toBe(0.669)
+  })
+
+  it('does not invent 0% when list has clients but no rate evidence', () => {
+    expect(
+      resolveDirectorReturnRate({
+        returnRates: [],
+        nonReturnerCount: 5,
+        salonRate: null,
+      }),
+    ).toBeNull()
+  })
+
+  it('uses salon rate when list has no per-row taxa', () => {
+    expect(
+      resolveDirectorReturnRate({
+        returnRates: [],
+        nonReturnerCount: 5,
+        salonRate: 0.42,
+      }),
+    ).toBe(0.42)
   })
 })

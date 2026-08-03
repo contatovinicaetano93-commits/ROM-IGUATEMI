@@ -12,7 +12,8 @@ export interface DirectorProfessional {
 export interface ReturnQuarterRow {
   quarter: QuarterKey
   label: string
-  return_rate: number // 0–1
+  /** 0–1; null = sem evidência de taxa (não inventar 0%) */
+  return_rate: number | null
   clients_total: number
   clients_returned: number
   delta_vs_prev: number | null // pontos percentuais

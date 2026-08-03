@@ -46,7 +46,9 @@ function html0011(report: DirectorReport) {
       const sel = b.quarters.find((q) => q.quarter === report.period.selected_quarter)
       const cmp = b.quarters.find((q) => q.quarter === report.period.compare_quarter)
       const delta =
-        sel && cmp ? Math.round((sel.return_rate - cmp.return_rate) * 1000) / 10 : null
+        sel?.return_rate != null && cmp?.return_rate != null
+          ? Math.round((sel.return_rate - cmp.return_rate) * 1000) / 10
+          : null
       return { name: b.professional.name, sel, cmp, delta, n: b.reactivation.length }
     })
     .sort((a, b) => (b.sel?.return_rate ?? 0) - (a.sel?.return_rate ?? 0))

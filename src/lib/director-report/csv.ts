@@ -99,15 +99,16 @@ export function returnCompareCsv(report: DirectorReport) {
   for (const block of report.return_blocks) {
     const qa = block.quarters.find((q) => q.quarter === a)
     const qb = block.quarters.find((q) => q.quarter === b)
-    const rateA = qa?.return_rate ?? 0
-    const rateB = qb?.return_rate ?? 0
-    const delta = Math.round((rateA - rateB) * 1000) / 10
+    const rateA = qa?.return_rate ?? null
+    const rateB = qb?.return_rate ?? null
+    const delta =
+      rateA != null && rateB != null ? Math.round((rateA - rateB) * 1000) / 10 : ''
     lines.push(
       [
         block.professional.name,
-        (rateA * 100).toFixed(1),
+        rateA == null ? '' : (rateA * 100).toFixed(1),
         qa?.clients_total ?? '',
-        (rateB * 100).toFixed(1),
+        rateB == null ? '' : (rateB * 100).toFixed(1),
         qb?.clients_total ?? '',
         delta,
       ]
@@ -136,7 +137,7 @@ export function returnCsv(report: DirectorReport, selectedQuarter?: QuarterKey) 
         [
           block.professional.name,
           q.label,
-          (q.return_rate * 100).toFixed(1),
+          q.return_rate == null ? '' : (q.return_rate * 100).toFixed(1),
           q.clients_total,
           q.clients_returned,
           q.delta_vs_prev ?? '',
