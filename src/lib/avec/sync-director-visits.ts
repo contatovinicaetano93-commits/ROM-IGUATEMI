@@ -63,8 +63,10 @@ export function isDirectorVisitQuarterKey(v: string): v is QuarterKey {
 async function upsertVisitBatch(batch: VisitUpsert[]): Promise<void> {
   if (batch.length === 0) return
   const sql = getSql()
-  const payload = JSON.stringify(batch)
-  await sql`
+  // sql.query / $1::jsonb — o tagged template do postgres.js serializa string
+  // como jsonb escalar ("[...]"), e jsonb_to_recordset exige array.
+  await sql.query(
+    `
     insert into salon_client_visits (
       client_key, visited_on, client_name, phone, mobile, email,
       professional_names, source_report, synced_at
@@ -77,12 +79,15 @@ async function upsertVisitBatch(batch: VisitUpsert[]): Promise<void> {
       x.mobile,
       x.email,
       coalesce(
-        (select array_agg(p) from jsonb_array_elements_text(coalesce(x.professional_names, '[]'::jsonb)) as p),
+        (
+          select array_agg(p)
+          from jsonb_array_elements_text(coalesce(x.professional_names, '[]'::jsonb)) as p
+        ),
         '{}'::text[]
       ),
       x.source_report,
       now()
-    from jsonb_to_recordset(${payload}::jsonb) as x(
+    from jsonb_to_recordset($1::jsonb) as x(
       client_key text,
       visited_on text,
       client_name text,
@@ -99,7 +104,9 @@ async function upsertVisitBatch(batch: VisitUpsert[]): Promise<void> {
       email = coalesce(excluded.email, salon_client_visits.email),
       professional_names = excluded.professional_names,
       synced_at = now()
-  `
+    `,
+    [JSON.stringify(batch)],
+  )
 }
 
 async function coverageIsFresh(quarter: QuarterKey): Promise<boolean> {
