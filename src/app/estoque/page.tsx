@@ -14,6 +14,11 @@ import {
 } from 'lucide-react'
 import { SectionCard, PrimaryButton, InfoBanner, CountBadge } from '../_components/ui'
 import {
+  LIST_PAGE_SIZE,
+  ListPagination,
+  listPageSlice,
+} from '../_components/ListPagination'
+import {
   CollapsibleBody,
   SectionToggleHeader,
   useSectionOpen,
@@ -233,6 +238,8 @@ export default function EstoquePage() {
   const [catalogCategoryId, setCatalogCategoryId] = useState('')
   const [catalogBrandId, setCatalogBrandId] = useState('')
   const [catalogStockFilter, setCatalogStockFilter] = useState<CatalogStockFilter>('all')
+  const [catalogPage, setCatalogPage] = useState(1)
+  const [movementsPage, setMovementsPage] = useState(1)
   const [outflowWindow, setOutflowWindow] = useState<'hoje' | 'semana'>('semana')
   const [movementsOpen, setMovementsOpen] = useSectionOpen('estoque.section.movimentos.open', false)
 
@@ -339,6 +346,24 @@ export default function EstoquePage() {
       return hay.includes(q)
     })
   }, [products, catalogQuery, catalogCategoryId, catalogBrandId, catalogStockFilter])
+
+  useEffect(() => {
+    setCatalogPage(1)
+  }, [catalogQuery, catalogCategoryId, catalogBrandId, catalogStockFilter])
+
+  useEffect(() => {
+    setMovementsPage(1)
+  }, [movements.length])
+
+  const catalogPageItems = useMemo(
+    () => listPageSlice(catalogProducts, catalogPage, LIST_PAGE_SIZE),
+    [catalogProducts, catalogPage],
+  )
+
+  const movementsPageItems = useMemo(
+    () => listPageSlice(movements, movementsPage, LIST_PAGE_SIZE),
+    [movements, movementsPage],
+  )
 
   const outflowRange = useMemo(() => {
     const today = todayIsoDaySp()
@@ -677,51 +702,53 @@ export default function EstoquePage() {
           <p className="text-xs text-muted">Nenhum produto com esses filtros.</p>
         )}
         {!detailLoading && catalogProducts.length > 0 && (
-          <div className="max-h-96 overflow-y-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-card text-[0.65rem] uppercase tracking-wide text-muted">
-                <tr>
-                  <th className="py-1.5 font-medium">Produto</th>
-                  <th className="py-1.5 font-medium">Saldo</th>
-                  <th className="hidden py-1.5 font-medium sm:table-cell">Mín.</th>
-                  <th className="py-1.5 font-medium">Custo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {catalogProducts.slice(0, 200).map((p) => {
-                  const low = p.minimum_qty != null && p.current_qty <= p.minimum_qty
-                  return (
-                    <tr key={p.id} className="border-t border-border/60">
-                      <td className="py-2">
-                        <p className="font-medium">{p.name}</p>
-                        <p className="text-xs text-muted">
-                          {[p.brand_name, p.category_name, p.sku].filter(Boolean).join(' · ') ||
-                            '—'}
-                        </p>
-                      </td>
-                      <td
-                        className={`py-2 tabular-nums ${
-                          p.current_qty <= 0 ? 'text-danger' : low ? 'text-warning' : ''
-                        }`}
-                      >
-                        {formatQty(p.current_qty)}
-                      </td>
-                      <td className="hidden py-2 tabular-nums text-muted sm:table-cell">
-                        {p.minimum_qty != null ? formatQty(p.minimum_qty) : '—'}
-                      </td>
-                      <td className="py-2 tabular-nums text-muted">
-                        {p.unit_cost != null ? formatCurrency(p.unit_cost) : '—'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            {catalogProducts.length > 200 && (
-              <p className="mt-2 text-xs text-muted">
-                Mostrando 200 de {catalogProducts.length}. Refine a busca.
-              </p>
-            )}
+          <div>
+            <div className="max-h-96 overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-card text-[0.65rem] uppercase tracking-wide text-muted">
+                  <tr>
+                    <th className="py-1.5 font-medium">Produto</th>
+                    <th className="py-1.5 font-medium">Saldo</th>
+                    <th className="hidden py-1.5 font-medium sm:table-cell">Mín.</th>
+                    <th className="py-1.5 font-medium">Custo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalogPageItems.map((p) => {
+                    const low = p.minimum_qty != null && p.current_qty <= p.minimum_qty
+                    return (
+                      <tr key={p.id} className="border-t border-border/60">
+                        <td className="py-2">
+                          <p className="font-medium">{p.name}</p>
+                          <p className="text-xs text-muted">
+                            {[p.brand_name, p.category_name, p.sku].filter(Boolean).join(' · ') ||
+                              '—'}
+                          </p>
+                        </td>
+                        <td
+                          className={`py-2 tabular-nums ${
+                            p.current_qty <= 0 ? 'text-danger' : low ? 'text-warning' : ''
+                          }`}
+                        >
+                          {formatQty(p.current_qty)}
+                        </td>
+                        <td className="hidden py-2 tabular-nums text-muted sm:table-cell">
+                          {p.minimum_qty != null ? formatQty(p.minimum_qty) : '—'}
+                        </td>
+                        <td className="py-2 tabular-nums text-muted">
+                          {p.unit_cost != null ? formatCurrency(p.unit_cost) : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <ListPagination
+              page={catalogPage}
+              totalItems={catalogProducts.length}
+              onPageChange={setCatalogPage}
+            />
           </div>
         )}
       </SectionCard>
@@ -869,7 +896,7 @@ export default function EstoquePage() {
             )}
 
           {!detailLoading &&
-            movements.map((m) => {
+            movementsPageItems.map((m) => {
               const outflowBucket: OutflowReasonBucket | null =
                 m.type === 'saida' ? classifyOutflowReason(m.reason) : null
               const purchase = isPurchaseEntry(m)
@@ -916,6 +943,13 @@ export default function EstoquePage() {
                 </div>
               )
             })}
+          {!detailLoading && movements.length > LIST_PAGE_SIZE && (
+            <ListPagination
+              page={movementsPage}
+              totalItems={movements.length}
+              onPageChange={setMovementsPage}
+            />
+          )}
         </CollapsibleBody>
       </div>
 
