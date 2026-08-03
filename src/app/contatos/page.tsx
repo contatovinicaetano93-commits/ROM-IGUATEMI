@@ -159,6 +159,9 @@ export default function ContatosPage() {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [novosDay, setNovosDay] = useState<string | null>(null)
+  /** Deep-link Hoje WA: ?channel=whatsapp&status=novo (não é a fila Novos Avec). */
+  const [urlChannel, setUrlChannel] = useState<string | null>(null)
+  const [urlStatus, setUrlStatus] = useState<string | null>(null)
   const [urlQueueReady, setUrlQueueReady] = useState(false)
 
   useEffect(() => {
@@ -166,8 +169,24 @@ export default function ContatosPage() {
     if (params.get('queue') === 'novos') setMode('novos')
     const day = params.get('day')
     if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) setNovosDay(day)
+    const ch = params.get('channel')?.trim().toLowerCase() ?? ''
+    const st = params.get('status')?.trim().toLowerCase() ?? ''
+    if (ch === 'whatsapp' || ch === 'telegram' || ch === 'instagram' || ch === 'manual' || ch === 'avec') {
+      setUrlChannel(ch)
+      setMode('search')
+    }
+    if (st === 'novo' || st === 'em_atendimento' || st === 'agendado' || st === 'convertido' || st === 'perdido') {
+      setUrlStatus(st)
+      if (!params.get('queue')) setMode('search')
+    }
     setUrlQueueReady(true)
   }, [])
+
+  function selectMode(next: ListMode) {
+    setUrlChannel(null)
+    setUrlStatus(null)
+    setMode(next)
+  }
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300)
@@ -177,7 +196,8 @@ export default function ContatosPage() {
   async function load() {
     setLoading(true)
     try {
-      if (mode === 'search' && !debouncedQuery) {
+      const hasUrlFilter = Boolean(urlChannel || urlStatus)
+      if (mode === 'search' && !debouncedQuery && !hasUrlFilter) {
         setError(null)
         setContacts([])
         setTotalInBase(null)
@@ -197,7 +217,7 @@ export default function ContatosPage() {
         return
       }
       const params = new URLSearchParams({
-        sort: mode === 'novos' ? 'name' : 'urgency',
+        sort: mode === 'novos' ? 'name' : mode === 'search' && hasUrlFilter ? 'name' : 'urgency',
         limit: mode === 'search' ? '100' : '250',
       })
       if (mode === 'reactivate') {
@@ -207,7 +227,10 @@ export default function ContatosPage() {
         params.set('queue', 'novos')
         if (novosDay) params.set('day', novosDay)
       } else {
-        params.set('q', debouncedQuery)
+        if (debouncedQuery) params.set('q', debouncedQuery)
+        if (urlChannel) params.set('channel', urlChannel)
+        if (urlStatus) params.set('status', urlStatus)
+        if (hasUrlFilter) params.set('limit', '250')
       }
       const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const json = await res.json()
@@ -241,13 +264,14 @@ export default function ContatosPage() {
     if (!urlQueueReady) return
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, debouncedQuery, queue, urlQueueReady, novosDay])
+  }, [mode, debouncedQuery, queue, urlQueueReady, novosDay, urlChannel, urlStatus])
 
   const visible = contacts
+  const hasUrlFilter = Boolean(urlChannel || urlStatus)
 
   const countLabel =
     mode === 'search'
-      ? debouncedQuery
+      ? debouncedQuery || hasUrlFilter
         ? `${visible.length} contato${visible.length === 1 ? '' : 's'}${
             totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
@@ -260,7 +284,7 @@ export default function ContatosPage() {
 
   const emptyCopy =
     mode === 'search'
-      ? debouncedQuery
+      ? debouncedQuery || hasUrlFilter
         ? 'Nenhum contato encontrado.'
         : 'Digite um nome ou telefone para buscar na base.'
       : mode === 'novos'
@@ -282,7 +306,11 @@ export default function ContatosPage() {
               ? 'Reative quem está atrasado, vencendo ou agendado'
               : mode === 'novos'
                 ? 'Lead Avec do dia sem cliente cadastrado na Avec ainda'
-                : 'Busque por nome ou telefone em toda a base'}
+                : hasUrlFilter
+                  ? `Filtro${urlChannel ? ` ${channelLabel(urlChannel)}` : ''}${
+                      urlStatus ? ` · status ${urlStatus}` : ''
+                    }`
+                  : 'Busque por nome ou telefone em toda a base'}
             {' · '}
             {countLabel}
           </p>
@@ -297,7 +325,7 @@ export default function ContatosPage() {
 
       <button
         type="button"
-        onClick={() => setMode('novos')}
+        onClick={() => selectMode('novos')}
         aria-pressed={mode === 'novos'}
         className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition-colors ${
           mode === 'novos'
@@ -338,7 +366,7 @@ export default function ContatosPage() {
               type="button"
               role="tab"
               aria-selected={active}
-              onClick={() => setMode(tab.id)}
+              onClick={() => selectMode(tab.id)}
               className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
                 active ? 'bg-gold/15 text-gold' : 'text-muted active:text-foreground'
               }`}
