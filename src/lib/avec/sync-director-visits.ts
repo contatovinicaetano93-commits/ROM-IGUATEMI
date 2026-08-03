@@ -3,11 +3,10 @@
  * Sem essa tabela o Relatório gerência 0011 só existia via Avec ao vivo.
  */
 
-import { extractRows, fetchAvecReport } from '@/lib/avec/client'
+import { extractRows, fetchAvecReport, fmtAvecDate } from '@/lib/avec/client'
 import { normalizeAttendanceRow } from '@/lib/avec/normalize'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
-import { quarterRangeBr } from '@/lib/director-report/avec-live'
 import {
   local0011ClientKey,
   previousQuarterKey,
@@ -17,6 +16,31 @@ import { currentQuarterKeySp } from '@/lib/director-report/period'
 import type { QuarterKey } from '@/lib/director-report/types'
 
 const MAX_PAGES_PER_QUARTER = 40
+/** Upserts em lote — insert linha a linha estourava o maxDuration no BR. */
+const UPSERT_BATCH_SIZE = 80
+const COVERAGE_FRESH_MS = 12 * 60 * 60_000
+
+type VisitUpsert = {
+  client_key: string
+  visited_on: string
+  client_name: string
+  phone: string | null
+  mobile: string | null
+  email: string | null
+  professional_names: string[]
+  source_report: string
+}
+
+function quarterRangeBr(quarter: QuarterKey): { inicio: string; fim: string } {
+  const [yStr, qStr] = quarter.split('-Q')
+  const y = Number(yStr)
+  const q = Number(qStr) as 1 | 2 | 3 | 4
+  if (!y || !q || q < 1 || q > 4) throw new Error(`Trimestre inválido: ${quarter}`)
+  const startMonth = (q - 1) * 3
+  const start = new Date(y, startMonth, 1)
+  const end = new Date(y, startMonth + 3, 0)
+  return { inicio: fmtAvecDate(start), fim: fmtAvecDate(end) }
+}
 
 function avecBrToIso(ddmmYYYY: string): string {
   const [d, m, y] = ddmmYYYY.split('/')
@@ -30,6 +54,71 @@ function quartersToSync(now = new Date()): QuarterKey[] {
   const yoy = `${Number(current.slice(0, 4)) - 1}-${current.slice(5)}` as QuarterKey
   const yoyPrior = previousQuarterKey(yoy)
   return [...new Set([current, prior, yoy, yoyPrior])]
+}
+
+export function isDirectorVisitQuarterKey(v: string): v is QuarterKey {
+  return /^\d{4}-Q[1-4]$/.test(v)
+}
+
+async function upsertVisitBatch(batch: VisitUpsert[]): Promise<void> {
+  if (batch.length === 0) return
+  const sql = getSql()
+  const payload = JSON.stringify(batch)
+  await sql`
+    insert into salon_client_visits (
+      client_key, visited_on, client_name, phone, mobile, email,
+      professional_names, source_report, synced_at
+    )
+    select
+      x.client_key,
+      x.visited_on::date,
+      x.client_name,
+      x.phone,
+      x.mobile,
+      x.email,
+      coalesce(
+        (select array_agg(p) from jsonb_array_elements_text(coalesce(x.professional_names, '[]'::jsonb)) as p),
+        '{}'::text[]
+      ),
+      x.source_report,
+      now()
+    from jsonb_to_recordset(${payload}::jsonb) as x(
+      client_key text,
+      visited_on text,
+      client_name text,
+      phone text,
+      mobile text,
+      email text,
+      professional_names jsonb,
+      source_report text
+    )
+    on conflict (client_key, visited_on, source_report) do update set
+      client_name = excluded.client_name,
+      phone = coalesce(excluded.phone, salon_client_visits.phone),
+      mobile = coalesce(excluded.mobile, salon_client_visits.mobile),
+      email = coalesce(excluded.email, salon_client_visits.email),
+      professional_names = excluded.professional_names,
+      synced_at = now()
+  `
+}
+
+async function coverageIsFresh(quarter: QuarterKey): Promise<boolean> {
+  try {
+    const sql = getSql()
+    const rows = (await sql`
+      select row_count, truncated, synced_at
+      from salon_visit_sync_coverage
+      where period_key = ${quarter}
+      limit 1
+    `) as { row_count: number; truncated: boolean; synced_at: string | Date }[]
+    const row = rows[0]
+    if (!row || row.truncated || row.row_count <= 0) return false
+    const ts = new Date(row.synced_at).getTime()
+    if (!Number.isFinite(ts)) return false
+    return Date.now() - ts < COVERAGE_FRESH_MS
+  } catch {
+    return false
+  }
 }
 
 async function syncOneQuarter(
@@ -46,6 +135,16 @@ async function syncOneQuarter(
   let rowCount = 0
   let truncated = false
   const seen = new Set<string>()
+  let batch: VisitUpsert[] = []
+
+  const flush = async () => {
+    if (batch.length === 0) return
+    const chunk = batch
+    batch = []
+    await upsertVisitBatch(chunk)
+    rowCount += chunk.length
+    stats.director_visits_upserted = (stats.director_visits_upserted ?? 0) + chunk.length
+  }
 
   for (let page = 1; page <= MAX_PAGES_PER_QUARTER; page++) {
     const payload = await fetchAvecReport(
@@ -75,36 +174,24 @@ async function syncOneQuarter(
       const email =
         typeof row.email === 'string' && row.email.trim() ? row.email.trim() : null
 
-      await sql`
-        insert into salon_client_visits (
-          client_key, visited_on, client_name, phone, mobile, email,
-          professional_names, source_report, synced_at
-        ) values (
-          ${key},
-          ${att.lastVisitDay}::date,
-          ${att.clientName},
-          ${phone},
-          ${phone},
-          ${email},
-          ${pros},
-          ${'0002'},
-          now()
-        )
-        on conflict (client_key, visited_on, source_report) do update set
-          client_name = excluded.client_name,
-          phone = coalesce(excluded.phone, salon_client_visits.phone),
-          mobile = coalesce(excluded.mobile, salon_client_visits.mobile),
-          email = coalesce(excluded.email, salon_client_visits.email),
-          professional_names = excluded.professional_names,
-          synced_at = now()
-      `
-      rowCount++
-      stats.director_visits_upserted = (stats.director_visits_upserted ?? 0) + 1
+      batch.push({
+        client_key: key,
+        visited_on: att.lastVisitDay,
+        client_name: att.clientName,
+        phone,
+        mobile: phone,
+        email,
+        professional_names: pros,
+        source_report: '0002',
+      })
+      if (batch.length >= UPSERT_BATCH_SIZE) await flush()
     }
 
     if (rows.length < 250) break
     if (page === MAX_PAGES_PER_QUARTER) truncated = true
   }
+
+  await flush()
 
   await sql`
     insert into salon_visit_sync_coverage (
@@ -136,6 +223,13 @@ async function syncOneQuarter(
   }
 }
 
+export type SyncDirectorVisitsOpts = {
+  /** Se omitido, sincroniza corrente + anterior + YoY. */
+  quarters?: QuarterKey[]
+  /** Re-sincroniza mesmo com cobertura fresca (<12h). */
+  force?: boolean
+}
+
 /**
  * Full sync: grava trimestres corrente + anterior + YoY (para comparativo gerência).
  * Best-effort — falha de um trimestre não aborta o sync.
@@ -143,10 +237,15 @@ async function syncOneQuarter(
 export async function syncDirectorVisits(
   stats: AvecSyncStats,
   syncRunId?: string,
+  opts?: SyncDirectorVisitsOpts,
 ): Promise<void> {
-  const quarters = quartersToSync()
+  const quarters = opts?.quarters?.length ? opts.quarters : quartersToSync()
   for (const q of quarters) {
     try {
+      if (!opts?.force && (await coverageIsFresh(q))) {
+        stats.warnings.push(`director-visits ${q}: cobertura fresca — pulado`)
+        continue
+      }
       await syncOneQuarter(q, stats, syncRunId)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
