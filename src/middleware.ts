@@ -78,6 +78,7 @@ function isAdminOnlyPath(pathname: string) {
     pathname.startsWith('/api/avec/sync/') ||
     pathname === '/api/avec/purge-snapshots' ||
     pathname === '/api/avec/refresh-token' ||
+    pathname === '/api/avec/probe-0011' ||
     pathname === '/api/seed' ||
     (pathname.startsWith('/api/admin/') && !isFinanceAllowedAdminApi(pathname)) ||
     pathname === '/api/lgpd/purge' ||
@@ -137,6 +138,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/api/avec/sync/') ||
     pathname === '/api/avec/purge-snapshots' ||
     pathname === '/api/avec/refresh-token' ||
+    pathname === '/api/avec/probe-0011' ||
     pathname === '/api/estoque/sync' ||
     pathname === '/api/financeiro/omie/sync' ||
     pathname === '/api/director-report' ||
