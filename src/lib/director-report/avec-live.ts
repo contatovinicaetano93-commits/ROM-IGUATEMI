@@ -482,9 +482,9 @@ function avg(nums: number[]): number | null {
 }
 
 /**
- * Taxa coerente com a lista 0011 (não-retornados).
- * 100% com clientes p/ reativar > 0 é impossível → descarta média contaminada.
- * Sem evidência de taxa → null (UI mostra "—"), nunca 0% inventado.
+ * Taxa por profissional — só com evidência própria (taxa/cohort do pro).
+ * Nunca clona a taxa do salão em cada linha (várias % iguais = bug).
+ * Sem evidência → null (UI "—").
  */
 export function resolveDirectorReturnRate(opts: {
   returnRates: number[]
@@ -492,6 +492,8 @@ export function resolveDirectorReturnRate(opts: {
   salonRate: number | null
   clientsTotalHint?: number
   clientsReturnedHint?: number
+  /** true só na linha agregada "Salão". */
+  allowSalonFallback?: boolean
 }): number | null {
   const hintTotal = opts.clientsTotalHint ?? 0
   const hintReturned = opts.clientsReturnedHint ?? 0
@@ -499,13 +501,16 @@ export function resolveDirectorReturnRate(opts: {
     return Math.round((hintReturned / hintTotal) * 1000) / 1000
   }
 
-  let rate: number | null = avg(opts.returnRates) ?? opts.salonRate
-  if (rate == null) return null
-  if (opts.nonReturnerCount > 0 && rate >= 0.999) {
-    rate = opts.salonRate != null && opts.salonRate < 0.999 ? opts.salonRate : null
+  const fromRates = avg(opts.returnRates)
+  if (fromRates != null) {
+    if (opts.nonReturnerCount > 0 && fromRates >= 0.999) return null
+    return Math.round(fromRates * 1000) / 1000
   }
-  if (rate == null) return null
-  return Math.round(rate * 1000) / 1000
+
+  if (opts.allowSalonFallback && opts.salonRate != null) {
+    return Math.round(opts.salonRate * 1000) / 1000
+  }
+  return null
 }
 
 function buildQuarterRow(
@@ -513,6 +518,7 @@ function buildQuarterRow(
   agg: QuarterAgg | undefined,
   salonRate: number | null,
   prevRate: number | null,
+  allowSalonFallback = false,
 ): ReturnQuarterRow {
   const listN = agg?.clients.length ?? 0
   const return_rate = resolveDirectorReturnRate({
@@ -521,6 +527,7 @@ function buildQuarterRow(
     salonRate,
     clientsTotalHint: agg?.clientsTotalHint,
     clientsReturnedHint: agg?.clientsReturnedHint,
+    allowSalonFallback,
   })
 
   const clients_total = listN > 0 ? listN : agg?.clientsTotalHint || 0
@@ -830,26 +837,22 @@ export async function fetchLiveDirectorBlocks(
         const cmpAgg = cmpByPro.get(professional.id)
         const useSalon = !hasPerPro
 
-        // Com breakdown: usa taxa própria; se faltar o tri comparativo, cai na taxa salão.
+        // Com breakdown por pro: só taxa própria. Taxa do salão só na linha agregada.
         const cmpRow = buildQuarterRow(
           compareQuarter,
           cmpAgg,
-          useSalon || !cmpAgg ? salonCmp : null,
+          useSalon ? salonCmp : null,
           null,
+          useSalon,
         )
         const selRow = buildQuarterRow(
           selectedQuarter,
           selAgg,
-          useSalon || !selAgg ? salonSel : null,
+          useSalon ? salonSel : null,
           cmpRow.return_rate,
+          useSalon,
         )
 
-        if (!selAgg && salonSel != null && selRow.clients_total === 0) {
-          selRow.return_rate = Math.round(salonSel * 1000) / 1000
-        }
-        if (!cmpAgg && salonCmp != null && cmpRow.clients_total === 0) {
-          cmpRow.return_rate = Math.round(salonCmp * 1000) / 1000
-        }
         if (selRow.return_rate != null && cmpRow.return_rate != null) {
           selRow.delta_vs_prev =
             Math.round((selRow.return_rate - cmpRow.return_rate) * 1000) / 10
