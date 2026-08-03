@@ -266,13 +266,21 @@ export default function HojePage() {
       )}
 
       {!loading && (data?.leads.whatsapp_sem_resposta ?? 0) > 0 && (
-        <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4">
-          <MessageCircle size={18} className="mt-0.5 shrink-0 text-warning" />
-          <p className="text-sm">
-            <span className="font-semibold text-warning">{data!.leads.whatsapp_sem_resposta} lead(s) WhatsApp hoje</span>
-            {' '}ainda com status Novo — priorize o primeiro contato.
-          </p>
-        </div>
+        <Link
+          href="/contatos?channel=whatsapp&status=novo"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 active:bg-warning/15"
+        >
+          <div className="flex min-w-0 items-start gap-3">
+            <MessageCircle size={18} className="mt-0.5 shrink-0 text-warning" />
+            <p className="text-sm">
+              <span className="font-semibold text-warning">
+                {data!.leads.whatsapp_sem_resposta} lead(s) WhatsApp hoje
+              </span>{' '}
+              ainda com status Novo — ver lista.
+            </p>
+          </div>
+          <ChevronRight size={16} className="shrink-0 text-warning/80" />
+        </Link>
       )}
 
       <Link
