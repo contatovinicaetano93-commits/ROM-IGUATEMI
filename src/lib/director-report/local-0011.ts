@@ -238,8 +238,10 @@ export function aggregateLocal0011ByPro(
   p2Clients: AvecClientRow[],
   professionals: DirectorProfessional[],
   nonReturnerKeys?: Set<string>,
+  opts?: { p2Truncated?: boolean },
 ): Map<string, Local0011Agg> {
   const p2Keys = new Set(p2Clients.map((c) => c.key))
+  const p2Truncated = Boolean(opts?.p2Truncated)
   const byProId = new Map<
     string,
     {
@@ -292,11 +294,14 @@ export function aggregateLocal0011ByPro(
     const returned = Math.max(0, total - nonReturnCount)
     const rate = returned / total
     nonReturners.sort((a, b) => b.days_since - a.days_since)
+
+    // Amostra 0002 P2 truncada + cruzamento → cohort “some” do P2 e vira 0% falso.
+    const rateReliable = use0007 || !p2Truncated
     out.set(bucket.proName, {
       clients: nonReturners,
-      returnRates: [Math.round(rate * 1000) / 1000],
-      clientsTotalHint: total,
-      clientsReturnedHint: returned,
+      returnRates: rateReliable ? [Math.round(rate * 1000) / 1000] : [],
+      clientsTotalHint: rateReliable ? total : 0,
+      clientsReturnedHint: rateReliable ? returned : 0,
     })
   }
   return out
@@ -316,6 +321,7 @@ function buildQuarterResult(
     p2.clients,
     professionals,
     nonReturnerKeys && nonReturnerKeys.size > 0 ? nonReturnerKeys : undefined,
+    { p2Truncated: p2.truncated },
   )
   const salonRates = salonRate != null ? [salonRate] : []
   const truncated = p1.truncated || p2.truncated
@@ -331,14 +337,17 @@ function buildQuarterResult(
     }
   }
 
+  const hasReliableRate = [...byPro.values()].some((a) => a.returnRates.length > 0)
   return {
     byPro,
     salonRates,
     truncated,
     source: hasData ? 'local' : 'none',
-    note: hasData
-      ? `0011 local via 0002+0007 (${labelQuarter(prior)}→${labelQuarter(quarter)}; por profissional)`
-      : `0011 local sem match por pro — taxa salão 0007`,
+    note: !hasData
+      ? `0011 local sem match por pro — taxa salão 0007`
+      : truncated && !hasReliableRate
+        ? `0011 local: lista parcial (0002 truncado) — taxas por pro omitidas para não inventar 0%`
+        : `0011 local via 0002+0007 (${labelQuarter(prior)}→${labelQuarter(quarter)}; por profissional)`,
   }
 }
 
