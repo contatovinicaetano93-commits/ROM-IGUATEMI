@@ -644,7 +644,13 @@ export default function RelatorioDiretoriaPage() {
                   {loading && (
                     <tr>
                       <td colSpan={5} className="py-6 text-muted">
-                        Carregando…
+                        {isHistoricalDirectorPeriod({
+                          quarter,
+                          compare,
+                          stage: '0011',
+                        })
+                          ? 'Carregando 0011 com dados completos Avec (trimestres fechados — pode levar alguns minutos)…'
+                          : 'Carregando…'}
                       </td>
                     </tr>
                   )}
