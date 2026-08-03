@@ -2,13 +2,8 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
-import {
-  extractReportTotals,
-  extractRows,
-  fetchAvecReport,
-  getAvecUnitId,
-} from '@/lib/avec/client'
-import { getRomPanelId } from '@/lib/brand'
+import { extractReportTotals, extractRows, fetchAvecReport } from '@/lib/avec/client'
+import { getAvecUnitId, getRomPanelId } from '@/lib/brand'
 
 export const maxDuration = 60
 
