@@ -237,6 +237,20 @@ describe('normalize0011ReactivationRow', () => {
     expect(row?.returnRate).toBeCloseTo(0.42)
     expect(row?.professional).toBe('Vitor M')
   })
+
+  it('ignora flag retorno=1 em linha de cliente (não é taxa)', () => {
+    const row = normalize0011ReactivationRow({
+      Cliente: 'ANA TESTE',
+      Celular: '11999990000',
+      'Data ultima comanda': '10/05/2026',
+      Profissional: 'Geyza Melo De Araujo',
+      retorno: 1,
+      taxa: 1,
+      rate: '1',
+    })
+    expect(row?.name).toBe('ANA TESTE')
+    expect(row?.returnRate).toBeNull()
+  })
 })
 
 describe('normalizeP1OccupancyRow 0126', () => {

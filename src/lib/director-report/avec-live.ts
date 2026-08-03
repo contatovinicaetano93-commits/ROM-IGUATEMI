@@ -314,7 +314,8 @@ async function fetch0011Quarter(
           clientsTotalHint: 0,
           clientsReturnedHint: 0,
         }
-        if (c.returnRate != null) agg.returnRates.push(c.returnRate)
+        // Lista 0011 = clientes SEM retorno — não usar “taxa” por linha de cliente
+        // (Avec manda flag/coluna ambígua → média virava 100%).
         if (c.name && c.name !== '—') {
           agg.clients.push(
             toReactivationClient({
@@ -459,6 +460,30 @@ function avg(nums: number[]): number | null {
   return nums.reduce((a, b) => a + b, 0) / nums.length
 }
 
+/**
+ * Taxa coerente com a lista 0011 (não-retornados).
+ * 100% com clientes p/ reativar > 0 é impossível → descarta média contaminada.
+ */
+export function resolveDirectorReturnRate(opts: {
+  returnRates: number[]
+  nonReturnerCount: number
+  salonRate: number | null
+  clientsTotalHint?: number
+  clientsReturnedHint?: number
+}): number {
+  const hintTotal = opts.clientsTotalHint ?? 0
+  const hintReturned = opts.clientsReturnedHint ?? 0
+  if (hintTotal > 0 && hintReturned >= 0 && hintReturned <= hintTotal) {
+    return Math.round((hintReturned / hintTotal) * 1000) / 1000
+  }
+
+  let rate = avg(opts.returnRates) ?? opts.salonRate ?? 0
+  if (opts.nonReturnerCount > 0 && rate >= 0.999) {
+    rate = opts.salonRate != null && opts.salonRate < 0.999 ? opts.salonRate : 0
+  }
+  return Math.round(rate * 1000) / 1000
+}
+
 function buildQuarterRow(
   quarter: QuarterKey,
   agg: QuarterAgg | undefined,
@@ -466,24 +491,26 @@ function buildQuarterRow(
   prevRate: number | null,
 ): ReturnQuarterRow {
   const listN = agg?.clients.length ?? 0
-  const rateFromAgg = avg(agg?.returnRates ?? [])
-  // Lista 0011 = clientes sem retorno → taxa ≈ 1 − (lista / (lista + retornados)).
-  // Sem total Avec, usamos taxa do relatório/0007; clients_total = tamanho da lista.
-  const return_rate =
-    rateFromAgg ??
-    salonRate ??
-    (listN > 0 ? 0 : 0)
+  const return_rate = resolveDirectorReturnRate({
+    returnRates: agg?.returnRates ?? [],
+    nonReturnerCount: listN,
+    salonRate,
+    clientsTotalHint: agg?.clientsTotalHint,
+    clientsReturnedHint: agg?.clientsReturnedHint,
+  })
 
   const clients_total = listN > 0 ? listN : agg?.clientsTotalHint || 0
   const clients_returned =
-    clients_total > 0 && return_rate > 0
-      ? Math.round(clients_total * return_rate)
-      : agg?.clientsReturnedHint || 0
+    agg?.clientsReturnedHint && agg.clientsReturnedHint > 0
+      ? agg.clientsReturnedHint
+      : listN === 0 && clients_total > 0 && return_rate > 0
+        ? Math.round(clients_total * return_rate)
+        : 0
 
   return {
     quarter,
     label: labelQuarter(quarter),
-    return_rate: Math.round(return_rate * 1000) / 1000,
+    return_rate,
     clients_total,
     clients_returned,
     delta_vs_prev:

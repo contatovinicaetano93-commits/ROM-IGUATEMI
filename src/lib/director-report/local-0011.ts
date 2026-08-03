@@ -269,8 +269,20 @@ export function aggregateLocal0011ByPro(
     if (total === 0) continue
     const nonReturners: ReactivationClient[] = []
     let nonReturnCount = 0
+
+    // 0007 truncado / chave diferente de 0002 → 0 matches → taxa falsa de 100%.
+    // Nesse caso cai no cruzamento com a amostra 0002 do P2.
+    let use0007 = Boolean(nonReturnerKeys && nonReturnerKeys.size > 0)
+    if (use0007 && nonReturnerKeys) {
+      let matched = 0
+      for (const key of bucket.cohort.keys()) {
+        if (nonReturnerKeys.has(key)) matched++
+      }
+      if (matched === 0) use0007 = false
+    }
+
     for (const [key, row] of bucket.cohort) {
-      const isNonReturner = nonReturnerKeys
+      const isNonReturner = use0007 && nonReturnerKeys
         ? nonReturnerKeys.has(key)
         : !p2Keys.has(key)
       if (!isNonReturner) continue
