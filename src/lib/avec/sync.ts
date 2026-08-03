@@ -754,6 +754,11 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         durationCount++
       }
 
+      if (!att.avecClientId && !att.phone) {
+        stats.warnings.push('atendimento: linha sem avec_client_id e sem telefone — ignorada')
+        continue
+      }
+
       const contact = await upsertInBatch({
         avecClientId: att.avecClientId ?? undefined,
         name: att.clientName,
@@ -850,6 +855,10 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         try {
           const att = normalizeAttendanceRow(row)
           if (!att?.lastVisitDay || (att.totalVisits ?? 0) <= 1) continue
+          if (!att.avecClientId && !att.phone) {
+            stats.warnings.push('recorrentes 0002: linha sem avec_client_id e sem telefone — ignorada')
+            continue
+          }
           const day = att.lastVisitDay
           const contact = await upsertContact({
             avecClientId: att.avecClientId ?? undefined,

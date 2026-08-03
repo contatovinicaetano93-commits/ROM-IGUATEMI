@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergeContactStatus } from '@/lib/contacts'
+import { mergeContactStatus, resolveUpsertPhone } from '@/lib/contacts'
 
 describe('mergeContactStatus', () => {
   it('não rebaixa convertido para agendado (sync de agendamentos Avec)', () => {
@@ -40,5 +40,21 @@ describe('mergeContactStatus', () => {
 
   it('permite heal/PATCH novo → importado (dump Avec)', () => {
     expect(mergeContactStatus('novo', 'importado')).toBe('importado')
+  })
+})
+
+describe('resolveUpsertPhone', () => {
+  it('normaliza BR para E.164 e rejeita curto', () => {
+    expect(resolveUpsertPhone('(11) 97028-4991')).toBe('+5511970284991')
+    expect(resolveUpsertPhone('123')).toBeNull()
+    expect(resolveUpsertPhone(null)).toBeNull()
+  })
+
+  it('não devolve telefone cru quando normalize falha', () => {
+    expect(resolveUpsertPhone('abc-def')).toBeNull()
+  })
+
+  it('preserva DDI explícito (+1) sem forçar 55', () => {
+    expect(resolveUpsertPhone('+17866224690')).toBe('+17866224690')
   })
 })

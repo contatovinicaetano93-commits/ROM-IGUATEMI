@@ -40,6 +40,14 @@ describe('normalizePhone', () => {
     expect(normalizePhone('+5511988887777')).toBe('+5511988887777')
   })
 
+  it('não trata +1 NANP como BR', () => {
+    expect(normalizePhone('+17866224690')).toBe('+17866224690')
+  })
+
+  it('aceita 55 sem + quando já tem DDI completo', () => {
+    expect(normalizePhone('5511999998888')).toBe('+5511999998888')
+  })
+
   it('retorna null para número curto', () => {
     expect(normalizePhone('12345')).toBeNull()
   })

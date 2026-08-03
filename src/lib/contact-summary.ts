@@ -539,6 +539,7 @@ export async function countNewContactsNotInAvec(opts?: {
     select count(*)::int as n
     from contacts
     where anonymized_at is null
+      and channel = 'avec'
       and avec_client_id is null
       and status <> 'importado'
       and coalesce(source, '') not like 'avec_sync_clients%'
@@ -562,6 +563,7 @@ export async function listNewContactsNotInAvec(opts?: {
     select count(*)::int as n
     from contacts
     where anonymized_at is null
+      and channel = 'avec'
       and avec_client_id is null
       and status <> 'importado'
       and coalesce(source, '') not like 'avec_sync_clients%'
@@ -575,6 +577,7 @@ export async function listNewContactsNotInAvec(opts?: {
     select *
     from contacts
     where anonymized_at is null
+      and channel = 'avec'
       and avec_client_id is null
       and status <> 'importado'
       and coalesce(source, '') not like 'avec_sync_clients%'
