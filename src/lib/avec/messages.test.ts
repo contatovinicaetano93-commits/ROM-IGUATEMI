@@ -126,6 +126,28 @@ describe('deriveAvecSyncUi', () => {
     expect(ui.status).toBe('ok')
     expect(ui.tone).toBe('success')
   })
+
+  it('não marca incompleto quando partial é abort limpo por orçamento', () => {
+    const ui = deriveAvecSyncUi({
+      configured: true,
+      now,
+      last: {
+        status: 'partial',
+        created_at: '2026-07-25T11:50:00.000Z',
+        error: null,
+        stats: {
+          aborted: true,
+          errors: [],
+          warnings: [
+            'sync: orçamento esgotado em appointments (abort limpo)',
+            'agenda: reconcile/KPI adiado — sync abortou no orçamento (keep-set incompleto)',
+          ],
+        },
+      },
+    })
+    expect(ui.status).toBe('ok')
+    expect(ui.tone).toBe('success')
+  })
 })
 
 describe('isSoftAvecSyncWarning', () => {
