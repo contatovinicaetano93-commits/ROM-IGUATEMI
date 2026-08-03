@@ -19,6 +19,8 @@ import {
   todayIso,
 } from '@/lib/salon/format'
 import { formatKpiSources } from '@/lib/kpi-source'
+import type { AvecSyncMeta } from '@/lib/avec/sync-meta'
+import { financeiroSyncStaleMessage, isFinanceiroStale } from '@/lib/avec/sync-meta'
 import { buildFinanceComparePrintHtml } from '@/lib/finance-compare-export'
 import { openPrintHtml } from '@/lib/salon/month-overview-export'
 import { getBrand } from '@/lib/brand'
@@ -381,6 +383,7 @@ export default function FinanceiroPage() {
   const [month, setMonth] = useState(currentMonthKey())
   const [compareMonth, setCompareMonth] = useState('')
   const [kpis, setKpis] = useState<FinanceKpis | null>(null)
+  const [syncMeta, setSyncMeta] = useState<AvecSyncMeta | null>(null)
   const [categories, setCategories] = useState<FinanceCategory[]>([])
   const [expenses, setExpenses] = useState<FinanceExpense[]>([])
   const [loading, setLoading] = useState(true)
@@ -405,11 +408,12 @@ export default function FinanceiroPage() {
       ])
       const [kpisJson, catJson, expJson] = await Promise.all([kpisRes.json(), catRes.json(), expRes.json()])
       if (kpisJson.error) throw new Error(kpisJson.error)
-      const raw = kpisJson.data as FinanceKpis
+      const raw = kpisJson.data as FinanceKpis & { sync?: AvecSyncMeta }
       setKpis({
         current: normalizeKpiBucket(raw.current),
         previous: normalizeKpiBucket(raw.previous),
       })
+      setSyncMeta(raw.sync ?? null)
       const sideErrors = [catJson.error, expJson.error].filter(Boolean)
       if (sideErrors.length) {
         setError(`KPIs ok; listas: ${String(sideErrors[0])}`)
@@ -757,6 +761,16 @@ export default function FinanceiroPage() {
       {omieSyncMsg && (
         <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground/90">
           {omieSyncMsg}
+        </div>
+      )}
+
+      {syncMeta && (isFinanceiroStale(syncMeta) || syncMeta.status === 'partial' || syncMeta.status === 'error') && (
+        <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
+          {isFinanceiroStale(syncMeta)
+            ? financeiroSyncStaleMessage(syncMeta)
+            : syncMeta.status === 'partial'
+              ? 'Último sync Avec parcial — confira Admin.'
+              : 'Último sync Avec com erro — confira Admin.'}
         </div>
       )}
 
