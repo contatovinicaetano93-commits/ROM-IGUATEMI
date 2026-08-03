@@ -2,11 +2,15 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
-import { extractReportTotals, extractRows, getAvecConfig } from '@/lib/avec/client'
-import { avecReportHeaders } from '@/lib/avec/headers'
+import {
+  avecReportHeaders,
+  extractReportTotals,
+  extractRows,
+  getAvecBaseUrl,
+  normalizeAvecApiToken,
+} from '@/lib/avec/client'
 import { getAvecUnitId, getRomPanelId } from '@/lib/brand'
-import { ensureFreshAvecApiToken } from '@/lib/avec/refresh-token'
-import { normalizeAvecApiToken } from '@/lib/avec/token-store'
+import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
 
 export const maxDuration = 60
 
@@ -40,8 +44,8 @@ async function rawProbe(
   if (reportId === '0011' && unit && !qs.has('salao_id')) {
     qs.set('salao_id', unit)
   }
-  const { baseUrl, token: initialToken } = await getAvecConfig()
-  let token = normalizeAvecApiToken(initialToken)
+  const baseUrl = getAvecBaseUrl()
+  let token = normalizeAvecApiToken(await ensureFreshAvecApiToken({ minHoursLeft: 1 }))
   const urlPath = `/reports/${reportId}?${qs}`
   const url = `${baseUrl}${urlPath}`
 
