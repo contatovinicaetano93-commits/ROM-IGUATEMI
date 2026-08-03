@@ -840,15 +840,17 @@ function parseIsoDateOnly(raw: string | null): string | null {
 export function normalize0011ReactivationRow(
   row: Record<string, unknown>,
 ): Normalized0011Client | null {
+  // Só campos explícitos de taxa. `retorno`/`taxa`/`rate` sozinhos pegam flag 0/1
+  // nas linhas de cliente e inventavam 100% de retorno no relatório gerência.
   const returnRate = parsePct(
     pick(row, [
       'taxa_retorno',
       'taxa de retorno',
-      'retorno',
-      'taxa',
-      'percentual',
-      'percent',
-      'rate',
+      'percentual_retorno',
+      'percentual retorno',
+      'percentual_de_retorno',
+      'pct_retorno',
+      'pct retorno',
     ]),
   )
 

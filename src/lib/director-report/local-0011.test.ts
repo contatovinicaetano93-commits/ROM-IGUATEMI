@@ -129,4 +129,42 @@ describe('aggregateLocal0011ByPro', () => {
     expect(beto?.returnRates[0]).toBe(0.5)
     expect(beto?.clients.map((c) => c.name)).toEqual(['Cliente B'])
   })
+
+  it('não inventa 100% quando 0007 não casa nenhuma chave do cohort', () => {
+    const p1 = [
+      {
+        key: 'p:111',
+        name: 'Cliente A',
+        email: null,
+        phone: '111',
+        mobile: '111',
+        lastVisit: '2026-03-10',
+        proNames: ['BETO FORTES'],
+      },
+      {
+        key: 'p:222',
+        name: 'Cliente B',
+        email: null,
+        phone: '222',
+        mobile: '222',
+        lastVisit: '2026-03-11',
+        proNames: ['BETO FORTES'],
+      },
+    ]
+    const p2 = [
+      {
+        key: 'p:111',
+        name: 'Cliente A',
+        email: null,
+        phone: '111',
+        mobile: '111',
+        lastVisit: '2026-05-10',
+        proNames: ['BETO FORTES'],
+      },
+    ]
+    const byPro = aggregateLocal0011ByPro(p1, p2, pros, new Set(['p:999']))
+    const beto = byPro.get('Beto Fortes')
+    expect(beto?.returnRates[0]).toBe(0.5)
+    expect(beto?.clients.map((c) => c.name)).toEqual(['Cliente B'])
+  })
 })
