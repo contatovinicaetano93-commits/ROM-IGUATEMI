@@ -47,6 +47,27 @@ export async function getVisitCoverage(periodKey: QuarterKey): Promise<VisitCove
   }
 }
 
+/** Status operacional: cobertura de todos os trimestres já sincronizados. */
+export async function listVisitCoverage(): Promise<{
+  coverage: VisitCoverage[]
+  visit_rows: number
+}> {
+  try {
+    const sql = getSql()
+    const coverage = (await sql`
+      select period_key, row_count, truncated, synced_at::text as synced_at
+      from salon_visit_sync_coverage
+      order by period_key
+    `) as VisitCoverage[]
+    const cnt = (await sql`
+      select count(*)::int as n from salon_client_visits
+    `) as { n: number }[]
+    return { coverage, visit_rows: cnt[0]?.n ?? 0 }
+  } catch {
+    return { coverage: [], visit_rows: 0 }
+  }
+}
+
 async function loadQuarterClientsFromDb(quarter: QuarterKey): Promise<{
   clients: Parameters<typeof aggregateLocal0011ByPro>[0]
   truncated: boolean

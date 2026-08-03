@@ -29,6 +29,10 @@
       "schedule": "45 * * * *"
     },
     {
+      "path": "/api/avec/sync/director-visits",
+      "schedule": "20 11,23 * * *"
+    },
+    {
       "path": "/api/avec/sync/full/catalog",
       "schedule": "5 * * * *"
     },
