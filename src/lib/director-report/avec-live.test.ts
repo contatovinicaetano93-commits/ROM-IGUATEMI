@@ -29,14 +29,14 @@ describe('quarterRangeBr', () => {
 })
 
 describe('resolveDirectorReturnRate', () => {
-  it('rejects 100% when there are clients to reactivate', () => {
+  it('rejects 100% when there are clients to reactivate (no salon clone)', () => {
     expect(
       resolveDirectorReturnRate({
         returnRates: [1, 1, 1],
         nonReturnerCount: 10,
         salonRate: 0.669,
       }),
-    ).toBe(0.669)
+    ).toBeNull()
   })
 
   it('does not invent 0% when list has clients but no rate evidence', () => {
@@ -49,12 +49,23 @@ describe('resolveDirectorReturnRate', () => {
     ).toBeNull()
   })
 
-  it('uses salon rate when list has no per-row taxa', () => {
+  it('does not clone salon rate onto a professional row', () => {
     expect(
       resolveDirectorReturnRate({
         returnRates: [],
         nonReturnerCount: 5,
         salonRate: 0.42,
+      }),
+    ).toBeNull()
+  })
+
+  it('allows salon fallback only for aggregated salon row', () => {
+    expect(
+      resolveDirectorReturnRate({
+        returnRates: [],
+        nonReturnerCount: 0,
+        salonRate: 0.42,
+        allowSalonFallback: true,
       }),
     ).toBe(0.42)
   })
