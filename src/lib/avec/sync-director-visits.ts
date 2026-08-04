@@ -7,6 +7,7 @@ import { extractRows, fetchAvecReport, fmtAvecDate } from '@/lib/avec/client'
 import { normalizeAttendanceRow } from '@/lib/avec/normalize'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
+import { getVisitCoverage, isVisitCoverageReady } from '@/lib/director-report/from-db'
 import {
   local0011ClientKey,
   previousQuarterKey,
@@ -255,9 +256,25 @@ async function syncOneQuarter(
     await flush()
   } catch (e) {
     await flush().catch(() => {})
-    // Falha no trimestre invalida a cobertura: evita o relatório usar um sucesso antigo/stale.
-    await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, true)
+    const existing = await getVisitCoverage(quarter)
+    if (isVisitCoverageReady(existing)) {
+      stats.warnings.push(
+        `director-visits ${quarter}: falha na atualização — cobertura boa anterior preservada`,
+      )
+    } else {
+      await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, true)
+    }
     throw e
+  }
+
+  if (aborted) {
+    const existing = await getVisitCoverage(quarter)
+    if (isVisitCoverageReady(existing)) {
+      stats.warnings.push(
+        `director-visits ${quarter}: abortado por orçamento — cobertura boa anterior preservada`,
+      )
+      return
+    }
   }
 
   await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, truncated)

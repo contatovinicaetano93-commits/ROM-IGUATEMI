@@ -532,13 +532,17 @@ function buildQuarterRow(
     allowSalonFallback,
   })
 
-  const clients_total = listN > 0 ? listN : agg?.clientsTotalHint || 0
+  // Sem evidência → null (UI "—"); nunca inventar 0 nem derivar retornados da taxa.
+  const hintTotal = agg?.clientsTotalHint ?? 0
+  const hintReturned = agg?.clientsReturnedHint
+  const clients_total =
+    listN > 0 ? listN : hintTotal > 0 ? hintTotal : null
   const clients_returned =
-    agg?.clientsReturnedHint && agg.clientsReturnedHint > 0
-      ? agg.clientsReturnedHint
-      : listN === 0 && clients_total > 0 && return_rate != null && return_rate > 0
-        ? Math.round(clients_total * return_rate)
-        : 0
+    hintReturned != null && hintReturned >= 0 && clients_total != null
+      ? hintReturned
+      : listN > 0 && hintTotal > listN
+        ? hintTotal - listN
+        : null
 
   return {
     quarter,
@@ -938,7 +942,9 @@ export async function fetchLiveDirectorBlocks(
     (return_blocks.some((b) => b.reactivation.length > 0) ||
       return_blocks.some((b) =>
         b.quarters.some(
-          (q) => (q.return_rate != null && q.return_rate > 0) || q.clients_total > 0,
+          (q) =>
+            (q.return_rate != null && q.return_rate > 0) ||
+            (q.clients_total != null && q.clients_total > 0),
         ),
       ))
 

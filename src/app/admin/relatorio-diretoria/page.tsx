@@ -423,15 +423,16 @@ export default function RelatorioDiretoriaPage() {
       })
       .sort((a, b) => {
         // Mesmo padrão do BR: mais clientes p/ reativar primeiro; empate → maior retorno.
-        const aN = a.sel?.clients_total ?? a.reactivation.length
-        const bN = b.sel?.clients_total ?? b.reactivation.length
-        const byClients = bN - aN
+        const aN = a.sel?.clients_total ?? (a.reactivation.length || null)
+        const bN = b.sel?.clients_total ?? (b.reactivation.length || null)
+        const byClients = (bN ?? -1) - (aN ?? -1)
         if (byClients !== 0) return byClients
-        return (b.sel?.return_rate ?? 0) - (a.sel?.return_rate ?? 0)
+        return (b.sel?.return_rate ?? -1) - (a.sel?.return_rate ?? -1)
       })
   }, [data, displayQuarter0011, displayCompare0011, proId0011])
 
-  const clientsOnList = useMemo(() => {
+  const clientsOnList = useMemo((): number | null => {
+    if (data?.source === 'error') return null
     const probeSelected = visitStatus?.report_probe?.selected
     if (
       !proId0011 &&
@@ -440,13 +441,22 @@ export default function RelatorioDiretoriaPage() {
     ) {
       return probeSelected.na_lista_unicos
     }
+    if (selectedReturn.length === 0) return null
     const unique = new Set<string>()
     for (const row of selectedReturn) {
       for (const client of row.reactivation) unique.add(reactivationClientKey(client))
     }
     if (unique.size > 0) return unique.size
-    return selectedReturn.reduce((s, r) => s + (r.sel?.clients_total ?? r.reactivation.length), 0)
-  }, [data?.return_source, displayQuarter0011, proId0011, selectedReturn, visitStatus])
+    let sum = 0
+    let saw = false
+    for (const r of selectedReturn) {
+      const n = r.sel?.clients_total
+      if (n == null) continue
+      saw = true
+      sum += n
+    }
+    return saw ? sum : null
+  }, [data?.return_source, data?.source, displayQuarter0011, proId0011, selectedReturn, visitStatus])
 
   const visitCoverageByQuarter = useMemo(
     () => new Map((visitStatus?.coverage ?? []).map((c) => [c.period_key, c])),
@@ -694,7 +704,7 @@ export default function RelatorioDiretoriaPage() {
             <Kpi
               icon={<Users size={16} />}
               label="Na lista (únicos)"
-              value={loading ? '—' : String(clientsOnList)}
+              value={loading ? '—' : clientsOnList == null ? '—' : String(clientsOnList)}
             />
             <Kpi
               icon={<TrendingUp size={16} />}
@@ -835,7 +845,13 @@ export default function RelatorioDiretoriaPage() {
                           >
                             {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta} p.p.`}
                           </td>
-                          <td className="py-3 tabular-nums">{reactivation.length}</td>
+                          <td className="py-3 tabular-nums">
+                            {sel?.clients_total != null
+                              ? sel.clients_total
+                              : reactivation.length > 0
+                                ? reactivation.length
+                                : '—'}
+                          </td>
                         </tr>
                       )
                     })}
