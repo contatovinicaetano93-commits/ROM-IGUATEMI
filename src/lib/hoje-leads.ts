@@ -13,7 +13,7 @@ export async function countNovosHoje(day: string): Promise<number> {
     where anonymized_at is null
       and channel = 'avec'
       and avec_client_id is null
-      and status <> 'importado'
+      and status = 'novo'
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
