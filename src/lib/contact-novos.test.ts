@@ -36,8 +36,12 @@ describe('new contacts not in Avec', () => {
     await countNewContactsNotInAvec({ day: '2026-08-01' })
 
     // O recuo é interpolado como valor: dia informado menos (janela - 1).
+    // Precisa de ::int — senão Postgres escolhe date-date (retorna integer) e
+    // o ::timestamp externo estoura: "cannot cast type integer to timestamp".
     const values = sqlMock.mock.calls[0]!.slice(1)
+    const texto = (sqlMock.mock.calls[0]![0] as string[]).join('')
     expect(values).toContain(NOVOS_WINDOW_DAYS - 1)
+    expect(texto).toContain('::int')
   })
 
   it('exclui quem já entrou no funil de cadência (não conta em Novos e Vencendo ao mesmo tempo)', async () => {

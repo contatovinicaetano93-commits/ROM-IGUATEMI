@@ -488,7 +488,7 @@ async function healImportadoStatus(stats: AvecSyncStats) {
         and coalesce(source, '') not like 'avec_lake%'
         and coalesce(source, '') not like 'avec_last_done%'
         and coalesce(source, '') not like 'avec_sync_returning%'
-        and created_at >= ((current_timestamp at time zone 'America/Sao_Paulo')::date - (${NOVOS_WINDOW_DAYS} - 1))::timestamp at time zone 'America/Sao_Paulo'
+        and created_at >= ((current_timestamp at time zone 'America/Sao_Paulo')::date - (${NOVOS_WINDOW_DAYS}::int - 1))::timestamp at time zone 'America/Sao_Paulo'
       returning id
     `
     const n = Array.isArray(restored) ? restored.length : 0
