@@ -36,8 +36,13 @@ describe('new contacts not in Avec', () => {
     await countNewContactsNotInAvec({ day: '2026-08-01' })
 
     // O recuo é interpolado como valor: dia informado menos (janela - 1).
+    // ::int no parâmetro é obrigatório: sem cast, Postgres resolve date - $n
+    // como date - date → integer, e integer::timestamp quebra em runtime
+    // ("cannot cast type integer to timestamp without time zone").
     const values = sqlMock.mock.calls[0]!.slice(1)
+    const texto = (sqlMock.mock.calls[0]![0] as string[]).join('?')
     expect(values).toContain(NOVOS_WINDOW_DAYS - 1)
+    expect(texto).toMatch(/\?::int/)
   })
 
   it('exclui quem já entrou no funil de cadência (não conta em Novos e Vencendo ao mesmo tempo)', async () => {
@@ -118,12 +123,15 @@ describe('contatos sem serviço (fora do funil)', () => {
     const { NOVOS_WINDOW_DAYS } = await import('@/lib/salon/constants')
     await countContactsWithoutServices({ day: '2026-08-01' })
 
-    const texto = (sqlMock.mock.calls[0]![0] as string[]).join(' ')
+    const parts = sqlMock.mock.calls[0]![0] as string[]
+    const texto = parts.join(' ')
     const values = sqlMock.mock.calls[0]!.slice(1)
     // Novos usa `created_at >=` o mesmo limite; aqui é `<`. Junto cobre tudo.
     expect(texto).toContain('created_at <')
     expect(texto).not.toContain('created_at >=')
     expect(values).toContain(NOVOS_WINDOW_DAYS - 1)
+    // Mesmo cast ::int que Novos — evita date-$n ambíguo no Postgres.
+    expect(parts.join('?')).toMatch(/\?::int/)
   })
 
   it('recorta por ausência de next_due, não por "nunca fez serviço"', async () => {

@@ -555,7 +555,7 @@ export async function countNewContactsNotInAvec(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
-      and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
+      and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1}::int)::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
         select 1
@@ -619,7 +619,7 @@ export async function listNewContactsNotInAvec(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
-      and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
+      and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1}::int)::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
         select 1
@@ -665,7 +665,7 @@ export async function countContactsWithoutServices(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
-      and created_at < ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
+      and created_at < ((${day}::date - ${NOVOS_WINDOW_DAYS - 1}::int)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
         select 1
         from client_services cs
@@ -696,7 +696,7 @@ export async function listContactsWithoutServices(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
-      and created_at < ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
+      and created_at < ((${day}::date - ${NOVOS_WINDOW_DAYS - 1}::int)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
         select 1
         from client_services cs
