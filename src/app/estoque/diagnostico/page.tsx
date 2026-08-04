@@ -70,7 +70,13 @@ export default function EstoqueDiagnosticoPage() {
   }, [])
 
   useEffect(() => {
-    load()
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) void load()
+    })
+    return () => {
+      cancelled = true
+    }
   }, [load])
 
   async function runSync(mode: 'fast' | 'full') {

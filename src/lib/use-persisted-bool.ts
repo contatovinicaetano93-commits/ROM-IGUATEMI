@@ -2,33 +2,32 @@
 
 import { useEffect, useState } from 'react'
 
+function readPersistedBool(key: string, defaultValue: boolean): boolean {
+  if (typeof window === 'undefined') return defaultValue
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (raw === '1') return true
+    if (raw === '0') return false
+  } catch {
+    // private mode / blocked storage — keep default
+  }
+  return defaultValue
+}
+
 /**
  * Boolean persisted in localStorage.
- * SSR-safe: starts at `defaultValue`, then hydrates from storage.
+ * SSR-safe: lazy-reads storage when state initializes; writes on change only.
  */
 export function usePersistedBool(key: string, defaultValue = false) {
-  const [value, setValue] = useState(defaultValue)
-  const [hydrated, setHydrated] = useState(false)
+  const [value, setValue] = useState(() => readPersistedBool(key, defaultValue))
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(key)
-      if (raw === '1') setValue(true)
-      else if (raw === '0') setValue(false)
-    } catch {
-      // private mode / blocked storage — keep default
-    }
-    setHydrated(true)
-  }, [key])
-
-  useEffect(() => {
-    if (!hydrated) return
     try {
       window.localStorage.setItem(key, value ? '1' : '0')
     } catch {
       // ignore
     }
-  }, [key, value, hydrated])
+  }, [key, value])
 
   return [value, setValue] as const
 }

@@ -55,7 +55,13 @@ export function BriefSheet({ contactId, contactName, onClose, returnTo }: BriefS
   }, [contactId])
 
   useEffect(() => {
-    void loadBrief()
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) void loadBrief()
+    })
+    return () => {
+      cancelled = true
+    }
   }, [loadBrief])
 
   async function copyBrief() {

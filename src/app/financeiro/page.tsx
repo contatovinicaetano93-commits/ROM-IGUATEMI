@@ -433,7 +433,13 @@ export default function FinanceiroPage() {
   }, [month, compareMonth])
 
   useEffect(() => {
-    load()
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) void load()
+    })
+    return () => {
+      cancelled = true
+    }
   }, [load])
 
   function downloadReport() {

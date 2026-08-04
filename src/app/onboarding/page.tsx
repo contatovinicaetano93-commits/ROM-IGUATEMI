@@ -71,11 +71,22 @@ export default function OnboardingPage() {
   }, [])
 
   useEffect(() => {
-    load()
-    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => setIsAdmin(Boolean(json.data?.can_view_revenue)))
-      .catch(() => setIsAdmin(false))
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      void load()
+      fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
+        .then((r) => r.json())
+        .then((json) => {
+          if (!cancelled) setIsAdmin(Boolean(json.data?.can_view_revenue))
+        })
+        .catch(() => {
+          if (!cancelled) setIsAdmin(false)
+        })
+    })
+    return () => {
+      cancelled = true
+    }
   }, [load])
 
   const videosByPillar = useMemo(() => {

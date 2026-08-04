@@ -279,19 +279,31 @@ function ContactDetailPageContent() {
 
   useEffect(() => {
     if (!id || loading || error) return
-    setBriefLoading(true)
-    setBriefError(null)
-    apiFetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
-      .then(async (r) => {
-        const json = await r.json()
-        if (!r.ok || json.error) {
-          setBriefError(json.error ?? 'Não foi possível carregar o briefing')
-          return
-        }
-        if (json.data?.brief) setBrief({ text: json.data.brief, source: json.data.source })
-      })
-      .catch((e) => setBriefError(String(e)))
-      .finally(() => setBriefLoading(false))
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      setBriefLoading(true)
+      setBriefError(null)
+      apiFetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
+        .then(async (r) => {
+          const json = await r.json()
+          if (cancelled) return
+          if (!r.ok || json.error) {
+            setBriefError(json.error ?? 'Não foi possível carregar o briefing')
+            return
+          }
+          if (json.data?.brief) setBrief({ text: json.data.brief, source: json.data.source })
+        })
+        .catch((e) => {
+          if (!cancelled) setBriefError(String(e))
+        })
+        .finally(() => {
+          if (!cancelled) setBriefLoading(false)
+        })
+    })
+    return () => {
+      cancelled = true
+    }
   }, [id, loading, error])
 
   async function changeStatus(status: string) {

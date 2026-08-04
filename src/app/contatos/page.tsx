@@ -165,21 +165,28 @@ export default function ContatosPage() {
   const [urlQueueReady, setUrlQueueReady] = useState(false)
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('queue') === 'novos') setMode('novos')
-    const day = params.get('day')
-    if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) setNovosDay(day)
-    const ch = params.get('channel')?.trim().toLowerCase() ?? ''
-    const st = params.get('status')?.trim().toLowerCase() ?? ''
-    if (ch === 'whatsapp' || ch === 'telegram' || ch === 'instagram' || ch === 'manual' || ch === 'avec') {
-      setUrlChannel(ch)
-      setMode('search')
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('queue') === 'novos') setMode('novos')
+      const day = params.get('day')
+      if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) setNovosDay(day)
+      const ch = params.get('channel')?.trim().toLowerCase() ?? ''
+      const st = params.get('status')?.trim().toLowerCase() ?? ''
+      if (ch === 'whatsapp' || ch === 'telegram' || ch === 'instagram' || ch === 'manual' || ch === 'avec') {
+        setUrlChannel(ch)
+        setMode('search')
+      }
+      if (st === 'novo' || st === 'em_atendimento' || st === 'agendado' || st === 'convertido' || st === 'perdido') {
+        setUrlStatus(st)
+        if (!params.get('queue')) setMode('search')
+      }
+      setUrlQueueReady(true)
+    })
+    return () => {
+      cancelled = true
     }
-    if (st === 'novo' || st === 'em_atendimento' || st === 'agendado' || st === 'convertido' || st === 'perdido') {
-      setUrlStatus(st)
-      if (!params.get('queue')) setMode('search')
-    }
-    setUrlQueueReady(true)
   }, [])
 
   function selectMode(next: ListMode) {
@@ -262,7 +269,13 @@ export default function ContatosPage() {
 
   useEffect(() => {
     if (!urlQueueReady) return
-    void load()
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) void load()
+    })
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, debouncedQuery, queue, urlQueueReady, novosDay, urlChannel, urlStatus])
 

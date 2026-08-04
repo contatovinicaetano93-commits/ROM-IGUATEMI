@@ -301,7 +301,10 @@ export default function EstoquePage() {
   }, [])
 
   useEffect(() => {
-    load()
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) void load()
+    })
     // Poll leve: só KPIs/alertas/status a cada 90s (não recarrega catálogo inteiro).
     const interval = setInterval(() => {
       void (async () => {
@@ -324,7 +327,10 @@ export default function EstoquePage() {
         }
       })()
     }, 90_000)
-    return () => clearInterval(interval)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [load])
 
   const purchaseQueue = useMemo(() => sortPurchaseQueue(alerts), [alerts])
@@ -348,13 +354,19 @@ export default function EstoquePage() {
     })
   }, [products, catalogQuery, catalogCategoryId, catalogBrandId, catalogStockFilter])
 
-  useEffect(() => {
+  const catalogFilterKey = `${catalogQuery}\0${catalogCategoryId}\0${catalogBrandId}\0${catalogStockFilter}`
+  const [catalogFilterSeen, setCatalogFilterSeen] = useState(catalogFilterKey)
+  if (catalogFilterKey !== catalogFilterSeen) {
+    setCatalogFilterSeen(catalogFilterKey)
     setCatalogPage(1)
-  }, [catalogQuery, catalogCategoryId, catalogBrandId, catalogStockFilter])
+  }
 
-  useEffect(() => {
+  const movementsLen = movements.length
+  const [movementsLenSeen, setMovementsLenSeen] = useState(movementsLen)
+  if (movementsLen !== movementsLenSeen) {
+    setMovementsLenSeen(movementsLen)
     setMovementsPage(1)
-  }, [movements.length])
+  }
 
   const catalogPageItems = useMemo(
     () => listPageSlice(catalogProducts, catalogPage, LIST_PAGE_SIZE),
