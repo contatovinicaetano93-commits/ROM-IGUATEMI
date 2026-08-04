@@ -97,7 +97,14 @@ export function fmtScheduleParts(iso: string, timeZone = SALON_TIMEZONE) {
         day: '2-digit',
         month: 'short',
       })
-  return { time, day, isToday }
+  // Data absoluta (dd/mm) no fuso do salão. `day` vira "Hoje" quando é o dia
+  // corrente; onde a data precisa aparecer sempre, use esta.
+  const date = d.toLocaleDateString('pt-BR', {
+    timeZone,
+    day: '2-digit',
+    month: '2-digit',
+  })
+  return { time, day, date, isToday }
 }
 
 export function timeAgo(iso: string) {

@@ -29,6 +29,30 @@ describe('new contacts not in Avec', () => {
     await expect(countNewContactsNotInAvec({ day: '2026-08-01' })).resolves.toBe(0)
   })
 
+  it('a janela é de NOVOS_WINDOW_DAYS dias, não de um dia só', async () => {
+    sqlMock.mockResolvedValueOnce([{ n: 0 }])
+    const { countNewContactsNotInAvec } = await import('@/lib/contact-summary')
+    const { NOVOS_WINDOW_DAYS } = await import('@/lib/salon/constants')
+    await countNewContactsNotInAvec({ day: '2026-08-01' })
+
+    // O recuo é interpolado como valor: dia informado menos (janela - 1).
+    const values = sqlMock.mock.calls[0]!.slice(1)
+    expect(values).toContain(NOVOS_WINDOW_DAYS - 1)
+  })
+
+  it('exclui quem já entrou no funil de cadência (não conta em Novos e Vencendo ao mesmo tempo)', async () => {
+    sqlMock.mockResolvedValueOnce([{ n: 0 }])
+    const { countNewContactsNotInAvec } = await import('@/lib/contact-summary')
+    await countNewContactsNotInAvec({ day: '2026-08-01' })
+
+    const texto = (sqlMock.mock.calls[0]![0] as string[]).join(' ')
+    expect(texto).toContain('not exists')
+    expect(texto).toContain('client_services')
+    // Mesma condição que faz next_due existir em countUrgencyQueues.
+    expect(texto).toContain('last_done_at is not null')
+    expect(texto).toContain('cadence_days is not null')
+  })
+
   it('listNewContactsNotInAvec usa um SELECT com count(*) over e zera urgência', async () => {
     sqlMock.mockResolvedValueOnce([
       {
@@ -80,5 +104,47 @@ describe('new contacts not in Avec', () => {
       items: [],
       total: 0,
     })
+  })
+})
+
+describe('contatos sem serviço (fora do funil)', () => {
+  beforeEach(() => {
+    sqlMock.mockReset()
+  })
+
+  it('pega o lado de fora da janela — complementar a Novos, sem vão nem sobreposição', async () => {
+    sqlMock.mockResolvedValueOnce([{ n: 0 }])
+    const { countContactsWithoutServices } = await import('@/lib/contact-summary')
+    const { NOVOS_WINDOW_DAYS } = await import('@/lib/salon/constants')
+    await countContactsWithoutServices({ day: '2026-08-01' })
+
+    const texto = (sqlMock.mock.calls[0]![0] as string[]).join(' ')
+    const values = sqlMock.mock.calls[0]!.slice(1)
+    // Novos usa `created_at >=` o mesmo limite; aqui é `<`. Junto cobre tudo.
+    expect(texto).toContain('created_at <')
+    expect(texto).not.toContain('created_at >=')
+    expect(values).toContain(NOVOS_WINDOW_DAYS - 1)
+  })
+
+  it('recorta por ausência de next_due, não por "nunca fez serviço"', async () => {
+    sqlMock.mockResolvedValueOnce([{ n: 0 }])
+    const { countContactsWithoutServices } = await import('@/lib/contact-summary')
+    await countContactsWithoutServices({ day: '2026-08-01' })
+
+    // Serviço sem cadência também não é pego por Vencendo/Atrasados: se o
+    // critério fosse "sem serviço", essa pessoa escaparia das duas listas.
+    const texto = (sqlMock.mock.calls[0]![0] as string[]).join(' ')
+    expect(texto).toContain('last_done_at is not null')
+    expect(texto).toContain('cadence_days is not null')
+  })
+
+  it('não lista quem já saiu do ciclo (perdido) nem carga em massa (importado)', async () => {
+    sqlMock.mockResolvedValueOnce([{ n: 0 }])
+    const { countContactsWithoutServices } = await import('@/lib/contact-summary')
+    await countContactsWithoutServices({ day: '2026-08-01' })
+
+    const texto = (sqlMock.mock.calls[0]![0] as string[]).join(' ')
+    expect(texto).toContain("status <> 'perdido'")
+    expect(texto).toContain("status <> 'importado'")
   })
 })
