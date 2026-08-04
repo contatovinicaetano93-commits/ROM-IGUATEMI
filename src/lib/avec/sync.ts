@@ -185,7 +185,10 @@ async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<Ave
         else 'error'
       end,
       error = coalesce(nullif(error, ''), 'Sync interrompido (timeout/kill)'),
-      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
+      stats = coalesce(stats, '{}'::jsonb) || jsonb_build_object(
+        'running', false,
+        'platform_kill_age_s', greatest(0, floor(extract(epoch from (now() - created_at))))::int
+      )
     where kind in ('fast', 'full')
       and coalesce(stats->>'running', 'false') = 'true'
       and (
@@ -316,13 +319,40 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<n
         else 'error'
       end,
       error = coalesce(nullif(error, ''), 'abandoned_partial_timeout'),
-      stats = coalesce(stats, '{}'::jsonb) || '{"running":false}'::jsonb
+      stats = coalesce(stats, '{}'::jsonb) || jsonb_build_object(
+        'running', false,
+        'platform_kill_age_s', greatest(0, floor(extract(epoch from (now() - created_at))))::int
+      )
     where coalesce(stats->>'running', 'false') = 'true'
       and kind in ('fast', 'full', 'stock_fast', 'stock_full')
       and created_at < ${cutoff}::timestamptz
     returning id
   `) as { id: string }[]
   return rows.length
+}
+
+
+/**
+ * Full runs recentes mortos por kill duro (sem aborted limpo).
+ * Usado por /api/health para ir RED se Fluid/maxDuration falhar.
+ */
+export async function getRecentHardPlatformTimeoutFullRuns(
+  lookbackHours = 24,
+): Promise<AvecSyncRun[]> {
+  const sql = getSql()
+  const rows = (await sql`
+    select *
+    from avec_sync_runs
+    where kind = 'full'
+      and coalesce(stats->>'running', 'false') <> 'true'
+      and coalesce(stats->>'aborted', 'false') <> 'true'
+      and status in ('error', 'partial')
+      and error ~* 'abandoned|Sync interrompido|timeout/kill|interrompido'
+      and created_at > now() - (${lookbackHours}::text || ' hours')::interval
+    order by created_at desc
+    limit 20
+  `) as AvecSyncRun[]
+  return rows
 }
 
 /** Margem vs route maxDuration=800s — abort limpo em vez de kill mid-row. */

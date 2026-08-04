@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server'
 import { err, handleError } from '@/lib/api-response'
 import { authorizeAvecSync, executeAvecSync } from '@/lib/avec/sync-http'
 
-/** Sync Avec full/catalog — dump 0004 + purge leve. Pro permite até 800s. */
+/**
+ * Sync Avec full/catalog — dump 0004 + purge leve. Pro permite até 800s.
+ * Requer Vercel Fluid Compute (Settings → Functions → Fluid). Sem Fluid o teto cai ~300s.
+ */
 export const maxDuration = 800
 
 /**

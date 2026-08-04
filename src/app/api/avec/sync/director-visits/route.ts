@@ -18,6 +18,8 @@ import type { QuarterKey } from '@/lib/director-report/types'
  * Sync só das visitas 0002 → salon_client_visits (Relatório gerência offline).
  * Separado do full/agenda para não depender do min-gap nem do budget das outras etapas.
  *
+ * maxDuration 800s requer Vercel Fluid Compute (Settings → Functions → Fluid).
+ *
  * Query: `?status=1` só cobertura · `?quarter=2026-Q2` um trimestre · `?force=1` refaz.
  */
 export const maxDuration = 800

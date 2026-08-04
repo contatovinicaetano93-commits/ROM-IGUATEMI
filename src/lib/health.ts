@@ -4,8 +4,13 @@ import { isAvecConfigured, isAvecMock, getAvecBaseUrl } from '@/lib/avec/client'
 import { isAuthEnabled, isFinanceAuthConfigured, isStockAuthConfigured } from '@/lib/auth'
 import { isAiConfigured } from '@/lib/ai/client'
 import { getBrand, getRomPanelId } from '@/lib/brand'
-import { getLastAvecSync } from '@/lib/avec/sync'
+import { getLastAvecSync, getRecentHardPlatformTimeoutFullRuns } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
+import {
+  hardTimeoutHealthMessage,
+  isClassic300sHardTimeout,
+  isHardPlatformTimeoutAvecRun,
+} from '@/lib/avec/sync-run-health'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
@@ -193,20 +198,39 @@ export async function getHealthStatus() {
   let stockLastFast: Awaited<ReturnType<typeof getLastStockSync>> = null
   let stockLastFull: Awaited<ReturnType<typeof getLastStockSync>> = null
 
+  let hardTimeoutHits: Awaited<ReturnType<typeof getRecentHardPlatformTimeoutFullRuns>> = []
   if (connected) {
-    ;[lastFast, lastFull, kpiLayers, stockLastFast, stockLastFull] = await Promise.all([
-      getLastAvecSync('fast'),
-      getLastAvecSync('full'),
-      probeKpiLayers(),
-      getLastStockSync('stock_fast'),
-      getLastStockSync('stock_full'),
-    ])
+    ;[lastFast, lastFull, kpiLayers, stockLastFast, stockLastFull, hardTimeoutHits] =
+      await Promise.all([
+        getLastAvecSync('fast'),
+        getLastAvecSync('full'),
+        probeKpiLayers(),
+        getLastStockSync('stock_fast'),
+        getLastStockSync('stock_full'),
+        getRecentHardPlatformTimeoutFullRuns(24).catch((e) => {
+          logger.warn('health hard_timeout probe failed', {
+            error: e instanceof Error ? e.message : String(e),
+          })
+          return [] as Awaited<ReturnType<typeof getRecentHardPlatformTimeoutFullRuns>>
+        }),
+      ])
+  }
+
+  const hardHits = hardTimeoutHits.filter(isHardPlatformTimeoutAvecRun)
+  const classic300 = hardHits.filter(isClassic300sHardTimeout).length
+  const hard_timeout = {
+    ok: hardHits.length === 0,
+    hits_24h: hardHits.length,
+    classic_300s_hits: classic300,
+    message: hardTimeoutHealthMessage({ count: hardHits.length, classic300 }),
+    latest_id: hardHits[0]?.id ?? null,
+    latest_created_at: hardHits[0]?.created_at ?? null,
   }
 
   const awaitingToken = !isAvecConfigured() && !isAvecMock()
 
   return {
-    ok: connected && validation.ok,
+    ok: connected && validation.ok && hard_timeout.ok,
     deployment,
     validation,
     readiness: {
@@ -243,6 +267,8 @@ export async function getHealthStatus() {
       last_fast: lastFast,
       last_full: lastFull,
       kpi_layers: kpiLayers,
+      /** RED quando full morre por kill duro (~300s) sem aborted limpo — Fluid/maxDuration. */
+      hard_timeout,
     },
     whatsapp: {
       configured:

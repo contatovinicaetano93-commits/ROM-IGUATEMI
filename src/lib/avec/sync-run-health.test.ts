@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  hardTimeoutHealthMessage,
+  isClassic300sHardTimeout,
   isEmptyKillAvecRun,
+  isHardPlatformTimeoutAvecRun,
   pickHojeAvecSyncRun,
   pickNewestUsableAvecRun,
 } from '@/lib/avec/sync-run-health'
@@ -21,6 +24,51 @@ describe('isEmptyKillAvecRun', () => {
     )
     expect(isEmptyKillAvecRun({ status: 'error', error: 'P3 falhou' })).toBe(false)
     expect(isEmptyKillAvecRun({ status: 'ok', error: null })).toBe(false)
+  })
+})
+
+describe('isHardPlatformTimeoutAvecRun', () => {
+  it('marca kill duro sem aborted', () => {
+    expect(
+      isHardPlatformTimeoutAvecRun({
+        status: 'error',
+        error: 'Sync interrompido (timeout/kill)',
+        stats: { platform_kill_age_s: 305 },
+      }),
+    ).toBe(true)
+  })
+
+  it('ignora abort limpo por orçamento', () => {
+    expect(
+      isHardPlatformTimeoutAvecRun({
+        status: 'partial',
+        error: 'orçamento esgotado',
+        stats: { aborted: true },
+      }),
+    ).toBe(false)
+  })
+
+  it('classic300 só na janela ~280-320s', () => {
+    expect(
+      isClassic300sHardTimeout({
+        status: 'error',
+        error: 'abandoned_partial_timeout',
+        stats: { platform_kill_age_s: 305 },
+      }),
+    ).toBe(true)
+    expect(
+      isClassic300sHardTimeout({
+        status: 'error',
+        error: 'abandoned_partial_timeout',
+        stats: { platform_kill_age_s: 720 },
+      }),
+    ).toBe(false)
+  })
+
+  it('mensagem de health aponta Fluid quando classic300', () => {
+    const msg = hardTimeoutHealthMessage({ count: 2, classic300: 1 })
+    expect(msg).toMatch(/Fluid Compute/)
+    expect(hardTimeoutHealthMessage({ count: 0, classic300: 0 })).toBeNull()
   })
 })
 

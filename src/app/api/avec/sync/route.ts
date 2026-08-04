@@ -9,7 +9,10 @@ import {
   parseAvecSyncMode,
 } from '@/lib/avec/sync-http'
 
-/** Sync Avec pode demorar (vários relatórios). Pro permite até 800s. */
+/**
+ * Sync Avec pode demorar (vários relatórios). Pro permite até 800s.
+ * Requer Vercel Fluid Compute (Settings → Functions → Fluid). Sem Fluid o teto cai ~300s.
+ */
 export const maxDuration = 800
 
 export async function POST(req: NextRequest) {
