@@ -17,6 +17,8 @@ export async function countNovosHoje(day: string): Promise<number> {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and coalesce(source, '') not like 'avec_last_done%'
+      and coalesce(source, '') not like 'avec_sync_returning%'
       and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
   `) as { n: number }[]
@@ -39,6 +41,8 @@ export async function countWhatsappNovosToday(day: string): Promise<number> {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and coalesce(source, '') not like 'avec_last_done%'
+      and coalesce(source, '') not like 'avec_sync_returning%'
       and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
   `) as { n: number }[]
