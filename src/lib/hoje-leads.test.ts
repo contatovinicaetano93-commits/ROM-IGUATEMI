@@ -23,7 +23,7 @@ describe('countNovosHoje', () => {
     const sqlText = queryTextOf(sqlMock.mock.calls[0] as unknown[])
     expect(sqlText).toMatch(/channel\s*=\s*'avec'/i)
     expect(sqlText).toMatch(/avec_client_id\s+is\s+null/i)
-    expect(sqlText).toMatch(/status\s*<>\s*'importado'/i)
+    expect(sqlText).toMatch(/status\s*=\s*'novo'/i)
     expect(sqlText).toMatch(/avec_sync_clients%/i)
     expect(sqlText).toMatch(/avec_backfill%/i)
     expect(sqlText).toMatch(/avec_lake%/i)
