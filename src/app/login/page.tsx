@@ -6,6 +6,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { PrimaryButton } from '../_components/ui'
 import { sanitizeRedirectPath } from '@/lib/auth-redirect'
 import { getBrand } from '@/lib/brand'
+import posthog from 'posthog-js'
 
 function LoginForm() {
   const brand = getBrand()
@@ -45,6 +46,8 @@ function LoginForm() {
           : role === 'estoque' && !next.startsWith('/estoque')
             ? '/estoque'
             : next
+      posthog.identify(json.data?.user ?? username.trim(), { role })
+      posthog.capture('user_logged_in', { role })
       // Hard navigation garante que o cookie da sessão seja lido pelo middleware
       window.location.assign(dest)
     } catch (err) {

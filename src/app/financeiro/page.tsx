@@ -20,6 +20,7 @@ import {
 } from '@/lib/salon/format'
 import { formatKpiSources } from '@/lib/kpi-source'
 import type { AvecSyncMeta } from '@/lib/avec/sync-meta-surface'
+import posthog from 'posthog-js'
 import { financeiroSyncStaleMessage, isFinanceiroStale } from '@/lib/avec/sync-meta-surface'
 import { buildFinanceComparePrintHtml } from '@/lib/finance-compare-export'
 import { openPrintHtml } from '@/lib/salon/month-overview-export'
@@ -438,6 +439,7 @@ export default function FinanceiroPage() {
 
   function downloadReport() {
     if (!kpis) return
+    posthog.capture('finance_report_downloaded', { month: kpis.current.month })
     const cur = kpis.current
     const prev = kpis.previous
     const rec = cur.payment_reconciliation
@@ -611,6 +613,7 @@ export default function FinanceiroPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || json.error) throw new Error(json.error ?? `Falha ao excluir (${res.status})`)
+      posthog.capture('expense_deleted')
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -1402,6 +1405,10 @@ function AddExpenseSheet({
       })
       const json = await res.json()
       if (!res.ok || json.error) throw new Error(json.error ?? 'Erro ao salvar')
+      posthog.capture('expense_added', {
+        has_receipt: Boolean(receiptUrl),
+        has_category: Boolean(finalCategoryId),
+      })
       onAdded()
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
