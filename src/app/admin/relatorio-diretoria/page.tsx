@@ -261,8 +261,8 @@ export default function RelatorioDiretoriaPage() {
                   revenue_blocks: [],
                   summary: {
                     ...prev.summary,
-                    total_revenue_selected_month: 0,
-                    avg_ticket_selected_month: 0,
+                    total_revenue_selected_month: null,
+                    avg_ticket_selected_month: null,
                   },
                 }
               : null,

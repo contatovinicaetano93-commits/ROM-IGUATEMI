@@ -100,7 +100,8 @@ export interface DirectorReport {
   summary: {
     professionals: number
     avg_return_rate: number | null
-    total_revenue_selected_month: number
+    /** null = sem evidência / etapa não carregada (UI "—"; nunca inventar 0) */
+    total_revenue_selected_month: number | null
     avg_ticket_selected_month: number | null
   }
 }
