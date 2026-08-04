@@ -454,13 +454,38 @@ function createBatchContactUpserter() {
 async function healImportadoStatus(stats: AvecSyncStats) {
   try {
     const sql = getSql()
+    // Só dump/cliente Avec real → importado. Órfãos sem avec_client_id ficam
+    // em Novos (janela 30d); heal amplo esvaziava a aba a cada sync.
     await sql`
       update contacts
       set status = 'importado'
       where status = 'novo'
         and channel = 'avec'
         and anonymized_at is null
+        and (
+          avec_client_id is not null
+          or coalesce(source, '') like 'avec_sync_clients%'
+          or coalesce(source, '') like 'avec_backfill%'
+          or coalesce(source, '') like 'avec_lake%'
+        )
     `
+    // Desfaz heal antigo que marcava órfãos operacionais como importado.
+    const restored = await sql`
+      update contacts
+      set status = 'novo'
+      where status = 'importado'
+        and channel = 'avec'
+        and avec_client_id is null
+        and anonymized_at is null
+        and coalesce(source, '') not like 'avec_sync_clients%'
+        and coalesce(source, '') not like 'avec_backfill%'
+        and coalesce(source, '') not like 'avec_lake%'
+      returning id
+    `
+    const n = Array.isArray(restored) ? restored.length : 0
+    if (n > 0) {
+      stats.warnings.push(`heal importado: ${n} órfão(s) Avec restaurado(s) para Novos`)
+    }
   } catch (e) {
     stats.warnings.push(`heal importado: ${e instanceof Error ? e.message : String(e)}`)
   }
