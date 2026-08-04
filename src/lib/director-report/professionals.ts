@@ -23,3 +23,7 @@ export function listDirectorProfessionals(
     return true
   })
 }
+
+export function listDirectorReportProfessionals(activeOnly = true): DirectorProfessional[] {
+  return listDirectorProfessionals(activeOnly, { roles: DIRECTOR_FLOOR_ROLES })
+}

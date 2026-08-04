@@ -40,6 +40,27 @@ interface StockKpisPayload {
   last_synced_at: string | null
 }
 
+interface DirectorVisitCoverage {
+  period_key: string
+  row_count: number
+  truncated: boolean
+  synced_at: string
+}
+
+interface DirectorVisitStatusPayload {
+  coverage: DirectorVisitCoverage[]
+  visit_rows: number
+  ready_for_default_0011?: boolean
+  report_probe?: {
+    ok: boolean
+    missing_coverage: string[]
+    selected: {
+      quarter: string
+      na_lista_unicos: number
+    } | null
+  } | null
+}
+
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 function spNowParts() {
@@ -111,6 +132,39 @@ const MONTHS = buildMonthOptions()
 const HISTORICAL_FETCH_MS = 270_000
 const CURRENT_FETCH_MS = 90_000
 
+function sourceLabel(report: DirectorReport | null, loading: boolean) {
+  if (loading && !report) return '…'
+  if (!report) return '—'
+  if (report.source === 'mock') return 'demo / fixture'
+  if (report.source === 'error') return 'sem dados / timeout'
+  if (report.source === 'partial') return 'parcial'
+  switch (report.return_source) {
+    case 'db':
+      return 'Banco 0002'
+    case 'local':
+      return 'Local 0002/0007'
+    case 'avec':
+      return 'Avec live'
+    case 'mock':
+      return 'demo / fixture'
+    case 'none':
+      return 'sem 0011'
+    default: {
+      const _exhaustive: never = report.return_source
+      return _exhaustive
+    }
+  }
+}
+
+function reactivationClientKey(c: { client_key?: string; phone: string | null; mobile: string | null; email: string | null; name: string }) {
+  if (c.client_key) return c.client_key
+  const phone = (c.mobile ?? c.phone ?? '').replace(/\D/g, '')
+  if (phone.length >= 8) return `p:${phone.slice(-11)}`
+  const email = (c.email ?? '').trim().toLowerCase()
+  if (email) return `e:${email}`
+  return `n:${c.name.trim().toLowerCase().replace(/\s+/g, ' ')}`
+}
+
 export default function RelatorioDiretoriaPage() {
   const [tab, setTab] = useState<StageTab>('0011')
   const [canViewRevenue, setCanViewRevenue] = useState(false)
@@ -144,6 +198,7 @@ export default function RelatorioDiretoriaPage() {
   const [stockKpis, setStockKpis] = useState<StockKpisPayload | null>(null)
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState<string | null>(null)
+  const [visitStatus, setVisitStatus] = useState<DirectorVisitStatusPayload | null>(null)
 
   /** Carrega só a etapa da aba ativa — 0011 não espera 0021 (causa do timeout). */
   const load = useCallback(async () => {
@@ -193,7 +248,7 @@ export default function RelatorioDiretoriaPage() {
         if (stage === '0011') {
           setData((prev) =>
             prev
-              ? { ...prev, return_blocks: [] }
+              ? { ...prev, return_blocks: [], return_source: 'none' }
               : null,
           )
         } else if (stage === '0021') {
@@ -220,6 +275,7 @@ export default function RelatorioDiretoriaPage() {
           ...next,
           return_blocks: stage === '0011' ? next.return_blocks : prev.return_blocks,
           revenue_blocks: stage === '0021' ? next.revenue_blocks : prev.revenue_blocks,
+          return_source: stage === '0011' ? next.return_source : prev.return_source,
           summary: {
             ...prev.summary,
             ...next.summary,
@@ -279,6 +335,35 @@ export default function RelatorioDiretoriaPage() {
     load()
   }, [load])
 
+  const loadVisitStatus = useCallback(async () => {
+    if (tab !== '0011') return
+    try {
+      const q = new URLSearchParams({
+        status: '1',
+        probe_0011: '1',
+        selected: quarter,
+        compare,
+      })
+      const res = await apiFetch(`/api/avec/sync/director-visits?${q}`, {
+        cache: 'no-store',
+        clientCache: false,
+        timeoutMs: 15_000,
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        setVisitStatus(null)
+        return
+      }
+      setVisitStatus(json.data as DirectorVisitStatusPayload)
+    } catch {
+      setVisitStatus(null)
+    }
+  }, [tab, quarter, compare])
+
+  useEffect(() => {
+    loadVisitStatus()
+  }, [loadVisitStatus])
+
   const loadStock = useCallback(async () => {
     setStockLoading(true)
     setStockError(null)
@@ -334,10 +419,39 @@ export default function RelatorioDiretoriaPage() {
       })
   }, [data, displayQuarter0011, displayCompare0011, proId0011])
 
-  const clientsOnList = useMemo(
-    () => selectedReturn.reduce((s, r) => s + (r.sel?.clients_total ?? r.reactivation.length), 0),
-    [selectedReturn],
+  const clientsOnList = useMemo(() => {
+    const probeSelected = visitStatus?.report_probe?.selected
+    if (
+      !proId0011 &&
+      data?.return_source === 'db' &&
+      probeSelected?.quarter === displayQuarter0011
+    ) {
+      return probeSelected.na_lista_unicos
+    }
+    const unique = new Set<string>()
+    for (const row of selectedReturn) {
+      for (const client of row.reactivation) unique.add(reactivationClientKey(client))
+    }
+    if (unique.size > 0) return unique.size
+    return selectedReturn.reduce((s, r) => s + (r.sel?.clients_total ?? r.reactivation.length), 0)
+  }, [data?.return_source, displayQuarter0011, proId0011, selectedReturn, visitStatus])
+
+  const visitCoverageByQuarter = useMemo(
+    () => new Map((visitStatus?.coverage ?? []).map((c) => [c.period_key, c])),
+    [visitStatus],
   )
+
+  const coverageQuarters0011 = useMemo(
+    () =>
+      [
+        displayQuarter0011,
+        previousQuarterKey(displayQuarter0011),
+        displayCompare0011,
+        previousQuarterKey(displayCompare0011),
+      ].filter((q, i, arr) => arr.indexOf(q) === i),
+    [displayQuarter0011, displayCompare0011],
+  )
+  const missingVisitCoverage = visitStatus?.report_probe?.missing_coverage ?? []
 
   const quarterPair = useMemo(() => {
     if (!compareMonths) return { older: quarter0021, newer: quarter0021 }
@@ -485,17 +599,7 @@ export default function RelatorioDiretoriaPage() {
                       : 'text-warning'
               }
             >
-              {loading
-                ? '…'
-                : data?.source === 'avec'
-                  ? 'Avec live'
-                  : data?.source === 'partial'
-                    ? 'parcial'
-                    : data?.source === 'error'
-                      ? 'sem dados / timeout'
-                      : data
-                        ? 'demo / fixture'
-                        : '—'}
+              {sourceLabel(data, loading)}
             </span>
             {data?.schedule_note ? ` · ${data.schedule_note}` : ''}
           </p>
@@ -577,7 +681,7 @@ export default function RelatorioDiretoriaPage() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <Kpi
               icon={<Users size={16} />}
-              label="Na lista"
+              label="Na lista (únicos)"
               value={loading ? '—' : String(clientsOnList)}
             />
             <Kpi
@@ -604,6 +708,42 @@ export default function RelatorioDiretoriaPage() {
               value={data?.period.label_0011 ?? '—'}
             />
           </div>
+
+          {visitStatus && (
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface/60 px-4 py-3 text-xs text-muted">
+              <span className="font-medium text-foreground">Cobertura 0002:</span>
+              {coverageQuarters0011.map((q) => {
+                const cov = visitCoverageByQuarter.get(q)
+                const tone =
+                  cov && !cov.truncated && cov.row_count > 0
+                    ? 'border-success/40 bg-success/10 text-success'
+                    : cov?.truncated
+                      ? 'border-warning/40 bg-warning/10 text-warning'
+                      : 'border-border bg-card text-muted'
+                const label =
+                  cov && !cov.truncated && cov.row_count > 0
+                    ? `${q}: ${cov.row_count}`
+                    : cov?.truncated
+                      ? `${q}: truncado`
+                      : `${q}: pendente`
+                return (
+                  <span key={q} className={`rounded-full border px-2.5 py-1 ${tone}`}>
+                    {label}
+                  </span>
+                )
+              })}
+              {visitStatus.ready_for_default_0011 === false && (
+                <span className="text-warning">
+                  Default 0011 ainda sem base selecionada completa.
+                </span>
+              )}
+              {missingVisitCoverage.length > 0 && (
+                <span className="text-muted">
+                  Comparativo pode vir parcial: faltam {missingVisitCoverage.join(', ')}.
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted">
             <span className="text-foreground">
@@ -717,19 +857,23 @@ export default function RelatorioDiretoriaPage() {
                 para a recepção reaquecer o lead (WhatsApp). Na tela mostramos uma amostra (até 12 por
                 profissional); a lista completa vai no CSV / e-mail.
               </p>
-              {data?.source === 'avec' &&
-                /0011 local/i.test(data.schedule_note ?? '') && (
-                  <p className="text-muted">
-                    Fonte 0011 local (0002+0007 por profissional) — Avec 0011 não disponível neste
-                    salão.
-                  </p>
-                )}
-              {data?.source === 'avec' &&
-                !/0011 local/i.test(data.schedule_note ?? '') && (
-                  <p className="text-muted">
-                    Fonte Avec live (0011) no trimestre selecionado.
-                  </p>
-                )}
+              {data?.return_source === 'db' && (
+                <p className="text-muted">
+                  Fonte 0011 banco interno (0002 sincronizado; proxy última visita 0002). Comparativo
+                  pode ficar parcial se a cobertura anterior ainda não terminou.
+                </p>
+              )}
+              {data?.return_source === 'local' && (
+                <p className="text-muted">
+                  Fonte 0011 local (0002+0007 por profissional) — Avec 0011 não disponível neste
+                  salão.
+                </p>
+              )}
+              {data?.return_source === 'avec' && (
+                <p className="text-muted">
+                  Fonte Avec live (0011) no trimestre selecionado.
+                </p>
+              )}
               {data?.source === 'partial' && (
                 <p className="text-warning">
                   Relatório parcial — só etapas Avec OK. Etapa faltante ficou vazia (sem fixture).

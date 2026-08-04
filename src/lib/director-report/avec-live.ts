@@ -27,6 +27,7 @@ import {
 } from './period'
 import type {
   DirectorProfessional,
+  DirectorReturnSource,
   MonthKey,
   MonthRevenueRow,
   ProfessionalReturnBlock,
@@ -555,6 +556,8 @@ function buildQuarterRow(
 export interface LiveDirectorBlocks {
   /** null = etapa 0011 falhou ao montar (bug/exceção) — caller deixa bloco vazio (sem fixture). */
   return_blocks: ProfessionalReturnBlock[] | null
+  /** Origem específica da etapa 0011; `source=avec` no relatório pode vir do DB/local. */
+  return_source: DirectorReturnSource
   /** null = etapa 0021 falhou ao montar (bug/exceção) — caller deixa bloco vazio (sem fixture). */
   revenue_blocks: ProfessionalRevenueBlock[] | null
   warnings: string[]
@@ -642,6 +645,7 @@ export async function fetchLiveDirectorBlocks(
     source: 'none',
     note: null,
   }
+  let returnSource: DirectorReturnSource = 'none'
 
   if (want0011) {
     let usedDb = false
@@ -652,7 +656,7 @@ export async function fetchLiveDirectorBlocks(
           compareQuarter,
           professionals,
         )
-        if (fromDb && fromDb.selected.source === 'local' && fromDb.compare.source === 'local') {
+        if (fromDb && fromDb.selected.source === 'local') {
           selectedQ = {
             byPro: fromDb.selected.byPro,
             salonRates: fromDb.selected.salonRates,
@@ -668,8 +672,12 @@ export async function fetchLiveDirectorBlocks(
             note: fromDb.compare.note,
           }
           usedDb = true
+          returnSource = 'db'
           warnings.push('0011 via banco interno (visitas 0002 sincronizadas)')
           if (selectedQ.note) warnings.push(selectedQ.note)
+          if (fromDb.compare.source !== 'local') {
+            warnings.push('0011 DB: comparativo sem cobertura completa — exibindo selecionado real')
+          }
         }
       } catch (e) {
         warnings.push(
@@ -700,6 +708,9 @@ export async function fetchLiveDirectorBlocks(
           source: pair.compare.source,
           note: pair.compare.note,
         }
+        if (selectedQ.source === 'local' || compareQ.source === 'local') {
+          returnSource = 'local'
+        }
         if (selectedQ.truncated || compareQ.truncated) {
           warnings.push('0011 local: amostra parcial (budget UI / páginas 0002)')
         }
@@ -717,6 +728,7 @@ export async function fetchLiveDirectorBlocks(
       ])
       if (selResult.status === 'fulfilled') {
         selectedQ = selResult.value
+        if (selectedQ.source !== 'none') returnSource = 'avec'
         if (selectedQ.truncated) warnings.push(`0011 ${selectedQuarter}: parcial (budget UI)`)
         if (selectedQ.note) warnings.push(selectedQ.note)
       } else
@@ -725,6 +737,7 @@ export async function fetchLiveDirectorBlocks(
         )
       if (cmpResult.status === 'fulfilled') {
         compareQ = cmpResult.value
+        if (compareQ.source !== 'none') returnSource = 'avec'
         if (compareQ.truncated) warnings.push(`0011 ${compareQuarter}: parcial (budget UI)`)
         if (compareQ.note && compareQ.note !== selectedQ.note) warnings.push(compareQ.note)
       } else
@@ -949,5 +962,14 @@ export async function fetchLiveDirectorBlocks(
     )
   }
 
-  return { return_blocks, revenue_blocks, warnings }
+  return {
+    return_blocks,
+    return_source: want0011
+      ? return_blocks == null
+        ? 'none'
+        : returnSource
+      : 'none',
+    revenue_blocks,
+    warnings,
+  }
 }

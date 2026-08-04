@@ -7,7 +7,7 @@ import { getSql } from '@/lib/db'
 import { aggregateLocal0011ByPro, previousQuarterKey } from './local-0011'
 import type { Local0011Agg, Local0011QuarterResult } from './local-0011'
 import { labelQuarter } from './period'
-import { DIRECTOR_FLOOR_ROLES, listDirectorProfessionals } from './professionals'
+import { listDirectorReportProfessionals } from './professionals'
 import type { DirectorProfessional, QuarterKey } from './types'
 
 type DbVisitRow = {
@@ -133,7 +133,7 @@ function buildFromDb(
     note: !hasData
       ? `0011 DB sem cohort (${prior}→${quarter})`
       : hasReliableRate
-        ? `0011 via banco interno 0002 (${labelQuarter(prior)}→${labelQuarter(quarter)})`
+        ? `0011 via banco interno 0002 — proxy última visita 0002 (${labelQuarter(prior)}→${labelQuarter(quarter)})`
         : `0011 DB parcial — taxas omitidas`,
   }
 }
@@ -157,7 +157,11 @@ export async function tryFetch0011QuarterPairFromDb(
   const needed = [...new Set([selectedQuarter, selPrior, compareQuarter, cmpPrior])]
 
   const coverages = await Promise.all(needed.map((q) => getVisitCoverage(q)))
-  if (!coverages.every((c) => isVisitCoverageReady(c))) return null
+  const coverageByQuarter = new Map(needed.map((q, i) => [q, coverages[i]]))
+  const selectedReady =
+    isVisitCoverageReady(coverageByQuarter.get(selectedQuarter)) &&
+    isVisitCoverageReady(coverageByQuarter.get(selPrior))
+  if (!selectedReady) return null
 
   try {
     const [selP1, selP2, cmpP1, cmpP2] = await Promise.all([
@@ -200,13 +204,17 @@ export async function probe0011FromDb(
     na_lista_unicos: number
   } | null
 }> {
-  const professionals = listDirectorProfessionals(true, { roles: DIRECTOR_FLOOR_ROLES })
+  const professionals = listDirectorReportProfessionals(true)
   const selPrior = previousQuarterKey(selectedQuarter)
   const cmpPrior = previousQuarterKey(compareQuarter)
   const needed = [...new Set([selectedQuarter, selPrior, compareQuarter, cmpPrior])]
   const coverages = await Promise.all(needed.map((q) => getVisitCoverage(q)))
+  const coverageByQuarter = new Map(needed.map((q, i) => [q, coverages[i]]))
   const missing = needed.filter((_, i) => !isVisitCoverageReady(coverages[i]))
-  if (missing.length > 0) {
+  const selectedMissing = [selectedQuarter, selPrior].filter(
+    (q) => !isVisitCoverageReady(coverageByQuarter.get(q)),
+  )
+  if (selectedMissing.length > 0) {
     return {
       ok: false,
       missing_coverage: missing,
@@ -262,8 +270,8 @@ export async function probe0011FromDb(
   const compare = summarize(compareQuarter, pair.compare)
 
   return {
-    ok: pair.selected.source === 'local' && pair.compare.source === 'local',
-    missing_coverage: [],
+    ok: pair.selected.source === 'local',
+    missing_coverage: missing,
     professionals: professionals.length,
     selected,
     compare: {

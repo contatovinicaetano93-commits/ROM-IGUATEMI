@@ -106,6 +106,7 @@ function toClient(row: AvecClientRow): ReactivationClient {
     new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10)
   const days = daysSince(last)
   return {
+    client_key: row.key,
     name: row.name,
     email: row.email,
     phone: row.phone,

@@ -21,6 +21,8 @@ export interface ReturnQuarterRow {
 
 /** Linha no formato Avec 0011 (export Excel). */
 export interface ReactivationClient {
+  /** Estável quando vem do 0002 local/DB; usado para deduplicar clientes entre profissionais. */
+  client_key?: string
   name: string
   email: string | null
   phone: string | null
@@ -64,6 +66,7 @@ export interface ProfessionalRevenueBlock {
 }
 
 export type DirectorReportStage = '0011' | '0021' | 'all'
+export type DirectorReturnSource = 'mock' | 'db' | 'local' | 'avec' | 'none'
 
 export interface DirectorReportPeriod {
   selected_month: MonthKey
@@ -89,6 +92,7 @@ export interface DirectorReport {
   generated_at: string
   period: DirectorReportPeriod
   source: 'mock' | 'avec' | 'error' | 'partial'
+  return_source: DirectorReturnSource
   avec_reports: { return: string; revenue: string }
   schedule_note: string
   return_blocks: ProfessionalReturnBlock[]
