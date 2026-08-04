@@ -528,7 +528,11 @@ function normalizeDayKey(raw: string | null | undefined): string {
  * Contatos novos dos últimos NOVOS_WINDOW_DAYS dias sem cliente na Avec ainda.
  * O lead pode vir da Avec (agenda/atendimento), mas o ROM cria cadastro novo
  * porque ainda não existe no banco Avec (`avec_client_id` nulo).
- * Exclui só dump em massa (clients/backfill/lake) — não o sync operacional.
+ * Exclui só dump em massa (clients/backfill/lake/last_done/returning).
+ *
+ * Status `convertido` (atendido) **permanece** em Novos — a regra é
+ * `avec_client_id` nulo na janela, não o funil de status. Só `importado`
+ * (dump) fica de fora.
  *
  * Sai da lista quem já conta em Vencendo/Atrasados: serviço ativo com
  * `last_done_at` + `cadence_days` cujo `next_due` já venceu ou cai na janela
@@ -551,7 +555,7 @@ export async function countNewContactsNotInAvec(opts?: {
     where anonymized_at is null
       and channel = 'avec'
       and avec_client_id is null
-      and status = 'novo'
+      and status <> 'importado'
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
@@ -622,7 +626,7 @@ export async function listNewContactsNotInAvec(opts?: {
     where anonymized_at is null
       and channel = 'avec'
       and avec_client_id is null
-      and status = 'novo'
+      and status <> 'importado'
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'

@@ -69,6 +69,15 @@ describe('new contacts not in Avec', () => {
     expect(texto).toContain('avec_sync_returning%')
   })
 
+  it('mantém convertidos (atendidos) em Novos — só exclui importado', async () => {
+    sqlMock.mockResolvedValueOnce([{ n: 0 }])
+    const { countNewContactsNotInAvec } = await import('@/lib/contact-summary')
+    await countNewContactsNotInAvec({ day: '2026-08-01' })
+    const texto = (sqlMock.mock.calls[0]![0] as string[]).join(' ')
+    expect(texto).toContain("status <> 'importado'")
+    expect(texto).not.toContain("status = 'novo'")
+  })
+
   it('listNewContactsNotInAvec usa um SELECT com count(*) over e zera urgência', async () => {
     sqlMock.mockResolvedValueOnce([
       {
