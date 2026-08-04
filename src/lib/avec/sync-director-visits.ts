@@ -8,6 +8,10 @@ import { normalizeAttendanceRow } from '@/lib/avec/normalize'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
 import {
+  getVisitCoverage,
+  isVisitCoverageReady,
+} from '@/lib/director-report/from-db'
+import {
   local0011ClientKey,
   previousQuarterKey,
   splitAvecProfessionalNames,
@@ -77,6 +81,30 @@ async function upsertVisitCoverage(
       truncated = excluded.truncated,
       synced_at = now()
   `
+}
+
+/**
+ * Em falha/abort: se já havia cobertura boa, não envenena o ready check.
+ * Sem cobertura pronta, grava stub truncado.
+ */
+async function preserveOrStubCoverage(
+  quarter: QuarterKey,
+  periodStart: string,
+  periodEnd: string,
+  pagesFetched: number,
+  rowCount: number,
+  stats: AvecSyncStats,
+  reason: string,
+): Promise<'preserved' | 'stubbed'> {
+  const prior = await getVisitCoverage(quarter)
+  if (isVisitCoverageReady(prior)) {
+    stats.warnings.push(
+      `director-visits ${quarter}: ${reason}; cobertura anterior preservada (${prior!.row_count} rows)`,
+    )
+    return 'preserved'
+  }
+  await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, true)
+  return 'stubbed'
 }
 
 /**
@@ -215,7 +243,19 @@ async function syncOneQuarter(
       )
       pagesFetched = page
       const rows = extractRows(payload)
-      if (rows.length === 0) break
+      if (rows.length === 0) {
+        // Página vazia: se prior estava pronto e ainda não gravamos nada, preserva.
+        if (page === 1 && rowCount === 0) {
+          const prior = await getVisitCoverage(quarter)
+          if (isVisitCoverageReady(prior)) {
+            stats.warnings.push(
+              `director-visits ${quarter}: Avec vazio; cobertura anterior preservada (${prior!.row_count} rows)`,
+            )
+            return
+          }
+        }
+        break
+      }
 
       for (const row of rows) {
         const att = normalizeAttendanceRow(row)
@@ -255,16 +295,54 @@ async function syncOneQuarter(
     await flush()
   } catch (e) {
     await flush().catch(() => {})
-    // Falha no trimestre invalida a cobertura: evita o relatório usar um sucesso antigo/stale.
-    await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, true)
+    await preserveOrStubCoverage(
+      quarter,
+      periodStart,
+      periodEnd,
+      pagesFetched,
+      rowCount,
+      stats,
+      'falha no sync',
+    )
     throw e
+  }
+
+  if (aborted) {
+    const outcome = await preserveOrStubCoverage(
+      quarter,
+      periodStart,
+      periodEnd,
+      pagesFetched,
+      rowCount,
+      stats,
+      'abortado por orçamento',
+    )
+    if (outcome === 'stubbed') {
+      stats.warnings.push(
+        `director-visits ${quarter}: abortado por orçamento; cobertura marcada truncada`,
+      )
+    }
+    return
+  }
+
+  // Resultado "completo" mas suspeitosamente baixo vs cobertura boa anterior.
+  if (!truncated) {
+    const prior = await getVisitCoverage(quarter)
+    if (
+      isVisitCoverageReady(prior) &&
+      prior &&
+      (rowCount === 0 || (prior.row_count > 100 && rowCount < prior.row_count * 0.5))
+    ) {
+      stats.warnings.push(
+        `director-visits ${quarter}: resultado incompleto (${rowCount} vs prior ${prior.row_count}); cobertura anterior preservada`,
+      )
+      return
+    }
   }
 
   await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, truncated)
 
-  if (aborted) {
-    stats.warnings.push(`director-visits ${quarter}: abortado por orçamento; cobertura marcada truncada`)
-  } else if (truncated) {
+  if (truncated) {
     stats.warnings.push(`director-visits ${quarter}: truncado em ${MAX_PAGES_PER_QUARTER} páginas 0002`)
   } else {
     stats.warnings.push(
@@ -311,6 +389,7 @@ export async function syncDirectorVisits(
         stats.warnings.push(`director-visits: schema pendente (${msg.slice(0, 80)})`)
         return
       }
+      // syncOneQuarter já fez preserveOrStub antes de rethrow.
       stats.errors.push(`director-visits ${q}: ${msg.slice(0, 160)}`)
     }
   }
