@@ -16,7 +16,12 @@ import {
 import { Avatar, PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
 import { fmtSchedule, fmtScheduleParts, toSalonDateIso, whatsAppUrl } from '@/lib/salon/format'
-import { CATEGORY_LABEL, DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
+import {
+  CATEGORY_LABEL,
+  DUE_SOON_DAYS,
+  NOVOS_WINDOW_DAYS,
+  SCHEDULED_SOON_DAYS,
+} from '@/lib/salon/constants'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
 
 interface Contact {
@@ -288,7 +293,7 @@ export default function ContatosPage() {
         ? 'Nenhum contato encontrado.'
         : 'Digite um nome ou telefone para buscar na base.'
       : mode === 'novos'
-        ? 'Nenhum lead Avec hoje sem cliente cadastrado.'
+        ? `Nenhum lead Avec nos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado.`
         : queue === 'overdue'
           ? 'Nenhum atrasado (cadência vencida com visita registrada).'
           : queue === 'due_soon'
@@ -305,7 +310,7 @@ export default function ContatosPage() {
             {mode === 'reactivate'
               ? 'Reative quem está atrasado, vencendo ou agendado'
               : mode === 'novos'
-                ? 'Lead Avec do dia sem cliente cadastrado na Avec ainda'
+                ? `Lead Avec dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda`
                 : hasUrlFilter
                   ? `Filtro${urlChannel ? ` ${channelLabel(urlChannel)}` : ''}${
                       urlStatus ? ` · status ${urlStatus}` : ''
@@ -339,7 +344,7 @@ export default function ContatosPage() {
             Novos contatos
           </p>
           <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
-            Vieram da Avec hoje, mas ainda sem cliente no banco Avec
+            Últimos {NOVOS_WINDOW_DAYS} dias, ainda sem cliente no banco Avec
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-gold/15 px-3 py-1 text-sm font-semibold tabular-nums text-gold">
@@ -422,7 +427,9 @@ export default function ContatosPage() {
       {mode === 'novos' && (
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
           Novos: lead que chegou pela Avec (agenda/atendimento), mas o ROM abriu cadastro novo
-          porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio).
+          porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio). Fica aqui por{' '}
+          {NOVOS_WINDOW_DAYS} dias; sai antes se fizer um serviço com cadência, e aí passa a
+          aparecer em Vencendo/Atrasados.
         </p>
       )}
 
@@ -525,7 +532,7 @@ export default function ContatosPage() {
             const createdParts = mode === 'novos' ? fmtScheduleParts(c.created_at) : null
             const secondaryLine =
               mode === 'novos'
-                ? `${channelLabel(c.channel)}${createdParts ? ` · ${createdParts.time}` : ''}`
+                ? `${channelLabel(c.channel)}${createdParts ? ` · ${createdParts.date} ${createdParts.time}` : ''}`
                 : serviceLine(c, mode === 'reactivate' ? queue : q)
             return (
               <div key={c.id}>

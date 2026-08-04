@@ -16,7 +16,7 @@ describe('new contacts not in Avec', () => {
     sqlMock.mockReset()
   })
 
-  it('countNewContactsNotInAvec lê o count do dia', async () => {
+  it('countNewContactsNotInAvec lê o count da janela', async () => {
     sqlMock.mockResolvedValueOnce([{ n: 3 }])
     const { countNewContactsNotInAvec } = await import('@/lib/contact-summary')
     await expect(countNewContactsNotInAvec({ day: '2026-08-01' })).resolves.toBe(3)
@@ -27,6 +27,30 @@ describe('new contacts not in Avec', () => {
     sqlMock.mockResolvedValueOnce([])
     const { countNewContactsNotInAvec } = await import('@/lib/contact-summary')
     await expect(countNewContactsNotInAvec({ day: '2026-08-01' })).resolves.toBe(0)
+  })
+
+  it('a janela é de NOVOS_WINDOW_DAYS dias, não de um dia só', async () => {
+    sqlMock.mockResolvedValueOnce([{ n: 0 }])
+    const { countNewContactsNotInAvec } = await import('@/lib/contact-summary')
+    const { NOVOS_WINDOW_DAYS } = await import('@/lib/salon/constants')
+    await countNewContactsNotInAvec({ day: '2026-08-01' })
+
+    // O recuo é interpolado como valor: dia informado menos (janela - 1).
+    const values = sqlMock.mock.calls[0]!.slice(1)
+    expect(values).toContain(NOVOS_WINDOW_DAYS - 1)
+  })
+
+  it('exclui quem já entrou no funil de cadência (não conta em Novos e Vencendo ao mesmo tempo)', async () => {
+    sqlMock.mockResolvedValueOnce([{ n: 0 }])
+    const { countNewContactsNotInAvec } = await import('@/lib/contact-summary')
+    await countNewContactsNotInAvec({ day: '2026-08-01' })
+
+    const texto = (sqlMock.mock.calls[0]![0] as string[]).join(' ')
+    expect(texto).toContain('not exists')
+    expect(texto).toContain('client_services')
+    // Mesma condição que faz next_due existir em countUrgencyQueues.
+    expect(texto).toContain('last_done_at is not null')
+    expect(texto).toContain('cadence_days is not null')
   })
 
   it('listNewContactsNotInAvec usa um SELECT com count(*) over e zera urgência', async () => {
