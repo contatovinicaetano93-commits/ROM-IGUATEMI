@@ -1,11 +1,20 @@
-import { timingSafeEqual } from 'node:crypto'
 import type { NextRequest } from 'next/server'
 
+/**
+ * Comparação timing-safe compatível com Edge (middleware) — sem node:crypto.
+ * Se os comprimentos diferem, ainda varre o buffer maior para não vazar o tamanho
+ * do secret via tempo de early-return óbvio no path igual.
+ */
 function secretsEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a)
-  const right = Buffer.from(b)
-  if (left.length !== right.length) return false
-  return timingSafeEqual(left, right)
+  const enc = new TextEncoder()
+  const left = enc.encode(a)
+  const right = enc.encode(b)
+  const len = Math.max(left.length, right.length)
+  let diff = left.length ^ right.length
+  for (let i = 0; i < len; i++) {
+    diff |= (left[i] ?? 0) ^ (right[i] ?? 0)
+  }
+  return diff === 0
 }
 
 /**
