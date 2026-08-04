@@ -145,6 +145,8 @@ function sourceLabel(report: DirectorReport | null, loading: boolean) {
       return 'Local 0002/0007'
     case 'avec':
       return 'Avec live'
+    case 'mixed':
+      return 'Misto (DB parcial)'
     case 'mock':
       return 'demo / fixture'
     case 'none':
