@@ -332,7 +332,10 @@ export default function RelatorioDiretoriaPage() {
   ])
 
   useEffect(() => {
-    load()
+    const id = window.setTimeout(() => {
+      void load()
+    }, 0)
+    return () => window.clearTimeout(id)
   }, [load])
 
   const loadVisitStatus = useCallback(async () => {
@@ -361,7 +364,10 @@ export default function RelatorioDiretoriaPage() {
   }, [tab, quarter, compare])
 
   useEffect(() => {
-    loadVisitStatus()
+    const id = window.setTimeout(() => {
+      void loadVisitStatus()
+    }, 0)
+    return () => window.clearTimeout(id)
   }, [loadVisitStatus])
 
   const loadStock = useCallback(async () => {
@@ -385,7 +391,11 @@ export default function RelatorioDiretoriaPage() {
   }, [])
 
   useEffect(() => {
-    if (tab === 'estoque') loadStock()
+    if (tab !== 'estoque') return
+    const id = window.setTimeout(() => {
+      void loadStock()
+    }, 0)
+    return () => window.clearTimeout(id)
   }, [tab, loadStock])
 
   const pros = useMemo(() => {
