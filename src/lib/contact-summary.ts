@@ -530,11 +530,11 @@ function normalizeDayKey(raw: string | null | undefined): string {
  * porque ainda não existe no banco Avec (`avec_client_id` nulo).
  * Exclui só dump em massa (clients/backfill/lake) — não o sync operacional.
  *
- * Sai da lista quem já entrou no funil de cadência (serviço ativo com
- * `last_done_at` e `cadence_days`) — mesma condição que faz o contato contar em
- * Vencendo/Atrasados. Sem isso ele apareceria nas duas filas e as contagens
- * ficariam infladas. Quem fez serviço SEM cadência continua aqui, porque o
- * funil de reativação não pega esse caso.
+ * Sai da lista quem já conta em Vencendo/Atrasados: serviço ativo com
+ * `last_done_at` + `cadence_days` cujo `next_due` já venceu ou cai na janela
+ * DUE_SOON_DAYS. Cadência longa ainda fora dessa janela permanece em Novos —
+ * sem isso o lead sumiria das duas filas. Quem fez serviço SEM cadência
+ * continua aqui, porque o funil de reativação não pega esse caso.
  *
  * `day` é o fim da janela (default hoje), não um dia isolado.
  */
@@ -564,6 +564,8 @@ export async function countNewContactsNotInAvec(opts?: {
           and cs.active = true
           and cs.last_done_at is not null
           and cs.cadence_days is not null
+          and cs.last_done_at + (cs.cadence_days * interval '1 day')
+            <= now() + (${DUE_SOON_DAYS} * interval '1 day')
       )
   `) as { n: number }[]
   return Number(rows[0]?.n ?? 0) || 0
@@ -630,6 +632,8 @@ export async function listNewContactsNotInAvec(opts?: {
           and cs.active = true
           and cs.last_done_at is not null
           and cs.cadence_days is not null
+          and cs.last_done_at + (cs.cadence_days * interval '1 day')
+            <= now() + (${DUE_SOON_DAYS} * interval '1 day')
       )
     order by created_at desc
     limit ${limit}

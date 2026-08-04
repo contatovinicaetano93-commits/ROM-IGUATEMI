@@ -1,9 +1,10 @@
 import { getSql } from '@/lib/db'
+import { DUE_SOON_DAYS } from '@/lib/salon/constants'
 
 /**
  * Contatos novos do dia (Hoje KPI) — paridade com filtro Contatos Novos
  * (`countNewContactsNotInAvec`), mas fixo na janela de 1 dia (não herda 30d).
- * Inclui a exclusão de quem já entrou no funil de cadência.
+ * Inclui a mesma exclusão de quem já conta em Vencendo/Atrasados.
  */
 export async function countNovosHoje(day: string): Promise<number> {
   const sql = getSql()
@@ -28,6 +29,8 @@ export async function countNovosHoje(day: string): Promise<number> {
           and cs.active = true
           and cs.last_done_at is not null
           and cs.cadence_days is not null
+          and cs.last_done_at + (cs.cadence_days * interval '1 day')
+            <= now() + (${DUE_SOON_DAYS} * interval '1 day')
       )
   `) as { n: number }[]
   return Number(rows[0]?.n ?? 0) || 0

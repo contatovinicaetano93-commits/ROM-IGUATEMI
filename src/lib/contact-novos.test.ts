@@ -40,17 +40,21 @@ describe('new contacts not in Avec', () => {
     expect(values).toContain(NOVOS_WINDOW_DAYS - 1)
   })
 
-  it('exclui quem já entrou no funil de cadência (não conta em Novos e Vencendo ao mesmo tempo)', async () => {
+  it('exclui só quem já conta em Vencendo/Atrasados (não some da fila no meio)', async () => {
     sqlMock.mockResolvedValueOnce([{ n: 0 }])
     const { countNewContactsNotInAvec } = await import('@/lib/contact-summary')
+    const { DUE_SOON_DAYS } = await import('@/lib/salon/constants')
     await countNewContactsNotInAvec({ day: '2026-08-01' })
 
     const texto = (sqlMock.mock.calls[0]![0] as string[]).join(' ')
     expect(texto).toContain('not exists')
     expect(texto).toContain('client_services')
-    // Mesma condição que faz next_due existir em countUrgencyQueues.
+    // next_due = last_done_at + cadence; só exclui se já está overdue/due_soon.
     expect(texto).toContain('last_done_at is not null')
     expect(texto).toContain('cadence_days is not null')
+    expect(texto).toContain("interval '1 day'")
+    const values = sqlMock.mock.calls[0]!.slice(1)
+    expect(values).toContain(DUE_SOON_DAYS)
   })
 
   it('exclui dump last_done/returning da aba Novos', async () => {
