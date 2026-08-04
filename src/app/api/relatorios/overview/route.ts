@@ -7,7 +7,7 @@ import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 
 /** Evita hang eterno no serverless quando o pool DB satura. */
-export const maxDuration = 30
+export const maxDuration = 120
 
 /** Overview do mês — fechamento ROM (admin + financeiro). */
 export async function GET(req: NextRequest) {
