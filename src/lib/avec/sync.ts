@@ -1,4 +1,6 @@
 import { getSql } from '@/lib/db'
+import { MemoryCache } from '@/lib/cache'
+import { NOVOS_WINDOW_DAYS } from '@/lib/salon/constants'
 import { SYNC_LOCK_KEYS, withSyncLock } from '@/lib/sync-lock'
 import {
   upsertContact,
@@ -190,7 +192,7 @@ async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<Ave
       and coalesce(stats->>'running', 'false') = 'true'
       and (
         kind = ${kind}
-        or created_at < now() - interval '8 minutes'
+        or created_at < now() - interval '14 minutes'
       )
   `
   const starting: AvecSyncStats = { ...stats, running: true }
@@ -295,8 +297,9 @@ export async function getLastAvecSync(
 /**
  * Fecha runs órfãos (timeout Vercel / kill sem finally).
  * Só `running=true` — nunca reescreve partial/ok já finalizados (falso abandoned).
+ * Default 14 min: budget full ≈ 12 min + margem (lock TTL 15 min).
  */
-export async function abandonStaleAvecSyncRuns(maxAgeMs = 8 * 60_000): Promise<number> {
+export async function abandonStaleAvecSyncRuns(maxAgeMs = 14 * 60_000): Promise<number> {
   const sql = getSql()
   const cutoff = new Date(Date.now() - maxAgeMs).toISOString()
   // Progresso mid-flight ≠ sync completo — nunca promover a ok (mentiria saúde no Cérebro).
@@ -454,13 +457,46 @@ function createBatchContactUpserter() {
 async function healImportadoStatus(stats: AvecSyncStats) {
   try {
     const sql = getSql()
+    // Dump/histórico/cliente Avec real → importado.
+    // Órfãos operacionais (agenda/atendimento) sem avec_client_id ficam em Novos (30d).
     await sql`
       update contacts
       set status = 'importado'
       where status = 'novo'
         and channel = 'avec'
         and anonymized_at is null
+        and (
+          avec_client_id is not null
+          or coalesce(source, '') like 'avec_sync_clients%'
+          or coalesce(source, '') like 'avec_backfill%'
+          or coalesce(source, '') like 'avec_lake%'
+          or coalesce(source, '') like 'avec_last_done%'
+          or coalesce(source, '') like 'avec_sync_returning%'
+        )
     `
+    // Desfaz heal antigo só para órfãos operacionais (não dump/returning/last_done),
+    // limitados à janela Novos (NOVOS_WINDOW_DAYS).
+    const restored = await sql`
+      update contacts
+      set status = 'novo'
+      where status = 'importado'
+        and channel = 'avec'
+        and avec_client_id is null
+        and anonymized_at is null
+        and coalesce(source, '') not like 'avec_sync_clients%'
+        and coalesce(source, '') not like 'avec_backfill%'
+        and coalesce(source, '') not like 'avec_lake%'
+        and coalesce(source, '') not like 'avec_last_done%'
+        and coalesce(source, '') not like 'avec_sync_returning%'
+        and created_at >= ((current_timestamp at time zone 'America/Sao_Paulo')::date - (${NOVOS_WINDOW_DAYS} - 1))::timestamp at time zone 'America/Sao_Paulo'
+      returning id
+    `
+    const n = Array.isArray(restored) ? restored.length : 0
+    if (n > 0) {
+      stats.warnings.push(`heal importado: ${n} órfão(s) operacionais restaurado(s) para Novos`)
+    }
+    MemoryCache.deletePrefix('contacts:novos:')
+    MemoryCache.deletePrefix('contacts:queue-counts:')
   } catch (e) {
     stats.warnings.push(`heal importado: ${e instanceof Error ? e.message : String(e)}`)
   }
@@ -468,8 +504,6 @@ async function healImportadoStatus(stats: AvecSyncStats) {
 
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
   try {
-    await healImportadoStatus(stats)
-
     const params = { limit: 250, site: avecSiteParam() }
     const result = await fetchSyncReport('0004', params)
     warnIfTruncated(stats, '0004', result)

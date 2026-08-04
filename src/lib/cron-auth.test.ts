@@ -23,11 +23,20 @@ describe('isCronAuthorized', () => {
     expect(isCronAuthorized(req({ authorization: 'Bearer test-cron-secret' }))).toBe(true)
   })
 
+  it('aceita x-cron-secret', () => {
+    expect(isCronAuthorized(req({ 'x-cron-secret': 'test-cron-secret' }))).toBe(true)
+  })
+
   it('rejeita só x-vercel-cron sem secret', () => {
     expect(isCronAuthorized(req({ 'x-vercel-cron': '1' }))).toBe(false)
   })
 
   it('rejeita secret errado', () => {
     expect(isCronAuthorized(req({ authorization: 'Bearer wrong' }))).toBe(false)
+  })
+
+  it('fail-closed sem CRON_SECRET', () => {
+    delete process.env.CRON_SECRET
+    expect(isCronAuthorized(req({ authorization: 'Bearer test-cron-secret' }))).toBe(false)
   })
 })
