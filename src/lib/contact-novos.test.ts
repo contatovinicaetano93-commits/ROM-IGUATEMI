@@ -53,8 +53,11 @@ describe('new contacts not in Avec', () => {
     expect(texto).toContain('last_done_at is not null')
     expect(texto).toContain('cadence_days is not null')
     expect(texto).toContain("interval '1 day'")
+    // Âncora no fim da janela (`day`), não só wall-clock now — evita mismatch com ?day=.
+    expect(texto).toMatch(/least\s*\(/i)
     const values = sqlMock.mock.calls[0]!.slice(1)
     expect(values).toContain(DUE_SOON_DAYS)
+    expect(values.filter((v) => v === '2026-08-01')).toHaveLength(3)
   })
 
   it('exclui dump last_done/returning da aba Novos', async () => {

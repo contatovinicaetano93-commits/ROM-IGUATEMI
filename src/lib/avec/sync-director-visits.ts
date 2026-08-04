@@ -84,7 +84,9 @@ async function upsertVisitCoverage(
 }
 
 /**
- * Em falha/abort: se já havia cobertura boa, não envenena o ready check.
+ * Em falha/abort: se já havia cobertura boa e esta execução não gravou visitas,
+ * preserva o ready check. Se gravou páginas parciais, marca truncado — o warehouse
+ * já misturou upserts incompletos e 0011 não pode tratar como cobertura pronta.
  * Sem cobertura pronta, grava stub truncado.
  */
 async function preserveOrStubCoverage(
@@ -97,7 +99,7 @@ async function preserveOrStubCoverage(
   reason: string,
 ): Promise<'preserved' | 'stubbed'> {
   const prior = await getVisitCoverage(quarter)
-  if (isVisitCoverageReady(prior)) {
+  if (isVisitCoverageReady(prior) && rowCount === 0) {
     stats.warnings.push(
       `director-visits ${quarter}: ${reason}; cobertura anterior preservada (${prior!.row_count} rows)`,
     )
@@ -333,8 +335,16 @@ async function syncOneQuarter(
       prior &&
       (rowCount === 0 || (prior.row_count > 100 && rowCount < prior.row_count * 0.5))
     ) {
+      if (rowCount === 0) {
+        stats.warnings.push(
+          `director-visits ${quarter}: resultado incompleto (${rowCount} vs prior ${prior.row_count}); cobertura anterior preservada`,
+        )
+        return
+      }
+      // Já houve upserts — não manter ready sobre warehouse parcial.
+      await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, true)
       stats.warnings.push(
-        `director-visits ${quarter}: resultado incompleto (${rowCount} vs prior ${prior.row_count}); cobertura anterior preservada`,
+        `director-visits ${quarter}: resultado incompleto (${rowCount} vs prior ${prior.row_count}); cobertura marcada truncada`,
       )
       return
     }

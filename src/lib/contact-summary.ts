@@ -532,7 +532,9 @@ function normalizeDayKey(raw: string | null | undefined): string {
  *
  * Sai da lista quem já conta em Vencendo/Atrasados: serviço ativo com
  * `last_done_at` + `cadence_days` cujo `next_due` já venceu ou cai na janela
- * DUE_SOON_DAYS. Cadência longa ainda fora dessa janela permanece em Novos —
+ * DUE_SOON_DAYS. A âncora da cadência é o fim da janela (`day`), com
+ * `least(now(), …)` para manter paridade com Vencendo/Atrasados quando
+ * `day` é hoje. Cadência longa ainda fora dessa janela permanece em Novos —
  * sem isso o lead sumiria das duas filas. Quem fez serviço SEM cadência
  * continua aqui, porque o funil de reativação não pega esse caso.
  *
@@ -565,7 +567,10 @@ export async function countNewContactsNotInAvec(opts?: {
           and cs.last_done_at is not null
           and cs.cadence_days is not null
           and cs.last_done_at + (cs.cadence_days * interval '1 day')
-            <= now() + (${DUE_SOON_DAYS} * interval '1 day')
+            <= least(
+                 now(),
+                 ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+               ) + (${DUE_SOON_DAYS} * interval '1 day')
       )
   `) as { n: number }[]
   return Number(rows[0]?.n ?? 0) || 0
@@ -633,7 +638,10 @@ export async function listNewContactsNotInAvec(opts?: {
           and cs.last_done_at is not null
           and cs.cadence_days is not null
           and cs.last_done_at + (cs.cadence_days * interval '1 day')
-            <= now() + (${DUE_SOON_DAYS} * interval '1 day')
+            <= least(
+                 now(),
+                 ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+               ) + (${DUE_SOON_DAYS} * interval '1 day')
       )
     order by created_at desc
     limit ${limit}
