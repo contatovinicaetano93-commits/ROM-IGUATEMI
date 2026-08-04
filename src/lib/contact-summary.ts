@@ -553,6 +553,8 @@ export async function countNewContactsNotInAvec(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and coalesce(source, '') not like 'avec_last_done%'
+      and coalesce(source, '') not like 'avec_sync_returning%'
       and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
@@ -617,6 +619,8 @@ export async function listNewContactsNotInAvec(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and coalesce(source, '') not like 'avec_last_done%'
+      and coalesce(source, '') not like 'avec_sync_returning%'
       and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1})::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
