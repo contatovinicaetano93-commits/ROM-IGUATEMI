@@ -661,22 +661,28 @@ export async function fetchLiveDirectorBlocks(
             byPro: fromDb.selected.byPro,
             salonRates: fromDb.selected.salonRates,
             truncated: fromDb.selected.truncated,
-            source: 'local',
+            source: fromDb.selected.source,
             note: fromDb.selected.note,
           }
           compareQ = {
             byPro: fromDb.compare.byPro,
             salonRates: fromDb.compare.salonRates,
             truncated: fromDb.compare.truncated,
-            source: 'local',
+            source: fromDb.compare.source,
             note: fromDb.compare.note,
           }
           usedDb = true
-          returnSource = 'db'
-          warnings.push('0011 via banco interno (visitas 0002 sincronizadas)')
+          returnSource =
+            fromDb.compare.source === 'local' ? 'db' : 'mixed'
+          warnings.push('0011 via banco interno (proxy última visita 0002 sincronizado)')
           if (selectedQ.note) warnings.push(selectedQ.note)
           if (fromDb.compare.source !== 'local') {
-            warnings.push('0011 DB: comparativo sem cobertura completa — exibindo selecionado real')
+            warnings.push(
+              '0011 DB: comparativo sem cobertura completa — exibindo selecionado do banco',
+            )
+          }
+          if (compareQ.note && compareQ.note !== selectedQ.note) {
+            warnings.push(compareQ.note)
           }
         }
       } catch (e) {
