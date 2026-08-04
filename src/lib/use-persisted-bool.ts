@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
+
+const listenersByKey = new Map<string, Set<() => void>>()
 
 function readPersistedBool(key: string, defaultValue: boolean): boolean {
-  if (typeof window === 'undefined') return defaultValue
   try {
     const raw = window.localStorage.getItem(key)
     if (raw === '1') return true
@@ -14,20 +15,54 @@ function readPersistedBool(key: string, defaultValue: boolean): boolean {
   return defaultValue
 }
 
+function subscribeKey(key: string, onChange: () => void): () => void {
+  let set = listenersByKey.get(key)
+  if (!set) {
+    set = new Set()
+    listenersByKey.set(key, set)
+  }
+  set.add(onChange)
+
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === key || e.key === null) onChange()
+  }
+  window.addEventListener('storage', onStorage)
+
+  return () => {
+    set!.delete(onChange)
+    if (set!.size === 0) listenersByKey.delete(key)
+    window.removeEventListener('storage', onStorage)
+  }
+}
+
+function emitKey(key: string) {
+  listenersByKey.get(key)?.forEach((listener) => listener())
+}
+
 /**
  * Boolean persisted in localStorage.
- * SSR-safe: lazy-reads storage when state initializes; writes on change only.
+ * SSR-safe via useSyncExternalStore (server snapshot = default; no setState-in-effect).
  */
 export function usePersistedBool(key: string, defaultValue = false) {
-  const [value, setValue] = useState(() => readPersistedBool(key, defaultValue))
+  const subscribe = useCallback((onChange: () => void) => subscribeKey(key, onChange), [key])
+  const getSnapshot = useCallback(() => readPersistedBool(key, defaultValue), [key, defaultValue])
+  const getServerSnapshot = useCallback(() => defaultValue, [defaultValue])
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(key, value ? '1' : '0')
-    } catch {
-      // ignore
-    }
-  }, [key, value])
+  const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+
+  const setValue = useCallback(
+    (next: boolean | ((prev: boolean) => boolean)) => {
+      const prev = readPersistedBool(key, defaultValue)
+      const resolved = typeof next === 'function' ? next(prev) : next
+      try {
+        window.localStorage.setItem(key, resolved ? '1' : '0')
+      } catch {
+        // ignore
+      }
+      emitKey(key)
+    },
+    [key, defaultValue],
+  )
 
   return [value, setValue] as const
 }
