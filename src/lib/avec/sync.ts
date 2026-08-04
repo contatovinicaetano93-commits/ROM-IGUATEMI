@@ -1445,10 +1445,10 @@ async function runAvecSyncUnlocked(
         ['P3', () => syncP3Kpis(stats, syncRunId)],
         ['tm-0223', () => syncDurationFrom0223(stats, syncRunId)],
       ] as const
-      // director-visits primeiro: o Relatório gerência depende disso e o budget
-      // do full/agenda costuma esgotar antes do bloco no fim do sync.
+      // director-visits primeiro: Relatório gerência depende dessa base 0002,
+      // mas o passo anda por vários trimestres e deve respeitar o budget da agenda.
       const agendaSteps = [
-        ['director-visits', () => syncDirectorVisits(stats, syncRunId)],
+        ['director-visits', () => syncDirectorVisits(stats, syncRunId, { shouldAbort: syncBudgetExhausted })],
         ['appointments', () => syncAppointments(stats, mode, syncRunId)],
         ['attendances', () => syncAttendances(stats, mode, syncRunId)],
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],

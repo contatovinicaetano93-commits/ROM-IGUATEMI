@@ -45,6 +45,7 @@ async function buildForUi(
       return {
         ...skeleton,
         source: 'error',
+        return_source: 'none',
         return_blocks: [],
         revenue_blocks: [],
         schedule_note: note,
@@ -239,7 +240,7 @@ export async function GET(req: NextRequest) {
       format === 'json'
         ? await cachedFetch(
             [
-              'director:json:v8-hist-stage',
+              'director:json:v9-return-source',
               stages,
               `slim=${slim ? 1 : 0}`,
               `hist=${historical ? 1 : 0}`,

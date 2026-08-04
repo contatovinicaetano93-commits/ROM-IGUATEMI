@@ -9,7 +9,7 @@ import {
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
 import { getDeploymentContext } from '@/lib/deployment'
-import { listVisitCoverage, probe0011FromDb } from '@/lib/director-report/from-db'
+import { isVisitCoverageReady, listVisitCoverage, probe0011FromDb } from '@/lib/director-report/from-db'
 import { previousQuarterKey } from '@/lib/director-report/local-0011'
 import { currentQuarterKeySp } from '@/lib/director-report/period'
 import type { QuarterKey } from '@/lib/director-report/types'
@@ -59,6 +59,12 @@ export async function GET(req: NextRequest) {
 
     if (req.nextUrl.searchParams.get('status') === '1') {
       const status = await listVisitCoverage()
+      const defaultSelected = previousQuarterKey(currentQuarterKeySp())
+      const defaultSelectedPrior = previousQuarterKey(defaultSelected)
+      const coverageByQuarter = new Map(status.coverage.map((c) => [c.period_key, c]))
+      const readyForDefault0011 =
+        isVisitCoverageReady(coverageByQuarter.get(defaultSelected)) &&
+        isVisitCoverageReady(coverageByQuarter.get(defaultSelectedPrior))
       const probe =
         req.nextUrl.searchParams.get('probe_0011') === '1' ||
         req.nextUrl.searchParams.get('probe_0011') === 'true'
@@ -79,6 +85,7 @@ export async function GET(req: NextRequest) {
       return ok({
         ...status,
         ready: status.coverage.some((c) => !c.truncated && c.row_count > 0),
+        ready_for_default_0011: readyForDefault0011,
         report_probe,
         note: probe
           ? 'Cobertura + probe 0011 do warehouse (Na lista / taxas).'

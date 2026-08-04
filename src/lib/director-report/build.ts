@@ -23,7 +23,7 @@ import {
   reportReferenceDate,
 } from './period'
 import { DIRECTOR_FLOOR_ROLES, listDirectorProfessionals } from './professionals'
-import type { DirectorReport, MonthKey, QuarterKey } from './types'
+import type { DirectorReport, DirectorReturnSource, MonthKey, QuarterKey } from './types'
 
 /** Evita jogar JSON bruto de validação Avec na UI (HTTP 400 salao_id etc.). */
 function shortenAvecWarning(w: string): string {
@@ -148,6 +148,7 @@ export async function buildDirectorReport(
         reference_date: '',
       },
       source: 'mock',
+      return_source: 'mock',
       avec_reports: { return: '0011', revenue: '0021' },
       schedule_note: 'Dados de demonstração (mock) — não usar para decisão',
       return_blocks,
@@ -176,6 +177,7 @@ export async function buildDirectorReport(
   let liveNote: string | null = null
   let live0011 = false
   let live0021 = false
+  let returnSource: DirectorReturnSource = 'none'
 
   if (!avecReady) {
     liveNote = 'Avec não configurada — sem dados inventados'
@@ -204,8 +206,10 @@ export async function buildDirectorReport(
         if (live.return_blocks !== null) {
           return_blocks = live.return_blocks
           live0011 = true
+          returnSource = live.return_source
         } else {
           return_blocks = []
+          returnSource = 'none'
         }
       }
       if (want0021) {
@@ -321,6 +325,7 @@ export async function buildDirectorReport(
       reference_date: '',
     },
     source,
+    return_source: returnSource,
     avec_reports: { return: '0011', revenue: '0021' },
     schedule_note:
       professionals.length === 0
