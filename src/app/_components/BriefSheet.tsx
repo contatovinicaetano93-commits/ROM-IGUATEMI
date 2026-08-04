@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { X, Sparkles, Copy, Check, ChevronRight, Hand, Scissors } from 'lucide-react'
 import { apiFetch } from '@/lib/api-client'
@@ -23,8 +23,53 @@ export function BriefSheet({ contactId, contactName, onClose, returnTo }: BriefS
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [seenId, setSeenId] = useState(contactId)
+  if (contactId !== seenId) {
+    setSeenId(contactId)
+    setBrief(null)
+    setLastVisit(null)
+    setManicurist(null)
+    setHairstylist(null)
+    setError(null)
+    setLoading(true)
+  }
 
-  const loadBrief = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const [briefRes, profileRes] = await Promise.all([
+          apiFetch(`/api/contacts/${contactId}/brief`, { cache: 'no-store' }),
+          apiFetch(`/api/contacts/${contactId}`, { cache: 'no-store' }),
+        ])
+        const json = await briefRes.json()
+        const profile = await profileRes.json()
+        if (cancelled) return
+        if (!briefRes.ok || json.error) {
+          setError(json.error ?? 'Não foi possível gerar o briefing')
+          setBrief(null)
+          return
+        }
+        setLastVisit(json.data?.last_visit ?? null)
+        setManicurist(profile.data?.contact?.preferred_manicurist ?? null)
+        setHairstylist(profile.data?.contact?.preferred_hairstylist ?? null)
+        if (json.data?.brief) {
+          setBrief({ text: json.data.brief, source: json.data.source })
+        } else {
+          setError('Resposta vazia do servidor')
+        }
+      } catch (e) {
+        if (!cancelled) setError(String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [contactId])
+
+  async function loadBrief() {
     setLoading(true)
     setError(null)
     try {
@@ -52,17 +97,7 @@ export function BriefSheet({ contactId, contactName, onClose, returnTo }: BriefS
     } finally {
       setLoading(false)
     }
-  }, [contactId])
-
-  useEffect(() => {
-    let cancelled = false
-    queueMicrotask(() => {
-      if (!cancelled) void loadBrief()
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [loadBrief])
+  }
 
   async function copyBrief() {
     if (!brief?.text) return

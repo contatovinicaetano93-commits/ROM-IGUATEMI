@@ -202,9 +202,16 @@ function ContactDetailPageContent() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [brief, setBrief] = useState<{ text: string; source: string } | null>(null)
-  const [briefLoading, setBriefLoading] = useState(false)
+  const [briefLoading, setBriefLoading] = useState(true)
   const [briefError, setBriefError] = useState<string | null>(null)
   const [briefCopied, setBriefCopied] = useState(false)
+  const [briefSeenId, setBriefSeenId] = useState(id)
+  if (id !== briefSeenId) {
+    setBriefSeenId(id)
+    setBrief(null)
+    setBriefError(null)
+    setBriefLoading(true)
+  }
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [scheduleFor, setScheduleFor] = useState<Service | null>(null)
@@ -280,27 +287,22 @@ function ContactDetailPageContent() {
   useEffect(() => {
     if (!id || loading || error) return
     let cancelled = false
-    queueMicrotask(() => {
-      if (cancelled) return
-      setBriefLoading(true)
-      setBriefError(null)
-      apiFetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
-        .then(async (r) => {
-          const json = await r.json()
-          if (cancelled) return
-          if (!r.ok || json.error) {
-            setBriefError(json.error ?? 'Não foi possível carregar o briefing')
-            return
-          }
-          if (json.data?.brief) setBrief({ text: json.data.brief, source: json.data.source })
-        })
-        .catch((e) => {
-          if (!cancelled) setBriefError(String(e))
-        })
-        .finally(() => {
-          if (!cancelled) setBriefLoading(false)
-        })
-    })
+    apiFetch(`/api/contacts/${id}/brief`, { cache: 'no-store' })
+      .then(async (r) => {
+        const json = await r.json()
+        if (cancelled) return
+        if (!r.ok || json.error) {
+          setBriefError(json.error ?? 'Não foi possível carregar o briefing')
+          return
+        }
+        if (json.data?.brief) setBrief({ text: json.data.brief, source: json.data.source })
+      })
+      .catch((e) => {
+        if (!cancelled) setBriefError(String(e))
+      })
+      .finally(() => {
+        if (!cancelled) setBriefLoading(false)
+      })
     return () => {
       cancelled = true
     }

@@ -244,11 +244,13 @@ export default function EstoquePage() {
   const [outflowWindow, setOutflowWindow] = useState<'hoje' | 'semana'>('semana')
   const [movementsOpen, setMovementsOpen] = useSectionOpen('estoque.section.movimentos.open', false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setDetailLoading(true)
-    setError(null)
-    setDetailError(null)
+  const load = useCallback(async (opts?: { reset?: boolean }) => {
+    if (opts?.reset) {
+      setLoading(true)
+      setDetailLoading(true)
+      setError(null)
+      setDetailError(null)
+    }
     try {
       // KPIs + alertas + status primeiro (acima da dobra); catálogo/movimentos depois.
       const [kpisRes, alertsRes, statusRes] = await Promise.all([
@@ -301,10 +303,7 @@ export default function EstoquePage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    queueMicrotask(() => {
-      if (!cancelled) void load()
-    })
+    void load()
     // Poll leve: só KPIs/alertas/status a cada 90s (não recarrega catálogo inteiro).
     const interval = setInterval(() => {
       void (async () => {
@@ -328,7 +327,6 @@ export default function EstoquePage() {
       })()
     }, 90_000)
     return () => {
-      cancelled = true
       clearInterval(interval)
     }
   }, [load])
@@ -393,7 +391,7 @@ export default function EstoquePage() {
 
   async function acknowledge(id: string) {
     await apiFetch(`/api/estoque/alertas/${id}`, { method: 'PATCH' })
-    load()
+    void load({ reset: true })
   }
 
   async function triggerSync() {
@@ -405,7 +403,7 @@ export default function EstoquePage() {
       if (!res.ok || json.error) {
         throw new Error(json.error ?? 'Falha no sync de estoque')
       }
-      await load()
+      await load({ reset: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -427,7 +425,7 @@ export default function EstoquePage() {
       if (!res.ok || json.error) {
         throw new Error(json.error ?? 'Falha ao continuar sync de estoque')
       }
-      await load()
+      await load({ reset: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -974,7 +972,7 @@ export default function EstoquePage() {
           onClose={() => setShowAdd(false)}
           onAdded={() => {
             setShowAdd(false)
-            load()
+            void load({ reset: true })
           }}
         />
       )}

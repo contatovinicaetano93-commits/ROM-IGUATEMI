@@ -51,9 +51,11 @@ export default function OnboardingPage() {
   const [playing, setPlaying] = useState<OnboardingVideo | null>(null)
   const [showAdd, setShowAdd] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (opts?: { reset?: boolean }) => {
+    if (opts?.reset) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const [pRes, vRes] = await Promise.all([
         apiFetch('/api/onboarding/pilares', { cache: 'no-store' }),
@@ -72,18 +74,15 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     let cancelled = false
-    queueMicrotask(() => {
-      if (cancelled) return
-      void load()
-      fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
-        .then((r) => r.json())
-        .then((json) => {
-          if (!cancelled) setIsAdmin(Boolean(json.data?.can_view_revenue))
-        })
-        .catch(() => {
-          if (!cancelled) setIsAdmin(false)
-        })
-    })
+    void load()
+    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
+      .then((r) => r.json())
+      .then((json) => {
+        if (!cancelled) setIsAdmin(Boolean(json.data?.can_view_revenue))
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false)
+      })
     return () => {
       cancelled = true
     }
@@ -223,7 +222,7 @@ export default function OnboardingPage() {
           onClose={() => setShowAdd(false)}
           onAdded={() => {
             setShowAdd(false)
-            load()
+            void load({ reset: true })
           }}
         />
       )}

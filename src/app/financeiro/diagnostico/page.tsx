@@ -46,9 +46,11 @@ export default function FinanceiroDiagnosticoPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (opts?: { reset?: boolean }) => {
+    if (opts?.reset) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const res = await apiFetch('/api/health', { cache: 'no-store', timeoutMs: 10_000 })
       const json = await res.json()
@@ -67,13 +69,7 @@ export default function FinanceiroDiagnosticoPage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    queueMicrotask(() => {
-      if (!cancelled) void load()
-    })
-    return () => {
-      cancelled = true
-    }
+    void load()
   }, [load])
 
   return (
@@ -87,7 +83,7 @@ export default function FinanceiroDiagnosticoPage() {
           <LogoutButton label="Sair" />
           <button
             type="button"
-            onClick={load}
+            onClick={() => void load({ reset: true })}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-2.5 text-sm font-semibold text-gold disabled:opacity-60"
           >

@@ -115,9 +115,11 @@ export default function AdminPage() {
   const [purging, setPurging] = useState(false)
   const [purgeMsg, setPurgeMsg] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setState('loading')
-    setError(null)
+  const load = useCallback(async (opts?: { reset?: boolean }) => {
+    if (opts?.reset) {
+      setState('loading')
+      setError(null)
+    }
     try {
       // Health primeiro — desbloqueia a página de diagnóstico sem esperar KPIs/contatos.
       const h = await apiFetch('/api/health', { cache: 'no-store', timeoutMs: 10_000 }).then((r) =>
@@ -163,13 +165,7 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    queueMicrotask(() => {
-      if (!cancelled) void load()
-    })
-    return () => {
-      cancelled = true
-    }
+    void load()
   }, [load])
 
   async function testAvec() {
@@ -323,7 +319,7 @@ export default function AdminPage() {
           <LogoutButton label="Sair" />
           <button
             type="button"
-            onClick={load}
+            onClick={() => void load({ reset: true })}
             disabled={state === 'loading'}
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-2.5 text-sm font-semibold text-gold disabled:opacity-60 lg:hover:bg-gold/15"
           >

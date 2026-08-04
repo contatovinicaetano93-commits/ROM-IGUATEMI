@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import {
   Plus,
   X,
@@ -141,8 +142,37 @@ function whatsappHrefFor(c: Contact): string | null {
   return whatsAppUrl(c.phone, text)
 }
 
+const URL_CHANNELS = new Set(['whatsapp', 'telegram', 'instagram', 'manual', 'avec'])
+const URL_STATUSES = new Set(['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido'])
+
+function initialModeFromSearch(searchParams: URLSearchParams): ListMode {
+  if (searchParams.get('queue') === 'novos') return 'novos'
+  const ch = searchParams.get('channel')?.trim().toLowerCase() ?? ''
+  const st = searchParams.get('status')?.trim().toLowerCase() ?? ''
+  if (URL_CHANNELS.has(ch) || URL_STATUSES.has(st)) return 'search'
+  return 'reactivate'
+}
+
 export default function ContatosPage() {
-  const [mode, setMode] = useState<ListMode>('reactivate')
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6">
+          <div className="h-8 w-48 animate-pulse rounded-xl bg-card" />
+          <div className="h-12 w-full animate-pulse rounded-2xl bg-card" />
+          <div className="h-64 w-full animate-pulse rounded-2xl bg-card" />
+        </main>
+      }
+    >
+      <ContatosPageContent />
+    </Suspense>
+  )
+}
+
+function ContatosPageContent() {
+  const searchParams = useSearchParams()
+  const [ignoreUrlFilters, setIgnoreUrlFilters] = useState(false)
+  const [mode, setMode] = useState<ListMode>(() => initialModeFromSearch(searchParams))
   const [queue, setQueue] = useState<ReactivateQueue>('overdue')
   const [contacts, setContacts] = useState<Contact[]>([])
   const [queueCounts, setQueueCounts] = useState<{
@@ -158,40 +188,21 @@ export default function ContatosPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [novosDay, setNovosDay] = useState<string | null>(null)
-  /** Deep-link Hoje WA: ?channel=whatsapp&status=novo (não é a fila Novos Avec). */
-  const [urlChannel, setUrlChannel] = useState<string | null>(null)
-  const [urlStatus, setUrlStatus] = useState<string | null>(null)
-  const [urlQueueReady, setUrlQueueReady] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    queueMicrotask(() => {
-      if (cancelled) return
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('queue') === 'novos') setMode('novos')
-      const day = params.get('day')
-      if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) setNovosDay(day)
-      const ch = params.get('channel')?.trim().toLowerCase() ?? ''
-      const st = params.get('status')?.trim().toLowerCase() ?? ''
-      if (ch === 'whatsapp' || ch === 'telegram' || ch === 'instagram' || ch === 'manual' || ch === 'avec') {
-        setUrlChannel(ch)
-        setMode('search')
-      }
-      if (st === 'novo' || st === 'em_atendimento' || st === 'agendado' || st === 'convertido' || st === 'perdido') {
-        setUrlStatus(st)
-        if (!params.get('queue')) setMode('search')
-      }
-      setUrlQueueReady(true)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const dayParam = searchParams.get('day')
+  const novosDay =
+    dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : null
+  const channelParam = searchParams.get('channel')?.trim().toLowerCase() ?? ''
+  const statusParam = searchParams.get('status')?.trim().toLowerCase() ?? ''
+  /** Deep-link Hoje WA: ?channel=whatsapp&status=novo (não é a fila Novos Avec). */
+  const urlChannel =
+    !ignoreUrlFilters && URL_CHANNELS.has(channelParam) ? channelParam : null
+  const urlStatus =
+    !ignoreUrlFilters && URL_STATUSES.has(statusParam) ? statusParam : null
 
   function selectMode(next: ListMode) {
-    setUrlChannel(null)
-    setUrlStatus(null)
+    setIgnoreUrlFilters(true)
+    setLoading(true)
     setMode(next)
   }
 
@@ -200,84 +211,79 @@ export default function ContatosPage() {
     return () => window.clearTimeout(t)
   }, [query])
 
-  async function load() {
-    setLoading(true)
-    try {
-      const hasUrlFilter = Boolean(urlChannel || urlStatus)
-      if (mode === 'search' && !debouncedQuery && !hasUrlFilter) {
-        setError(null)
-        setContacts([])
-        setTotalInBase(null)
-        // Ainda puxa contagem de novos para o card.
-        const countsRes = await apiFetch('/api/contacts?counts=1', { cache: 'no-store' })
-        const countsJson = await countsRes.json()
-        const q = countsJson.meta?.queues
-        if (countsJson.meta?.sync) setSyncMeta(countsJson.meta.sync as ContactsSyncMeta)
-        if (q && typeof q.novos === 'number') {
-          setQueueCounts((prev) => ({
-            overdue: typeof q.overdue === 'number' ? q.overdue : prev.overdue,
-            due_soon: typeof q.due_soon === 'number' ? q.due_soon : prev.due_soon,
-            scheduled: typeof q.scheduled === 'number' ? q.scheduled : prev.scheduled,
-            novos: q.novos,
-          }))
-        }
-        return
-      }
-      const params = new URLSearchParams({
-        sort: mode === 'novos' ? 'name' : mode === 'search' && hasUrlFilter ? 'name' : 'urgency',
-        limit: mode === 'search' ? '100' : '250',
-      })
-      if (mode === 'reactivate') {
-        params.set('pending', 'true')
-        params.set('queue', queue)
-      } else if (mode === 'novos') {
-        params.set('queue', 'novos')
-        if (novosDay) params.set('day', novosDay)
-      } else {
-        if (debouncedQuery) params.set('q', debouncedQuery)
-        if (urlChannel) params.set('channel', urlChannel)
-        if (urlStatus) params.set('status', urlStatus)
-        if (hasUrlFilter) params.set('limit', '250')
-      }
-      const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
-      const json = await res.json()
-      if (json.error) setError(json.error)
-      else {
-        setError(null)
-        if (json.meta?.sync) setSyncMeta(json.meta.sync as ContactsSyncMeta)
-        setContacts(json.data ?? [])
-        const total = json.meta?.total
-        setTotalInBase(typeof total === 'number' ? total : null)
-        const q = json.meta?.queues
-        if (q && typeof q.overdue === 'number') {
-          setQueueCounts({
-            overdue: q.overdue,
-            due_soon: q.due_soon,
-            scheduled: q.scheduled,
-            novos: typeof q.novos === 'number' ? q.novos : 0,
-          })
-        } else if (mode === 'novos' && typeof total === 'number') {
-          setQueueCounts((prev) => ({ ...prev, novos: total }))
-        }
-      }
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    if (!urlQueueReady) return
     let cancelled = false
-    queueMicrotask(() => {
-      if (!cancelled) void load()
-    })
+    void (async () => {
+      try {
+        const hasUrlFilter = Boolean(urlChannel || urlStatus)
+        if (mode === 'search' && !debouncedQuery && !hasUrlFilter) {
+          // Ainda puxa contagem de novos para o card.
+          const countsRes = await apiFetch('/api/contacts?counts=1', { cache: 'no-store' })
+          const countsJson = await countsRes.json()
+          if (cancelled) return
+          setError(null)
+          setContacts([])
+          setTotalInBase(null)
+          const q = countsJson.meta?.queues
+          if (countsJson.meta?.sync) setSyncMeta(countsJson.meta.sync as ContactsSyncMeta)
+          if (q && typeof q.novos === 'number') {
+            setQueueCounts((prev) => ({
+              overdue: typeof q.overdue === 'number' ? q.overdue : prev.overdue,
+              due_soon: typeof q.due_soon === 'number' ? q.due_soon : prev.due_soon,
+              scheduled: typeof q.scheduled === 'number' ? q.scheduled : prev.scheduled,
+              novos: q.novos,
+            }))
+          }
+          return
+        }
+        const params = new URLSearchParams({
+          sort: mode === 'novos' ? 'name' : mode === 'search' && hasUrlFilter ? 'name' : 'urgency',
+          limit: mode === 'search' ? '100' : '250',
+        })
+        if (mode === 'reactivate') {
+          params.set('pending', 'true')
+          params.set('queue', queue)
+        } else if (mode === 'novos') {
+          params.set('queue', 'novos')
+          if (novosDay) params.set('day', novosDay)
+        } else {
+          if (debouncedQuery) params.set('q', debouncedQuery)
+          if (urlChannel) params.set('channel', urlChannel)
+          if (urlStatus) params.set('status', urlStatus)
+          if (hasUrlFilter) params.set('limit', '250')
+        }
+        const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
+        const json = await res.json()
+        if (cancelled) return
+        if (json.error) setError(json.error)
+        else {
+          setError(null)
+          if (json.meta?.sync) setSyncMeta(json.meta.sync as ContactsSyncMeta)
+          setContacts(json.data ?? [])
+          const total = json.meta?.total
+          setTotalInBase(typeof total === 'number' ? total : null)
+          const q = json.meta?.queues
+          if (q && typeof q.overdue === 'number') {
+            setQueueCounts({
+              overdue: q.overdue,
+              due_soon: q.due_soon,
+              scheduled: q.scheduled,
+              novos: typeof q.novos === 'number' ? q.novos : 0,
+            })
+          } else if (mode === 'novos' && typeof total === 'number') {
+            setQueueCounts((prev) => ({ ...prev, novos: total }))
+          }
+        }
+      } catch (e) {
+        if (!cancelled) setError(String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, debouncedQuery, queue, urlQueueReady, novosDay, urlChannel, urlStatus])
+  }, [mode, debouncedQuery, queue, novosDay, urlChannel, urlStatus])
 
   const visible = contacts
   const hasUrlFilter = Boolean(urlChannel || urlStatus)
@@ -408,7 +414,10 @@ export default function ContatosPage() {
                 <button
                   key={q.id}
                   type="button"
-                  onClick={() => setQueue(q.id)}
+                  onClick={() => {
+                    setLoading(true)
+                    setQueue(q.id)
+                  }}
                   aria-pressed={active}
                   className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors ${
                     active
@@ -499,7 +508,11 @@ export default function ContatosPage() {
               {(mode === 'reactivate' || mode === 'novos') && (
                 <button
                   type="button"
-                  onClick={() => setMode('search')}
+                  onClick={() => {
+                    setIgnoreUrlFilters(true)
+                    setLoading(true)
+                    setMode('search')
+                  }}
                   className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-gold"
                 >
                   Buscar contato
@@ -609,6 +622,8 @@ export default function ContatosPage() {
         <NewContactSheet
           onClose={() => setFormOpen(false)}
           onCreated={(createdName) => {
+            setIgnoreUrlFilters(true)
+            setLoading(true)
             setMode('search')
             setQuery(createdName)
             setDebouncedQuery(createdName.trim())
