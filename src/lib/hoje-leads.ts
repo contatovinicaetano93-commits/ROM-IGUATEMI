@@ -1,9 +1,9 @@
 import { getSql } from '@/lib/db'
 
 /**
- * Contatos novos do dia (Hoje KPI) — paridade com filtro Contatos Novos em main
- * (`countNewContactsNotInAvec`), mas fixo na janela de 1 dia (não herda 30d de
- * feat/contatos-novos-data).
+ * Contatos novos do dia (Hoje KPI) — paridade com filtro Contatos Novos
+ * (`countNewContactsNotInAvec`), mas fixo na janela de 1 dia (não herda 30d).
+ * Inclui a exclusão de quem já entrou no funil de cadência.
  */
 export async function countNovosHoje(day: string): Promise<number> {
   const sql = getSql()
@@ -21,6 +21,14 @@ export async function countNovosHoje(day: string): Promise<number> {
       and coalesce(source, '') not like 'avec_sync_returning%'
       and created_at >= (${day}::date::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
+      and not exists (
+        select 1
+        from client_services cs
+        where cs.contact_id = contacts.id
+          and cs.active = true
+          and cs.last_done_at is not null
+          and cs.cadence_days is not null
+      )
   `) as { n: number }[]
   return Number(rows[0]?.n ?? 0) || 0
 }
