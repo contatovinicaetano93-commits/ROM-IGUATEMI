@@ -57,6 +57,10 @@
       "schedule": "40 */2 * * *"
     },
     {
+      "path": "/api/reminders/financeiro",
+      "schedule": "5 12 * * 1"
+    },
+    {
       "path": "/api/financeiro/omie/sync",
       "schedule": "45 8 * * *"
     }
