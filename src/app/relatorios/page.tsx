@@ -33,9 +33,11 @@ export default function RelatoriosOverviewPage() {
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState<'csv' | 'pdf' | null>(null)
 
-  const load = useCallback(async (opts?: { materialize?: boolean }) => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (opts?: { materialize?: boolean; reset?: boolean }) => {
+    if (opts?.reset || opts?.materialize) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const q = new URLSearchParams({ month })
       // Leitura rápida por padrão; "Atualizar fechamento" rematerializa o mês.
@@ -101,7 +103,15 @@ export default function RelatoriosOverviewPage() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-[0.65rem] uppercase tracking-wide text-muted">Mês</span>
-            <MonthYearField value={month} onChange={setMonth} aria-label="Mês do overview" />
+            <MonthYearField
+              value={month}
+              onChange={(m) => {
+                setLoading(true)
+                setError(null)
+                setMonth(m)
+              }}
+              aria-label="Mês do overview"
+            />
           </label>
           <button
             type="button"

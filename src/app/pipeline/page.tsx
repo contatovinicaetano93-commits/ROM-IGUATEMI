@@ -129,7 +129,8 @@ export default function PipelinePage() {
 
   const load = useCallback(async (opts?: { fresh?: boolean; silent?: boolean }) => {
     const silent = opts?.silent === true
-    if (!silent) {
+    // setLoading only on user refresh (event handler path) — not on mount/effect.
+    if (opts?.fresh) {
       setLoading(true)
       setError(null)
     }

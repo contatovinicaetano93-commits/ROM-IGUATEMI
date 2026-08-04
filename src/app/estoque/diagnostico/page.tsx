@@ -50,9 +50,11 @@ export default function EstoqueDiagnosticoPage() {
   const [syncing, setSyncing] = useState<'fast' | 'full' | null>(null)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (opts?: { reset?: boolean }) => {
+    if (opts?.reset) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const [healthRes, statusRes] = await Promise.all([
         apiFetch('/api/health', { cache: 'no-store', timeoutMs: 12_000 }),
@@ -70,7 +72,7 @@ export default function EstoqueDiagnosticoPage() {
   }, [])
 
   useEffect(() => {
-    load()
+    void load()
   }, [load])
 
   async function runSync(mode: 'fast' | 'full') {
@@ -100,7 +102,7 @@ export default function EstoqueDiagnosticoPage() {
           <LogoutButton label="Sair" />
           <button
             type="button"
-            onClick={load}
+            onClick={() => void load({ reset: true })}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 px-4 py-2.5 text-sm font-semibold text-gold disabled:opacity-60"
           >
