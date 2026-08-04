@@ -27,6 +27,10 @@ describe('countNovosHoje', () => {
     expect(sqlText).toMatch(/avec_sync_clients%/i)
     expect(sqlText).toMatch(/avec_backfill%/i)
     expect(sqlText).toMatch(/avec_lake%/i)
+    expect(sqlText).toMatch(/not exists/i)
+    expect(sqlText).toMatch(/client_services/i)
+    expect(sqlText).toMatch(/last_done_at\s+is\s+not\s+null/i)
+    expect(sqlText).toMatch(/cadence_days\s+is\s+not\s+null/i)
   })
 })
 

@@ -282,7 +282,9 @@ export default function ContatosPage() {
           }`
         : 'busque na base'
       : mode === 'novos'
-        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} hoje (sem cliente Avec)`
+        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} nos últimos ${NOVOS_WINDOW_DAYS} dias (sem cliente Avec)${
+            totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
+          }`
         : `${visible.length} na fila${
             totalInBase != null && totalInBase > visible.length ? ` · ${totalInBase} no total` : ''
           }`
