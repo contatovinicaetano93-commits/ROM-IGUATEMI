@@ -307,6 +307,8 @@ export async function buildDirectorReport(
         })
   const totalRev = selectedRevenue.reduce((s, r) => s + r.revenue, 0)
   const totalAtt = selectedRevenue.reduce((s, r) => s + r.attended, 0)
+  // want0021 com revenue_blocks vazio (timeout/erro) → null, não 0 do reduce vazio.
+  const hasRevenueData = want0021 && revenue_blocks.length > 0
 
   const returnRates = return_blocks
     .map((b) => {
@@ -348,9 +350,9 @@ export async function buildDirectorReport(
         returnRates.length > 0
           ? returnRates.reduce((a, b) => a + b, 0) / returnRates.length
           : null,
-      total_revenue_selected_month: want0021 ? totalRev : null,
+      total_revenue_selected_month: hasRevenueData ? totalRev : null,
       avg_ticket_selected_month:
-        want0021 && totalAtt > 0 ? Math.round(totalRev / totalAtt) : null,
+        hasRevenueData && totalAtt > 0 ? Math.round(totalRev / totalAtt) : null,
     },
   }
 

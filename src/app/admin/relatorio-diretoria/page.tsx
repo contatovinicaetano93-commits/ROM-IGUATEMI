@@ -1053,12 +1053,15 @@ export default function RelatorioDiretoriaPage() {
               value={
                 loading
                   ? '—'
-                  : formatCurrency(
-                      selectedRevenue.reduce(
-                        (s, r) => s + (compareMonths ? (r.newer?.revenue ?? 0) : (r.focus?.revenue ?? 0)),
-                        0
+                  : (() => {
+                      const amounts = selectedRevenue
+                        .map((r) => (compareMonths ? r.newer?.revenue : r.focus?.revenue))
+                        .filter((v): v is number => v != null)
+                      // Sem blocos 0021 (timeout/erro) → null → "—", nunca R$ 0,00.
+                      return formatCurrency(
+                        amounts.length === 0 ? null : amounts.reduce((s, v) => s + v, 0),
                       )
-                    )
+                    })()
               }
             />
             <Kpi
