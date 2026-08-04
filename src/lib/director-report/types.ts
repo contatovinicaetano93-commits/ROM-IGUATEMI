@@ -66,7 +66,7 @@ export interface ProfessionalRevenueBlock {
 }
 
 export type DirectorReportStage = '0011' | '0021' | 'all'
-export type DirectorReturnSource = 'mock' | 'db' | 'local' | 'avec' | 'none'
+export type DirectorReturnSource = 'mock' | 'db' | 'local' | 'avec' | 'none' | 'mixed'
 
 export interface DirectorReportPeriod {
   selected_month: MonthKey
