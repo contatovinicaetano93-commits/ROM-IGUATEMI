@@ -1,5 +1,4 @@
 import * as Sentry from '@sentry/nextjs'
-import { scheduleBootMigrations, shouldRunBootMigrations } from './lib/boot-migrations'
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
@@ -7,6 +6,8 @@ export async function register() {
 
     // Pipeline de schema — fire-and-forget no boot local; skip no Vercel (cron hot path).
     // Admin: POST /api/admin/migrations · deploy: npm run db:migrate
+    // Dynamic import keeps migrations/db/fs out of Edge instrumentation + middleware bundle.
+    const { scheduleBootMigrations, shouldRunBootMigrations } = await import('./lib/boot-migrations')
     if (shouldRunBootMigrations()) {
       scheduleBootMigrations()
     }

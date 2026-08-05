@@ -1,6 +1,6 @@
 import 'server-only'
-import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, existsSync } from 'fs'
+import { join } from 'path'
 import postgres, { type Sql as PostgresSql } from 'postgres'
 import { DEPLOY_DATABASE_URL } from '@/lib/db-url.generated'
 
