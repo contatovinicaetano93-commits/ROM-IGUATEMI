@@ -1425,6 +1425,32 @@ async function runAvecSyncUnlocked(
   step(`begin ${run.id}`)
 
   try {
+    // Catalog-only: se o dump 0004 já rodou nas últimas 20h, evita heal+lock pesado
+    // (cron 2×/dia ainda acorda a fatia — sai cedo com purge leve).
+    if (runCatalog && !runOps && !runAgenda) {
+      const dumpClients = await shouldSyncClientCatalog()
+      if (!dumpClients) {
+        stats.warnings.push(
+          'Catálogo 0004 adiado — já sincronizado nas últimas 20h (DB leve; force com AVEC_SYNC_CLIENTS=1)',
+        )
+        try {
+          await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
+        } catch {
+          /* ignore */
+        }
+        step('catalog deferred')
+        const finished = await finishAvecSyncRun(run.id, 'ok', stats)
+        await logEvent({
+          contactId: null,
+          channel: 'avec',
+          direction: 'in',
+          handledBy: 'system',
+          payload: { avec_sync: stats, status: 'ok', mode },
+        })
+        return finished
+      }
+    }
+
     await healImportadoStatus(stats)
     step('healed')
     // Catálogo 0004 só depois do core (P1/agenda/caixa) — não pode comer o budget primeiro.
