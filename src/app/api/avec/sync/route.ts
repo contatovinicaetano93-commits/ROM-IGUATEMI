@@ -52,10 +52,10 @@ export async function GET(req: NextRequest) {
       cron: {
         fast: { schedule: '10,30,50 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: {
-          schedule: 'ops/agenda 2×/dia + retry horário (offset BR); catalog só 2×/dia',
+          schedule: 'ops/agenda/catalog 2×/dia (offset BR: ops :35/:55, catalog :10 11,23 UTC)',
           mode: 'full',
           path: '/api/avec/sync/full/{ops,agenda,catalog}',
-          note: 'ops/agenda — retry horário com min-gap (5h ok / 45m partial·error); catalog sem retry horário (dump 0004 + 20h gap); /full monolítico só admin',
+          note: 'min-gap 5h ok / 45m partial·error; catalog dump 0004 + 20h gap; /full monolítico só admin',
         },
         estoque_fast: { schedule: '5 * * * *', path: '/api/estoque/sync' },
         estoque_full: { schedule: '55 11 * * *', path: '/api/estoque/sync?mode=full' },
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
         },
         token: { schedule: '30 */3 * * *', path: '/api/avec/refresh-token' },
         cadence:
-          'fast ~20 min (offset BR) · ops/agenda 2×/dia + retry horário · catalog 2×/dia · estoque horário · token 3h · purge diário — webhook só fast',
+          'fast ~20 min (offset BR) · ops/agenda/catalog 2×/dia · director-visits 2×/dia · estoque horário · token 3h · purge diário — webhook só fast',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),
