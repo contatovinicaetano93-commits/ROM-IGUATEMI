@@ -9,7 +9,7 @@ import { aggregateLocal0011ByPro, previousQuarterKey } from './local-0011'
 import type { Local0011Agg, Local0011QuarterResult } from './local-0011'
 import { labelQuarter } from './period'
 import { listDirectorReportProfessionals } from './professionals'
-import type { DirectorProfessional, QuarterKey } from './types'
+import type { DirectorProfessional, MonthKey, QuarterKey } from './types'
 
 type DbVisitRow = {
   client_key: string
@@ -320,5 +320,103 @@ export async function probe0011FromDb(
       na_lista_soma_pros: compare.na_lista_soma_pros,
       na_lista_unicos: compare.na_lista_unicos,
     },
+  }
+}
+
+/** Linha agregada 0021 por profissional (warehouse mensal). */
+export type Director0021ProfessionalRow = {
+  name: string
+  revenue: number
+  attended: number
+  ticket_avg: number
+}
+
+export type Month0021Coverage = {
+  month: MonthKey
+  row_count: number
+  truncated: boolean
+  synced_at: string
+}
+
+export function is0021MonthCoverageReady(cov: Month0021Coverage | null | undefined): boolean {
+  if (!cov) return false
+  if (cov.truncated) return false
+  return cov.row_count > 0
+}
+
+export async function get0021MonthCoverage(month: MonthKey): Promise<Month0021Coverage | null> {
+  try {
+    const sql = getSql()
+    const rows = (await sql`
+      select month, row_count, truncated, synced_at::text as synced_at
+      from salon_director_0021_months
+      where month = ${month}
+      limit 1
+    `) as Month0021Coverage[]
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
+
+/** Status operacional: todos os meses 0021 já sincronizados. */
+export async function list0021MonthCoverage(): Promise<{
+  coverage: Month0021Coverage[]
+  month_rows: number
+}> {
+  try {
+    const sql = getSql()
+    const coverage = (await sql`
+      select month, row_count, truncated, synced_at::text as synced_at
+      from salon_director_0021_months
+      order by month
+    `) as Month0021Coverage[]
+    const cnt = (await sql`
+      select count(*)::int as n from salon_director_0021_months
+    `) as { n: number }[]
+    return { coverage, month_rows: cnt[0]?.n ?? 0 }
+  } catch {
+    return { coverage: [], month_rows: 0 }
+  }
+}
+
+function map0021Professionals(
+  rows: Director0021ProfessionalRow[],
+): Map<string, { revenue: number; attended: number; ticketAvg: number }> {
+  const byName = new Map<string, { revenue: number; attended: number; ticketAvg: number }>()
+  for (const row of rows) {
+    if (!row.name) continue
+    const cur = byName.get(row.name) ?? { revenue: 0, attended: 0, ticketAvg: 0 }
+    cur.revenue += row.revenue
+    cur.attended += row.attended
+    cur.ticketAvg = cur.attended > 0 ? cur.revenue / cur.attended : row.ticket_avg
+    byName.set(row.name, cur)
+  }
+  return byName
+}
+
+/**
+ * Lê 0021 do warehouse quando cobertura pronta (não truncada, row_count>0).
+ * null = caller deve usar Avec live.
+ */
+export async function tryFetch0021MonthFromDb(
+  month: MonthKey,
+): Promise<Map<string, { revenue: number; attended: number; ticketAvg: number }> | null> {
+  const cov = await get0021MonthCoverage(month)
+  if (!is0021MonthCoverageReady(cov)) return null
+
+  try {
+    const sql = getSql()
+    const rows = (await sql`
+      select professionals
+      from salon_director_0021_months
+      where month = ${month}
+      limit 1
+    `) as { professionals: Director0021ProfessionalRow[] | null }[]
+    const pros = rows[0]?.professionals
+    if (!Array.isArray(pros) || pros.length === 0) return null
+    return map0021Professionals(pros)
+  } catch {
+    return null
   }
 }
