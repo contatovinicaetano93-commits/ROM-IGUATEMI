@@ -1,34 +1,14 @@
 import * as Sentry from '@sentry/nextjs'
-import { Logger } from './lib/logger'
-
-const logger = new Logger('Boot')
+import { scheduleBootMigrations, shouldRunBootMigrations } from './lib/boot-migrations'
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     await import('./sentry.server.config')
 
-    // Pipeline de schema — aplica deltas pendentes no boot (idempotente).
-    // NÃO await: CONNECT_TIMEOUT / lock no pooler Supabase não pode atrasar
-    // o cold start de /api/avec/sync e /api/kpis/dashboard (504 → Safari SyntaxError).
-    // Falha não derruba o processo; admin pode reexecutar em POST /api/admin/migrations.
-    if (process.env.DATABASE_URL && process.env.ROM_SKIP_BOOT_MIGRATIONS !== '1') {
-      void (async () => {
-        try {
-          const { runPendingMigrations } = await import('./lib/migrations')
-          const summary = await runPendingMigrations()
-          if (summary.lockBusy) {
-            logger.info('Boot migrations skipped — lock busy', { failed: summary.failed })
-          } else if (summary.failed) {
-            logger.error('Boot migrations failed', { failed: summary.failed })
-          } else if (summary.applied.length > 0) {
-            logger.info('Boot migrations applied', { applied: summary.applied })
-          }
-        } catch (e) {
-          logger.error('Boot migrations error', {
-            error: e instanceof Error ? e.message : String(e),
-          })
-        }
-      })()
+    // Pipeline de schema — fire-and-forget no boot local; skip no Vercel (cron hot path).
+    // Admin: POST /api/admin/migrations · deploy: npm run db:migrate
+    if (shouldRunBootMigrations()) {
+      scheduleBootMigrations()
     }
   }
 
