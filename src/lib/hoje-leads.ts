@@ -2,9 +2,9 @@ import { getSql } from '@/lib/db'
 import { DUE_SOON_DAYS } from '@/lib/salon/constants'
 
 /**
- * Contatos novos do dia (Hoje KPI) — paridade com filtro Contatos Novos
- * (`countNewContactsNotInAvec`), mas fixo na janela de 1 dia (não herda 30d).
- * Inclui a mesma exclusão de quem já conta em Vencendo/Atrasados.
+ * Contatos novos do dia (Hoje KPI) — paridade com Contatos Novos
+ * (`countNewContactsNotInAvec`): `avec_client_id` null, exclui só `importado`
+ * (dump). Convertidos/atendidos na janela continuam contando. Janela fixa de 1 dia.
  */
 export async function countNovosHoje(day: string): Promise<number> {
   const sql = getSql()
@@ -14,7 +14,7 @@ export async function countNovosHoje(day: string): Promise<number> {
     where anonymized_at is null
       and channel = 'avec'
       and avec_client_id is null
-      and status = 'novo'
+      and status <> 'importado'
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
@@ -38,7 +38,7 @@ export async function countNovosHoje(day: string): Promise<number> {
 
 /**
  * WhatsApp novos do dia (Hoje KPI).
- * Mesmas exclusões de dump que Contatos Novos; mantém canal whatsapp + status novo.
+ * Mesmas exclusões de dump; só `importado` sai — convertidos permanecem.
  */
 export async function countWhatsappNovosToday(day: string): Promise<number> {
   const sql = getSql()
@@ -47,7 +47,7 @@ export async function countWhatsappNovosToday(day: string): Promise<number> {
     from contacts
     where anonymized_at is null
       and channel = 'whatsapp'
-      and status = 'novo'
+      and status <> 'importado'
       and avec_client_id is null
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
