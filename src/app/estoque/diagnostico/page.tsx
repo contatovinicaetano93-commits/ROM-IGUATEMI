@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { SectionCard, PrimaryButton } from '../../_components/ui'
 import { LogoutButton } from '../../_components/LogoutButton'
 import { apiFetch } from '@/lib/api-client'
+import { useClientLoader } from '@/lib/use-client-loader'
 
 interface StockSyncRun {
   status: 'ok' | 'error' | 'partial'
@@ -71,9 +72,7 @@ export default function EstoqueDiagnosticoPage() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useClientLoader(() => void load(), [load])
 
   async function runSync(mode: 'fast' | 'full') {
     setSyncing(mode)

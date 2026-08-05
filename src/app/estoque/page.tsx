@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Plus,
   X,
@@ -24,6 +24,8 @@ import {
   useSectionOpen,
 } from '../_components/CollapsibleSection'
 import { apiFetch } from '@/lib/api-client'
+import { useClientLoader } from '@/lib/use-client-loader'
+import { useLiveRefresh } from '@/lib/use-live-refresh'
 import { formatCurrency } from '@/lib/salon/format'
 import {
   deriveAvecSyncUi,
@@ -150,8 +152,8 @@ function SyncBadge({ status }: { status: SyncStatus | null }) {
   const ui = deriveAvecSyncUi({
     configured: status.configured,
     last: run,
-    // Cron estoque IG = a cada 4h — não marcar stale antes disso.
-    staleAfterMs: 5 * 60 * 60 * 1000,
+    // Cron estoque IG = a cada 3h — não marcar stale antes disso.
+    staleAfterMs: 4 * 60 * 60 * 1000,
   })
   return <CountBadge value={ui.label} tone={ui.tone} />
 }
@@ -252,12 +254,10 @@ export default function EstoquePage() {
       setDetailError(null)
     }
     try {
-      // KPIs + alertas + status primeiro (acima da dobra); catálogo/movimentos depois.
-      const [kpisRes, alertsRes, statusRes] = await Promise.all([
-        apiFetch('/api/estoque/kpis', { cache: 'no-store', timeoutMs: 20_000 }),
-        apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store', timeoutMs: 15_000 }),
-        apiFetch('/api/estoque/sync/status', { cache: 'no-store', timeoutMs: 10_000 }),
-      ])
+      // Lotes pequenos: 7 Promise.all no pooler (max:1) deixavam Estoque lento / falho.
+      const kpisRes = await apiFetch('/api/estoque/kpis', { cache: 'no-store', timeoutMs: 20_000 })
+      const alertsRes = await apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store', timeoutMs: 15_000 })
+      const statusRes = await apiFetch('/api/estoque/sync/status', { cache: 'no-store', timeoutMs: 10_000 })
       const [kpisJson, alertsJson, statusJson] = await Promise.all([
         kpisRes.json(),
         alertsRes.json(),
@@ -270,24 +270,19 @@ export default function EstoquePage() {
       setLoading(false)
 
       try {
-        const [movRes, prodRes, catRes, brandRes] = await Promise.all([
-          apiFetch('/api/estoque/movimentos', { cache: 'no-store', timeoutMs: 20_000 }),
-          apiFetch('/api/estoque/produtos', { cache: 'no-store', timeoutMs: 25_000 }),
-          apiFetch('/api/estoque/categorias', { cache: 'no-store', timeoutMs: 10_000 }),
-          apiFetch('/api/estoque/marcas', { cache: 'no-store', timeoutMs: 10_000 }),
-        ])
-        const [movJson, prodJson, catJson, brandJson] = await Promise.all([
-          movRes.json(),
-          prodRes.json(),
-          catRes.json(),
-          brandRes.json(),
-        ])
-        const detailErrs = [movJson.error, prodJson.error, catJson.error, brandJson.error].filter(
-          Boolean,
-        )
-        if (detailErrs.length) setDetailError(String(detailErrs[0]))
+        const movRes = await apiFetch('/api/estoque/movimentos', { cache: 'no-store', timeoutMs: 20_000 })
+        const prodRes = await apiFetch('/api/estoque/produtos', { cache: 'no-store', timeoutMs: 25_000 })
+        const [movJson, prodJson] = await Promise.all([movRes.json(), prodRes.json()])
+        if (movJson.error) throw new Error(movJson.error)
+        if (prodJson.error) throw new Error(prodJson.error)
         setMovements(movJson.data ?? [])
         setProducts(prodJson.data ?? [])
+
+        const catRes = await apiFetch('/api/estoque/categorias', { cache: 'no-store', timeoutMs: 10_000 })
+        const brandRes = await apiFetch('/api/estoque/marcas', { cache: 'no-store', timeoutMs: 10_000 })
+        const [catJson, brandJson] = await Promise.all([catRes.json(), brandRes.json()])
+        const detailErrs = [catJson.error, brandJson.error].filter(Boolean)
+        if (detailErrs.length) setDetailError(String(detailErrs[0]))
         setCategories(catJson.data ?? [])
         setBrands(brandJson.data ?? [])
       } catch (e) {
@@ -302,34 +297,28 @@ export default function EstoquePage() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-    // Poll leve: só KPIs/alertas/status a cada 90s (não recarrega catálogo inteiro).
-    const interval = setInterval(() => {
-      void (async () => {
-        try {
-          const [kpisRes, alertsRes, statusRes] = await Promise.all([
-            apiFetch('/api/estoque/kpis', { cache: 'no-store', timeoutMs: 20_000 }),
-            apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store', timeoutMs: 15_000 }),
-            apiFetch('/api/estoque/sync/status', { cache: 'no-store', timeoutMs: 10_000 }),
-          ])
-          const [kpisJson, alertsJson, statusJson] = await Promise.all([
-            kpisRes.json(),
-            alertsRes.json(),
-            statusRes.json(),
-          ])
-          if (!kpisJson.error) setKpis(kpisJson.data)
-          setAlerts(alertsJson.data ?? [])
-          setSyncStatus(statusJson.data ?? null)
-        } catch {
-          // silencioso no poll
-        }
-      })()
-    }, 90_000)
-    return () => {
-      clearInterval(interval)
+  const pollKpis = useCallback(async () => {
+    try {
+      const kpisRes = await apiFetch('/api/estoque/kpis', { cache: 'no-store', timeoutMs: 20_000 })
+      const alertsRes = await apiFetch('/api/estoque/alertas?status=ativo', { cache: 'no-store', timeoutMs: 15_000 })
+      const statusRes = await apiFetch('/api/estoque/sync/status', { cache: 'no-store', timeoutMs: 10_000 })
+      const [kpisJson, alertsJson, statusJson] = await Promise.all([
+        kpisRes.json(),
+        alertsRes.json(),
+        statusRes.json(),
+      ])
+      if (!kpisJson.error) setKpis(kpisJson.data)
+      setAlerts(alertsJson.data ?? [])
+      setSyncStatus(statusJson.data ?? null)
+    } catch {
+      // silencioso no poll
     }
-  }, [load])
+  }, [])
+
+  useClientLoader(() => void load(), [load])
+  useLiveRefresh(() => {
+    void pollKpis()
+  }, 90_000)
 
   const purchaseQueue = useMemo(() => sortPurchaseQueue(alerts), [alerts])
   const queueTotalCost = useMemo(() => purchaseQueueTotalCost(purchaseQueue), [purchaseQueue])

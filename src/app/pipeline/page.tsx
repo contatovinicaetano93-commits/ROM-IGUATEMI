@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import Link from 'next/link'
 import { Columns3, RefreshCw } from 'lucide-react'
 import { apiFetch, clearApiClientCache } from '@/lib/api-client'
+import { useClientLoader } from '@/lib/use-client-loader'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import { fmtScheduleParts } from '@/lib/salon/format'
 import { contactHref } from '@/lib/auth-redirect'
@@ -152,9 +153,7 @@ export default function PipelinePage() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useClientLoader(() => void load(), [load])
 
   useLiveRefresh(() => {
     void load({ silent: true })

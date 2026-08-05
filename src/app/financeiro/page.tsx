@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Plus, X, Trash2, Download, Camera, Paperclip, FileText, RefreshCw } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { CountBadge, PrimaryButton } from '../_components/ui'
@@ -11,6 +11,7 @@ import {
 } from '../_components/CollapsibleSection'
 import { MonthYearField } from '../_components/MonthYearField'
 import { apiFetch } from '@/lib/api-client'
+import { useClientLoader } from '@/lib/use-client-loader'
 import {
   formatCurrency,
   formatDateBr,
@@ -434,9 +435,7 @@ export default function FinanceiroPage() {
     }
   }, [month, compareMonth])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useClientLoader(() => void load(), [load])
 
   function downloadReport() {
     if (!kpis) return

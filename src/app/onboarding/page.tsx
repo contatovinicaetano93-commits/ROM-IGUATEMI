@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { GraduationCap, Play, Plus, X } from 'lucide-react'
 import { upload } from '@vercel/blob/client'
 import { PrimaryButton } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
+import { useClientLoader } from '@/lib/use-client-loader'
 
 interface OnboardingPillar {
   id: string
@@ -72,21 +73,18 @@ export default function OnboardingPage() {
     }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    void load()
-    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => {
-        if (!cancelled) setIsAdmin(Boolean(json.data?.can_view_revenue))
-      })
-      .catch(() => {
-        if (!cancelled) setIsAdmin(false)
-      })
-    return () => {
-      cancelled = true
+  const init = useCallback(async () => {
+    await load()
+    try {
+      const res = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
+      const json = await res.json()
+      setIsAdmin(Boolean(json.data?.can_view_revenue))
+    } catch {
+      setIsAdmin(false)
     }
   }, [load])
+
+  useClientLoader(() => void init(), [init])
 
   const videosByPillar = useMemo(() => {
     const map = new Map<string, OnboardingVideo[]>()

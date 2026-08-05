@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { useClientLoader } from '@/lib/use-client-loader'
 import Link from 'next/link'
 import { RefreshCw, ChevronRight, Database, Link2 } from 'lucide-react'
 import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL, PrimaryButton } from '../_components/ui'
@@ -164,9 +165,7 @@ export default function AdminPage() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useClientLoader(() => void load(), [load])
 
   async function testAvec() {
     setConnMsg('Testando…')

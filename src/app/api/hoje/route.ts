@@ -19,7 +19,8 @@ import { countDistinctContactIds } from '@/lib/salon/headcount'
 import { resolveAppointmentsHeads } from '@/lib/salon/resolve-appointments'
 import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 import { getReactivationKpis } from '@/lib/salon/reactivation-kpi'
-import { countWhatsappNovosToday, countNovosHoje } from '@/lib/hoje-leads'
+import { countNewContactsNotInAvec } from '@/lib/contact-summary'
+import { countWhatsappNovosToday } from '@/lib/hoje-leads'
 
 /** Painel Hoje — métricas vêm do sync (read-only); cache curto no isolate. */
 export const maxDuration = 30
@@ -36,16 +37,16 @@ export async function GET(req: NextRequest) {
     const day = todayIso()
 
     const payload = await ttlGetOrSet(
-      `hoje:v7:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
+      `hoje:v8:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
       HOJE_CACHE_TTL_MS,
       async () => {
         // Sequencial no pooler max:1 — Promise.all competia consigo mesmo e com outras lambdas.
         const salonRaw = await getSalonMetrics(day)
         const playbookAll = await listActionItems({ limit: 60 })
         const scheduleRaw = await listTodaySchedules(day, 200)
-        // novos: paridade Contatos Novos (main), janela = hoje apenas.
+        // novos: paridade com Contatos · Novos (últimos NOVOS_WINDOW_DAYS).
         const [novos, whatsapp_novos] = await Promise.all([
-          countNovosHoje(day),
+          countNewContactsNotInAvec({ day }),
           countWhatsappNovosToday(day),
         ])
         // Hoje = caixa/agenda: badge pelo fast. Full só entra se não houver fast
