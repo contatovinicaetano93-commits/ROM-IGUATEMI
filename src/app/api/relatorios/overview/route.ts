@@ -6,8 +6,8 @@ import { buildMonthOverviewCsv } from '@/lib/salon/month-overview-export'
 import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 
-/** Overview pesado (mês + materialize) — 30s estourava no Iguatemi. */
-export const maxDuration = 120
+/** Atualizar fechamento (finance+analytics) — leitura rápida não usa este teto. */
+export const maxDuration = 300
 
 /** Overview do mês — fechamento ROM (admin + financeiro). */
 export async function GET(req: NextRequest) {
