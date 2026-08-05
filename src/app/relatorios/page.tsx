@@ -42,9 +42,10 @@ export default function RelatoriosOverviewPage() {
       const q = new URLSearchParams({ month })
       // Leitura rápida por padrão; "Atualizar fechamento" rematerializa o mês.
       if (opts?.materialize) q.set('materialize', '1')
+      // Leitura rápida (~45s); "Atualizar fechamento" pode chegar perto do maxDuration 300s.
       const res = await apiFetch(`/api/relatorios/overview?${q}`, {
         cache: 'no-store',
-        timeoutMs: 25_000,
+        timeoutMs: opts?.materialize ? 280_000 : 45_000,
       })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
@@ -54,7 +55,9 @@ export default function RelatoriosOverviewPage() {
       const msg = e instanceof Error ? e.message : String(e)
       setError(
         msg === 'Timeout' || (e instanceof DOMException && e.name === 'AbortError')
-          ? 'Overview demorou demais — tente Atualizar fechamento ou outro mês.'
+          ? opts?.materialize
+            ? 'Atualizar fechamento demorou demais — tente de novo em 1–2 min.'
+            : 'Overview demorou demais — tente Atualizar fechamento ou outro mês.'
           : msg,
       )
     } finally {
