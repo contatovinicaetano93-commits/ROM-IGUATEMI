@@ -34,7 +34,7 @@ function monthRangeBr(month: MonthKey, referenceDay?: string): { inicio: string;
 
 function resolve0021ReportId(): string {
   const def = getAvecReportRegistry().find((r) => r.mapper === 'professionals_revenue')
-  return def ? resolveReportId(def) : '0021'
+  return (def && resolveReportId(def)) || '0021'
 }
 
 export function isDirector0021MonthKey(v: string): v is MonthKey {

@@ -17,8 +17,8 @@ import {
   scheduleService,
   markServiceDone,
   patchServiceVisitMeta,
-  clearServiceSchedule,
   clearOrphanSchedulesForDay,
+  clearServiceSchedule,
   ensureServiceCadence,
 } from '@/lib/services'
 import {
@@ -44,13 +44,19 @@ import {
   isSyncBudgetExhausted,
   noteSyncBudgetExhausted,
   setActiveSyncDeadlineAt,
+  syncBudgetExhausted,
+  markSyncBudgetExhausted,
 } from '@/lib/avec/sync-budget'
 
 export {
   getActiveSyncDeadlineAt,
   isSyncBudgetExhausted,
   noteSyncBudgetExhausted,
-} from '@/lib/avec/sync-budget'
+  syncBudgetExhausted,
+  markSyncBudgetExhausted,
+  resolveAvecFinishStatus,
+  avecHadCoreProgress,
+}
 import {
   normalizeClientRow,
   normalizeAppointmentRow,
@@ -68,17 +74,8 @@ import { purgeAvecStorageBloat, saveReportSnapshot } from '@/lib/avec/snapshots'
 import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
 import { syncDirectorVisits } from '@/lib/avec/sync-director-visits'
 import { getDeploymentContext } from '@/lib/deployment'
-import {
-  getSalonMetrics,
-  upsertSalonMetrics,
-} from '@/lib/salon/metrics'
+import { getSalonMetrics, upsertSalonMetrics } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
-import { syncP1Kpis } from '@/lib/avec/sync-p1'
-import { syncP2Kpis } from '@/lib/avec/sync-p2'
-import { syncP3Kpis } from '@/lib/avec/sync-p3'
-import type { RomPanelId } from '@/lib/brand'
-import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
-import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
 import {
   isAvecCancelledStatus,
   isAvecNegativeOutcomeStatus,
@@ -91,6 +88,12 @@ import {
   COMANDA_SERVICE_NAME,
   type ScheduleOrigin,
 } from '@/lib/salon/schedule-origin'
+import { syncP1Kpis } from '@/lib/avec/sync-p1'
+import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
+import { syncP3Kpis } from '@/lib/avec/sync-p3'
+import type { RomPanelId } from '@/lib/brand'
+import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
+import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
 
 export type AvecSyncMode = 'fast' | 'full'
 
@@ -134,8 +137,6 @@ export interface AvecSyncStats {
   p1_rows?: number
   p2_rows?: number
   p3_rows?: number
-  /** Linhas 0223 com campo tempo válido (TM cadastrado). */
-  duration_rows?: number
   /** Visitas 0002 gravadas em salon_client_visits (0011 offline). */
   director_visits_upserted?: number
   /** Meses 0021 gravados em salon_director_0021_months (faturamento por pro). */
@@ -172,7 +173,6 @@ async function beginAvecSyncRun(kind: string, stats: AvecSyncStats): Promise<Ave
   const sql = getSql()
   // Runs mortos por timeout/kill não devem bloquear o min-gap / status UI.
   // Com progresso checkpointado → partial (não pintar Cérebro/Hoje de error falso).
-  // Só Avec: stock tem beginRun próprio (locks distintos).
   await sql`
     update avec_sync_runs
     set
@@ -240,9 +240,8 @@ export async function getLastAvecSync(
   opts?: { finishedOnly?: boolean; stage?: AvecSyncStage },
 ): Promise<AvecSyncRun | null> {
   const sql = getSql()
-  // NÃO fazer UPDATE aqui — Relatórios/Hoje/Visão chamam isto a cada load e
-  // o write no pooler (max:1) deixava os painéis em “Carregando…”.
-  // Orphans são saneados em beginAvecSyncRun / abandonStaleAvecSyncRuns.
+  // NÃO fazer UPDATE aqui — Relatórios/Hoje/Visão chamam isto a cada load.
+  // Orphans são saneados em begin / abandonStaleAvecSyncRuns.
   const finishedOnly = opts?.finishedOnly === true
   const stage = opts?.stage
   if (kind && stage) {
@@ -279,7 +278,7 @@ export async function getLastAvecSync(
         `) as AvecSyncRun[])
     return rows[0] ?? null
   }
-  // Sem kind: só Avec (nunca stock_*), para Hoje/Admin não mentirem o status.
+  // Hoje/badge: só agenda Avec (fast/full) — não misturar stock_* .
   const rows = finishedOnly
     ? ((await sql`
         select * from avec_sync_runs
@@ -334,15 +333,6 @@ export async function abandonStaleAvecSyncRuns(maxAgeMs = 14 * 60_000): Promise<
 /** Margem vs route maxDuration=800s — abort limpo em vez de kill mid-row. */
 const AVEC_SYNC_BUDGET_MS = 720_000
 
-/** @deprecated use isSyncBudgetExhausted — alias interno legado */
-function syncBudgetExhausted(): boolean {
-  return isSyncBudgetExhausted()
-}
-
-function markSyncBudgetExhausted(stats: AvecSyncStats, stage: string) {
-  noteSyncBudgetExhausted(stats, stage)
-}
-
 async function fetchSyncReport(
   reportId: string,
   params: Parameters<typeof fetchAllAvecReport>[1] = {},
@@ -351,6 +341,32 @@ async function fetchSyncReport(
   return fetchAllAvecReport(reportId, params, maxPages, {
     deadlineAt: getActiveSyncDeadlineAt(),
   })
+}
+
+/** Catálogo 0004 é pesado (~50k upserts) — no máximo 1×/dia no cron. */
+const CLIENT_DUMP_MIN_GAP_MS = 20 * 60 * 60_000
+
+async function shouldSyncClientCatalog(): Promise<boolean> {
+  if (process.env.AVEC_SYNC_CLIENTS === '1' || process.env.AVEC_SYNC_CLIENTS === 'true') {
+    return true
+  }
+  if (process.env.AVEC_SYNC_CLIENTS === '0' || process.env.AVEC_SYNC_CLIENTS === 'false') {
+    return false
+  }
+  const sql = getSql()
+  const rows = (await sql`
+    select created_at, stats
+    from avec_sync_runs
+    where kind = 'full'
+      and status in ('ok', 'partial')
+      and coalesce((stats->>'clients_upserted')::int, 0) > 0
+    order by created_at desc
+    limit 1
+  `) as { created_at: string; stats: AvecSyncStats | string }[]
+  const last = rows[0]
+  if (!last?.created_at) return true
+  const age = Date.now() - new Date(last.created_at).getTime()
+  return age >= CLIENT_DUMP_MIN_GAP_MS
 }
 
 /** Cache por contato no decorrer de um sync — evita N+1 listServices por linha Avec. */
@@ -437,32 +453,6 @@ function createBatchContactUpserter() {
     chains.set(key, next)
     return next
   }
-}
-
-/** Catálogo 0004 é pesado — no máximo 1×/20h no cron (paridade Iguatemi). */
-const CLIENT_DUMP_MIN_GAP_MS = 20 * 60 * 60_000
-
-async function shouldSyncClientCatalog(): Promise<boolean> {
-  if (process.env.AVEC_SYNC_CLIENTS === '1' || process.env.AVEC_SYNC_CLIENTS === 'true') {
-    return true
-  }
-  if (process.env.AVEC_SYNC_CLIENTS === '0' || process.env.AVEC_SYNC_CLIENTS === 'false') {
-    return false
-  }
-  const sql = getSql()
-  const rows = (await sql`
-    select created_at, stats
-    from avec_sync_runs
-    where kind = 'full'
-      and status in ('ok', 'partial')
-      and coalesce((stats->>'clients_upserted')::int, 0) > 0
-    order by created_at desc
-    limit 1
-  `) as { created_at: string; stats: AvecSyncStats | string }[]
-  const last = rows[0]
-  if (!last?.created_at) return true
-  const age = Date.now() - new Date(last.created_at).getTime()
-  return age >= CLIENT_DUMP_MIN_GAP_MS
 }
 
 /** Dump / sync Avec com canal avec preso em "novo" → importado (≠ lead WhatsApp). */
@@ -562,12 +552,12 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
   const today = todayIso()
   const yesterday = addCalendarDaysYmd(today, -1)
-  const upsertInBatch = createBatchContactUpserter()
   /** Serviços que devem permanecer abertos hoje (Agendado/Aguardando/Em Atendimento). */
   const todayOpenServiceIds: string[] = []
-  /** Agendados por dia = cabeças (contato único), não linhas 0051. */
+  /** Movimento por dia = cabeças (contato único), não linhas 0051. */
   const bookedHeadsByDay = new Map<string, Set<string>>()
   const rowsByDay = new Map<string, number>()
+  const upsertInBatch = createBatchContactUpserter()
 
   for (const row of result.rows) {
     if (syncBudgetExhausted()) {
@@ -580,6 +570,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
 
       // Status agenda 0051. No-show KPI: fonte canônica é 0248 (não gravar aqui).
       // "Em Atendimento" / "A Realizar" = aberto — NÃO marcar pago nem perdido.
+      // "não pago" não casa com \bpago\b.
       const status = (appt.status ?? '').toLowerCase()
       const isNoShow = isAvecNoShowStatus(status)
       const isNegativeOutcome = isAvecNegativeOutcomeStatus(status)
@@ -635,6 +626,8 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         phone: appt.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_appointments_fast' : 'avec_sync_appointments',
+        // Cancel/no-show: não marca perdido aqui — só se não restar slot aberto
+        // (evita um cancel demotar contato com outro horário ainda aberto).
         status: isPaid ? 'convertido' : isLostOutcome ? undefined : 'agendado',
       })
       // Tombstone LGPD: upsert casa no id, mas não reescreve serviços/prefs/PII.
@@ -658,7 +651,8 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
         const isNew = servicesCreatedRecently(service)
         if (isNew) stats.services_created++
 
-        // 0051 status Pago = comanda fechada → Concluídos no Pipeline (paridade IG).
+        // 0051 status Pago = comanda fechada. Usa hora_ini do agendamento (único relógio
+        // estável que a Avec manda) — evita Concluídos todos com o mesmo horário inventado.
         if (isPaid) {
           await markServiceDone(service.id, {
             doneAt: scheduledAt,
@@ -667,6 +661,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
           })
           stats.services_completed++
         } else if (isLostOutcome) {
+          // Só limpa se o slot aberto for do mesmo dia do cancel/no-show (não apaga futuro).
           if (
             apptDay &&
             service.scheduled_at &&
@@ -708,7 +703,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
     }
   }
 
-  // Reconcilia órfãos de hoje + KPI Agendados por dia (hoje/ontem + dias com linha).
+  // Reconcilia órfãos de hoje + KPI Movimento por dia (hoje/ontem + dias com linha).
   // Truncado/abort: keep-set incompleto — não limpar nem gravar KPI parcial.
   try {
     if (result.truncated || stats.aborted) {
@@ -763,12 +758,12 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
   warnIfTruncated(stats, '0002', result)
   await snapshotReport('0002', params, result.rows, stats, syncRunId)
 
+  let durationSumMinutes = 0
+  let durationCount = 0
   const upsertInBatch = createBatchContactUpserter()
   /** Mix do dia (Cérebro NOVOS·RECORRENTES): 0002 total_visitas na ultima_visita. */
   const returningByDay = new Map<string, number>()
   const newByDay = new Map<string, number>()
-  let durationSumMinutes = 0
-  let durationCount = 0
 
   for (const row of result.rows) {
     if (syncBudgetExhausted()) {
@@ -792,7 +787,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
       const attendedDay = att.attendedAt ? toSalonDateIso(att.attendedAt) : visitDay
       if (!attendedDay || attendedDay < attendanceFrom || attendedDay > today) continue
 
-      // TM do dia: duração real 0002 (início+fim) — 0223 é catálogo sem data.
+      // TM (Sprint 1) — só soma se a Avec mandou início+fim reais e o atendimento foi hoje.
       if (att.durationMinutes != null && att.attendedAt && toSalonDateIso(att.attendedAt) === today) {
         durationSumMinutes += att.durationMinutes
         durationCount++
@@ -809,14 +804,12 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
         phone: att.phone,
         channel: 'avec',
         source: mode === 'fast' ? 'avec_sync_attended_fast' : 'avec_sync_attended',
+        status: 'convertido',
       })
-
       if (contact.anonymized_at) {
         stats.attendances_synced++
         continue
       }
-
-      await updateContact(contact.id, { status: 'convertido' })
 
       if (att.serviceName) {
         const service = await findOrCreateService(contact.id, att.serviceName)
@@ -868,7 +861,6 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     }
   }
 
-  // TM + mix só em dump completo (truncado/abort → não sobrescreve com amostra).
   if (result.truncated || stats.aborted) {
     stats.warnings.push(
       stats.aborted
@@ -898,7 +890,6 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
           returning_clients: returningByDay.get(day) ?? 0,
         })
       }
-      // last_done histórico (só full; fast já marca done no loop de attendances do dia).
       for (const row of result.rows) {
         try {
           const att = normalizeAttendanceRow(row)
@@ -914,6 +905,7 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
             phone: att.phone,
             channel: 'avec',
             source: 'avec_sync_returning_0002',
+            status: 'convertido',
           })
           if (contact.anonymized_at) continue
           const serviceName = att.serviceName || 'Atendimento'
@@ -993,15 +985,13 @@ function revenueDaysBack(mode: AvecSyncMode): number {
 }
 
 /**
- * Faturamento dia a dia.
- * Fast: hoje + ontem (corrige atraso do relatório).
- * Full: últimos 7 dias + hoje (mesmo padrão do 0081).
- * Override: AVEC_REVENUE_DAYS_BACK=N (ex.: mês incompleto).
+ * Faturamento dia a dia no intervalo [from, to] (YYYY-MM-DD, inclusive).
  * Sempre grava a linha do dia (mesmo receita 0) para Relatórios não marcar gap.
  */
-async function syncRevenue(
+export async function syncRevenueDateRange(
   stats: AvecSyncStats,
-  mode: AvecSyncMode,
+  from: string,
+  to: string,
   syncRunId?: string,
 ) {
   const def = getDailyReports().find((r) => r.mapper === 'revenue')
@@ -1014,14 +1004,12 @@ async function syncRevenue(
     return
   }
 
-  const today = todayIso()
-  const daysBack = revenueDaysBack(mode)
-  const from = addCalendarDaysYmd(today, -daysBack)
-  const days = listDaysNewestFirst(from, today)
+  const days = listDaysNewestFirst(from, to)
+  const salonToday = todayIso()
 
   for (const day of days) {
     if (syncBudgetExhausted()) {
-      markSyncBudgetExhausted(stats, 'revenue')
+      markSyncBudgetExhausted(stats, 'receita')
       break
     }
     const params = {
@@ -1064,7 +1052,7 @@ async function syncRevenue(
           continue
         }
         // Hoje: 0088 vazio de manhã ≠ caixa fechado em R$0 — mantém NULL (UI "—").
-        if (day === today) {
+        if (day === salonToday) {
           stats.warnings.push(
             `receita ${day}: 0088 vazio — não grava R$0 (caixa do dia ainda não lançou)`,
           )
@@ -1083,29 +1071,30 @@ async function syncRevenue(
 }
 
 /**
- * Cancelamentos / no-shows dia a dia (mesmo backfill do faturamento).
+ * Faturamento dia a dia.
+ * Fast: hoje + ontem (corrige atraso do relatório).
+ * Full: últimos 7 dias + hoje (mesmo padrão do 0081).
+ * Override: AVEC_REVENUE_DAYS_BACK=N (ex.: mês incompleto).
  */
-async function syncCancellations(
+async function syncRevenue(
   stats: AvecSyncStats,
   mode: AvecSyncMode,
   syncRunId?: string,
 ) {
   const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
+  const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
-  await syncCancellationsRange(from, today, stats, syncRunId)
+  await syncRevenueDateRange(stats, from, today, syncRunId)
 }
 
 /**
- * Cancelamentos (0052) dia a dia em [from, to] — usado no sync diário e no backfill analítico.
+ * Cancelamentos dia a dia no intervalo [from, to].
  */
-export async function syncCancellationsRange(
+export async function syncCancellationsDateRange(
+  stats: AvecSyncStats,
   from: string,
   to: string,
-  stats: AvecSyncStats,
   syncRunId?: string,
-  // Mantido p/ callers de backfill — sync diário já grava cancelled=0 sempre (paridade IG).
-  _opts?: { zeroEmptyDays?: boolean },
 ) {
   const def = getDailyReports().find((r) => r.mapper === 'cancellations')
   if (!def) return
@@ -1121,7 +1110,7 @@ export async function syncCancellationsRange(
 
   for (const day of days) {
     if (syncBudgetExhausted()) {
-      markSyncBudgetExhausted(stats, 'cancellations')
+      markSyncBudgetExhausted(stats, 'cancelamentos')
       break
     }
     const params = {
@@ -1157,7 +1146,6 @@ export async function syncCancellationsRange(
       }
       const cancelled = cancelledHeads.size + cancelledOrphans
 
-      // Sempre grava cancelled (inclui 0) — paridade IG; evita KPI stale em dias vazios.
       await upsertSalonMetrics(day, { cancelled })
     } catch (e) {
       stats.errors.push(`cancelamentos ${day}: ${e instanceof Error ? e.message : String(e)}`)
@@ -1166,34 +1154,30 @@ export async function syncCancellationsRange(
 }
 
 /**
- * No-shows oficiais — relatório 0248 com status=0.6 ("Faltou").
- * A agenda 0051 do dia costuma não listar Falta (só Cancelado/Pago/…); 0248 sim.
+ * Cancelamentos / no-shows dia a dia (mesmo backfill do faturamento).
  */
-async function syncNoShows0248(
+async function syncCancellations(
   stats: AvecSyncStats,
   mode: AvecSyncMode,
   syncRunId?: string,
 ) {
   const today = todayIso()
-  const daysBack = mode === 'fast' ? 1 : 7
+  const daysBack = revenueDaysBack(mode)
   const from = addCalendarDaysYmd(today, -daysBack)
-  await syncNoShows0248Range(from, today, stats, syncRunId)
+  await syncCancellationsDateRange(stats, from, today, syncRunId)
 }
 
 /**
- * No-shows 0248 no intervalo [from, to].
- * Zera no_shows em todo dia do intervalo sem falta (paridade IG).
+ * No-shows oficiais — relatório 0248 com status=0.6 ("Faltou") no intervalo.
  */
-export async function syncNoShows0248Range(
+export async function syncNoShows0248DateRange(
+  stats: AvecSyncStats,
   from: string,
   to: string,
-  stats: AvecSyncStats,
   syncRunId?: string,
-  // Mantido p/ callers de backfill — sync diário já zera o range inteiro (paridade IG).
-  _opts?: { zeroTodayIfEmpty?: boolean; zeroEmptyDays?: boolean },
 ) {
   if (syncBudgetExhausted()) {
-    markSyncBudgetExhausted(stats, 'no-shows-0248')
+    markSyncBudgetExhausted(stats, 'no-shows 0248')
     return
   }
   const params = {
@@ -1221,9 +1205,7 @@ export async function syncNoShows0248Range(
       const appt = normalizeAppointmentRow(row)
       const day =
         (appt?.scheduledAt ? toSalonDateIso(appt.scheduledAt) : null) ??
-        (typeof row.data === 'string'
-          ? toSalonDateIso(parseAvecDateTime(String(row.data)))
-          : null)
+        (typeof row.data === 'string' ? toSalonDateIso(parseAvecDateTime(String(row.data))) : null)
       if (!day) continue
       // Endpoint já filtrado por status=0.6 (Faltou).
       if (appt?.avecClientId) {
@@ -1242,16 +1224,16 @@ export async function syncNoShows0248Range(
     for (const day of daysWithNoshow) {
       const no_shows = (byDay.get(day)?.size ?? 0) + (orphansByDay.get(day) ?? 0)
       if (syncBudgetExhausted()) {
-        markSyncBudgetExhausted(stats, 'no-shows-0248 upsert')
+        markSyncBudgetExhausted(stats, 'no-shows 0248 upsert')
         break
       }
       await upsertSalonMetrics(day, { no_shows })
     }
 
-    // Zera dias do intervalo sem falta (paridade IG; limpa stale após correção Avec).
+    // Zera dias do intervalo sem falta (evita KPI stale após correção Avec).
     for (const day of listDaysNewestFirst(from, to)) {
       if (syncBudgetExhausted()) {
-        markSyncBudgetExhausted(stats, 'no-shows-0248 zero')
+        markSyncBudgetExhausted(stats, 'no-shows 0248 zero')
         break
       }
       if (!daysWithNoshow.has(day)) {
@@ -1261,6 +1243,21 @@ export async function syncNoShows0248Range(
   } catch (e) {
     stats.errors.push(`no-show 0248: ${e instanceof Error ? e.message : String(e)}`)
   }
+}
+
+/**
+ * No-shows oficiais — relatório 0248 com status=0.6 ("Faltou").
+ * A agenda 0051 do dia costuma não listar Falta (só Cancelado/Pago/…); 0248 sim.
+ */
+async function syncNoShows0248(
+  stats: AvecSyncStats,
+  mode: AvecSyncMode,
+  syncRunId?: string,
+) {
+  const today = todayIso()
+  const daysBack = mode === 'fast' ? 1 : 7
+  const from = addCalendarDaysYmd(today, -daysBack)
+  await syncNoShows0248DateRange(stats, from, today, syncRunId)
 }
 
 /**
@@ -1333,14 +1330,10 @@ async function syncReturningFrom0002(
 
 /**
  * TM atendimento — 0223 (`tempo`) é catálogo sem filtro de data.
- * Não grava como KPI do dia (fonte: 0002 com duração real). Snapshot só no full.
+ * Não grava como KPI do dia (só 0002 com duração real). Snapshot fica para auditoria.
+ * Uma página basta (payload não é retido) — paginar 50k linhas estoura o sync.
  */
-async function syncDurationFrom0223(
-  stats: AvecSyncStats,
-  mode: AvecSyncMode,
-  syncRunId?: string,
-) {
-  if (mode !== 'full') return
+async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
   try {
     const params = { profissional_id: '', limit: 250 }
     const result = await fetchSyncReport('0223', params, 1)
@@ -1358,7 +1351,7 @@ export async function runAvecSync(
 ): Promise<AvecSyncRun> {
   const stage: AvecSyncStage = mode === 'full' ? (opts?.stage ?? 'all') : 'all'
   const scope: AvecSyncScope = mode === 'fast' ? (opts?.scope ?? 'all') : 'all'
-  // Locks separados: full/ops às 10:20 não deve matar o fast de :25 (Hoje).
+  // Locks separados: full/ops às 10:35 não deve matar o fast de :50 (Hoje).
   // Estágios full ainda compartilham avecFull (evita duas fatias no mesmo DB).
   const lockKey = mode === 'fast' ? SYNC_LOCK_KEYS.avecFast : SYNC_LOCK_KEYS.avecFull
   return withSyncLock(lockKey, () => runAvecSyncUnlocked(mode, stage, scope), {
@@ -1386,6 +1379,11 @@ async function runAvecSyncUnlocked(
   await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {
     // sync continua — fetchAvecReport ainda tenta force-refresh no 401
   })
+
+  const debug = process.env.AVEC_SYNC_DEBUG === '1' || process.env.AVEC_SYNC_DEBUG === 'true'
+  const step = (label: string) => {
+    if (debug) console.log(`[avec-sync] ${mode}/${stage} ${label} @ ${new Date().toISOString()}`)
+  }
 
   const deployment = getDeploymentContext()
   const runOps = mode === 'full' && (stage === 'all' || stage === 'ops')
@@ -1426,6 +1424,7 @@ async function runAvecSyncUnlocked(
   beginSyncServiceCache()
   setActiveSyncDeadlineAt(Date.now() + AVEC_SYNC_BUDGET_MS)
   attendancesCoveredReturning = false
+  step(`begin ${run.id}`)
 
   try {
     // Catalog-only: se o dump 0004 já rodou nas últimas 20h, evita heal+lock pesado
@@ -1441,6 +1440,7 @@ async function runAvecSyncUnlocked(
         } catch {
           /* ignore */
         }
+        step('catalog deferred')
         const finished = await finishAvecSyncRun(run.id, 'ok', stats)
         await logEvent({
           contactId: null,
@@ -1454,13 +1454,17 @@ async function runAvecSyncUnlocked(
     }
 
     await healImportadoStatus(stats)
+    step('healed')
     // Catálogo 0004 só depois do core (P1/agenda/caixa) — não pode comer o budget primeiro.
     if (mode === 'fast') {
       // Caixa PRIMEIRO e sozinho — se o cron estourar maxDuration depois,
-      // o faturamento de Hoje já está gravado (antes ficava 0 com sync morto).
+      // o faturamento de Hoje já está gravado (paridade BR / #95).
+      step('revenue…')
       await syncRevenue(stats, mode, syncRunId)
       await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
+      step(`revenue_rows=${stats.revenue_rows}`)
       if (!syncBudgetExhausted()) {
+        step('cancel/noshow…')
         await Promise.all([
           syncCancellations(stats, mode, syncRunId),
           syncNoShows0248(stats, mode, syncRunId),
@@ -1472,37 +1476,41 @@ async function runAvecSyncUnlocked(
       // Webhook: ingest já agendou/concluiu o contato — só precisa caixa/KPI.
       // Cron fast (scope=all) ainda reconcilia agenda/atendidos.
       if (scope === 'all') {
-        // Sequencial: agenda e atendidos compartilham phones — Promise.all
-        // gerava corrida em contacts_phone_idx (partial com duplicate key).
         if (!syncBudgetExhausted()) {
+          step('appointments…')
           await syncAppointments(stats, mode, syncRunId)
           await checkpointAvecSyncRun(syncRunId, stats).catch(() => {})
+          step(`appointments=${stats.appointments_synced}`)
         } else {
           markSyncBudgetExhausted(stats, 'antes de appointments')
         }
         if (!syncBudgetExhausted()) {
+          step('attendances…')
           await syncAttendances(stats, mode, syncRunId)
+          step(`attendances=${stats.attendances_synced}`)
         } else {
           markSyncBudgetExhausted(stats, 'antes de attendances')
         }
+        // TM 0223 + P2 0081 só no full — no fast estouravam os 300s (Sync interrompido).
+        step('fast core done (0223/0081 deferred to full)')
       } else {
         stats.warnings.push(
           'fast/kpi: agenda/atendidos pulados — webhook já aplicou o contato (cron reconcilia)',
         )
+        step('fast/kpi done (appointments skipped)')
       }
     } else {
       // Full fatiado: ops (P1–P3/TM) → agenda (caixa) → catalog (0004).
-      // Cada fatia tem cron próprio — cabe no orçamento sem abortar o core.
       const opsSteps = [
         ['P1', () => syncP1Kpis(stats, syncRunId)],
         ['P2', () => syncP2Kpis(stats, syncRunId)],
         ['P3', () => syncP3Kpis(stats, syncRunId)],
-        ['tm-0223', () => syncDurationFrom0223(stats, mode, syncRunId)],
+        ['tm-0223', () => syncDurationFrom0223(stats, syncRunId)],
       ] as const
-      // director-visits primeiro: o Relatório gerência depende disso e o budget
-      // do full/agenda costuma esgotar antes do bloco no fim do sync.
+      // director-visits primeiro: Relatório gerência depende dessa base 0002,
+      // mas o passo anda por vários trimestres e deve respeitar o budget da agenda.
       const agendaSteps = [
-        ['director-visits', () => syncDirectorVisits(stats, syncRunId, { shouldAbort: () => syncBudgetExhausted() })],
+        ['director-visits', () => syncDirectorVisits(stats, syncRunId, { shouldAbort: syncBudgetExhausted })],
         ['appointments', () => syncAppointments(stats, mode, syncRunId)],
         ['attendances', () => syncAttendances(stats, mode, syncRunId)],
         ['revenue', () => syncRevenue(stats, mode, syncRunId)],
@@ -1519,6 +1527,7 @@ async function runAvecSyncUnlocked(
           break
         }
         try {
+          step(`${label}…`)
           await fn()
         } catch (e) {
           stats.errors.push(`${label}: ${e instanceof Error ? e.message : String(e)}`)
@@ -1548,11 +1557,14 @@ async function runAvecSyncUnlocked(
       if (!syncBudgetExhausted()) {
         const dumpClients = await shouldSyncClientCatalog()
         if (dumpClients) {
+          step('clients…')
           await syncClients(stats, syncRunId)
+          step(`clients done upserted=${stats.clients_upserted}`)
         } else {
           stats.warnings.push(
             'Catálogo 0004 adiado — já sincronizado nas últimas 20h (DB leve; force com AVEC_SYNC_CLIENTS=1)',
           )
+          step('clients skipped (recent dump)')
         }
       } else {
         markSyncBudgetExhausted(stats, 'antes do catálogo 0004')
@@ -1575,7 +1587,6 @@ async function runAvecSyncUnlocked(
       stats.warnings.push(...softPeripheral)
     }
 
-    // Truncamento / unit-id / órfãos ficam em warnings (UI), mas não impedem status ok.
     const hardWarnings = hardAvecSyncWarnings(stats.warnings)
     const hadCoreRows = avecHadCoreProgress(stats)
     const status = resolveAvecFinishStatus({
@@ -1607,9 +1618,10 @@ async function runAvecSyncUnlocked(
     const raw = e instanceof Error ? e.message : String(e)
     const msg = formatAvecUserMessage(raw) ?? raw
     stats.errors.push(msg)
+    // Progresso checkpointado / abort limpo → partial (não pintar Cérebro de error falso).
     const status = resolveAvecFinishStatus({
       errorCount: stats.errors.length,
-      hardWarningCount: 0,
+      hardWarningCount: hardAvecSyncWarnings(stats.warnings).length,
       aborted: Boolean(stats.aborted),
       hadCoreRows: avecHadCoreProgress(stats),
       thrown: true,
@@ -1618,5 +1630,126 @@ async function runAvecSyncUnlocked(
   } finally {
     setActiveSyncDeadlineAt(null)
     endSyncServiceCache()
+  }
+}
+
+const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+export function isIsoDay(value: string): boolean {
+  return ISO_DAY_RE.test(value)
+}
+
+/** 1º de janeiro do ano do dia (fuso salão via YYYY-MM-DD já local). */
+export function yearStartIso(day = todayIso()): string {
+  return `${day.slice(0, 4)}-01-01`
+}
+
+export interface RevenueBackfillResult {
+  from: string
+  to: string
+  days: number
+  next_from: string | null
+  done: boolean
+  status: AvecSyncRun['status']
+  stats: AvecSyncStats
+  error?: string | null
+}
+
+/**
+ * Backfill de métricas diárias (receita 0088 + cancelamentos + no-shows 0248)
+ * para o Financeiro comparar meses anteriores sem ficar em R$ 0.
+ *
+ * Aceita chunk via `chunkDays` para caber no maxDuration 300s da Vercel.
+ */
+export async function runAvecRevenueBackfill(opts: {
+  from: string
+  to?: string
+  chunkDays?: number
+}): Promise<RevenueBackfillResult> {
+  if (!isAvecConfigured()) {
+    throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
+  }
+  if (!isIsoDay(opts.from)) {
+    throw new Error(`from inválido: ${opts.from}`)
+  }
+  const to = opts.to ?? todayIso()
+  if (!isIsoDay(to)) {
+    throw new Error(`to inválido: ${to}`)
+  }
+  if (opts.from > to) {
+    throw new Error(`from (${opts.from}) > to (${to})`)
+  }
+
+  const chunkDays = Math.max(1, Math.min(62, Math.floor(opts.chunkDays ?? 14)))
+  const chunkTo = (() => {
+    const end = addCalendarDaysYmd(opts.from, chunkDays - 1)
+    return end < to ? end : to
+  })()
+  const days = listDaysInclusive(opts.from, chunkTo).length
+  const next_from = chunkTo < to ? addCalendarDaysYmd(chunkTo, 1) : null
+
+  const deployment = getDeploymentContext()
+  const stats: AvecSyncStats = {
+    panel: deployment.panel,
+    deployment_host: deployment.host,
+    clients_upserted: 0,
+    appointments_synced: 0,
+    attendances_synced: 0,
+    services_created: 0,
+    services_scheduled: 0,
+    services_completed: 0,
+    revenue_rows: 0,
+    cancellation_rows: 0,
+    snapshots_saved: 0,
+    errors: [],
+    warnings: [],
+  }
+
+  const run = await beginAvecSyncRun(
+    `revenue-backfill:${opts.from}:${chunkTo}`,
+    stats,
+  )
+
+  try {
+    await syncRevenueDateRange(stats, opts.from, chunkTo, run.id)
+    await syncCancellationsDateRange(stats, opts.from, chunkTo, run.id)
+    await syncNoShows0248DateRange(stats, opts.from, chunkTo, run.id)
+
+    stats.errors = formatAvecErrorList(stats.errors)
+    const hardWarnings = hardAvecSyncWarnings(stats.warnings)
+    const hadRows = stats.revenue_rows + stats.cancellation_rows > 0
+    const status: AvecSyncRun['status'] =
+      stats.errors.length > 0 && !hadRows
+        ? 'error'
+        : stats.errors.length > 0 || hardWarnings.length > 0
+          ? 'partial'
+          : 'ok'
+
+    const finished = await finishAvecSyncRun(run.id, status, stats)
+    return {
+      from: opts.from,
+      to: chunkTo,
+      days,
+      next_from,
+      done: next_from == null,
+      status: finished.status,
+      stats,
+      error: finished.error,
+    }
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e)
+    const msg = formatAvecUserMessage(raw) ?? raw
+    stats.errors.push(msg)
+    const finished = await finishAvecSyncRun(run.id, 'error', stats, msg)
+    return {
+      from: opts.from,
+      to: chunkTo,
+      days,
+      next_from,
+      done: false,
+      status: finished.status,
+      stats,
+      error: finished.error,
+    }
   }
 }

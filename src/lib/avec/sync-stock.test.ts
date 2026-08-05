@@ -8,7 +8,7 @@ import {
 describe('stockPaginationPlan', () => {
   it('retorna vazio sem pagination no último run', () => {
     expect(stockPaginationPlan(null)).toEqual([])
-    expect(stockPaginationPlan({ id: '1', kind: 'stock_full', status: 'ok', stats: { errors: [], warnings: [] } as StockSyncRun['stats'], error: null, created_at: '' })).toEqual([])
+    expect(stockPaginationPlan({ id: '1', kind: 'stock_full', status: 'ok', stats: { errors: [], warnings: [] } as unknown as StockSyncRun['stats'], error: null, created_at: '' })).toEqual([])
   })
 
   it('monta batchLabel para lote completo e pendente', () => {
