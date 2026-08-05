@@ -25,6 +25,10 @@
       "schedule": "20 11,23 * * *"
     },
     {
+      "path": "/api/avec/sync/director-0021",
+      "schedule": "35 11,23 * * *"
+    },
+    {
       "path": "/api/estoque/sync",
       "schedule": "5 */3 * * *"
     },

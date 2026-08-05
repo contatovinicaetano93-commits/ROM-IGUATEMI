@@ -139,6 +139,8 @@ export interface AvecSyncStats {
   p3_rows?: number
   /** Visitas 0002 gravadas em salon_client_visits (0011 offline). */
   director_visits_upserted?: number
+  /** Meses 0021 gravados em salon_director_0021_months (faturamento por pro). */
+  director_0021_months_upserted?: number
   /** Fatia do full (ops/agenda/catalog/all) — min-gap por estágio. */
   stage?: AvecSyncStage
   /** true enquanto o job ainda não chamou finish — excluído do min-gap. */
