@@ -478,7 +478,7 @@ export default function HojePage() {
           <div className="flex items-center gap-3">
             <Users size={18} className="text-gold" />
             <div>
-              <p className="text-sm font-medium">{data!.leads.novos} entrada(s) no funil hoje</p>
+              <p className="text-sm font-medium">{data!.leads.novos} contato(s) novo(s)</p>
               <p className="text-xs text-muted">Contatos · últimos 30 dias (exceto Importado Avec)</p>
             </div>
           </div>

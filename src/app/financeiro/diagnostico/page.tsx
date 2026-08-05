@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { SectionCard } from '../../_components/ui'
 import { LogoutButton } from '../../_components/LogoutButton'
 import { apiFetch } from '@/lib/api-client'
+import { useClientLoader } from '@/lib/use-client-loader'
 
 interface StockSyncRun {
   status: 'ok' | 'error' | 'partial'
@@ -68,9 +69,7 @@ export default function FinanceiroDiagnosticoPage() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useClientLoader(() => void load(), [load])
 
   return (
     <main className="mx-auto flex w-full max-w-[900px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">

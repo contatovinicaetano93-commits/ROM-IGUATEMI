@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, Download, FileText, RefreshCw } from 'lucide-react'
 import { MonthYearField } from '../_components/MonthYearField'
 import { SectionCard } from '../_components/ui'
 import { apiFetch } from '@/lib/api-client'
+import { useClientLoader } from '@/lib/use-client-loader'
 import { getBrand } from '@/lib/brand'
 import { formatCurrency, formatPercentPoints, todayIso } from '@/lib/salon/format'
 import { momCompareLine } from '@/lib/salon/mom-delta'
@@ -65,9 +66,7 @@ export default function RelatoriosOverviewPage() {
     }
   }, [month])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useClientLoader(() => void load(), [load])
 
   function exportCsv() {
     if (!data) return

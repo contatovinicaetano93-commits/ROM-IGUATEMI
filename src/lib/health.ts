@@ -164,20 +164,7 @@ async function probeOpsCoverageYtd() {
 /** Resposta mínima — segura para monitoramento externo sem login. */
 export async function getPublicHealthStatus() {
   const { connected, db_quota } = await probeDatabase()
-  const [metrics_ytd, ops_ytd] = connected
-    ? await Promise.all([probeDailyMetricsYtd(), probeOpsCoverageYtd()])
-    : [null, null]
-  return {
-    ok: connected,
-    db_quota,
-    database: {
-      host: peekDatabaseHost(),
-      port: peekDatabasePort(),
-      source: peekDatabaseUrlSource(),
-    },
-    metrics_ytd,
-    ops_ytd,
-  }
+  return { ok: connected, db_quota }
 }
 
 export async function getHealthStatus() {
@@ -187,20 +174,52 @@ export async function getHealthStatus() {
   const deployment = getDeploymentContext()
   const validation = validateDeploymentEnv(peekResolvedDatabaseUrl())
 
+  // Sequencial: Promise.all de 5 leituras no pooler (max:1) competia com outras
+  // lambdas e o /api/health estourava → HTML de timeout → SyntaxError no Safari.
   let lastFast: Awaited<ReturnType<typeof getLastAvecSync>> = null
   let lastFull: Awaited<ReturnType<typeof getLastAvecSync>> = null
   let kpiLayers: Record<string, number | null> = { p1: null, p2: null, p3: null }
+  let metricsYtd: Awaited<ReturnType<typeof probeDailyMetricsYtd>> | null = null
+  let opsYtd: Awaited<ReturnType<typeof probeOpsCoverageYtd>> | null = null
   let stockLastFast: Awaited<ReturnType<typeof getLastStockSync>> = null
   let stockLastFull: Awaited<ReturnType<typeof getLastStockSync>> = null
 
   if (connected) {
-    ;[lastFast, lastFull, kpiLayers, stockLastFast, stockLastFull] = await Promise.all([
-      getLastAvecSync('fast'),
-      getLastAvecSync('full'),
-      probeKpiLayers(),
-      getLastStockSync('stock_fast'),
-      getLastStockSync('stock_full'),
-    ])
+    try {
+      lastFast = await getLastAvecSync('fast')
+    } catch (e) {
+      logger.warn('health last_fast failed', { error: e instanceof Error ? e.message : String(e) })
+    }
+    try {
+      lastFull = await getLastAvecSync('full')
+    } catch (e) {
+      logger.warn('health last_full failed', { error: e instanceof Error ? e.message : String(e) })
+    }
+    try {
+      kpiLayers = await probeKpiLayers()
+    } catch (e) {
+      logger.warn('health kpi layers failed', { error: e instanceof Error ? e.message : String(e) })
+    }
+    try {
+      metricsYtd = await probeDailyMetricsYtd()
+    } catch (e) {
+      logger.warn('health metrics_ytd failed', { error: e instanceof Error ? e.message : String(e) })
+    }
+    try {
+      opsYtd = await probeOpsCoverageYtd()
+    } catch (e) {
+      logger.warn('health ops_ytd failed', { error: e instanceof Error ? e.message : String(e) })
+    }
+    try {
+      stockLastFast = await getLastStockSync('stock_fast')
+    } catch (e) {
+      logger.warn('health stock_fast failed', { error: e instanceof Error ? e.message : String(e) })
+    }
+    try {
+      stockLastFull = await getLastStockSync('stock_full')
+    } catch (e) {
+      logger.warn('health stock_full failed', { error: e instanceof Error ? e.message : String(e) })
+    }
   }
 
   const awaitingToken = !isAvecConfigured() && !isAvecMock()
@@ -283,5 +302,7 @@ export async function getHealthStatus() {
       last_fast: stockLastFast,
       last_full: stockLastFull,
     },
+    metrics_ytd: metricsYtd,
+    ops_ytd: opsYtd,
   }
 }
