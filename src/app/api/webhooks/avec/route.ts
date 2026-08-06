@@ -8,7 +8,7 @@ import { resolveRequestHost } from '@/lib/deployment'
 
 /**
  * Webhook Avec — tempo real (push).
- * URL: https://rom-club.vercel.app/api/webhooks/avec
+ * URL: https://rom-iguatemi.vercel.app/api/webhooks/avec
  * Header: x-avec-secret: <AVEC_WEBHOOK_SECRET>
  * (também aceita Authorization: Bearer … ou x-webhook-secret)
  */

@@ -29,6 +29,7 @@ describe('validateDeploymentEnv', () => {
     process.env.DATABASE_URL = 'postgres://x'
     process.env.AVEC_API_TOKEN = 'token'
     process.env.AVEC_UNIT_ID = '123'
+    process.env.ROM_SESSION_SECRET = 'test-session-secret'
     delete process.env.VERCEL_URL
     delete process.env.VERCEL_PROJECT_PRODUCTION_URL
     delete process.env.ROM_EXPECTED_DB_HOST
@@ -56,12 +57,28 @@ describe('validateDeploymentEnv', () => {
     process.env.DATABASE_URL = 'postgres://ep-other.neon.tech/db' // exemplo errado: BR/IG devem usar Supabase
     process.env.AVEC_API_TOKEN = 'token'
     process.env.AVEC_UNIT_ID = '123'
+    process.env.ROM_SESSION_SECRET = 'test-session-secret'
     process.env.ROM_EXPECTED_DB_HOST = 'ep-iguatemi'
     delete process.env.VERCEL_URL
     delete process.env.VERCEL_PROJECT_PRODUCTION_URL
+    delete process.env.VERCEL_ENV
 
     const result = validateDeploymentEnv()
     expect(result.ok).toBe(false)
     expect(result.warnings.some((w) => w.includes('ROM_EXPECTED_DB_HOST'))).toBe(true)
+  })
+
+  it('alerta ROM_SESSION_SECRET ausente em produção', () => {
+    process.env.ROM_PANEL = 'iguatemi'
+    process.env.NEXT_PUBLIC_ROM_PANEL = 'iguatemi'
+    process.env.DATABASE_URL = 'postgres://x'
+    process.env.AVEC_API_TOKEN = 'token'
+    process.env.AVEC_UNIT_ID = '123'
+    process.env.VERCEL_ENV = 'production'
+    delete process.env.ROM_SESSION_SECRET
+
+    const result = validateDeploymentEnv()
+    expect(result.ok).toBe(false)
+    expect(result.warnings.some((w) => w.includes('ROM_SESSION_SECRET'))).toBe(true)
   })
 })
