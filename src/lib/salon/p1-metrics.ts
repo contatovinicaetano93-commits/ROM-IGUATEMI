@@ -124,10 +124,9 @@ export async function getSalonP1Daily(day: string): Promise<SalonP1Daily | null>
 }
 
 /**
- * syncP1Kpis grava um snapshot por dia, mas cada snapshot já é uma janela
- * rolante de 30 dias (não um delta diário) — então "comparação de período"
- * aqui é o snapshot mais recente vs o snapshot disponível mais próximo de N
- * dias atrás, não meses de calendário como no TM.
+ * syncP1Kpis grava um snapshot por dia com escopo de mês calendário até esse dia
+ * (MTD no mês corrente). "Near" pega o snapshot mais recente em ou antes de
+ * targetDay — a Visão compara mês atual vs fim do mês anterior.
  */
 export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Daily | null> {
   const sql = getSql()

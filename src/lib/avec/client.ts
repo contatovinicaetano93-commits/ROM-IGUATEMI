@@ -240,13 +240,26 @@ export function periodRange(daysBack = 0, daysForward = 14) {
 
 /**
  * Janela Avec ~N dias terminando em `anchorYmd` (inclusive), no formato dd/mm/yyyy.
- * Usado no backfill histórico da Visão analítica (P1/P2/P3 ancorados no fim do mês).
+ * Usado no backfill histórico da Visão analítica (P2/P3 ancorados no fim do mês).
  */
 export function periodRangeEndingOn(anchorYmd: string, daysBack = 30) {
   const anchor = /^\d{4}-\d{2}-\d{2}$/.test(anchorYmd) ? anchorYmd : todayIso()
   const back = Math.max(0, Math.floor(daysBack))
   return {
     inicio: fmtBrFromYmd(addCalendarDays(anchor, -back)),
+    fim: fmtBrFromYmd(anchor),
+  }
+}
+
+/**
+ * Mês calendário em dd/mm/yyyy até `anchorYmd` (MTD se o âncora for o mês corrente).
+ * Usado no P1 (ranking de profissionais 0021+0126) — alinha título Ago/2026 ao escopo real.
+ */
+export function calendarMonthRangeBr(anchorYmd: string) {
+  const anchor = /^\d{4}-\d{2}-\d{2}$/.test(anchorYmd) ? anchorYmd : todayIso()
+  const monthStart = `${anchor.slice(0, 7)}-01`
+  return {
+    inicio: fmtBrFromYmd(monthStart),
     fim: fmtBrFromYmd(anchor),
   }
 }
