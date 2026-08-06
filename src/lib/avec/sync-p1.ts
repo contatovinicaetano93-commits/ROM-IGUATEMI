@@ -1,8 +1,8 @@
 import {
+  calendarMonthRangeBr,
   fetchAllAvecReport,
   formatTruncationWarning,
   isAvecFetchAbortError,
-  periodRange,
   type AvecReportFetchResult,
   withRequiredAvecReportParams,
 } from '@/lib/avec/client'
@@ -130,7 +130,7 @@ function applyOccupancy(
 export type OpsPeriodOpts = {
   /** Dia em que o snapshot é gravado (ex.: fim do mês). Default: hoje. */
   asOf?: string
-  /** início/fim BR (dd/mm/yyyy). Default: janela rolante 30d. */
+  /** início/fim BR (dd/mm/yyyy). Default: mês calendário até asOf (MTD). */
   inicio?: string
   fim?: string
 }
@@ -138,13 +138,14 @@ export type OpsPeriodOpts = {
 /**
  * P1 — sync diário (full): 0021, 0126, 0032, 0107, 0003 → salon_p1_daily
  * Não roda no fast (evita custo/API).
- * Com `opts`, grava snapshot histórico (mês fechado) para a Visão/Relatórios sem gaps.
+ * Janela padrão = mês calendário até `asOf` (MTD no mês corrente).
+ * Com `opts.inicio/fim`, grava snapshot histórico explícito para a Visão/Relatórios.
  */
 export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?: OpsPeriodOpts) {
   const day = opts?.asOf ?? todayIsoLocal()
-  const rolling = periodRange(30, 0)
-  const inicio = opts?.inicio ?? rolling.inicio
-  const fim = opts?.fim ?? rolling.fim
+  const calendar = calendarMonthRangeBr(day)
+  const inicio = opts?.inicio ?? calendar.inicio
+  const fim = opts?.fim ?? calendar.fim
   const params = { inicio, fim, limit: 250 }
   const deadlineAt = () => getActiveSyncDeadlineAt()
   const canFetch = (stage: string) => {

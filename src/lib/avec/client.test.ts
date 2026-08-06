@@ -6,6 +6,7 @@ import {
   getAvecSyncMaxPages,
   isAvecWafForbiddenError,
   normalizeAvecApiToken,
+  calendarMonthRangeBr,
   periodRangeEndingOn,
   wasPaginationTruncated,
   withRequiredAvecReportParams,
@@ -218,6 +219,22 @@ describe('periodRangeEndingOn', () => {
     expect(periodRangeEndingOn('2026-01-15', 0)).toEqual({
       inicio: '15/01/2026',
       fim: '15/01/2026',
+    })
+  })
+})
+
+describe('calendarMonthRangeBr', () => {
+  it('mês fechado: 1º → último dia', () => {
+    expect(calendarMonthRangeBr('2026-07-31')).toEqual({
+      inicio: '01/07/2026',
+      fim: '31/07/2026',
+    })
+  })
+
+  it('mês em aberto: 1º → âncora (MTD)', () => {
+    expect(calendarMonthRangeBr('2026-08-06')).toEqual({
+      inicio: '01/08/2026',
+      fim: '06/08/2026',
     })
   })
 })

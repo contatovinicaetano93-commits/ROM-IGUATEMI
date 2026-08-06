@@ -145,17 +145,19 @@ export async function runAnalyticsMonthBackfill(
   let cancel_to: string | null = null
   let next_cancel_from: string | null = null
   let cancellations_done = !steps.includes('cancellations')
-  const window = periodRangeEndingOn(to, 30)
-  const snapOpts = { asOf: to, inicio: window.inicio, fim: window.fim }
+  // P1 = mês calendário (ranking). P2/P3 mantêm janela ~30d ancorada no fim do mês.
+  const rolling = periodRangeEndingOn(to, 30)
+  const p1Opts = { asOf: to }
+  const p23Opts = { asOf: to, inicio: rolling.inicio, fim: rolling.fim }
 
   if (steps.includes('p1')) {
-    await syncP1Kpis(stats, undefined, snapOpts)
+    await syncP1Kpis(stats, undefined, p1Opts)
   }
   if (steps.includes('p2')) {
-    await syncP2Kpis(stats, undefined, { ...snapOpts, includePaymentMix: false })
+    await syncP2Kpis(stats, undefined, { ...p23Opts, includePaymentMix: false })
   }
   if (steps.includes('p3')) {
-    await syncP3Kpis(stats, undefined, snapOpts)
+    await syncP3Kpis(stats, undefined, p23Opts)
   }
 
   if (steps.includes('cancellations')) {
