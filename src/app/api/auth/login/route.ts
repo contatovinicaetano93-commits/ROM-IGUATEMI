@@ -8,6 +8,7 @@ import {
   validateCredentials,
 } from '@/lib/auth'
 import { checkLoginRateLimit } from '@/lib/rate-limiter'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export async function POST(req: NextRequest) {
   if (!isAuthEnabled()) return ok({ auth: 'disabled', role: 'admin', can_view_revenue: true })
@@ -30,6 +31,26 @@ export async function POST(req: NextRequest) {
 
   if (!hit) {
     return err('Usuário ou senha incorretos', 401)
+  }
+
+  // Analytics não pode atrasar nem quebrar login: sem token vira no-op, erro é
+  // engolido, e o flush não bloqueia a resposta (PostHog lento ≠ login lento).
+  try {
+    const posthog = getPostHogClient()
+    if (posthog) {
+      posthog.identify({
+        distinctId: hit.user,
+        properties: { role: hit.role },
+      })
+      posthog.capture({
+        distinctId: hit.user,
+        event: 'server_user_logged_in',
+        properties: { role: hit.role },
+      })
+      void posthog.flush().catch(() => {})
+    }
+  } catch {
+    // ignorado de propósito
   }
 
   const res = ok({

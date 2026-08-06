@@ -6,19 +6,18 @@ import {
   runAvecRevenueBackfill,
   yearStartIso,
 } from '@/lib/avec/sync'
-import { isAuthorized } from '@/lib/auth'
+import { requireFinance } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
-import { isProduction } from '@/lib/env'
 import { todayIso } from '@/lib/salon/format'
 
 /** Backfill dia a dia — chunks longos podem aproximar o teto. */
 export const maxDuration = 300
 
 async function authorize(req: NextRequest) {
-  if (isCronAuthorized(req)) return true
-  if (await isAuthorized(req)) return true
-  if (!process.env.CRON_SECRET?.trim() && !isProduction()) return true
-  return false
+  if (isCronAuthorized(req)) return { ok: true as const }
+  const auth = await requireFinance(req)
+  if (!auth.ok) return auth
+  return { ok: true as const }
 }
 
 /**
@@ -29,7 +28,8 @@ async function authorize(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    if (!(await authorize(req))) return err('Não autorizado', 401)
+    const auth = await authorize(req)
+    if (!auth.ok) return err(auth.message, auth.status)
     if (!isAvecConfigured()) return err('Avec não configurado (AVEC_API_TOKEN)', 503)
 
     const sp = req.nextUrl.searchParams
@@ -60,7 +60,8 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    if (!(await authorize(req))) return err('Não autorizado', 401)
+    const auth = await authorize(req)
+    if (!auth.ok) return err(auth.message, auth.status)
     const to = todayIso()
     return ok({
       configured: isAvecConfigured(),

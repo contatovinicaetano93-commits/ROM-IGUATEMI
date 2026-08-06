@@ -294,6 +294,7 @@ export async function getHealthStatus() {
       staff_password: envOk('ROM_STAFF_PASSWORD'),
       finance_configured: isFinanceAuthConfigured(),
       stock_configured: isStockAuthConfigured(),
+      session_secret: envOk('ROM_SESSION_SECRET'),
     },
     webhooks: {
       avec_secret: envOk('AVEC_WEBHOOK_SECRET'),
