@@ -1,10 +1,9 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Columns3, RefreshCw } from 'lucide-react'
 import { apiFetch, clearApiClientCache } from '@/lib/api-client'
-import { useClientLoader } from '@/lib/use-client-loader'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
 import { fmtScheduleParts } from '@/lib/salon/format'
 import { contactHref } from '@/lib/auth-redirect'
@@ -15,6 +14,8 @@ import {
   useSectionOpen,
 } from '../_components/CollapsibleSection'
 
+type NonBillableKind = 'teste' | 'cortesia'
+
 interface PipelineCard {
   id: string
   contact_id: string
@@ -23,22 +24,37 @@ interface PipelineCard {
   professional_name: string | null
   scheduled_at: string | null
   last_done_at: string | null
+  non_billable_kind?: NonBillableKind
 }
 
 interface PipelineData {
   day: string
   scheduled: PipelineCard[]
-  walkIn: PipelineCard[]
+  courtesy: PipelineCard[]
   completed: PipelineCard[]
   counts: {
     /** Badges = pessoas (cabeças). */
     scheduled: number
-    walkIn: number
+    courtesy: number
     completed: number
     total: number
     scheduled_services?: number
-    walkIn_services?: number
+    courtesy_services?: number
     completed_services?: number
+  }
+}
+
+function kindLabel(kind: NonBillableKind | undefined): string | null {
+  if (kind == null) return null
+  switch (kind) {
+    case 'teste':
+      return 'Teste'
+    case 'cortesia':
+      return 'Cortesia'
+    default: {
+      const _exhaustive: never = kind
+      return _exhaustive
+    }
   }
 }
 
@@ -51,6 +67,7 @@ function PipelineColumn({
   timeFrom,
   emptyLabel,
   storageKey,
+  showKind,
 }: {
   title: string
   /** Uma linha sob o título — definição operacional da coluna. */
@@ -61,6 +78,7 @@ function PipelineColumn({
   timeFrom: (item: PipelineCard) => string | null
   emptyLabel: string
   storageKey: string
+  showKind?: boolean
 }) {
   const [open, setOpen] = useSectionOpen(storageKey, true)
   return (
@@ -85,6 +103,7 @@ function PipelineColumn({
           items.map((item) => {
             const iso = timeFrom(item)
             const when = iso ? fmtScheduleParts(iso) : null
+            const kind = showKind ? kindLabel(item.non_billable_kind) : null
             return (
               <Link
                 key={item.id}
@@ -93,9 +112,16 @@ function PipelineColumn({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {item.contact_name ?? 'Cliente'}
-                    </p>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {item.contact_name ?? 'Cliente'}
+                      </p>
+                      {kind ? (
+                        <span className="shrink-0 text-[0.65rem] uppercase tracking-wide text-sky-300">
+                          {kind}
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="mt-0.5 truncate text-xs text-muted">{item.name}</p>
                     {item.professional_name && (
                       <p className="mt-1 truncate text-[0.7rem] text-muted/80">{item.professional_name}</p>
@@ -130,7 +156,6 @@ export default function PipelinePage() {
 
   const load = useCallback(async (opts?: { fresh?: boolean; silent?: boolean }) => {
     const silent = opts?.silent === true
-    // setLoading only on user refresh (event handler path) — not on mount/effect.
     if (opts?.fresh) {
       setLoading(true)
       setError(null)
@@ -140,7 +165,6 @@ export default function PipelinePage() {
       const res = await apiFetch('/api/pipeline', {
         cache: 'no-store',
         clientCache: opts?.fresh || silent ? false : undefined,
-        timeoutMs: 25_000,
       })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
@@ -153,10 +177,40 @@ export default function PipelinePage() {
     }
   }, [])
 
-  useClientLoader(() => void load(), [load])
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await apiFetch('/api/pipeline', { cache: 'no-store' })
+        const json = await res.json()
+        if (cancelled) return
+        if (json.error) throw new Error(json.error)
+        setData(json.data)
+        setError(null)
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useLiveRefresh(() => {
-    void load({ silent: true })
+    void (async () => {
+      try {
+        clearApiClientCache('/api/pipeline')
+        const res = await apiFetch('/api/pipeline', { cache: 'no-store', clientCache: false })
+        const json = await res.json()
+        if (json.error) throw new Error(json.error)
+        setData(json.data)
+      } catch {
+        // silent refresh — keep last good snapshot
+      }
+    })()
   }, 60_000)
 
   const dayLabel = data
@@ -178,9 +232,8 @@ export default function PipelinePage() {
             {dayLabel || 'Agenda do dia'}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Badges contam pessoas. Cards = linhas de serviço. Agendados = booking com horário · No
-            salão = sem agendamento prévio (comanda aberta na hora / encaixe) · Concluídos = pagos
-            do dia.
+            Badges contam pessoas. Cards = linhas de serviço. Agendados = abertos do dia · Teste /
+            Cortesia = isolados do fluxo · Concluídos = pagos/fechados do dia.
           </p>
         </div>
         <button
@@ -203,27 +256,28 @@ export default function PipelinePage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <PipelineColumn
           title="Agendados"
-          hint="Clientes com horário marcado na agenda."
+          hint="Abertos do dia (agenda e encaixe), sem teste/cortesia."
           storageKey="pipeline.section.agendados.open"
           count={loading ? 0 : (data?.counts.scheduled ?? 0)}
           tone="gold"
           items={loading ? [] : (data?.scheduled ?? [])}
           timeFrom={(item) => item.scheduled_at}
-          emptyLabel={loading ? 'Carregando…' : 'Nenhum booking aberto hoje.'}
+          emptyLabel={loading ? 'Carregando…' : 'Nenhum atendimento aberto hoje.'}
         />
         <PipelineColumn
-          title="No salão"
-          hint="Não agendaram: abriram comanda na hora para consumir ou entrar num encaixe."
-          storageKey="pipeline.section.nosalao.open"
-          count={loading ? 0 : (data?.counts.walkIn ?? 0)}
+          title="Teste / Cortesia"
+          hint="Heurística por nome/serviço/notes ou preço zero já pago."
+          storageKey="pipeline.section.cortesia.open"
+          count={loading ? 0 : (data?.counts.courtesy ?? 0)}
           tone="sky"
-          items={loading ? [] : (data?.walkIn ?? [])}
-          timeFrom={(item) => item.scheduled_at}
-          emptyLabel={loading ? 'Carregando…' : 'Nenhuma comanda/encaixe aberto.'}
+          items={loading ? [] : (data?.courtesy ?? [])}
+          timeFrom={(item) => item.last_done_at ?? item.scheduled_at}
+          emptyLabel={loading ? 'Carregando…' : 'Nenhum teste ou cortesia hoje.'}
+          showKind
         />
         <PipelineColumn
           title="Concluídos"
-          hint="Atendimentos já pagos/fechados no dia."
+          hint="Pagos/fechados do dia, sem teste/cortesia."
           storageKey="pipeline.section.concluidos.open"
           count={loading ? 0 : (data?.counts.completed ?? 0)}
           tone="success"
