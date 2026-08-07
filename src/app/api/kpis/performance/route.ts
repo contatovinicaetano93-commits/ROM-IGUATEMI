@@ -35,9 +35,9 @@ export async function GET(req: NextRequest) {
     const payload = await ttlGetOrSet(cacheKey, 60_000, async () => {
       const reference =
         month && /^\d{4}-\d{2}$/.test(month)
-          ? await getSalonP1DailyNear(month === currentMonth ? today : monthLastDay(month), {
-              maxSkewDays: 14,
-            })
+          ? month === currentMonth
+            ? await getSalonP1DailyNear(today, { maxSkewDays: 14 })
+            : await getSalonP1DailyNear(monthLastDay(month))
           : await getLatestSalonP1Daily()
 
       if (!reference) {
@@ -64,7 +64,13 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const window = resolveMonthWindow(month ?? refMonth, reference.day)
+      // referenceDay = "hoje" para classificar MTD vs fechado; no mês corrente
+      // usa o dia do snapshot para alinhar o MoM ao mesmo recorte.
+      const selectedMonth = month ?? refMonth
+      const window = resolveMonthWindow(
+        selectedMonth,
+        selectedMonth === currentMonth ? reference.day : today,
+      )
       const prevWindow = resolvePreviousComparableWindow(window)
       const compare = await getSalonP1DailyNear(prevWindow.to, { maxSkewDays: 3 })
       const compareByName = new Map((compare?.professionals ?? []).map((p) => [p.name, p]))

@@ -110,7 +110,13 @@ export async function GET(req: NextRequest) {
           }
         } else {
           // MTD → mesmo dia do mês anterior; mês fechado → mês anterior cheio.
-          const window = resolveMonthWindow(month ?? refMonth, reference.day)
+          // referenceDay deve ser "hoje" (não o dia do snapshot): senão mês
+          // fechado com snapshot no próprio mês é classificado como MTD.
+          const selectedMonth = month ?? refMonth
+          const window = resolveMonthWindow(
+            selectedMonth,
+            selectedMonth === currentMonth ? reference.day : today,
+          )
           const prevWindow = resolvePreviousComparableWindow(window)
           const compare = await getSalonP1DailyNear(prevWindow.to, { maxSkewDays: 3 })
           const compareByName = new Map((compare?.professionals ?? []).map((p) => [p.name, p]))
