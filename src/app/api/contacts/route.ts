@@ -13,6 +13,8 @@ import { SERVICE_CATEGORIES } from '@/lib/services'
 import { compareByOverdueThenName } from '@/lib/salon/urgency'
 import { requireAuth } from '@/lib/auth'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
+import { getSalonMetrics } from '@/lib/salon/metrics'
+import { todayIso } from '@/lib/salon/format'
 import { z } from 'zod'
 
 export const maxDuration = 25
@@ -80,26 +82,45 @@ export async function GET(req: NextRequest) {
     }
 
     if (countsOnly) {
-      const cacheKey = `contacts:queue-counts:v5:ch=${channel ?? ''}:day=${day ?? 'today'}`
-      const queues = await cachedFetch(
+      const metricsDay = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : todayIso()
+      const cacheKey = `contacts:queue-counts:v6:ch=${channel ?? ''}:day=${day ?? 'today'}`
+      const payload = await cachedFetch(
         cacheKey,
-        () => countContactQueues({ channel, day }),
+        async () => {
+          const [queues, metrics] = await Promise.all([
+            countContactQueues({ channel, day }),
+            getSalonMetrics(metricsDay),
+          ])
+          return {
+            queues,
+            new_clients_today: metrics?.new_clients ?? null,
+          }
+        },
         30,
       )
-      return okCached(null, 30, { queues, sync: syncPayload })
+      return okCached(null, 30, {
+        queues: payload.queues,
+        new_clients_today: payload.new_clients_today,
+        sync: syncPayload,
+      })
     }
 
     if (newNotAvec) {
-      // v4: list-only (no countContactQueues / urgency scan); UI keeps prev overdue counts
-      const cacheKey = `contacts:novos:v4:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      // v5: list-only + KPI Avec new_clients do dia (card Contatos).
+      const metricsDay = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : todayIso()
+      const cacheKey = `contacts:novos:v5:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
       const result = await cachedFetch(
         cacheKey,
         async () => {
-          const listed = await listNewContactsNotInAvec({ day, limit })
+          const [listed, metrics] = await Promise.all([
+            listNewContactsNotInAvec({ day, limit }),
+            getSalonMetrics(metricsDay),
+          ])
           return {
             items: listed.items,
             total: listed.total,
             queues: { novos: listed.total },
+            new_clients_today: metrics?.new_clients ?? null,
           }
         },
         30,
@@ -113,6 +134,7 @@ export async function GET(req: NextRequest) {
         queue: 'novos',
         day: day ?? 'today',
         queues: result.queues,
+        new_clients_today: result.new_clients_today,
         sync: syncPayload,
       })
     }

@@ -330,7 +330,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
     await updateContact(contact.id, { status: 'convertido' })
   } else if (event === 'appointment.created' || event === 'appointment.updated') {
-    // Sem horário = comanda/encaixe → ancora agora; Pipeline coloca em "No salão".
+    // Sem horário = comanda/encaixe → ancora agora; Pipeline mantém em Agendados.
     const when = payload.scheduled_at ?? (payload.service_name ? new Date().toISOString() : null)
     if (payload.service_name && when) {
       const services = await listServices(contact.id)

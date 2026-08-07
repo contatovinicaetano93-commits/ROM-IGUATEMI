@@ -195,6 +195,8 @@ function ContatosPageContent() {
     novos: number
     sem_servicos: number
   }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0, sem_servicos: 0 })
+  /** KPI Avec new_clients do dia — atualiza no sync; distinto da fila sem avec_client_id. */
+  const [newClientsToday, setNewClientsToday] = useState<number | null>(null)
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [syncMeta, setSyncMeta] = useState<ContactsSyncMeta | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -240,6 +242,11 @@ function ContatosPageContent() {
           setTotalInBase(null)
           const q = countsJson.meta?.queues
           if (countsJson.meta?.sync) setSyncMeta(countsJson.meta.sync as ContactsSyncMeta)
+          if (typeof countsJson.meta?.new_clients_today === 'number') {
+            setNewClientsToday(countsJson.meta.new_clients_today)
+          } else if (countsJson.meta?.new_clients_today === null) {
+            setNewClientsToday(null)
+          }
           if (q && typeof q.novos === 'number') {
             setQueueCounts((prev) => ({
               overdue: typeof q.overdue === 'number' ? q.overdue : prev.overdue,
@@ -283,6 +290,11 @@ function ContatosPageContent() {
         else {
           setError(null)
           if (json.meta?.sync) setSyncMeta(json.meta.sync as ContactsSyncMeta)
+          if (typeof json.meta?.new_clients_today === 'number') {
+            setNewClientsToday(json.meta.new_clients_today)
+          } else if (json.meta?.new_clients_today === null) {
+            setNewClientsToday(null)
+          }
           setContacts(json.data ?? [])
           const total = json.meta?.total
           setTotalInBase(typeof total === 'number' ? total : null)
@@ -395,11 +407,13 @@ function ContatosPageContent() {
             Novos contatos
           </p>
           <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
-            Últimos {NOVOS_WINDOW_DAYS} dias, ainda sem cliente no banco Avec
+            {newClientsToday != null && newClientsToday > 0
+              ? `Avec hoje: ${newClientsToday} · fila ${NOVOS_WINDOW_DAYS}d sem ID: ${queueCounts.novos}`
+              : `Últimos ${NOVOS_WINDOW_DAYS} dias, ainda sem cliente no banco Avec`}
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-gold/15 px-3 py-1 text-sm font-semibold tabular-nums text-gold">
-          {queueCounts.novos}
+          {newClientsToday != null && newClientsToday > 0 ? newClientsToday : queueCounts.novos}
         </span>
       </button>
 
@@ -483,8 +497,8 @@ function ContatosPageContent() {
 
       {mode === 'novos' && (
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
-          Novos: lead que chegou pela Avec (agenda/atendimento), mas o ROM abriu cadastro novo
-          porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio). Fica aqui por{' '}
+          Badge do card = KPI Avec de clientes novos do dia (sync 0002). A lista abaixo é a fila
+          operacional: lead que a Avec trouxe sem `avec_client_id` ainda. Fica na fila por{' '}
           {NOVOS_WINDOW_DAYS} dias; sai antes se fizer um serviço com cadência, e aí passa a
           aparecer em Vencendo/Atrasados.
         </p>

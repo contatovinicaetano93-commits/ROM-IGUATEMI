@@ -16,27 +16,27 @@ export async function GET(req: NextRequest) {
     const dayParam = req.nextUrl.searchParams.get('day')
     const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : todayIso()
     const payload = await cachedFetch(
-      `pipeline:v3:${day}`,
+      `pipeline:v4:${day}`,
       async () => {
-        const { scheduled, walkIn, completed } = await listTodayPipeline(day)
+        const { scheduled, courtesy, completed } = await listTodayPipeline(day)
         const scheduledHeads = countDistinctContactIds(scheduled)
-        const walkInHeads = countDistinctContactIds(walkIn)
+        const courtesyHeads = countDistinctContactIds(courtesy)
         const completedHeads = countDistinctContactIds(completed)
         // Total do dia = união de cabeças (não soma das colunas — mesma pessoa em 2 colunas conta 1).
-        const totalHeads = countDistinctContactIds([...scheduled, ...walkIn, ...completed])
+        const totalHeads = countDistinctContactIds([...scheduled, ...courtesy, ...completed])
         return {
           day,
           scheduled,
-          walkIn,
+          courtesy,
           completed,
           counts: {
             scheduled: scheduledHeads,
-            walkIn: walkInHeads,
+            courtesy: courtesyHeads,
             completed: completedHeads,
             total: totalHeads,
             /** Linhas de serviço (cards) — referência ops, não badge. */
             scheduled_services: scheduled.length,
-            walkIn_services: walkIn.length,
+            courtesy_services: courtesy.length,
             completed_services: completed.length,
           },
         }
