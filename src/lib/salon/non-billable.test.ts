@@ -29,6 +29,25 @@ describe('non-billable', () => {
         last_done_at: '2026-08-07T15:00:00.000Z',
       }),
     ).toBe('cortesia')
+    expect(
+      classifyNonBillable({
+        name: 'Escova',
+        last_price: 0,
+        last_done_at: '2026-08-07T15:00:00.000Z',
+        scheduled_at: '2026-08-07T14:00:00.000Z',
+      }),
+    ).toBe('cortesia')
+  })
+
+  it('não usa last_price 0 histórico em rebooking aberto', () => {
+    expect(
+      classifyNonBillable({
+        name: 'Escova',
+        last_price: 0,
+        last_done_at: '2026-07-01T15:00:00.000Z',
+        scheduled_at: '2026-08-07T14:00:00.000Z',
+      }),
+    ).toBeNull()
   })
 
   it('prioriza teste quando ambos aparecem', () => {

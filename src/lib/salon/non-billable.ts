@@ -11,6 +11,8 @@ export type NonBillableRow = {
   contact_name?: string | null
   last_price?: number | null
   last_done_at?: string | null
+  /** Presente no pipeline: se posterior a last_done_at, last_price é de visita anterior. */
+  scheduled_at?: string | null
 }
 
 function blobOf(row: NonBillableRow): string {
@@ -46,8 +48,14 @@ export function classifyNonBillable(row: NonBillableRow): NonBillableKind | null
     return 'cortesia'
   }
 
-  // Só com visita marcada como feita: preço 0 costuma ser cortesia no Avec.
-  if (row.last_done_at && row.last_price != null && Number(row.last_price) === 0) {
+  // Só com visita marcada como feita nesta ocorrência: preço 0 costuma ser cortesia no Avec.
+  // Rebooking aberto após cortesia ainda carrega last_done_at/last_price históricos — ignorar.
+  if (
+    row.last_done_at &&
+    row.last_price != null &&
+    Number(row.last_price) === 0 &&
+    (!row.scheduled_at || row.scheduled_at <= row.last_done_at)
+  ) {
     return 'cortesia'
   }
 
