@@ -4,7 +4,7 @@ import { ttlGetOrSet } from '@/lib/ttl-cache'
 
 export async function GET() {
   try {
-    const data = await ttlGetOrSet('kpis:tm', 120_000, () => fetchTmComparison())
+    const data = await ttlGetOrSet('kpis:tm:v2', 120_000, () => fetchTmComparison())
     return okCached(data, 60)
   } catch (e) {
     return handleError(e)

@@ -2,7 +2,10 @@ import { getSql } from '@/lib/db'
 import { todayIso } from '@/lib/salon/format'
 import { labelMonth, labelQuarter, quarterOfMonth, monthsInQuarter } from '@/lib/director-report/period'
 import type { MonthKey, QuarterKey } from '@/lib/director-report/types'
-import { resolveMonthWindow } from '@/lib/salon/month-window'
+import {
+  resolveMonthWindow,
+  resolvePreviousComparableWindow,
+} from '@/lib/salon/month-window'
 
 export interface TmBucket {
   key: string
@@ -16,22 +19,6 @@ export interface TmComparison {
   quarter: { current: TmBucket; previous: TmBucket }
 }
 
-function monthKeyFromDate(d: Date): MonthKey {
-  const y = d.getUTCFullYear()
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  return `${y}-${m}` as MonthKey
-}
-
-function previousMonthKey(month: MonthKey): MonthKey {
-  const [y, m] = month.split('-').map(Number)
-  return monthKeyFromDate(new Date(Date.UTC(y, m - 2, 1)))
-}
-
-function monthRange(month: MonthKey): { start: string; end: string } {
-  const w = resolveMonthWindow(month)
-  return { start: w.from, end: w.to }
-}
-
 function previousQuarterKey(quarter: QuarterKey): QuarterKey {
   const [yStr, qStr] = quarter.split('-Q')
   const y = Number(yStr)
@@ -39,9 +26,94 @@ function previousQuarterKey(quarter: QuarterKey): QuarterKey {
   return q === 1 ? (`${y - 1}-Q4` as QuarterKey) : (`${y}-Q${q - 1}` as QuarterKey)
 }
 
-function quarterRange(quarter: QuarterKey): { start: string; end: string } {
+function calendarMonthRange(month: MonthKey): { start: string; end: string } {
+  const [y, m] = month.split('-').map(Number)
+  const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate()
+  return {
+    start: `${month}-01`,
+    end: `${month}-${String(last).padStart(2, '0')}`,
+  }
+}
+
+function quarterBounds(quarter: QuarterKey): { start: string; end: string } {
   const months = monthsInQuarter(quarter)
-  return { start: monthRange(months[0]!).start, end: monthRange(months[months.length - 1]!).end }
+  const first = calendarMonthRange(months[0]!)
+  const last = calendarMonthRange(months[months.length - 1]!)
+  return { start: first.start, end: last.end }
+}
+
+function addDaysIso(day: string, delta: number): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
+function daysInclusive(from: string, to: string): number {
+  const a = new Date(`${from}T12:00:00Z`).getTime()
+  const b = new Date(`${to}T12:00:00Z`).getTime()
+  return Math.max(1, Math.round((b - a) / 86_400_000) + 1)
+}
+
+/**
+ * Trimestre atual até referenceDay; anterior com o mesmo nº de dias a partir do início.
+ * Evita Q aberto vs Q cheio (mesma distorção do MoM).
+ */
+export function tmQuarterWindows(referenceDay: string): {
+  current: { key: QuarterKey; label: string; start: string; end: string }
+  previous: { key: QuarterKey; label: string; start: string; end: string }
+} {
+  const month = referenceDay.slice(0, 7) as MonthKey
+  const currentKey = quarterOfMonth(month)
+  const previousKey = previousQuarterKey(currentKey)
+  const curBounds = quarterBounds(currentKey)
+  const prevBounds = quarterBounds(previousKey)
+  const curEnd =
+    referenceDay >= curBounds.start && referenceDay <= curBounds.end
+      ? referenceDay
+      : curBounds.end
+  const span = daysInclusive(curBounds.start, curEnd)
+  const prevEndRaw = addDaysIso(prevBounds.start, span - 1)
+  const prevEnd = prevEndRaw > prevBounds.end ? prevBounds.end : prevEndRaw
+  return {
+    current: {
+      key: currentKey,
+      label: labelQuarter(currentKey),
+      start: curBounds.start,
+      end: curEnd,
+    },
+    previous: {
+      key: previousKey,
+      label: `${labelQuarter(previousKey)} (${span}d)`,
+      start: prevBounds.start,
+      end: prevEnd,
+    },
+  }
+}
+
+/** Janelas mensais TM — MTD↔MTD via resolvePreviousComparableWindow. */
+export function tmMonthWindows(referenceDay: string): {
+  current: { key: MonthKey; label: string; start: string; end: string; mtd: boolean }
+  previous: { key: string; label: string; start: string; end: string; mtd_aligned: boolean }
+} {
+  const currentMonth = referenceDay.slice(0, 7) as MonthKey
+  const current = resolveMonthWindow(currentMonth, referenceDay)
+  const previous = resolvePreviousComparableWindow(current)
+  return {
+    current: {
+      key: currentMonth,
+      label: current.mtd ? `${labelMonth(currentMonth)} (MTD)` : labelMonth(currentMonth),
+      start: current.from,
+      end: current.to,
+      mtd: current.mtd,
+    },
+    previous: {
+      key: previous.month,
+      label: previous.label,
+      start: previous.from,
+      end: previous.to,
+      mtd_aligned: previous.mtd_aligned,
+    },
+  }
 }
 
 async function sumDuration(start: string, end: string): Promise<{ avgMinutes: number | null; sampleCount: number }> {
@@ -63,34 +135,45 @@ async function sumDuration(start: string, end: string): Promise<{ avgMinutes: nu
   }
 }
 
-/** TM (Sprint 1) — mês atual vs anterior e trimestre atual vs anterior, a partir de salon_daily_metrics. */
+/**
+ * TM — mês atual vs anterior (MTD alinhado) e trimestre vs trimestre
+ * (mesmo nº de dias a partir do início do trimestre).
+ */
 export async function fetchTmComparison(referenceDay = todayIso()): Promise<TmComparison> {
-  const [y, m] = referenceDay.split('-').map(Number)
-  const currentMonth = `${y}-${String(m).padStart(2, '0')}` as MonthKey
-  const prevMonth = previousMonthKey(currentMonth)
-  const currentQuarter = quarterOfMonth(currentMonth)
-  const prevQuarter = previousQuarterKey(currentQuarter)
-
-  const curMonthRange = monthRange(currentMonth)
-  const prevMonthRange = monthRange(prevMonth)
-  const curQuarterRange = quarterRange(currentQuarter)
-  const prevQuarterRange = quarterRange(prevQuarter)
+  const months = tmMonthWindows(referenceDay)
+  const quarters = tmQuarterWindows(referenceDay)
 
   const [curMonth, prevMonthData, curQuarter, prevQuarterData] = await Promise.all([
-    sumDuration(curMonthRange.start, curMonthRange.end),
-    sumDuration(prevMonthRange.start, prevMonthRange.end),
-    sumDuration(curQuarterRange.start, curQuarterRange.end),
-    sumDuration(prevQuarterRange.start, prevQuarterRange.end),
+    sumDuration(months.current.start, months.current.end),
+    sumDuration(months.previous.start, months.previous.end),
+    sumDuration(quarters.current.start, quarters.current.end),
+    sumDuration(quarters.previous.start, quarters.previous.end),
   ])
 
   return {
     month: {
-      current: { key: currentMonth, label: labelMonth(currentMonth), ...curMonth },
-      previous: { key: prevMonth, label: labelMonth(prevMonth), ...prevMonthData },
+      current: {
+        key: months.current.key,
+        label: months.current.label,
+        ...curMonth,
+      },
+      previous: {
+        key: months.previous.key,
+        label: months.previous.label,
+        ...prevMonthData,
+      },
     },
     quarter: {
-      current: { key: currentQuarter, label: labelQuarter(currentQuarter), ...curQuarter },
-      previous: { key: prevQuarter, label: labelQuarter(prevQuarter), ...prevQuarterData },
+      current: {
+        key: quarters.current.key,
+        label: quarters.current.label,
+        ...curQuarter,
+      },
+      previous: {
+        key: quarters.previous.key,
+        label: quarters.previous.label,
+        ...prevQuarterData,
+      },
     },
   }
 }
