@@ -76,6 +76,8 @@ interface ProfessionalRanking {
 interface PerformanceData {
   reference_day: string | null
   compare_day: string | null
+  compare_label?: string | null
+  compare_mtd_aligned?: boolean
   professionals: ProfessionalRanking[]
 }
 
@@ -709,7 +711,9 @@ export default function DashboardPage() {
               Escopo: {period?.from ?? '—'} → {period?.to ?? '—'}
               {period?.mtd ? ' (mês em aberto · MTD)' : ' (mês fechado)'}
               {performance.reference_day ? ` · snapshot ${performance.reference_day}` : ''}
-              {' · '}deltas vs mês anterior
+              {performance.compare_label
+                ? ` · deltas vs ${performance.compare_label}`
+                : ' · deltas vs período comparável do mês anterior'}
             </p>
             <table className="w-full min-w-[560px] text-sm">
               <thead>
@@ -754,8 +758,11 @@ export default function DashboardPage() {
             </table>
             {performance.compare_day && (
               <p className="mt-3 text-[0.65rem] text-muted">
-                Comparação mês calendário: {performance.reference_day} vs{' '}
-                {performance.compare_day} (fim do mês anterior)
+                Comparação:{' '}
+                {performance.compare_mtd_aligned
+                  ? `mesmo recorte de dias — ${performance.reference_day} vs ${performance.compare_day}`
+                  : `mês fechado — ${performance.reference_day} vs ${performance.compare_day}`}
+                {performance.compare_label ? ` (${performance.compare_label})` : ''}
               </p>
             )}
           </div>
