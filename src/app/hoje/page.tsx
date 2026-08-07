@@ -470,7 +470,34 @@ export default function HojePage() {
         />
       )}
 
-      {!loading && (data?.leads.novos ?? 0) > 0 && (
+      {!loading && (salon?.new_clients ?? 0) > 0 && (
+        <div className="flex items-center justify-between rounded-2xl border border-border bg-card p-4">
+          <div className="flex items-center gap-3">
+            <Users size={18} className="text-gold" />
+            <div>
+              <p className="text-sm font-medium">
+                {salon!.new_clients} cliente(s) novo(s) hoje
+              </p>
+              <p className="text-xs text-muted">
+                KPI Avec · atualiza no sync do dia (0002)
+                {(data?.leads.novos ?? 0) > 0
+                  ? ` · ${data!.leads.novos} lead(s) sem cadastro Avec (30d)`
+                  : ''}
+              </p>
+            </div>
+          </div>
+          {(data?.leads.novos ?? 0) > 0 ? (
+            <Link
+              href="/contatos?queue=novos"
+              className="flex shrink-0 items-center gap-1 text-xs font-medium text-gold"
+            >
+              Ver fila
+              <ChevronRight size={16} />
+            </Link>
+          ) : null}
+        </div>
+      )}
+      {!loading && (salon?.new_clients ?? 0) === 0 && (data?.leads.novos ?? 0) > 0 && (
         <Link
           href="/contatos?queue=novos"
           className="flex items-center justify-between rounded-2xl border border-border bg-card p-4 active:bg-surface"
@@ -479,7 +506,7 @@ export default function HojePage() {
             <Users size={18} className="text-gold" />
             <div>
               <p className="text-sm font-medium">{data!.leads.novos} contato(s) novo(s)</p>
-              <p className="text-xs text-muted">Contatos · últimos 30 dias (exceto Importado Avec)</p>
+              <p className="text-xs text-muted">Contatos · últimos 30 dias sem cadastro Avec</p>
             </div>
           </div>
           <ChevronRight size={16} className="text-muted" />

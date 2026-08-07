@@ -266,7 +266,7 @@ export default function PipelinePage() {
         />
         <PipelineColumn
           title="Teste / Cortesia"
-          hint="Heurística por nome/serviço/notes ou preço zero já pago."
+          hint="Cortesia/brinde no nome, ou preço zero pago. TESTE DE MECHAS fica em Agendados."
           storageKey="pipeline.section.cortesia.open"
           count={loading ? 0 : (data?.counts.courtesy ?? 0)}
           tone="sky"

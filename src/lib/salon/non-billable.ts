@@ -1,6 +1,8 @@
 /**
  * Heurística para isolar teste / cortesia do Pipeline operacional.
  * Não há flag canônica no Avec — usa nome do serviço, contato, notes e preço zero pago.
+ *
+ * "TESTE DE MECHAS" (e similares) é serviço real de coloração — não é teste de sistema.
  */
 
 export type NonBillableKind = 'teste' | 'cortesia'
@@ -24,29 +26,45 @@ function blobOf(row: NonBillableRow): string {
     .replace(/\p{M}/gu, '')
 }
 
-/** Classifica linha como teste ou cortesia; null = atendimento normal. */
-export function classifyNonBillable(row: NonBillableRow): NonBillableKind | null {
-  const blob = blobOf(row)
+/** Serviços Avec com "teste" no nome que são procedimento (faturável), não QA. */
+function isProceduralTesteService(blob: string): boolean {
+  return (
+    /\bteste\s+de\s+mechas?\b/.test(blob) ||
+    /\bteste\s+de\s+cor\b/.test(blob) ||
+    /\bteste\s+de\s+color/.test(blob) ||
+    /\bteste\s+de\s+alisamento\b/.test(blob) ||
+    /\bteste\s+de\s+quimica\b/.test(blob)
+  )
+}
 
-  // Teste antes de cortesia (ex.: "teste cortesia").
-  if (
-    /\btestes?\b/.test(blob) ||
-    /\btest\b/.test(blob) ||
-    /\bcliente\s*teste\b/.test(blob) ||
-    /\bagenda\s*teste\b/.test(blob)
-  ) {
-    return 'teste'
-  }
-
-  if (
+function isCourtesyBlob(blob: string): boolean {
+  return (
     /\bcortesias?\b/.test(blob) ||
     /\bcourtesy\b/.test(blob) ||
     /\bbrinde\b/.test(blob) ||
     /\bamostra\b/.test(blob) ||
     /\bgentileza\b/.test(blob)
-  ) {
-    return 'cortesia'
-  }
+  )
+}
+
+function isQaTestBlob(blob: string): boolean {
+  if (isProceduralTesteService(blob)) return false
+  return (
+    /\bcliente\s*teste\b/.test(blob) ||
+    /\bagenda\s*teste\b/.test(blob) ||
+    /\btestes?\b/.test(blob) ||
+    /\btest\b/.test(blob)
+  )
+}
+
+/** Classifica linha como teste ou cortesia; null = atendimento normal. */
+export function classifyNonBillable(row: NonBillableRow): NonBillableKind | null {
+  const blob = blobOf(row)
+
+  // Cortesia primeiro — serviço "CORTESIA" deve ir para o card do meio.
+  if (isCourtesyBlob(blob)) return 'cortesia'
+
+  if (isQaTestBlob(blob)) return 'teste'
 
   // Só com visita marcada como feita nesta ocorrência: preço 0 costuma ser cortesia no Avec.
   // Rebooking aberto após cortesia ainda carrega last_done_at/last_price históricos — ignorar.
