@@ -67,13 +67,17 @@ export function tmQuarterWindows(referenceDay: string): {
   const previousKey = previousQuarterKey(currentKey)
   const curBounds = quarterBounds(currentKey)
   const prevBounds = quarterBounds(previousKey)
-  const curEnd =
+  const curEndRaw =
     referenceDay >= curBounds.start && referenceDay <= curBounds.end
       ? referenceDay
       : curBounds.end
-  const span = daysInclusive(curBounds.start, curEnd)
-  const prevEndRaw = addDaysIso(prevBounds.start, span - 1)
-  const prevEnd = prevEndRaw > prevBounds.end ? prevBounds.end : prevEndRaw
+  // Cap to the shorter side so QoQ always compares the same nº of days
+  // (e.g. Q2=91d vs Q1=90d would otherwise leave current one day longer).
+  const curSpan = daysInclusive(curBounds.start, curEndRaw)
+  const prevCap = daysInclusive(prevBounds.start, prevBounds.end)
+  const span = Math.min(curSpan, prevCap)
+  const curEnd = addDaysIso(curBounds.start, span - 1)
+  const prevEnd = addDaysIso(prevBounds.start, span - 1)
   return {
     current: {
       key: currentKey,

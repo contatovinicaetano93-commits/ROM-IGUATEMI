@@ -50,4 +50,20 @@ describe('tmQuarterWindows', () => {
     })
     expect(w.previous.label).toContain('38d')
   })
+
+  it('Q2 fechado alinha ao Q1 mais curto (90d), não 91 vs 90', () => {
+    // 2026-Q2 = 91d; 2026-Q1 = 90d → ambos em 90d (até 29/06 e 31/03)
+    const w = tmQuarterWindows('2026-06-30')
+    expect(w.current).toMatchObject({
+      key: '2026-Q2',
+      start: '2026-04-01',
+      end: '2026-06-29',
+    })
+    expect(w.previous).toMatchObject({
+      key: '2026-Q1',
+      start: '2026-01-01',
+      end: '2026-03-31',
+    })
+    expect(w.previous.label).toContain('90d')
+  })
 })
