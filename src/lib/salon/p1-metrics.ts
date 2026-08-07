@@ -123,12 +123,24 @@ export async function getSalonP1Daily(day: string): Promise<SalonP1Daily | null>
   }
 }
 
+function addDaysIso(day: string, delta: number): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
 /**
  * syncP1Kpis grava um snapshot por dia com escopo de mês calendário até esse dia
  * (MTD no mês corrente). "Near" pega o snapshot mais recente em ou antes de
- * targetDay — a Visão compara mês atual vs fim do mês anterior.
+ * targetDay — deltas MoM usam o mesmo recorte de dias do mês anterior.
+ *
+ * `maxSkewDays`: se o dia encontrado estiver mais antigo que target−N, retorna null
+ * (evita herdar snapshot de mês errado quando o dia comparável não foi backfillado).
  */
-export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Daily | null> {
+export async function getSalonP1DailyNear(
+  targetDay: string,
+  opts?: { maxSkewDays?: number },
+): Promise<SalonP1Daily | null> {
   const sql = getSql()
   try {
     const rows = (await sql`
@@ -144,7 +156,10 @@ export async function getSalonP1DailyNear(targetDay: string): Promise<SalonP1Dai
       order by day desc
       limit 1
     `) as SalonP1Daily[]
-    return mapSalonP1Row(rows[0])
+    const mapped = mapSalonP1Row(rows[0])
+    if (!mapped || opts?.maxSkewDays == null) return mapped
+    const minDay = addDaysIso(targetDay, -Math.max(0, Math.floor(opts.maxSkewDays)))
+    return mapped.day >= minDay ? mapped : null
   } catch {
     return null
   }

@@ -12,6 +12,10 @@ import {
   getSalonP1DailyNear,
   type P1ProfessionalRow,
 } from '@/lib/salon/p1-metrics'
+import {
+  resolveMonthWindow,
+  resolvePreviousComparableWindow,
+} from '@/lib/salon/month-window'
 import { compareByNamePtBr } from '@/lib/salon/sort'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 
@@ -76,6 +80,8 @@ export async function GET(req: NextRequest) {
         month: string | null
         reference_day: string | null
         compare_day: string | null
+        compare_label: string | null
+        compare_mtd_aligned: boolean
         professionals: ProfessionalWithDelta[]
         can_view_revenue: boolean
       }
@@ -85,6 +91,8 @@ export async function GET(req: NextRequest) {
           month,
           reference_day: null,
           compare_day: null,
+          compare_label: null,
+          compare_mtd_aligned: false,
           professionals: [],
           can_view_revenue: canViewRevenue,
         }
@@ -95,14 +103,16 @@ export async function GET(req: NextRequest) {
             month,
             reference_day: null,
             compare_day: null,
+            compare_label: null,
+            compare_mtd_aligned: false,
             professionals: [],
             can_view_revenue: canViewRevenue,
           }
         } else {
-          const [y, m] = refMonth.split('-').map(Number)
-          const prevMonthDate = new Date(Date.UTC(y!, m! - 2, 1))
-          const prevMonth = prevMonthDate.toISOString().slice(0, 7)
-          const compare = await getSalonP1DailyNear(monthLastDay(prevMonth))
+          // MTD → mesmo dia do mês anterior; mês fechado → mês anterior cheio.
+          const window = resolveMonthWindow(month ?? refMonth, reference.day)
+          const prevWindow = resolvePreviousComparableWindow(window)
+          const compare = await getSalonP1DailyNear(prevWindow.to, { maxSkewDays: 3 })
           const compareByName = new Map((compare?.professionals ?? []).map((p) => [p.name, p]))
 
           const professionals: ProfessionalWithDelta[] = reference.professionals
@@ -134,6 +144,8 @@ export async function GET(req: NextRequest) {
             month: month ?? refMonth,
             reference_day: reference.day,
             compare_day: compare && compare.day !== reference.day ? compare.day : null,
+            compare_label: prevWindow.label,
+            compare_mtd_aligned: prevWindow.mtd_aligned,
             professionals,
             can_view_revenue: canViewRevenue,
           }

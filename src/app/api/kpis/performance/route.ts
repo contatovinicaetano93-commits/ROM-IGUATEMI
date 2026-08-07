@@ -2,6 +2,10 @@ import { NextRequest } from 'next/server'
 import { okCached, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { getLatestSalonP1Daily, getSalonP1DailyNear, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
+import {
+  resolveMonthWindow,
+  resolvePreviousComparableWindow,
+} from '@/lib/salon/month-window'
 import { compareByNamePtBr } from '@/lib/salon/sort'
 import { todayIso } from '@/lib/salon/format'
 import { ttlGetOrSet } from '@/lib/ttl-cache'
@@ -26,18 +30,22 @@ export async function GET(req: NextRequest) {
     const today = todayIso()
     const currentMonth = today.slice(0, 7)
     const canViewRevenue = auth.session.can_view_revenue
-    const cacheKey = `kpis:performance:${month ?? 'latest'}:rev=${canViewRevenue ? 1 : 0}`
+    const cacheKey = `kpis:performance:v2:${month ?? 'latest'}:rev=${canViewRevenue ? 1 : 0}`
 
     const payload = await ttlGetOrSet(cacheKey, 60_000, async () => {
       const reference =
         month && /^\d{4}-\d{2}$/.test(month)
-          ? await getSalonP1DailyNear(month === currentMonth ? today : monthLastDay(month))
+          ? await getSalonP1DailyNear(month === currentMonth ? today : monthLastDay(month), {
+              maxSkewDays: 14,
+            })
           : await getLatestSalonP1Daily()
 
       if (!reference) {
         return {
           reference_day: null as string | null,
           compare_day: null as string | null,
+          compare_label: null as string | null,
+          compare_mtd_aligned: false,
           professionals: [] as ProfessionalWithDelta[],
           month: month ?? null,
         }
@@ -49,15 +57,16 @@ export async function GET(req: NextRequest) {
         return {
           reference_day: null as string | null,
           compare_day: null as string | null,
+          compare_label: null as string | null,
+          compare_mtd_aligned: false,
           professionals: [] as ProfessionalWithDelta[],
           month,
         }
       }
 
-      const [y, m] = refMonth.split('-').map(Number)
-      const prevMonthDate = new Date(Date.UTC(y!, m! - 2, 1))
-      const prevMonth = prevMonthDate.toISOString().slice(0, 7)
-      const compare = await getSalonP1DailyNear(monthLastDay(prevMonth))
+      const window = resolveMonthWindow(month ?? refMonth, reference.day)
+      const prevWindow = resolvePreviousComparableWindow(window)
+      const compare = await getSalonP1DailyNear(prevWindow.to, { maxSkewDays: 3 })
       const compareByName = new Map((compare?.professionals ?? []).map((p) => [p.name, p]))
 
       const professionals: ProfessionalWithDelta[] = reference.professionals
@@ -88,6 +97,8 @@ export async function GET(req: NextRequest) {
       return {
         reference_day: reference.day,
         compare_day: compare && compare.day !== reference.day ? compare.day : null,
+        compare_label: prevWindow.label,
+        compare_mtd_aligned: prevWindow.mtd_aligned,
         month: month ?? refMonth,
         professionals,
       }

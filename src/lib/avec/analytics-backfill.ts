@@ -43,6 +43,11 @@ export type AnalyticsBackfillOpts = {
    * 'snapshots' = p1+p2+p3 na mesma chamada (só se a API estiver rápida).
    */
   steps?: AnalyticsBackfillStep[]
+  /**
+   * Âncora ISO (YYYY-MM-DD) dentro do mês — grava snapshot MTD até esse dia
+   * (ex.: 2026-07-07 para delta alinhado com 1–7/ago). Default = fim da janela do mês.
+   */
+  asOf?: string
   /** Início do chunk de cancelamentos (default = 1º do mês). */
   cancelFrom?: string
   /** Tamanho do chunk de cancelamentos (1–14, default 5). */
@@ -125,7 +130,15 @@ export async function runAnalyticsMonthBackfill(
     throw new Error(`Mês inválido: ${month} (use YYYY-MM)`)
   }
 
-  const { from, to } = monthToDateRange(monthKey)
+  const { from, to: monthDefaultTo } = monthToDateRange(monthKey)
+  const asOfRaw = opts?.asOf?.trim()
+  const to =
+    asOfRaw &&
+    /^\d{4}-\d{2}-\d{2}$/.test(asOfRaw) &&
+    asOfRaw.slice(0, 7) === monthKey &&
+    asOfRaw >= from
+      ? asOfRaw
+      : monthDefaultTo
   const stepsRaw = opts?.steps?.length ? opts.steps : (['p1'] as AnalyticsBackfillStep[])
   const expanded: AnalyticsBackfillStep[] = []
   for (const s of stepsRaw) {
@@ -145,7 +158,7 @@ export async function runAnalyticsMonthBackfill(
   let cancel_to: string | null = null
   let next_cancel_from: string | null = null
   let cancellations_done = !steps.includes('cancellations')
-  // P1 = mês calendário (ranking). P2/P3 mantêm janela ~30d ancorada no fim do mês.
+  // P1 = mês calendário (ranking). P2/P3 mantêm janela ~30d ancorada no asOf.
   const rolling = periodRangeEndingOn(to, 30)
   const p1Opts = { asOf: to }
   const p23Opts = { asOf: to, inicio: rolling.inicio, fim: rolling.fim }
