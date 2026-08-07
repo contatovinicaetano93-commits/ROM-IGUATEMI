@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     const monthRaw = req.nextUrl.searchParams.get('month')?.trim()
     const month = monthRaw && /^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : null
     const canViewRevenue = auth.session.can_view_revenue
-    const cacheKey = `kpis:dashboard:v1:${month ?? 'latest'}:rev=${canViewRevenue ? 1 : 0}`
+    const cacheKey = `kpis:dashboard:v2:${month ?? 'latest'}:rev=${canViewRevenue ? 1 : 0}`
 
     const data = await ttlGetOrSet(cacheKey, 45_000, async () => {
       // 1) Contact KPIs
