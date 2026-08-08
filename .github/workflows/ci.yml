@@ -28,9 +28,9 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
-      # Não bloqueia (ainda): o main já entra aqui com 28 erros herdados,
-      # quase todos set-state-in-effect / no-explicit-any / no-unused-vars,
-      # espalhados por muitos arquivos. Bloquear hoje deixaria todo PR vermelho.
+      # Não bloqueia (ainda): passivo herdado ~15–30 erros — sobretudo
+      # @typescript-eslint/no-explicit-any, no-unused-vars e react-hooks/refs
+      # (set-state-in-effect já zerou). Bloquear hoje deixaria todo PR vermelho.
       # Zerado esse passivo, troque para bloqueante removendo o continue-on-error.
       - name: Lint (informativo)
         run: npm run lint
