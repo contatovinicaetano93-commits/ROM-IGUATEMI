@@ -26,6 +26,9 @@ describe('non-billable', () => {
   it('detecta cortesia por serviço/notes sem confundir com Corte', () => {
     expect(classifyNonBillable({ name: 'Corte', contact_name: 'Ana' })).toBeNull()
     expect(classifyNonBillable({ name: 'CORTESIA', contact_name: 'Isabella' })).toBe('cortesia')
+    expect(classifyNonBillable({ name: 'CORTESIA CARINA', contact_name: 'Tarsila' })).toBe(
+      'cortesia',
+    )
     expect(classifyNonBillable({ name: 'Cortesia escova', contact_name: 'Ana' })).toBe('cortesia')
     expect(classifyNonBillable({ name: 'Escova', notes: 'brinde cliente' })).toBe('cortesia')
   })
