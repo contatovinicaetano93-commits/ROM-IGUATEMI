@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server'
 import { err, handleError } from '@/lib/api-response'
 import { authorizeAvecSync, executeAvecSync } from '@/lib/avec/sync-http'
+import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 
-/** Sync Avec full/agenda — appointments/caixa/cancel/noshow. Pro permite até 800s. */
+/** Sync Avec full/agenda — appointments/caixa/cancel/noshow. Pro + Fluid Compute até 800s. */
 export const maxDuration = 800
+warnIfLongMaxDuration('/api/avec/sync/full/agenda', maxDuration)
 
 /**
  * Cron fatiado do sync full — path sem query string.

@@ -8,6 +8,7 @@ import {
 } from '@/lib/avec/sync-director-0021'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
+import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
   is0021MonthCoverageReady,
@@ -30,6 +31,7 @@ import {
  * Query: `?status=1` só cobertura · `?month=2025-01` ou `?months=2025-01,2025-02` · `?force=1`.
  */
 export const maxDuration = 800
+warnIfLongMaxDuration('/api/avec/sync/director-0021', maxDuration)
 
 function emptyStats(): AvecSyncStats {
   const deployment = getDeploymentContext()

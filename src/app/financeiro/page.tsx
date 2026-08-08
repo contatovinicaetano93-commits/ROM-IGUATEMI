@@ -71,8 +71,8 @@ interface FinanceKpiBucket {
   ticket_avg: number | null
   daily: {
     day: string
-    revenue: number
-    attended: number
+    revenue: number | null
+    attended: number | null
     ticket_avg: number | null
     expenses_servicos: number
     expenses_comercio: number
@@ -1107,7 +1107,9 @@ export default function FinanceiroPage() {
                       <td className="py-1.5 tabular-nums">
                         {formatCurrency(d.expenses_comercio ?? 0)}
                       </td>
-                      <td className="py-1.5 tabular-nums">{d.attended}</td>
+                      <td className="py-1.5 tabular-nums">
+                        {d.attended != null ? d.attended : '—'}
+                      </td>
                       <td className="py-1.5 tabular-nums">
                         {d.ticket_avg != null ? formatCurrency(d.ticket_avg) : '—'}
                       </td>

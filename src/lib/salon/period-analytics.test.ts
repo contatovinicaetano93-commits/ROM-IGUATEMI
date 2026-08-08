@@ -101,4 +101,18 @@ describe('period-analytics', () => {
     expect(result.previous.lost_revenue).toBe(400)
     expect(result.previous.occupancy_avg).toBe(0.7)
   })
+
+  it('KPI ausente é null quando P2/P3 não existem', async () => {
+    sqlMock
+      .mockResolvedValueOnce([{ revenue: 1000, attended: 10, revenue_days: 1, attended_days: 1 }])
+      .mockResolvedValueOnce([{ cancelled: 0, no_shows: 0 }])
+      .mockResolvedValueOnce([{ revenue: null, attended: null, revenue_days: 0, attended_days: 0 }])
+      .mockResolvedValueOnce([{ cancelled: 0, no_shows: 0 }])
+
+    const { computePeriodAnalytics } = await import('@/lib/salon/period-analytics')
+    const result = await computePeriodAnalytics({ month: '2026-07' })
+    expect(result.packages_sold).toBeNull()
+    expect(result.new_clients_period).toBeNull()
+    expect(result.return_rate).toBeNull()
+  })
 })

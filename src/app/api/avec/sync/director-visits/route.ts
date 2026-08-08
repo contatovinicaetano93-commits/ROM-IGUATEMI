@@ -8,6 +8,7 @@ import {
 } from '@/lib/avec/sync-director-visits'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
+import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 import { getDeploymentContext } from '@/lib/deployment'
 import { isVisitCoverageReady, listVisitCoverage, probe0011FromDb } from '@/lib/director-report/from-db'
 import { previousQuarterKey } from '@/lib/director-report/local-0011'
@@ -29,6 +30,7 @@ import {
  * Query: `?status=1` só cobertura · `?quarter=2026-Q2` um trimestre · `?force=1` refaz.
  */
 export const maxDuration = 800
+warnIfLongMaxDuration('/api/avec/sync/director-visits', maxDuration)
 
 function emptyStats(): AvecSyncStats {
   const deployment = getDeploymentContext()

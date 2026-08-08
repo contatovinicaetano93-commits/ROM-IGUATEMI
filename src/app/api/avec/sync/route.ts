@@ -8,9 +8,11 @@ import {
   executeAvecSync,
   parseAvecSyncMode,
 } from '@/lib/avec/sync-http'
+import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 
-/** Sync Avec pode demorar (vários relatórios). Pro permite até 800s. */
+/** Sync Avec pode demorar (vários relatórios). Pro + Fluid Compute permite até 800s; sem Fluid, cap 300s. */
 export const maxDuration = 800
+warnIfLongMaxDuration('/api/avec/sync', maxDuration)
 
 export async function POST(req: NextRequest) {
   try {

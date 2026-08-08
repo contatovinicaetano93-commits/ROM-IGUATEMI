@@ -218,7 +218,7 @@ describe('finance', () => {
 })
 
 describe('mergeDailyFinanceSeries', () => {
-  it('une receita e despesas Omie; dia só despesa entra com receita 0', async () => {
+  it('une receita e despesas Omie; dia só despesa entra com receita null', async () => {
     const { mergeDailyFinanceSeries } = await import('@/lib/finance')
     const merged = mergeDailyFinanceSeries(
       [
@@ -249,11 +249,29 @@ describe('mergeDailyFinanceSeries', () => {
       },
       {
         day: '2026-07-03',
-        revenue: 0,
-        attended: 0,
+        revenue: null,
+        attended: null,
         ticket_avg: null,
         expenses_servicos: 0,
         expenses_comercio: 80,
+      },
+    ])
+  })
+
+  it('preserva revenue/attended null vindos de salon_daily_metrics', async () => {
+    const { mergeDailyFinanceSeries } = await import('@/lib/finance')
+    const merged = mergeDailyFinanceSeries(
+      [{ day: '2026-07-01', revenue: null, attended: null, ticket_avg: null }],
+      [],
+    )
+    expect(merged).toEqual([
+      {
+        day: '2026-07-01',
+        revenue: null,
+        attended: null,
+        ticket_avg: null,
+        expenses_servicos: 0,
+        expenses_comercio: 0,
       },
     ])
   })
