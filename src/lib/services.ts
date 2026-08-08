@@ -1,6 +1,6 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
-import { todayIso, toSalonDateIso } from '@/lib/salon/format'
+import { todayIso, toSalonDateIso, toSortableIso } from '@/lib/salon/format'
 import { notesWithScheduleOrigin, type ScheduleOrigin } from '@/lib/salon/schedule-origin'
 import { classifyNonBillable, type NonBillableKind } from '@/lib/salon/non-billable'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
@@ -542,11 +542,8 @@ export async function listTodayPipeline(day: string): Promise<{
 
   courtesy.sort((a, b) => {
     // postgres.js devolve Date em timestamptz — normalizar antes do localeCompare.
-    const key = (row: ScheduledServiceRow) => {
-      const raw = row.last_done_at ?? row.scheduled_at ?? ''
-      if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? '' : raw.toISOString()
-      return typeof raw === 'string' ? raw : String(raw ?? '')
-    }
+    const key = (row: ScheduledServiceRow) =>
+      toSortableIso(row.last_done_at ?? row.scheduled_at ?? '')
     return key(a).localeCompare(key(b))
   })
 
