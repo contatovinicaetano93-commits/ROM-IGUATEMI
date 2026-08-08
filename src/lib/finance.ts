@@ -324,8 +324,10 @@ async function sumExpensesByCnpj(from: string, to: string): Promise<ExpenseCnpjB
 
 export interface FinanceDayPoint {
   day: string
-  revenue: number
-  attended: number
+  /** null = dia sem métrica Avec (não inventar R$0). */
+  revenue: number | null
+  /** null = dia sem métrica Avec. */
+  attended: number | null
   ticket_avg: number | null
   /** Despesas Omie CNPJ serviços no dia (vencimento). */
   expenses_servicos: number
@@ -333,9 +335,14 @@ export interface FinanceDayPoint {
   expenses_comercio: number
 }
 
-/** Une dias de receita Avec + dias só com despesa Omie (zeros onde faltar). */
+/** Une dias de receita Avec + dias só com despesa Omie (null de KPI onde faltar métrica). */
 export function mergeDailyFinanceSeries(
-  metrics: Array<{ day: string; revenue: number; attended: number; ticket_avg: number | null }>,
+  metrics: Array<{
+    day: string
+    revenue: number | null
+    attended: number | null
+    ticket_avg: number | null
+  }>,
   expenses: Array<{ day: string; servicos: number; comercio: number }>,
 ): FinanceDayPoint[] {
   const byDay = new Map<string, FinanceDayPoint>()
@@ -343,8 +350,8 @@ export function mergeDailyFinanceSeries(
     const day = m.day.slice(0, 10)
     byDay.set(day, {
       day,
-      revenue: Math.round(Number(m.revenue) * 100) / 100,
-      attended: Number(m.attended) || 0,
+      revenue: m.revenue != null ? Math.round(Number(m.revenue) * 100) / 100 : null,
+      attended: m.attended != null ? Number(m.attended) : null,
       ticket_avg: m.ticket_avg != null ? Math.round(Number(m.ticket_avg) * 100) / 100 : null,
       expenses_servicos: 0,
       expenses_comercio: 0,
@@ -361,8 +368,8 @@ export function mergeDailyFinanceSeries(
     } else {
       byDay.set(day, {
         day,
-        revenue: 0,
-        attended: 0,
+        revenue: null,
+        attended: null,
         ticket_avg: null,
         expenses_servicos: servicos,
         expenses_comercio: comercio,
@@ -423,13 +430,13 @@ async function listDailyMetrics(from: string, to: string): Promise<FinanceDayPoi
       (await sql`
         select
           day::text as day,
-          coalesce(revenue, 0)::float as revenue,
-          coalesce(attended, 0)::int as attended,
+          revenue::float as revenue,
+          attended::int as attended,
           ticket_avg::float as ticket_avg
         from salon_daily_metrics
         where day >= ${from}::date and day <= ${to}::date
         order by day asc
-      `) as { day: string; revenue: number; attended: number; ticket_avg: number | null }[])(),
+      `) as { day: string; revenue: number | null; attended: number | null; ticket_avg: number | null }[])(),
     listDailyOmieExpenses(from, to),
   ])
   return mergeDailyFinanceSeries(metricRows, expenseRows)
