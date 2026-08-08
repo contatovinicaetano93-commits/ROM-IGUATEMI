@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     if (compareMonth && !/^\d{4}-\d{2}$/.test(compareMonth))
       return err('Parâmetro compare inválido (esperado YYYY-MM)', 422)
 
-    const cacheKey = `financeiro:kpis:v2:${month ?? 'cur'}:${compareMonth ?? 'prev'}`
+    const cacheKey = `financeiro:kpis:v3:${month ?? 'cur'}:${compareMonth ?? 'prev'}`
     const data = await ttlGetOrSet(cacheKey, 45_000, async () => {
       const kpis = await computeFinanceKpis({ month, compareMonth })
       const sync = await loadAvecSyncMeta()
