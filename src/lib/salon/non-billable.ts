@@ -12,9 +12,15 @@ export type NonBillableRow = {
   notes?: string | null
   contact_name?: string | null
   last_price?: number | null
-  last_done_at?: string | null
+  last_done_at?: string | Date | null
   /** Presente no pipeline: se posterior a last_done_at, last_price é de visita anterior. */
-  scheduled_at?: string | null
+  scheduled_at?: string | Date | null
+}
+
+function toEpochMs(value: string | Date | null | undefined): number | null {
+  if (value == null || value === '') return null
+  const t = value instanceof Date ? value.getTime() : new Date(value).getTime()
+  return Number.isNaN(t) ? null : t
 }
 
 function blobOf(row: NonBillableRow): string {
@@ -68,13 +74,11 @@ export function classifyNonBillable(row: NonBillableRow): NonBillableKind | null
 
   // Só com visita marcada como feita nesta ocorrência: preço 0 costuma ser cortesia no Avec.
   // Rebooking aberto após cortesia ainda carrega last_done_at/last_price históricos — ignorar.
-  if (
-    row.last_done_at &&
-    row.last_price != null &&
-    Number(row.last_price) === 0 &&
-    (!row.scheduled_at || row.scheduled_at <= row.last_done_at)
-  ) {
-    return 'cortesia'
+  // postgres.js pode devolver Date em timestamptz — comparar por epoch.
+  if (row.last_done_at && row.last_price != null && Number(row.last_price) === 0) {
+    const doneMs = toEpochMs(row.last_done_at)
+    const schedMs = toEpochMs(row.scheduled_at)
+    if (doneMs != null && (schedMs == null || schedMs <= doneMs)) return 'cortesia'
   }
 
   return null

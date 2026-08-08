@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const dayParam = req.nextUrl.searchParams.get('day')
     const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : todayIso()
     const payload = await cachedFetch(
-      `pipeline:v5:${day}`,
+      `pipeline:v6:${day}`,
       async () => {
         const { scheduled, courtesy, completed } = await listTodayPipeline(day)
         const scheduledHeads = countDistinctContactIds(scheduled)

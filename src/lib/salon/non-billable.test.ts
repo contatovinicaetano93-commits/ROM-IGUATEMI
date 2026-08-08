@@ -73,4 +73,23 @@ describe('non-billable', () => {
     ).toBeNull()
     expect(isNonBillable({ name: 'Corte' })).toBe(false)
   })
+
+  it('aceita Date do postgres.js no preço zero', () => {
+    expect(
+      classifyNonBillable({
+        name: 'Escova',
+        last_price: 0,
+        last_done_at: new Date('2026-08-07T15:00:00.000Z'),
+        scheduled_at: new Date('2026-08-07T14:00:00.000Z'),
+      }),
+    ).toBe('cortesia')
+    expect(
+      classifyNonBillable({
+        name: 'Escova',
+        last_price: 0,
+        last_done_at: new Date('2026-07-01T15:00:00.000Z'),
+        scheduled_at: new Date('2026-08-07T14:00:00.000Z'),
+      }),
+    ).toBeNull()
+  })
 })
