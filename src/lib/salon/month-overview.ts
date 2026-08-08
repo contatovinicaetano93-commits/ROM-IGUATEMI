@@ -13,11 +13,14 @@ import {
   monthKeyFromDay,
   monthRange,
   statusLabelPt,
+  sumSalonCmvRange,
+  sumSalonDailyRange,
+  sumSalonExpensesRange,
   type MonthCloseStatus,
   type MonthCompleteness,
   type SalonMonthMetricsRow,
 } from '@/lib/salon/month-metrics'
-import { resolveMonthWindow } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
 import { todayIso } from '@/lib/salon/format'
 
 export interface MonthOverviewSourceNote {
@@ -314,19 +317,137 @@ function buildOverview(args: {
   }
 }
 
-function overviewFromCachedRows(args: {
+function financeBucketFromDaily(args: {
+  monthKey: string
+  label: string
+  from: string
+  to: string
+  daily: Awaited<ReturnType<typeof sumSalonDailyRange>>
+  expenses: number
+  cmv: number
+}): FinanceKpis['current'] {
+  const base = emptyFinanceBucket(args.monthKey)
+  const revenue = args.daily.revenue
+  const expenses = args.expenses
+  const cmv = args.cmv
+  const attended = args.daily.attended
+  return {
+    ...base,
+    label: args.label,
+    from: args.from,
+    to: args.to,
+    revenue,
+    revenue_source: revenue > 0 ? 'metrics' : 'empty',
+    expenses,
+    expenses_by_cnpj: {
+      total: expenses,
+      servicos: 0,
+      comercio: 0,
+      manual: expenses,
+    },
+    attended,
+    ticket_avg: args.daily.ticket_avg,
+    cmv,
+    cmv_coverage: { ...EMPTY_CMV_COVERAGE, cmv },
+    cash_flow: Math.round((revenue - expenses) * 100) / 100,
+    gross_margin:
+      revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null,
+    margin_after_cmv:
+      revenue > 0 ? Math.round(((revenue - expenses - cmv) / revenue) * 1000) / 10 : null,
+  }
+}
+
+async function overviewFromCachedRows(args: {
   brand: ReturnType<typeof getBrand>
   month: string
   cached: SalonMonthMetricsRow
   cachedPrev: SalonMonthMetricsRow | null
-}): MonthOverview {
+}): Promise<MonthOverview> {
   const { brand, month, cached, cachedPrev } = args
   const baseAnalytics =
     analyticsFromMonthPayload(cached.payload) ?? analyticsFromMonthRow(cached)
+  const window = resolveMonthWindow(month)
+
+  // Mês em aberto: MoM = mesmo recorte de dias (MTD↔MTD). O cache do mês anterior
+  // materializado é mês cheio — não serve para o comparativo dos cards.
+  if (window.mtd) {
+    const prevWindow = resolvePreviousComparableWindow(window)
+    const dayNum = Number(window.to.slice(8, 10))
+    const currentLabel = `${labelMonthPt(month)} (até dia ${dayNum})`
+    const [curDaily, prevDaily, curExpenses, prevExpenses, curCmv, prevCmv, completeness] =
+      await Promise.all([
+        sumSalonDailyRange(window.from, window.to),
+        sumSalonDailyRange(prevWindow.from, prevWindow.to),
+        sumSalonExpensesRange(window.from, window.to),
+        sumSalonExpensesRange(prevWindow.from, prevWindow.to),
+        sumSalonCmvRange(window.from, window.to),
+        sumSalonCmvRange(prevWindow.from, prevWindow.to),
+        getMonthCompleteness(month),
+      ])
+    const current = financeBucketFromDaily({
+      monthKey: month,
+      label: currentLabel,
+      from: window.from,
+      to: window.to,
+      daily: curDaily,
+      expenses: curExpenses,
+      cmv: curCmv,
+    })
+    const previous = financeBucketFromDaily({
+      monthKey: prevWindow.month,
+      label: prevWindow.label,
+      from: prevWindow.from,
+      to: prevWindow.to,
+      daily: prevDaily,
+      expenses: prevExpenses,
+      cmv: prevCmv,
+    })
+    const analytics: PeriodAnalytics = {
+      ...baseAnalytics,
+      from: window.from,
+      to: window.to,
+      mtd: true,
+      revenue: curDaily.revenue > 0 || curDaily.attended > 0 ? curDaily.revenue : null,
+      attended: curDaily.attended > 0 || curDaily.revenue > 0 ? curDaily.attended : null,
+      cancelled: curDaily.cancelled,
+      no_shows: curDaily.no_shows,
+      ticket_avg: curDaily.ticket_avg,
+      lost_revenue: estimateLostRevenue(
+        curDaily.cancelled,
+        curDaily.no_shows,
+        curDaily.ticket_avg,
+      ),
+      previous: {
+        month: prevWindow.month,
+        label: prevWindow.label,
+        revenue: prevDaily.revenue > 0 || prevDaily.attended > 0 ? prevDaily.revenue : null,
+        attended: prevDaily.attended > 0 || prevDaily.revenue > 0 ? prevDaily.attended : null,
+        cancelled: prevDaily.cancelled,
+        no_shows: prevDaily.no_shows,
+        ticket_avg: prevDaily.ticket_avg,
+        lost_revenue: estimateLostRevenue(
+          prevDaily.cancelled,
+          prevDaily.no_shows,
+          prevDaily.ticket_avg,
+        ),
+        occupancy_avg: baseAnalytics.previous.occupancy_avg,
+      },
+    }
+    return buildOverview({
+      brand,
+      month,
+      finance: { current, previous },
+      analytics,
+      completeness,
+      materializedAt: cached.materialized_at,
+      fromCache: true,
+    })
+  }
+
   const previous = cachedPrev
     ? stubFinanceFromRow(cachedPrev)
     : emptyFinanceBucket(previousMonthKey(month))
-  // Se o payload não trouxe MoM e temos mês anterior materializado, preenche deltas.
+  // Mês fechado: MoM = mês anterior cheio (cache materializado).
   const analytics: PeriodAnalytics =
     cachedPrev && baseAnalytics.previous.revenue == null
       ? {
@@ -390,7 +511,7 @@ export async function computeMonthOverview(opts?: {
     }
 
     if (cached) {
-      return overviewFromCachedRows({ brand, month, cached, cachedPrev })
+      return await overviewFromCachedRows({ brand, month, cached, cachedPrev })
     }
 
     // Último recurso: completeness vazia (UI pede Atualizar fechamento).
