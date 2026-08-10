@@ -223,7 +223,8 @@ async function sumRevenue(from: string, to: string): Promise<number | null> {
   return Number(rows[0]?.revenue ?? 0) || 0
 }
 
-async function sumExpenses(from: string, to: string): Promise<number> {
+/** Despesas operacionais na janela — exclui TED/lucro/categorias Omie não operacionais. */
+export async function sumOperationalExpenses(from: string, to: string): Promise<number> {
   const sql = getSql()
   try {
     const rows = (await sql`
@@ -261,6 +262,10 @@ async function sumExpenses(from: string, to: string): Promise<number> {
     `) as { total: string | number }[]
     return Number(rows[0]?.total ?? 0) || 0
   }
+}
+
+async function sumExpenses(from: string, to: string): Promise<number> {
+  return sumOperationalExpenses(from, to)
 }
 
 export interface ExpenseCnpjBreakdown {

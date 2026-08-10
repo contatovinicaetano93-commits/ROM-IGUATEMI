@@ -29,7 +29,7 @@ async function execute(opts: {
   }
 
   try {
-    // Mês explícito: um mês. Senão YTD (cron, botão, scope=ytd) — MoM fidedigno no ano.
+    // Mês explícito: um mês. Cron: atual+anterior+1 YTD (rodízio). Manual: YTD completo.
     if (opts.monthParam && opts.scope !== 'ytd') {
       const month = normalizeMonthKey(opts.monthParam)
       if (!month) return err('Parâmetro month inválido (esperado YYYY-MM)', 422)
@@ -58,7 +58,7 @@ async function execute(opts: {
   }
 }
 
-/** Vercel Cron — Authorization: Bearer CRON_SECRET. Sync Omie YTD (jan→mês corrente). */
+/** Vercel Cron — Authorization: Bearer CRON_SECRET. Sync Omie recente + 1 mês YTD. */
 export async function GET(req: NextRequest) {
   try {
     if (!isCronAuthorized(req)) return err('Não autorizado', 401)

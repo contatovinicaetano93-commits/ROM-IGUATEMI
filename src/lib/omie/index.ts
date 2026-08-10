@@ -18,6 +18,7 @@ export {
   omieIsoToBr,
   omieFullMonthRange,
   omieYearMonthKeysThrough,
+  omieRecentSyncMonthKeys,
 } from '@/lib/omie/dates'
 export { ensureOmieExpenseSchema } from '@/lib/omie/store'
 export {
