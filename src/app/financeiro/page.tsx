@@ -648,77 +648,52 @@ export default function FinanceiroPage() {
     setOmieSyncing(true)
     setOmieSyncMsg(null)
     try {
-      // YTD: jan→mês corrente — MoM de despesas/fluxo fidedigno na plataforma.
-      const res = await apiFetch('/api/financeiro/omie/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scope: 'ytd' }),
-        timeoutMs: 280_000,
-      })
-      const json = await res.json()
-      if (json.error) throw new Error(json.error)
-      const data = json.data as {
-        skipped?: boolean
-        reason?: string
-        note?: string
-        scope?: string
-        months?: string[]
-        runs?: Array<{
-          month: string
+      // Mês a mês (Vercel ~300s) — um POST YTD inteiro estoura timeout.
+      const endKey = (kpis?.current.month || month).slice(0, 7)
+      const year = Number(endKey.slice(0, 4))
+      const endM = Number(endKey.slice(5, 7))
+      const months: string[] = []
+      for (let m = 1; m <= endM; m += 1) {
+        months.push(`${year}-${String(m).padStart(2, '0')}`)
+      }
+
+      let fetched = 0
+      let created = 0
+      let updated = 0
+      const errors: string[] = []
+
+      for (let i = 0; i < months.length; i += 1) {
+        const m = months[i]!
+        setOmieSyncMsg(`Omie ${m} (${i + 1}/${months.length})…`)
+        const res = await apiFetch('/api/financeiro/omie/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ month: m }),
+          timeoutMs: 280_000,
+        })
+        const json = await res.json()
+        if (json.error) throw new Error(json.error)
+        const data = json.data as {
+          skipped?: boolean
+          note?: string
+          fetched?: number
           created?: number
           updated?: number
-          fetched?: number
           error?: string
-        }>
-        created?: number
-        updated?: number
-        skipped_cancelled?: number
-        skipped_non_operating?: number
-        removed?: number
-        fetched?: number
-        error?: string
-        kinds?: {
-          kind: string
-          label: string
-          fetched: number
-          created: number
-          updated: number
-          error?: string
-        }[]
+        }
+        if (data.skipped) {
+          setOmieSyncMsg(data.note ?? 'Sync Omie já em andamento — tente de novo em alguns minutos.')
+          return
+        }
+        fetched += data.fetched ?? 0
+        created += data.created ?? 0
+        updated += data.updated ?? 0
+        if (data.error) errors.push(`${m}: ${data.error}`)
       }
-      if (data.skipped) {
-        setOmieSyncMsg(data.note ?? 'Sync Omie já em andamento — tente de novo em alguns minutos.')
-        return
-      }
-      if (data.runs && data.runs.length > 0) {
-        const fetched = data.runs.reduce((s, r) => s + (r.fetched ?? 0), 0)
-        const created = data.runs.reduce((s, r) => s + (r.created ?? 0), 0)
-        const updated = data.runs.reduce((s, r) => s + (r.updated ?? 0), 0)
-        const errors = data.runs.filter((r) => r.error).map((r) => `${r.month}: ${r.error}`)
-        setOmieSyncMsg(
-          `Omie YTD (${data.months?.length ?? data.runs.length} mês(es)): ${fetched} título(s) · +${created} novos · ${updated} atualizados` +
-            (errors.length ? ` ⚠ ${errors.join(' · ')}` : ''),
-        )
-        await load()
-        return
-      }
-      if (data.error && !(data.fetched && data.fetched > 0)) throw new Error(data.error)
-      const kindBits =
-        data.kinds
-          ?.map(
-            (k) =>
-              `${k.label}: ${k.fetched} título(s) (+${k.created}/${k.updated})` +
-              (k.error ? ` ⚠ ${k.error}` : ''),
-          )
-          .join(' · ') ?? null
+
       setOmieSyncMsg(
-        kindBits ??
-          `Omie: ${data.fetched ?? 0} título(s) · +${data.created ?? 0} novos · ${data.updated ?? 0} atualizados` +
-            (data.skipped_cancelled ? ` · ${data.skipped_cancelled} cancelados` : '') +
-            (data.skipped_non_operating
-              ? ` · ${data.skipped_non_operating} transferências/não-operacionais ignorados`
-              : '') +
-            (data.removed ? ` · ${data.removed} removidos` : ''),
+        `Omie YTD (${months.length} mês(es)): ${fetched} título(s) · +${created} novos · ${updated} atualizados` +
+          (errors.length ? ` ⚠ ${errors.join(' · ')}` : ''),
       )
       await load()
     } catch (e) {
