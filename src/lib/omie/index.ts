@@ -13,11 +13,17 @@ export {
   type OmieCnpjKind,
   type OmieCredentials,
 } from '@/lib/omie/client'
-export { omieBrToIso, omieIsoToBr, omieFullMonthRange } from '@/lib/omie/dates'
+export {
+  omieBrToIso,
+  omieIsoToBr,
+  omieFullMonthRange,
+  omieYearMonthKeysThrough,
+} from '@/lib/omie/dates'
 export { ensureOmieExpenseSchema } from '@/lib/omie/store'
 export {
   syncOmieExpensesForMonth,
   syncOmieExpensesRecent,
+  syncOmieExpensesYearToDate,
   normalizeOmieTitulo,
   type OmieSyncResult,
   type OmieSyncKindResult,

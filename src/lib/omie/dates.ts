@@ -26,3 +26,26 @@ export function omieFullMonthRange(monthKey: string): { from: string; to: string
     to: `${monthKey}-${String(lastDay).padStart(2, '0')}`,
   }
 }
+
+/**
+ * Meses YYYY-MM de jan/ano até o mês âncora (inclusive).
+ * Usado no sync Omie YTD — MoM de despesas em qualquer mês do ano.
+ */
+export function omieYearMonthKeysThrough(anchorIsoOrMonth: string): string[] {
+  const monthKey = /^\d{4}-\d{2}$/.test(anchorIsoOrMonth)
+    ? anchorIsoOrMonth
+    : anchorIsoOrMonth.slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(monthKey)) {
+    throw new Error(`Mês inválido: ${anchorIsoOrMonth}`)
+  }
+  const year = Number(monthKey.slice(0, 4))
+  const endMonth = Number(monthKey.slice(5, 7))
+  if (!Number.isFinite(year) || endMonth < 1 || endMonth > 12) {
+    throw new Error(`Mês inválido: ${anchorIsoOrMonth}`)
+  }
+  const keys: string[] = []
+  for (let m = 1; m <= endMonth; m += 1) {
+    keys.push(`${year}-${String(m).padStart(2, '0')}`)
+  }
+  return keys
+}

@@ -648,11 +648,12 @@ export default function FinanceiroPage() {
     setOmieSyncing(true)
     setOmieSyncMsg(null)
     try {
+      // YTD: jan→mês corrente — MoM de despesas/fluxo fidedigno na plataforma.
       const res = await apiFetch('/api/financeiro/omie/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month }),
-        timeoutMs: 120_000,
+        body: JSON.stringify({ scope: 'ytd' }),
+        timeoutMs: 280_000,
       })
       const json = await res.json()
       if (json.error) throw new Error(json.error)
@@ -660,6 +661,15 @@ export default function FinanceiroPage() {
         skipped?: boolean
         reason?: string
         note?: string
+        scope?: string
+        months?: string[]
+        runs?: Array<{
+          month: string
+          created?: number
+          updated?: number
+          fetched?: number
+          error?: string
+        }>
         created?: number
         updated?: number
         skipped_cancelled?: number
@@ -667,10 +677,29 @@ export default function FinanceiroPage() {
         removed?: number
         fetched?: number
         error?: string
-        kinds?: { kind: string; label: string; fetched: number; created: number; updated: number; error?: string }[]
+        kinds?: {
+          kind: string
+          label: string
+          fetched: number
+          created: number
+          updated: number
+          error?: string
+        }[]
       }
       if (data.skipped) {
         setOmieSyncMsg(data.note ?? 'Sync Omie já em andamento — tente de novo em alguns minutos.')
+        return
+      }
+      if (data.runs && data.runs.length > 0) {
+        const fetched = data.runs.reduce((s, r) => s + (r.fetched ?? 0), 0)
+        const created = data.runs.reduce((s, r) => s + (r.created ?? 0), 0)
+        const updated = data.runs.reduce((s, r) => s + (r.updated ?? 0), 0)
+        const errors = data.runs.filter((r) => r.error).map((r) => `${r.month}: ${r.error}`)
+        setOmieSyncMsg(
+          `Omie YTD (${data.months?.length ?? data.runs.length} mês(es)): ${fetched} título(s) · +${created} novos · ${updated} atualizados` +
+            (errors.length ? ` ⚠ ${errors.join(' · ')}` : ''),
+        )
+        await load()
         return
       }
       if (data.error && !(data.fetched && data.fetched > 0)) throw new Error(data.error)
@@ -763,10 +792,10 @@ export default function FinanceiroPage() {
             onClick={syncOmieExpenses}
             disabled={omieSyncing}
             className="flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-medium text-gold transition-colors hover:bg-gold/20 disabled:opacity-50"
-            title="Puxa Contas a Pagar dos 2 CNPJs Omie (Serviços + Comércio)"
+            title="Puxa Contas a Pagar Omie do ano (jan→mês atual), 2 CNPJs: Serviços + Comércio"
           >
             <RefreshCw size={14} className={omieSyncing ? 'animate-spin' : undefined} />
-            {omieSyncing ? 'Puxando Omie…' : 'Puxar despesas Omie'}
+            {omieSyncing ? 'Puxando Omie (ano)…' : 'Puxar despesas Omie (ano)'}
           </button>
         </div>
       </div>
