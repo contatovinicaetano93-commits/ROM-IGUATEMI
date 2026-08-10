@@ -295,9 +295,9 @@ export default function RelatoriosOverviewPage() {
           </div>
 
           <p className="text-xs text-muted">
-            Comparativo vs {data.previous_label} (mesmo recorte MTD quando o mês atual está em
-            andamento). Verde = melhor · laranja = pior (em despesas/CMV/cancel/no-show, cair é
-            melhor).
+            Comparativo vs {data.previous_label}. Com o mês em andamento, compara os mesmos dias do
+            mês anterior (MTD↔MTD) — não o acumulado cheio. Verde = melhor · laranja = pior (em
+            despesas/CMV/cancel/no-show, cair é melhor).
           </p>
 
           <div className="grid gap-4 lg:grid-cols-2">

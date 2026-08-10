@@ -26,3 +26,49 @@ export function omieFullMonthRange(monthKey: string): { from: string; to: string
     to: `${monthKey}-${String(lastDay).padStart(2, '0')}`,
   }
 }
+
+/**
+ * Meses YYYY-MM de jan/ano até o mês âncora (inclusive).
+ * Usado no sync Omie YTD — MoM de despesas em qualquer mês do ano.
+ */
+export function omieYearMonthKeysThrough(anchorIsoOrMonth: string): string[] {
+  const monthKey = /^\d{4}-\d{2}$/.test(anchorIsoOrMonth)
+    ? anchorIsoOrMonth
+    : anchorIsoOrMonth.slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(monthKey)) {
+    throw new Error(`Mês inválido: ${anchorIsoOrMonth}`)
+  }
+  const year = Number(monthKey.slice(0, 4))
+  const endMonth = Number(monthKey.slice(5, 7))
+  if (!Number.isFinite(year) || endMonth < 1 || endMonth > 12) {
+    throw new Error(`Mês inválido: ${anchorIsoOrMonth}`)
+  }
+  const keys: string[] = []
+  for (let m = 1; m <= endMonth; m += 1) {
+    keys.push(`${year}-${String(m).padStart(2, '0')}`)
+  }
+  return keys
+}
+
+/**
+ * Meses do cron Omie numa invocação: atual + anterior + 1 YTD em rodízio.
+ * Mantém o job diário dentro do maxDuration 300s e ainda cobre jan→mês.
+ */
+export function omieRecentSyncMonthKeys(anchorIsoOrMonth: string): string[] {
+  const months = omieYearMonthKeysThrough(anchorIsoOrMonth)
+  const current = months[months.length - 1]!
+  const previous = months.length >= 2 ? months[months.length - 2]! : null
+  const older = months.filter((m) => m !== current && m !== previous)
+  if (older.length === 0) {
+    return [current, ...(previous ? [previous] : [])]
+  }
+  const anchorDay = /^\d{4}-\d{2}$/.test(anchorIsoOrMonth)
+    ? `${anchorIsoOrMonth}-01`
+    : anchorIsoOrMonth.slice(0, 10)
+  const [y, m, d] = anchorDay.split('-').map(Number)
+  const dayOfYear = Math.floor(
+    (Date.UTC(y!, m! - 1, d!) - Date.UTC(y!, 0, 0)) / 86_400_000,
+  )
+  const olderPick = older[dayOfYear % older.length]!
+  return [current, ...(previous ? [previous] : []), olderPick]
+}

@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { sumOperationalExpenses } from '@/lib/finance'
 import { todayIso } from '@/lib/salon/format'
 import { statusLabelPt, type MonthCloseStatus } from '@/lib/salon/month-status'
 import { resolveMonthWindow } from '@/lib/salon/month-window'
@@ -202,6 +203,21 @@ async function listPresentDays(from: string, to: string): Promise<string[]> {
   }
 }
 
+/** Soma operacional de salon_daily_metrics numa janela (MTD↔MTD / mês fechado). */
+export async function sumSalonDailyRange(from: string, to: string) {
+  return sumDailyTotals(from, to)
+}
+
+/** Despesas operacionais na janela (mesma regra do Financeiro / sumOperationalExpenses). */
+export async function sumSalonExpensesRange(from: string, to: string): Promise<number> {
+  return sumExpenses(from, to)
+}
+
+/** CMV proxy (saídas de estoque) na janela. */
+export async function sumSalonCmvRange(from: string, to: string): Promise<number> {
+  return sumStockCogs(from, to)
+}
+
 async function sumDailyTotals(from: string, to: string) {
   const sql = getSql()
   try {
@@ -253,14 +269,9 @@ async function sumDailyTotals(from: string, to: string) {
 }
 
 async function sumExpenses(from: string, to: string): Promise<number> {
-  const sql = getSql()
   try {
-    const rows = (await sql`
-      select coalesce(sum(amount), 0)::float as total
-      from finance_expenses
-      where expense_date >= ${from}::date and expense_date <= ${to}::date
-    `) as { total: number }[]
-    return Math.round(Number(rows[0]?.total ?? 0) * 100) / 100
+    const total = await sumOperationalExpenses(from, to)
+    return Math.round(total * 100) / 100
   } catch {
     return 0
   }
