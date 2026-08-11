@@ -31,13 +31,15 @@ export interface MomCompareLine {
 
 /**
  * Linha de comparativo MoM. `invertGood` = menor é melhor (perdida, cancel, CMV, despesas).
+ * Ausência (null) → sem linha; não inventa 0.
  */
 export function momCompareLine(
-  current: number,
-  previous: number,
+  current: number | null | undefined,
+  previous: number | null | undefined,
   previousLabel: string,
   opts?: { kind?: 'currency' | 'number' | 'points'; invertGood?: boolean },
 ): MomCompareLine | null {
+  if (current == null || previous == null) return null
   const kind = opts?.kind ?? 'currency'
   const diff = current - previous
   if (kind === 'currency' && Math.round(diff * 100) / 100 === 0) return null
