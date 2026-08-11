@@ -81,7 +81,7 @@ interface FinanceKpiBucket {
   cmv_coverage: CmvCoverage
   margin_after_cmv: number | null
   gross_margin: number | null
-  cash_flow: number
+  cash_flow: number | null
   payment_mix: { method: string; amount: number; share: number }[]
   payment_reconciliation: PaymentReconciliation
   fiscal_split: FiscalSplitSummary
@@ -945,10 +945,30 @@ export default function FinanceiroPage() {
         />
         <FinanceKpiCard
           label="Fluxo (receita − despesas)"
-          value={loading || !kpis ? '—' : formatCurrency(kpis.current.cash_flow)}
-          delta={kpis ? fmtDelta(kpis.current.cash_flow, kpis.previous.cash_flow) : null}
+          value={
+            loading || !kpis
+              ? '—'
+              : awaitingCaixa || kpis.current.cash_flow == null
+                ? 'aguardando caixa'
+                : formatCurrency(kpis.current.cash_flow)
+          }
+          delta={
+            kpis &&
+            !awaitingCaixa &&
+            kpis.current.cash_flow != null &&
+            kpis.previous.cash_flow != null
+              ? fmtDelta(kpis.current.cash_flow, kpis.previous.cash_flow)
+              : null
+          }
           compareLabel={kpis?.previous.label ?? 'período comparado'}
-          positive={kpis ? kpis.current.cash_flow >= kpis.previous.cash_flow : null}
+          positive={
+            kpis &&
+            !awaitingCaixa &&
+            kpis.current.cash_flow != null &&
+            kpis.previous.cash_flow != null
+              ? kpis.current.cash_flow >= kpis.previous.cash_flow
+              : null
+          }
           loading={loading}
           source={formatKpiSources('rom')}
         />

@@ -44,7 +44,7 @@ export interface MonthOverview {
     ticket_avg: number | null
     expenses: number
     cmv: number
-    cash_flow: number
+    cash_flow: number | null
     days_expected: number
     days_present: number
     days_missing: string[]
@@ -61,7 +61,7 @@ export interface MonthOverview {
     ticket_avg: number | null
     expenses: number
     cmv: number
-    cash_flow: number
+    cash_flow: number | null
     lost_revenue: number
     occupancy_avg: number | null
   }
@@ -79,7 +79,7 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
   {
     field: 'despesas',
     source: 'rom_manual',
-    note: 'Cadastro manual no Financeiro ROM.',
+    note: 'Omie Contas a Pagar (por vencimento, CNPJs serviços/comércio) + lançamentos manuais. Exclui não-operacionais.',
   },
   {
     field: 'CMV',
@@ -130,7 +130,7 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     cmv_coverage: { ...EMPTY_CMV_COVERAGE, cmv },
     margin_after_cmv,
     gross_margin,
-    cash_flow: Number(row.cash_flow) || 0,
+    cash_flow: revenue > 0 ? Number(row.cash_flow) || 0 : null,
     payment_mix: [],
     payment_reconciliation: {
       revenue,
@@ -169,7 +169,7 @@ function emptyFinanceBucket(monthKey: string): FinanceKpis['current'] {
     cmv_coverage: { ...EMPTY_CMV_COVERAGE },
     margin_after_cmv: null,
     gross_margin: null,
-    cash_flow: 0,
+    cash_flow: null,
     payment_mix: [],
     payment_reconciliation: {
       revenue: 0,

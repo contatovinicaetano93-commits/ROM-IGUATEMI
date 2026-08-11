@@ -26,7 +26,8 @@ function pctPoints(n: number | null | undefined): string {
   return `${n.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
 }
 
-function deltaMoney(cur: number, prev: number): string {
+function deltaMoney(cur: number | null | undefined, prev: number | null | undefined): string {
+  if (cur == null || prev == null) return '—'
   const d = cur - prev
   const sign = d > 0 ? '+' : ''
   return `${sign}${money(d)}`
@@ -50,7 +51,7 @@ export function financeCompareMoneyBars(kpis: FinanceKpis): CompareBarSeries[] {
   return [
     { label: 'Receita', current: c.revenue, previous: p.revenue },
     { label: 'Despesas', current: c.expenses, previous: p.expenses },
-    { label: 'Fluxo', current: c.cash_flow, previous: p.cash_flow },
+    { label: 'Fluxo', current: c.cash_flow ?? 0, previous: p.cash_flow ?? 0 },
     { label: 'CMV', current: c.cmv, previous: p.cmv },
   ]
 }
