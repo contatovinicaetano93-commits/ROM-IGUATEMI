@@ -490,7 +490,9 @@ export default function FinanceiroPage() {
         'Fluxo (receita − despesas)',
         csvMoney(cur.cash_flow),
         csvMoney(prev.cash_flow),
-        csvMoney(cur.cash_flow - prev.cash_flow),
+        cur.cash_flow != null && prev.cash_flow != null
+          ? csvMoney(cur.cash_flow - prev.cash_flow)
+          : '—',
       ),
       csvRow(
         'CMV (saídas de estoque)',
