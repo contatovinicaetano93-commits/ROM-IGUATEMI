@@ -28,16 +28,16 @@ interface PipelineCard {
 interface PipelineData {
   day: string
   scheduled: PipelineCard[]
-  walkIn: PipelineCard[]
+  cortesias: PipelineCard[]
   completed: PipelineCard[]
   counts: {
     /** Badges = pessoas (cabeças). */
     scheduled: number
-    walkIn: number
+    cortesias: number
     completed: number
     total: number
     scheduled_services?: number
-    walkIn_services?: number
+    cortesias_services?: number
     completed_services?: number
   }
 }
@@ -178,9 +178,9 @@ export default function PipelinePage() {
             {dayLabel || 'Agenda do dia'}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Badges contam pessoas. Cards = linhas de serviço. Agendados = booking com horário · No
-            salão = sem agendamento prévio (comanda aberta na hora / encaixe) · Concluídos = pagos
-            do dia.
+            Badges contam pessoas. Cards = linhas de serviço. Agendados = agenda do dia ·
+            Cortesias = serviço marcado como cortesia na agenda · Concluídos = pagos do dia
+            (sem cortesia).
           </p>
         </div>
         <button
@@ -212,14 +212,14 @@ export default function PipelinePage() {
           emptyLabel={loading ? 'Carregando…' : 'Nenhum booking aberto hoje.'}
         />
         <PipelineColumn
-          title="No salão"
-          hint="Não agendaram: abriram comanda na hora para consumir ou entrar num encaixe."
-          storageKey="pipeline.section.nosalao.open"
-          count={loading ? 0 : (data?.counts.walkIn ?? 0)}
+          title="Cortesias"
+          hint="Tudo que a agenda Avec salvou como cortesia (nome com “cortesia”)."
+          storageKey="pipeline.section.cortesias.open"
+          count={loading ? 0 : (data?.counts.cortesias ?? 0)}
           tone="sky"
-          items={loading ? [] : (data?.walkIn ?? [])}
-          timeFrom={(item) => item.scheduled_at}
-          emptyLabel={loading ? 'Carregando…' : 'Nenhuma comanda/encaixe aberto.'}
+          items={loading ? [] : (data?.cortesias ?? [])}
+          timeFrom={(item) => item.scheduled_at ?? item.last_done_at}
+          emptyLabel={loading ? 'Carregando…' : 'Nenhuma cortesia na agenda hoje.'}
         />
         <PipelineColumn
           title="Concluídos"

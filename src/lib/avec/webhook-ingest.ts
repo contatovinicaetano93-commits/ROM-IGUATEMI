@@ -342,7 +342,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       day: toSalonDateIso(payload.completed_at ?? payload.scheduled_at ?? '') ?? todayIso(),
     })
   } else if (event === 'appointment.created' || event === 'appointment.updated') {
-    // Sem horário = comanda/encaixe → ancora agora; Pipeline coloca em "No salão".
+    // Sem horário = comanda/encaixe → ancora agora (fica em Agendados se ainda aberto).
     const when = payload.scheduled_at ?? (payload.service_name ? new Date().toISOString() : null)
     if (payload.service_name && when) {
       const services = await listServices(contact.id)

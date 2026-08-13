@@ -2,7 +2,7 @@ import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import {
-  isComandaOrigin,
+  isCortesiaService,
   notesWithScheduleOrigin,
   type ScheduleOrigin,
 } from '@/lib/salon/schedule-origin'
@@ -481,17 +481,17 @@ export async function listUpcomingSchedules(days = 7, limit = 20): Promise<Sched
 
 /**
  * Pipeline do dia:
- * - scheduled = booking com horário
- * - walkIn ("No salão") = sem agendamento prévio: comanda aberta na hora / encaixe
- * - completed = pagos/fechados no dia
+ * - scheduled = agenda do dia (exceto cortesia)
+ * - cortesias = serviços com "cortesia" no nome/notas (abertos ou concluídos no dia)
+ * - completed = pagos/fechados no dia (exceto cortesia)
  */
 export async function listTodayPipeline(day: string): Promise<{
   scheduled: ScheduledServiceRow[]
-  walkIn: ScheduledServiceRow[]
+  cortesias: ScheduledServiceRow[]
   completed: ScheduledServiceRow[]
 }> {
   const sql = getSql()
-  const [openRows, completed] = await Promise.all([
+  const [openRows, completedRows] = await Promise.all([
     sql`
       select cs.*, c.name as contact_name
       from client_services cs
@@ -524,15 +524,23 @@ export async function listTodayPipeline(day: string): Promise<{
   ])
 
   const scheduled: ScheduledServiceRow[] = []
-  const walkIn: ScheduledServiceRow[] = []
+  const cortesias: ScheduledServiceRow[] = []
+  const completed: ScheduledServiceRow[] = []
+
   for (const row of openRows as ScheduledServiceRow[]) {
-    if (isComandaOrigin(row)) walkIn.push(row)
+    if (isCortesiaService(row)) cortesias.push(row)
     else scheduled.push(row)
   }
-
-  return {
-    scheduled,
-    walkIn,
-    completed: completed as ScheduledServiceRow[],
+  for (const row of completedRows as ScheduledServiceRow[]) {
+    if (isCortesiaService(row)) cortesias.push(row)
+    else completed.push(row)
   }
+
+  cortesias.sort((a, b) => {
+    const ta = a.scheduled_at ?? a.last_done_at ?? ''
+    const tb = b.scheduled_at ?? b.last_done_at ?? ''
+    return ta < tb ? -1 : ta > tb ? 1 : 0
+  })
+
+  return { scheduled, cortesias, completed }
 }
