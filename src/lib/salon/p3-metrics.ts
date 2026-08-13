@@ -173,17 +173,14 @@ export async function upsertSalonP3Daily(
  */
 export async function getSalonP3DailyNear(targetDay: string): Promise<SalonP3Daily | null> {
   try {
-    // Leitura sem DDL — Visão não pode pagar ensure+UPDATE a cada GET.
+    // Sem DDL no GET. `*` traz has_* se existirem; schema legado (delta-p3-kpis
+    // sem essas colunas) não quebra — o mapper trata flags ausentes como null.
     const sql = getSql()
     const rows = (await sql`
       select
+        *,
         day::text as day,
-        return_rate::float as return_rate,
-        new_clients_period,
-        has_return_rate,
-        has_new_clients,
-        revenue_curve,
-        updated_at
+        return_rate::float as return_rate
       from salon_p3_daily
       where day <= ${targetDay}::date
       order by day desc

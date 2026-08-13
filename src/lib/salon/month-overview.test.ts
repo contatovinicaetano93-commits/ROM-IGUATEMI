@@ -3,6 +3,7 @@ import {
   analyticsFromMonthPayload,
   analyticsFromMonthRow,
 } from '@/lib/salon/month-overview'
+import { buildPeriodAnalyticsPrintHtml } from '@/lib/salon/month-overview-export'
 import type { SalonMonthMetricsRow } from '@/lib/salon/month-metrics'
 
 function sampleRow(over: Partial<SalonMonthMetricsRow> = {}): SalonMonthMetricsRow {
@@ -59,5 +60,15 @@ describe('analyticsFromMonthRow', () => {
     expect(a.packages).toEqual([])
     expect(a.top_professionals).toEqual([])
     expect(a.new_clients_period).toBeNull()
+  })
+})
+
+describe('buildPeriodAnalyticsPrintHtml', () => {
+  it('mostra — para pacotes/novos nulos em vez do texto null', () => {
+    const html = buildPeriodAnalyticsPrintHtml(analyticsFromMonthRow(sampleRow()), 'ROM')
+    expect(html).not.toContain('>null<')
+    expect(html).toContain('Pacotes vendidos')
+    expect(html).toMatch(/Pacotes vendidos<\/td><td>—<\/td>/)
+    expect(html).toMatch(/Novos no período<\/td><td>—<\/td>/)
   })
 })
