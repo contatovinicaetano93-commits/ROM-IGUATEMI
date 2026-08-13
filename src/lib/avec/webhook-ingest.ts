@@ -21,7 +21,7 @@ import {
   parseAvecDateTime,
   defaultCadenceDaysForServiceName,
 } from '@/lib/avec/normalize'
-import { toSalonDateIso } from '@/lib/salon/format'
+import { toSalonDateIso, todayIso } from '@/lib/salon/format'
 import {
   isAvecOpenStatus,
   isAvecPaidStatus,
@@ -30,6 +30,12 @@ import {
   COMANDA_SERVICE_NAME,
   type ScheduleOrigin,
 } from '@/lib/salon/schedule-origin'
+import {
+  addCalendarDaysYmd,
+  markComandaOpenedSeen,
+  markComandaPaidSeen,
+  rollupComandaDurations,
+} from '@/lib/salon/visit-spans'
 
 const EVENT_ALIASES: Record<string, string> = {
   'client.upsert': 'client.upsert',
@@ -329,6 +335,11 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     })
     await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
     await updateContact(contact.id, { status: 'convertido' })
+    await noteComandaSpan({
+      contactId: contact.id,
+      kind: 'paid',
+      day: toSalonDateIso(payload.completed_at ?? payload.scheduled_at ?? '') ?? todayIso(),
+    })
   } else if (event === 'appointment.created' || event === 'appointment.updated') {
     // Sem horário = comanda/encaixe → ancora agora; Pipeline coloca em "No salão".
     const when = payload.scheduled_at ?? (payload.service_name ? new Date().toISOString() : null)
@@ -349,6 +360,13 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       await scheduleService(service.id, when, payload.professional_name, { origin })
       await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
       await updateContact(contact.id, { status: 'agendado' })
+      await noteComandaSpan({
+        contactId: contact.id,
+        kind: 'open',
+        origin,
+        status: payload.status,
+        day: toSalonDateIso(when),
+      })
     }
   } else if (event === 'service.completed' && payload.service_name) {
     const services = await listServices(contact.id)
@@ -367,6 +385,11 @@ export async function ingestAvecWebhook(rawBody: unknown) {
     })
     await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
     await updateContact(contact.id, { status: 'convertido' })
+    await noteComandaSpan({
+      contactId: contact.id,
+      kind: 'paid',
+      day: toSalonDateIso(payload.completed_at ?? '') ?? todayIso(),
+    })
   }
 
   await logEvent({
@@ -378,4 +401,29 @@ export async function ingestAvecWebhook(rawBody: unknown) {
   })
 
   return { contact_id: contact.id, event, realtime: true as const }
+}
+
+async function noteComandaSpan(opts: {
+  contactId: string
+  kind: 'open' | 'paid'
+  origin?: ScheduleOrigin
+  status?: string
+  day?: string | null
+}) {
+  try {
+    const today = todayIso()
+    const yesterday = addCalendarDaysYmd(today, -1)
+    const day = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : today
+    if (opts.kind === 'open') {
+      const inSalon = opts.status === 'em_atendimento'
+      if (!inSalon && opts.origin !== 'comanda') return
+      if (day !== today && day !== yesterday) return
+      await markComandaOpenedSeen(opts.contactId, day)
+      return
+    }
+    await markComandaPaidSeen(opts.contactId, day, new Date(), yesterday)
+    await rollupComandaDurations([today, yesterday])
+  } catch {
+    // TM não derruba o webhook.
+  }
 }

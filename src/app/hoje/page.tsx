@@ -221,7 +221,7 @@ export default function HojePage() {
 
       {!loading && data && data.tm_today.avg_minutes == null && (
         <p className="-mt-2 text-[0.7rem] text-muted">
-          TM aguardando duração real na Avec (início/fim no relatório 0002).
+          TM aguardando o sync ver a mesma pessoa aberta no salão e depois Pago.
         </p>
       )}
 
