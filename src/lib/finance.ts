@@ -606,7 +606,8 @@ export interface FinanceKpiBucket {
   margin_after_cmv: number | null
   /** (receita - despesas) / receita, em % — null se não houver receita no período. */
   gross_margin: number | null
-  cash_flow: number
+  /** null quando ainda não há receita conhecida (não mostrar −despesas como “fluxo”). */
+  cash_flow: number | null
   /** Breakdown por forma de pagamento (relatório 0081 da Avec) — reconciliação. */
   payment_mix: P2PaymentRow[]
   /** Receita (métricas) vs soma das formas de pagamento (0081). */
@@ -682,14 +683,17 @@ async function buildBucket(
     cmv_coverage: cmvCoverage,
     margin_after_cmv,
     gross_margin,
-    cash_flow: Math.round((revenue - expenses) * 100) / 100,
+    cash_flow:
+      revenue_source === 'empty'
+        ? null
+        : Math.round((revenueRounded - expensesRounded) * 100) / 100,
     payment_mix,
     payment_reconciliation: reconcileRevenueToPayments(revenueRounded, payment_mix),
     fiscal_split,
   }
 }
 
-/** KPIs do Financeiro. Receita vem de salon_daily_metrics (Avec); despesas são cadastro manual. */
+/** KPIs do Financeiro. Receita = Avec (métricas/0081); despesas = Omie (vencimento) + manuais. */
 export async function computeFinanceKpis(opts?: {
   month?: string
   compareMonth?: string

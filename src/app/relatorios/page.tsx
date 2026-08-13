@@ -158,6 +158,13 @@ export default function RelatoriosOverviewPage() {
         </p>
       )}
 
+      {data && data.analytics.mtd && (data.closing.revenue == null || data.closing.revenue <= 0) && (
+        <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted">
+          Aguardando faturamento pago no Avec neste mês — receita, fluxo e MoM aparecem quando houver
+          caixa conhecido. Não é falha de sync de agenda.
+        </p>
+      )}
+
       {loading && !data ? (
         <p className="text-sm text-muted">Carregando overview…</p>
       ) : data ? (
@@ -196,16 +203,30 @@ export default function RelatoriosOverviewPage() {
             {([
               {
                 label: 'Receita',
-                value: formatCurrency(data.closing.revenue),
+                value:
+                  data.closing.revenue != null && data.closing.revenue > 0
+                    ? formatCurrency(data.closing.revenue)
+                    : data.closing.revenue === 0
+                      ? data.analytics.mtd
+                        ? 'aguardando caixa'
+                        : 'sem receita'
+                      : data.analytics.mtd
+                        ? 'aguardando caixa'
+                        : '—',
                 compare: momCompareLine(
-                  data.closing.revenue,
-                  data.previous_closing.revenue,
+                  data.closing.revenue > 0 ? data.closing.revenue : null,
+                  data.previous_closing.revenue > 0 ? data.previous_closing.revenue : null,
                   data.previous_label,
                 ),
               },
               {
                 label: 'Atendidos',
-                value: String(data.closing.attended),
+                value:
+                  data.closing.attended != null && data.closing.attended > 0
+                    ? String(data.closing.attended)
+                    : data.analytics.mtd && data.closing.revenue <= 0
+                      ? 'aguardando caixa'
+                      : String(data.closing.attended ?? '—'),
                 compare: momCompareLine(
                   data.closing.attended,
                   data.previous_closing.attended,
@@ -230,10 +251,17 @@ export default function RelatoriosOverviewPage() {
               },
               {
                 label: 'Fluxo',
-                value: formatCurrency(data.closing.cash_flow),
+                value:
+                  data.closing.cash_flow != null && data.closing.revenue > 0
+                    ? formatCurrency(data.closing.cash_flow)
+                    : data.analytics.mtd && data.closing.revenue <= 0
+                      ? 'aguardando caixa'
+                      : data.closing.cash_flow != null
+                        ? formatCurrency(data.closing.cash_flow)
+                        : '—',
                 compare: momCompareLine(
-                  data.closing.cash_flow,
-                  data.previous_closing.cash_flow,
+                  data.closing.revenue > 0 ? data.closing.cash_flow : null,
+                  data.previous_closing.revenue > 0 ? data.previous_closing.cash_flow : null,
                   data.previous_label,
                 ),
               },
@@ -358,16 +386,19 @@ export default function RelatoriosOverviewPage() {
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Pacotes / receita</span>
                   <span className="tabular-nums">
-                    {data.analytics.packages_sold} · {formatCurrency(data.analytics.packages_revenue)}
+                    {data.analytics.packages_sold != null ? data.analytics.packages_sold : '—'} ·{' '}
+                    {data.analytics.packages_revenue != null
+                      ? formatCurrency(data.analytics.packages_revenue)
+                      : '—'}
                   </span>
                 </li>
                 <li className="flex justify-between gap-3">
-                  <span className="text-muted">Retorno / novos</span>
+                  <span className="text-muted">Retorno / novos no salão</span>
                   <span className="tabular-nums">
                     {data.analytics.return_rate != null
                       ? formatPercentPoints(data.analytics.return_rate * 100, 0)
                       : '—'}{' '}
-                    · {data.analytics.new_clients_period}
+                    · {data.analytics.new_clients_period != null ? data.analytics.new_clients_period : '—'}
                   </span>
                 </li>
                 <li className="text-xs text-muted">
