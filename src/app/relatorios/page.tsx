@@ -386,16 +386,19 @@ export default function RelatoriosOverviewPage() {
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Pacotes / receita</span>
                   <span className="tabular-nums">
-                    {data.analytics.packages_sold} · {formatCurrency(data.analytics.packages_revenue)}
+                    {data.analytics.packages_sold != null ? data.analytics.packages_sold : '—'} ·{' '}
+                    {data.analytics.packages_revenue != null
+                      ? formatCurrency(data.analytics.packages_revenue)
+                      : '—'}
                   </span>
                 </li>
                 <li className="flex justify-between gap-3">
-                  <span className="text-muted">Retorno / novos</span>
+                  <span className="text-muted">Retorno / novos no salão</span>
                   <span className="tabular-nums">
                     {data.analytics.return_rate != null
                       ? formatPercentPoints(data.analytics.return_rate * 100, 0)
                       : '—'}{' '}
-                    · {data.analytics.new_clients_period}
+                    · {data.analytics.new_clients_period != null ? data.analytics.new_clients_period : '—'}
                   </span>
                 </li>
                 <li className="text-xs text-muted">
