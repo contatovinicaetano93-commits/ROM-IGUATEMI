@@ -48,12 +48,16 @@ export interface CompareBarSeries {
 /** Métricas principais para barras agrupadas (R$). */
 export function financeCompareMoneyBars(kpis: FinanceKpis): CompareBarSeries[] {
   const { current: c, previous: p } = kpis
-  return [
+  const bars: CompareBarSeries[] = [
     { label: 'Receita', current: c.revenue, previous: p.revenue },
     { label: 'Despesas', current: c.expenses, previous: p.expenses },
-    { label: 'Fluxo', current: c.cash_flow ?? 0, previous: p.cash_flow ?? 0 },
-    { label: 'CMV', current: c.cmv, previous: p.cmv },
   ]
+  // cash_flow null = caixa ainda vazio — não pintar R$ 0 nem comparar com valor real.
+  if (c.cash_flow != null && p.cash_flow != null) {
+    bars.push({ label: 'Fluxo', current: c.cash_flow, previous: p.cash_flow })
+  }
+  bars.push({ label: 'CMV', current: c.cmv, previous: p.cmv })
+  return bars
 }
 
 export interface DailyComparePoint {
