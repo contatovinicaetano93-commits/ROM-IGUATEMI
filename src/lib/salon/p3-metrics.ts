@@ -73,7 +73,6 @@ export async function ensureSalonP3Table() {
       const names = new Set(cols.map((c) => c.column_name))
       if (!names.has('has_return_rate')) {
         await sql`alter table salon_p3_daily add column has_return_rate boolean not null default false`
-        await sql`alter table salon_p3_daily alter column return_rate drop not null`.catch(() => {})
         await sql`
           update salon_p3_daily
           set has_return_rate = true
@@ -82,15 +81,22 @@ export async function ensureSalonP3Table() {
       }
       if (!names.has('has_new_clients')) {
         await sql`alter table salon_p3_daily add column has_new_clients boolean not null default false`
-        await sql`alter table salon_p3_daily alter column new_clients_period drop not null`.catch(
-          () => {},
-        )
         await sql`
           update salon_p3_daily
           set has_new_clients = true
           where new_clients_period is not null and new_clients_period > 0
         `
       }
+      // Delta antigo criava return_rate / new_clients_period NOT NULL DEFAULT 0
+      // mesmo com has_* — DROP fora do branch de add-column para o upsert aceitar null.
+      await sql`alter table salon_p3_daily alter column return_rate drop not null`.catch(() => {})
+      await sql`alter table salon_p3_daily alter column return_rate drop default`.catch(() => {})
+      await sql`alter table salon_p3_daily alter column new_clients_period drop not null`.catch(
+        () => {},
+      )
+      await sql`alter table salon_p3_daily alter column new_clients_period drop default`.catch(
+        () => {},
+      )
     })().catch((err) => {
       p3TableReady = null
       throw err

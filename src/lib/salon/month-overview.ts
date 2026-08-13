@@ -12,12 +12,18 @@ import {
   materializeSalonMonthMetrics,
   monthKeyFromDay,
   monthRange,
+  snapshotSalonMonthWindow,
   statusLabelPt,
   type MonthCloseStatus,
   type MonthCompleteness,
   type SalonMonthMetricsRow,
 } from '@/lib/salon/month-metrics'
-import { resolveMonthWindow, resolveComparableWindow, yearAgoMonthKey } from '@/lib/salon/month-window'
+import {
+  resolveMonthWindow,
+  resolveComparableWindow,
+  yearAgoMonthKey,
+  type ComparableWindow,
+} from '@/lib/salon/month-window'
 import { todayIso } from '@/lib/salon/format'
 
 export interface MonthOverviewSourceNote {
@@ -93,7 +99,10 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
   },
 ]
 
-function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
+function stubFinanceFromRow(
+  row: SalonMonthMetricsRow,
+  window?: { from: string; to: string; label?: string },
+): FinanceKpis['current'] {
   const revenue = Number(row.revenue) || 0
   const expenses = Number(row.expenses) || 0
   const cmv = Number(row.cmv) || 0
@@ -102,12 +111,13 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
   const margin_after_cmv =
     revenue > 0 ? Math.round(((revenue - expenses - cmv) / revenue) * 1000) / 10 : null
-  const range = monthRange(row.month)
+  const from = window?.from ?? String(row.from_day).slice(0, 10)
+  const to = window?.to ?? String(row.to_day).slice(0, 10)
   return {
     month: row.month,
-    label: labelMonthPt(row.month),
-    from: range.from,
-    to: range.to,
+    label: window?.label ?? labelMonthPt(row.month),
+    from,
+    to,
     revenue,
     revenue_source: revenue > 0 ? 'metrics' : 'empty',
     expenses,
@@ -145,11 +155,14 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
   }
 }
 
-function emptyFinanceBucket(monthKey: string): FinanceKpis['current'] {
-  const range = monthRange(monthKey)
+function emptyFinanceBucket(
+  monthKey: string,
+  window?: { from: string; to: string; label?: string },
+): FinanceKpis['current'] {
+  const range = window ?? monthRange(monthKey)
   return {
     month: monthKey,
-    label: labelMonthPt(monthKey),
+    label: window?.label ?? labelMonthPt(monthKey),
     from: range.from,
     to: range.to,
     revenue: 0,
@@ -312,41 +325,64 @@ function buildOverview(args: {
   }
 }
 
-function overviewFromCachedRows(args: {
+/** Alinha `analytics.previous` ao recorte comparado (YoY/MTD ou mês escolhido). */
+export function overlayCachedPrevious(
+  analytics: PeriodAnalytics,
+  cachedPrev: SalonMonthMetricsRow | null,
+  prevWindow: ComparableWindow,
+): PeriodAnalytics {
+  const keepSnapshots =
+    analytics.previous.month === prevWindow.month && !prevWindow.mtd_aligned
+  const previous = cachedPrev
+    ? {
+        month: prevWindow.month,
+        label: prevWindow.label,
+        revenue: Number(cachedPrev.revenue) || 0,
+        attended: Number(cachedPrev.attended) || 0,
+        cancelled: Number(cachedPrev.cancelled) || 0,
+        no_shows: Number(cachedPrev.no_shows) || 0,
+        ticket_avg: cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null,
+        lost_revenue: estimateLostRevenue(
+          Number(cachedPrev.cancelled) || 0,
+          Number(cachedPrev.no_shows) || 0,
+          cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null,
+        ),
+        occupancy_avg: keepSnapshots ? analytics.previous.occupancy_avg : null,
+        packages_revenue: keepSnapshots ? analytics.previous.packages_revenue : null,
+        new_clients_period: keepSnapshots ? analytics.previous.new_clients_period : null,
+        return_rate: keepSnapshots ? analytics.previous.return_rate : null,
+      }
+    : {
+        month: prevWindow.month,
+        label: prevWindow.label,
+        revenue: null,
+        attended: null,
+        cancelled: 0,
+        no_shows: 0,
+        ticket_avg: null,
+        lost_revenue: null,
+        occupancy_avg: keepSnapshots ? analytics.previous.occupancy_avg : null,
+        packages_revenue: keepSnapshots ? analytics.previous.packages_revenue : null,
+        new_clients_period: keepSnapshots ? analytics.previous.new_clients_period : null,
+        return_rate: keepSnapshots ? analytics.previous.return_rate : null,
+      }
+  return { ...analytics, previous }
+}
+
+export function overviewFromCachedRows(args: {
   brand: ReturnType<typeof getBrand>
   month: string
   cached: SalonMonthMetricsRow
   cachedPrev: SalonMonthMetricsRow | null
+  prevWindow: ComparableWindow
 }): MonthOverview {
-  const { brand, month, cached, cachedPrev } = args
+  const { brand, month, cached, cachedPrev, prevWindow } = args
   const baseAnalytics =
     analyticsFromMonthPayload(cached.payload) ?? analyticsFromMonthRow(cached)
   const previous = cachedPrev
-    ? stubFinanceFromRow(cachedPrev)
-    : emptyFinanceBucket(yearAgoMonthKey(month))
-  // Se o payload não trouxe MoM e temos mês anterior materializado, preenche deltas.
-  const analytics: PeriodAnalytics =
-    cachedPrev && baseAnalytics.previous.revenue == null
-      ? {
-          ...baseAnalytics,
-          previous: {
-            ...baseAnalytics.previous,
-            month: cachedPrev.month,
-            label: labelMonthPt(cachedPrev.month),
-            revenue: Number(cachedPrev.revenue) || 0,
-            attended: Number(cachedPrev.attended) || 0,
-            cancelled: Number(cachedPrev.cancelled) || 0,
-            no_shows: Number(cachedPrev.no_shows) || 0,
-            ticket_avg: cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null,
-            lost_revenue: estimateLostRevenue(
-              Number(cachedPrev.cancelled) || 0,
-              Number(cachedPrev.no_shows) || 0,
-              cachedPrev.ticket_avg != null ? Number(cachedPrev.ticket_avg) : null,
-            ),
-            occupancy_avg: null,
-          },
-        }
-      : baseAnalytics
+    ? stubFinanceFromRow(cachedPrev, prevWindow)
+    : emptyFinanceBucket(prevWindow.month, prevWindow)
+  const analytics = overlayCachedPrevious(baseAnalytics, cachedPrev, prevWindow)
   return buildOverview({
     brand,
     month,
@@ -373,11 +409,14 @@ export async function computeMonthOverview(opts?: {
   const month = opts?.month ?? monthKeyFromDay(todayIso())
   const brand = getBrand()
   const wantMaterialize = opts?.materialize === true
-  const prevMonth = resolveComparableWindow(resolveMonthWindow(month), opts?.compareMonth).month
+  const prevWindow = resolveComparableWindow(resolveMonthWindow(month), opts?.compareMonth)
 
   if (!wantMaterialize) {
     let cached = await getSalonMonthMetrics(month)
-    const cachedPrev = await getSalonMonthMetrics(prevMonth)
+    // Mês aberto: cache do comparado é o mês cheio — recorta o mesmo dia no diário.
+    const cachedPrev = prevWindow.mtd_aligned
+      ? await snapshotSalonMonthWindow(prevWindow.month, prevWindow.from, prevWindow.to)
+      : await getSalonMonthMetrics(prevWindow.month)
 
     if (!cached) {
       // Fecha o mês a partir do diário (leve) para a próxima leitura ser cache hit.
@@ -389,7 +428,7 @@ export async function computeMonthOverview(opts?: {
     }
 
     if (cached) {
-      return overviewFromCachedRows({ brand, month, cached, cachedPrev })
+      return overviewFromCachedRows({ brand, month, cached, cachedPrev, prevWindow })
     }
 
     // Último recurso: completeness vazia (UI pede Atualizar fechamento).
@@ -422,9 +461,9 @@ export async function computeMonthOverview(opts?: {
       month,
       finance: {
         current: emptyFinanceBucket(month),
-        previous: emptyFinanceBucket(prevMonth),
+        previous: emptyFinanceBucket(prevWindow.month, prevWindow),
       },
-      analytics: emptyAnalytics,
+      analytics: overlayCachedPrevious(emptyAnalytics, null, prevWindow),
       completeness,
       materializedAt: null,
       fromCache: false,

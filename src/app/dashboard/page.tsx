@@ -115,6 +115,7 @@ export default function DashboardPage() {
         setTm(null)
         setPerformance(null)
         setPeriod(null)
+        setData(null)
         // Um lambda: evita waterfall de 4 rotas × pooler max:1.
         const q = new URLSearchParams({ month })
         if (compareMonth) q.set('compare', compareMonth)
@@ -663,26 +664,30 @@ export default function DashboardPage() {
 
       <VisaoSection
         title="Funil CRM"
-        hint="Leads que entraram no ROM no mês — não é cliente novo no salão (isso está em Clientes do salão)."
+        hint="Cards: estoque ativo do funil (não recorta o mês). Gráfico e canais: leads que entraram no ROM no mês — não é cliente novo no salão (isso está em Clientes do salão)."
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5">
-            <p className="text-xs text-muted">Funil CRM ativo · {month}</p>
+            <p className="text-xs text-muted">Funil CRM ativo · estoque</p>
             {loading ? (
               <div className="mt-2 h-10 w-32 animate-pulse rounded-lg bg-border" />
             ) : (
               <p className="mt-1 text-4xl font-semibold tabular-nums">{funnelContacts}</p>
             )}
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
-                <TrendingUp size={13} />
-                {(conversionRate * 100).toFixed(1)}%
-              </span>
-              <span className="text-xs text-muted">conversão no funil</span>
-            </div>
+            {loading ? (
+              <div className="mt-3 h-5 w-40 animate-pulse rounded bg-border" />
+            ) : (
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
+                  <TrendingUp size={13} />
+                  {(conversionRate * 100).toFixed(1)}%
+                </span>
+                <span className="text-xs text-muted">conversão no funil</span>
+              </div>
+            )}
             {!loading && (
               <p className="mt-2 text-[0.7rem] text-muted">
-                Importados: {importedContacts.toLocaleString('pt-BR')} · total na janela:{' '}
+                Importados: {importedContacts.toLocaleString('pt-BR')} · total na base:{' '}
                 {totalContacts.toLocaleString('pt-BR')}
               </p>
             )}
@@ -700,59 +705,74 @@ export default function DashboardPage() {
         </div>
         <SectionCard title={`Contatos por dia · ${month}`}>
           <p className="mb-2 text-xs text-muted">
-            {crmWindow.from} → {crmWindow.to}. Exclui dump Avec / status importado.
+            {loading || !data
+              ? '—'
+              : `${crmWindow.from} → ${crmWindow.to}. Exclui dump Avec / status importado.`}
           </p>
-          <div className="h-52 lg:h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 6, right: 6, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--gold)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="var(--gold)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="day" stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis
-                  stroke="var(--muted)"
-                  fontSize={11}
-                  allowDecimals={false}
-                  tickLine={false}
-                  axisLine={false}
-                  width={28}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: 'var(--card-elevated)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 12,
-                    color: 'var(--foreground)',
-                    fontSize: 12,
-                  }}
-                />
-                <Area type="monotone" dataKey="total" stroke="var(--gold)" strokeWidth={2.5} fill="url(#gold)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          {loading || !data ? (
+            <p className="py-6 text-center text-sm text-muted">Carregando…</p>
+          ) : (
+            <div className="h-52 lg:h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 6, right: 6, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--gold)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--gold)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="day" stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis
+                    stroke="var(--muted)"
+                    fontSize={11}
+                    allowDecimals={false}
+                    tickLine={false}
+                    axisLine={false}
+                    width={28}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--card-elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      color: 'var(--foreground)',
+                      fontSize: 12,
+                    }}
+                  />
+                  <Area type="monotone" dataKey="total" stroke="var(--gold)" strokeWidth={2.5} fill="url(#gold)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </SectionCard>
-        <SectionCard title={`Contatos por canal · ${month}`} badge={<CountBadge value={`${channelTotal}`} />}>
-          {!loading && topChannel && channelTotal > 0 ? (
-            <p className="mb-3 text-xs text-muted">
-              <span className="font-semibold text-gold">{CHANNEL_LABEL[topChannel[0]] ?? topChannel[0]}</span>{' '}
-              lidera entradas ({topChannel[1]} de {channelTotal}).
-            </p>
-          ) : null}
-          <div className="divide-y divide-border">
-            {channelData.map(([channel, count]) => (
-              <div key={channel} className="flex items-center justify-between py-3 text-sm">
-                <span className="text-foreground/90">{CHANNEL_LABEL[channel] ?? channel}</span>
-                <span className="font-semibold tabular-nums text-gold">{count}</span>
+        <SectionCard
+          title={`Contatos por canal · ${month}`}
+          badge={<CountBadge value={loading ? '—' : `${channelTotal}`} />}
+        >
+          {loading || !data ? (
+            <p className="py-6 text-center text-sm text-muted">Carregando…</p>
+          ) : (
+            <>
+              {topChannel && channelTotal > 0 ? (
+                <p className="mb-3 text-xs text-muted">
+                  <span className="font-semibold text-gold">{CHANNEL_LABEL[topChannel[0]] ?? topChannel[0]}</span>{' '}
+                  lidera entradas ({topChannel[1]} de {channelTotal}).
+                </p>
+              ) : null}
+              <div className="divide-y divide-border">
+                {channelData.map(([channel, count]) => (
+                  <div key={channel} className="flex items-center justify-between py-3 text-sm">
+                    <span className="text-foreground/90">{CHANNEL_LABEL[channel] ?? channel}</span>
+                    <span className="font-semibold tabular-nums text-gold">{count}</span>
+                  </div>
+                ))}
+                {channelData.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted">Nenhuma entrada de funil neste mês.</p>
+                )}
               </div>
-            ))}
-            {channelData.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted">Nenhuma entrada de funil neste mês.</p>
-            )}
-          </div>
+            </>
+          )}
         </SectionCard>
         <p className="text-xs text-muted">
           Operação do dia:{' '}
