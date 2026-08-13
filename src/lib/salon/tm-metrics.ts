@@ -137,6 +137,7 @@ async function sumDuration(start: string, end: string): Promise<{ avgMinutes: nu
 
 /**
  * TM — mês vs mesmo mês ano passado (ou mês escolhido) e trimestre vs mesmo tri YoY.
+ * Fonte: salon_daily_metrics (spans comanda aberta→Pago).
  */
 export async function fetchTmComparison(
   referenceDay = todayIso(),

@@ -61,6 +61,13 @@ describe('normalizeAvecWebhookBody', () => {
         client_id: '1',
         status: 'em atendimento',
       }).status,
-    ).toBeUndefined()
+    ).toBe('em_atendimento')
+    expect(
+      normalizeAvecWebhookBody({
+        event: 'appointment.updated',
+        client_id: '1',
+        status: 'aguardando',
+      }).status,
+    ).toBe('em_atendimento')
   })
 })

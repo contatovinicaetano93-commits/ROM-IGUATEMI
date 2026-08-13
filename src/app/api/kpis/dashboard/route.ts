@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       const referenceDay = month ? monthToDateRange(month).to : todayIso()
       const tm = {
         ...(await fetchTmComparison(referenceDay, compareMonth)),
-        note: 'Média da duração real do atendimento (início/fim no 0002) — catálogo 0223 não entra no KPI.',
+        note: 'TM = 1ª vez que o ROM viu a comanda aberta no salão até a 1ª vez que viu Pago (intervalo do sync). Catálogo 0223 não entra.',
       }
 
       // 3) Ranking profissionais (mesma lógica de /api/kpis/performance)

@@ -170,6 +170,19 @@ create table if not exists salon_daily_metrics (
   updated_at timestamptz not null default now()
 );
 
+-- TM: 1ª vez que o ROM viu a comanda aberta no salão vs 1ª vez que viu Pago.
+create table if not exists salon_comanda_spans (
+  contact_id uuid not null references contacts (id) on delete cascade,
+  day date not null,
+  opened_seen_at timestamptz not null,
+  paid_seen_at timestamptz,
+  duration_minutes numeric(8, 1),
+  created_at timestamptz not null default now(),
+  primary key (contact_id, day)
+);
+
+create index if not exists salon_comanda_spans_day_idx on salon_comanda_spans (day);
+
 -- Cache de briefing por contato — evita regenerar IA a cada abertura.
 create table if not exists contact_brief_cache (
   contact_id uuid primary key references contacts (id) on delete cascade,

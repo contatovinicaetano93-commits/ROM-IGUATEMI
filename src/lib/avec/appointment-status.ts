@@ -33,6 +33,21 @@ export function isAvecOpenStatus(status: string): boolean {
 }
 
 /**
+ * Pessoa no salão (comanda de verdade), não só “Agendado” futuro.
+ * Em Atendimento / A Realizar / Aguardando / comanda / aberto.
+ */
+export function isAvecInSalonOpenStatus(status: string): boolean {
+  const s = norm(status)
+  if (!s) return false
+  return (
+    isAvecOpenStatus(s) ||
+    /\baguard/.test(s) ||
+    /\bcomanda\b/.test(s) ||
+    /\babert/.test(s)
+  )
+}
+
+/**
  * Comanda/encaixe aberto na agenda (sem necessariamente horário de booking).
  * Inclui Aguardando / Agendado / Em Atendimento / A Realizar.
  */
