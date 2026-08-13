@@ -4,7 +4,7 @@ import { requireSession } from '@/lib/auth'
 import { getLatestSalonP1Daily, getSalonP1DailyNear, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
 import {
   resolveMonthWindow,
-  resolvePreviousComparableWindow,
+  resolveComparableWindow,
 } from '@/lib/salon/month-window'
 import { compareByNamePtBr } from '@/lib/salon/sort'
 import { todayIso } from '@/lib/salon/format'
@@ -27,10 +27,12 @@ export async function GET(req: NextRequest) {
 
     const url = new URL(req.url)
     const month = url.searchParams.get('month')?.trim() || null
+    const compareRaw = url.searchParams.get('compare')?.trim()
+    const compareMonth = compareRaw && /^\d{4}-\d{2}$/.test(compareRaw) ? compareRaw : null
     const today = todayIso()
     const currentMonth = today.slice(0, 7)
     const canViewRevenue = auth.session.can_view_revenue
-    const cacheKey = `kpis:performance:v2:${month ?? 'latest'}:rev=${canViewRevenue ? 1 : 0}`
+    const cacheKey = `kpis:performance:v3:${month ?? 'latest'}:cmp=${compareMonth ?? 'yoy'}:rev=${canViewRevenue ? 1 : 0}`
 
     const payload = await ttlGetOrSet(cacheKey, 60_000, async () => {
       const reference =
@@ -65,7 +67,7 @@ export async function GET(req: NextRequest) {
       }
 
       const window = resolveMonthWindow(month ?? refMonth, reference.day)
-      const prevWindow = resolvePreviousComparableWindow(window)
+      const prevWindow = resolveComparableWindow(window, compareMonth)
       const compare = await getSalonP1DailyNear(prevWindow.to, { maxSkewDays: 3 })
       const compareByName = new Map((compare?.professionals ?? []).map((p) => [p.name, p]))
 

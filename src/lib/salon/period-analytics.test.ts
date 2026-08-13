@@ -125,7 +125,7 @@ describe('period-analytics', () => {
     expect(result.booking_channels[0]?.channel).toBe('WhatsApp')
     expect(result.new_clients_period).toBe(18)
     expect(result.return_rate).toBe(0.42)
-    expect(result.previous.month).toBe('2026-06')
+    expect(result.previous.month).toBe('2025-07')
     expect(result.previous.revenue).toBe(8000)
     expect(result.previous.attended).toBe(40)
     expect(result.previous.lost_revenue).toBe(400)

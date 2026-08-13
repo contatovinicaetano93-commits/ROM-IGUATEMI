@@ -19,6 +19,7 @@ import {
   formatPercentPoints,
   todayIso,
 } from '@/lib/salon/format'
+import { yearAgoMonthKey } from '@/lib/salon/month-window'
 import { formatKpiSources } from '@/lib/kpi-source'
 import type { AvecSyncMeta } from '@/lib/avec/sync-meta-surface'
 import { financeiroSyncStaleMessage, isFinanceiroStale } from '@/lib/avec/sync-meta-surface'
@@ -490,7 +491,9 @@ export default function FinanceiroPage() {
         'Fluxo (receita − despesas)',
         csvMoney(cur.cash_flow),
         csvMoney(prev.cash_flow),
-        csvMoney(cur.cash_flow - prev.cash_flow),
+        cur.cash_flow != null && prev.cash_flow != null
+          ? csvMoney(cur.cash_flow - prev.cash_flow)
+          : '—',
       ),
       csvRow(
         'CMV (saídas de estoque)',
@@ -738,7 +741,9 @@ export default function FinanceiroPage() {
                 setCompareMonth(m)
               }}
               allowEmpty
-              emptyLabel="Automático"
+              emptyLabel="Automático (ano passado)"
+              pickMonth={yearAgoMonthKey(month)}
+              maxMonth={month}
               aria-label="Comparar com"
             />
           </label>

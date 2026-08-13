@@ -172,7 +172,7 @@ describe('finance', () => {
       expect(result.current.cmv_coverage.with_movement_cost).toBe(4)
       expect(result.current.cmv_coverage.movement_cost_pct).toBe(40)
       expect(result.current.cmv_coverage.any_cost_pct).toBe(80)
-      expect(result.previous.month).toBe('2026-06')
+       expect(result.previous.month).toBe('2025-07')
       expect(result.previous.gross_margin).toBe(75)
     })
 
@@ -189,14 +189,14 @@ describe('finance', () => {
       expect(result.current.revenue_source).toBe('empty')
     })
 
-    it('vira o ano corretamente ao calcular o mês anterior a janeiro', async () => {
+    it('padrão compara com o mesmo mês do ano passado', async () => {
       mockBucketSql({ revenue: '1000', expenses: '100' })
       mockBucketSql({ revenue: '900', expenses: '90' })
 
       const { computeFinanceKpis } = await import('@/lib/finance')
       const result = await computeFinanceKpis({ month: '2026-01' })
 
-      expect(result.previous.month).toBe('2025-12')
+      expect(result.previous.month).toBe('2025-01')
     })
 
     it('usa payment_mix agregado do helper 0081', async () => {

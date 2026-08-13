@@ -12,7 +12,7 @@ import {
   type P2PackageRow,
 } from '@/lib/salon/p2-metrics'
 import { getSalonP3DailyNear } from '@/lib/salon/p3-metrics'
-import { resolveMonthWindow, resolvePreviousComparableWindow } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolveComparableWindow } from '@/lib/salon/month-window'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -144,6 +144,9 @@ export interface PeriodCompareBucket {
   lost_revenue: number | null
   /** Ocupação média do snapshot P1 do fim da janela comparável (null se sem dados). */
   occupancy_avg: number | null
+  packages_revenue: number | null
+  new_clients_period: number | null
+  return_rate: number | null
 }
 
 export interface PeriodAnalytics {
@@ -177,7 +180,7 @@ export interface PeriodAnalytics {
   new_clients_period: number | null
   top_professionals: P1ProfessionalRow[]
   top_services: P1ServiceRow[]
-  /** Mês anterior (mesmo recorte MTD quando aplicável) — comparativo na Visão. */
+  /** Período comparado (YoY por padrão; mês escolhido se informado). */
   previous: PeriodCompareBucket
 }
 
@@ -187,12 +190,13 @@ export interface PeriodAnalytics {
  */
 export async function computePeriodAnalytics(opts?: {
   month?: string
+  compareMonth?: string | null
 }): Promise<PeriodAnalytics> {
   const month = opts?.month ?? todayIso().slice(0, 7)
   const window = resolveMonthWindow(month)
   const { from, to } = window
-  const prev = resolvePreviousComparableWindow(window)
-  // Sequencial no pooler max:1 — Promise.all(8) estoura timeout da Visão no IG.
+  const prev = resolveComparableWindow(window, opts?.compareMonth)
+  // Sequencial no pooler max:1 — Promise.all estoura timeout da Visão no IG.
   const totals = await sumRevenueAndAttended(from, to)
   const loss = await sumAttendanceLoss(from, to)
   const prevTotals = await sumRevenueAndAttended(prev.from, prev.to)
@@ -201,6 +205,8 @@ export async function computePeriodAnalytics(opts?: {
   const p2 = await getSalonP2DailyNear(to)
   const p3 = await getSalonP3DailyNear(to)
   const prevP1 = await getSalonP1DailyNear(prev.to)
+  const prevP2 = await getSalonP2DailyNear(prev.to)
+  const prevP3 = await getSalonP3DailyNear(prev.to)
   const ticket_avg =
     totals.revenue != null && totals.attended != null && totals.attended > 0
       ? Math.round((totals.revenue / totals.attended) * 100) / 100
@@ -250,6 +256,13 @@ export async function computePeriodAnalytics(opts?: {
       ticket_avg: prev_ticket_avg,
       lost_revenue: estimateLostRevenue(prevLoss.cancelled, prevLoss.no_shows, prev_ticket_avg),
       occupancy_avg: averageOccupancy(prevP1?.professionals ?? []),
+      packages_revenue: prevP2
+        ? Math.round(
+            (prevP2.packages ?? []).reduce((s, p) => s + Number(p.revenue || 0), 0) * 100,
+          ) / 100
+        : null,
+      new_clients_period: prevP3?.new_clients_period ?? null,
+      return_rate: prevP3?.return_rate ?? null,
     },
   }
 }

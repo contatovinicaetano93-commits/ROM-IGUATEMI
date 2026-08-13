@@ -17,7 +17,7 @@ import {
   type MonthCompleteness,
   type SalonMonthMetricsRow,
 } from '@/lib/salon/month-metrics'
-import { resolveMonthWindow } from '@/lib/salon/month-window'
+import { resolveMonthWindow, resolveComparableWindow, yearAgoMonthKey } from '@/lib/salon/month-window'
 import { todayIso } from '@/lib/salon/format'
 
 export interface MonthOverviewSourceNote {
@@ -92,12 +92,6 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
     note: 'Snapshot Avec (P1/P2/P3) mais próximo do fim do mês — não é soma diária ROM.',
   },
 ]
-
-function previousMonthKey(monthKey: string): string {
-  const [y, m] = monthKey.split('-').map(Number)
-  const d = new Date(Date.UTC(y!, m! - 2, 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-}
 
 function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
   const revenue = Number(row.revenue) || 0
@@ -249,8 +243,8 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
     top_professionals: [],
     top_services: [],
     previous: {
-      month: previousMonthKey(row.month),
-      label: labelMonthPt(previousMonthKey(row.month)),
+      month: yearAgoMonthKey(row.month),
+      label: labelMonthPt(yearAgoMonthKey(row.month)),
       revenue: null,
       attended: null,
       cancelled: 0,
@@ -258,6 +252,9 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
       ticket_avg: null,
       lost_revenue: null,
       occupancy_avg: null,
+      packages_revenue: null,
+      new_clients_period: null,
+      return_rate: null,
     },
   }
 }
@@ -326,7 +323,7 @@ function overviewFromCachedRows(args: {
     analyticsFromMonthPayload(cached.payload) ?? analyticsFromMonthRow(cached)
   const previous = cachedPrev
     ? stubFinanceFromRow(cachedPrev)
-    : emptyFinanceBucket(previousMonthKey(month))
+    : emptyFinanceBucket(yearAgoMonthKey(month))
   // Se o payload não trouxe MoM e temos mês anterior materializado, preenche deltas.
   const analytics: PeriodAnalytics =
     cachedPrev && baseAnalytics.previous.revenue == null
@@ -371,11 +368,12 @@ function overviewFromCachedRows(args: {
 export async function computeMonthOverview(opts?: {
   month?: string
   materialize?: boolean
+  compareMonth?: string | null
 }): Promise<MonthOverview> {
   const month = opts?.month ?? monthKeyFromDay(todayIso())
   const brand = getBrand()
   const wantMaterialize = opts?.materialize === true
-  const prevMonth = previousMonthKey(month)
+  const prevMonth = resolveComparableWindow(resolveMonthWindow(month), opts?.compareMonth).month
 
   if (!wantMaterialize) {
     let cached = await getSalonMonthMetrics(month)
@@ -435,8 +433,8 @@ export async function computeMonthOverview(opts?: {
 
   // Atualizar fechamento — caminho completo (pode levar ~1–2 min no IG).
   // Sequencial: finance e analytics juntos saturavam o pooler e davam timeout.
-  const finance = await computeFinanceKpis({ month })
-  const analytics = await computePeriodAnalytics({ month })
+  const finance = await computeFinanceKpis({ month, compareMonth: opts?.compareMonth ?? undefined })
+  const analytics = await computePeriodAnalytics({ month, compareMonth: opts?.compareMonth })
   const completeness = await getMonthCompleteness(month)
 
   let materializedAt: string | null = null
