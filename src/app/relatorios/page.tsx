@@ -102,7 +102,8 @@ export default function RelatoriosOverviewPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Relatórios</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Overview do mês</h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
-            Fechamento oficial {brand.displayName} — dados acumulados no ROM (não Avec ao vivo).
+            Fechamento oficial {brand.displayName} — receita bruta é o acumulado de caixa pago do
+            mês (1º até hoje se estiver aberto; mês cheio se já fechou).
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -221,7 +222,7 @@ export default function RelatoriosOverviewPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {([
               {
-                label: 'Receita bruta',
+                label: data.analytics.mtd ? 'Receita bruta (mês até hoje)' : 'Receita bruta',
                 value:
                   data.closing.revenue != null && data.closing.revenue > 0
                     ? formatCurrency(data.closing.revenue)
@@ -352,8 +353,8 @@ export default function RelatoriosOverviewPage() {
           </div>
 
           <p className="text-xs text-muted">
-            Receita = caixa pago no Avec (bruta — não desconta despesa). Fluxo = receita −
-            despesas no mesmo recorte. Mês aberto = até hoje (não é o mês cheio). Despesas Omie
+            Receita bruta = soma do caixa pago no recorte (não desconta despesa). Fluxo = receita −
+            despesas no mesmo recorte. Mês aberto = 1º até hoje. Despesas Omie
             no ROM existem a partir de jan/2026 — 2025 de despesas/fluxo fica sem comparativo
             real. Verde = melhor · laranja = pior (em despesas/CMV/cancel/no-show, cair é
             melhor). Vs {data.previous_label}.
