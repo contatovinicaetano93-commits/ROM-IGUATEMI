@@ -566,8 +566,8 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   const bookedHeadsByDay = new Map<string, Set<string>>()
   const rowsByDay = new Map<string, number>()
   const upsertInBatch = createBatchContactUpserter()
-  /** TM: 1ª vista aberta / 1ª vista Pago (contato → dia). */
-  const comandaOpenSeen = new Map<string, string>()
+  /** TM: dias com linha aberta por contato / 1ª vista Pago (contato → dia). */
+  const comandaOpenSeen = new Map<string, Set<string>>()
   const comandaPaidSeen = new Map<string, string>()
 
   for (const row of result.rows) {
@@ -670,7 +670,12 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
           scheduledAt,
         })
       ) {
-        comandaOpenSeen.set(contact.id, apptDay!)
+        let openDays = comandaOpenSeen.get(contact.id)
+        if (!openDays) {
+          openDays = new Set()
+          comandaOpenSeen.set(contact.id, openDays)
+        }
+        openDays.add(apptDay!)
       }
       if (isPaid && apptDay && (apptDay === today || apptDay === yesterday)) {
         comandaPaidSeen.set(contact.id, apptDay)
@@ -734,19 +739,24 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
   }
 
   try {
-    for (const [contactId, day] of comandaOpenSeen) {
-      await markComandaOpenedSeen(contactId, day)
-    }
-    for (const [contactId, day] of comandaPaidSeen) {
-      if (
-        !shouldCloseComandaClock({
-          stillOpenInBatch: comandaOpenSeen.get(contactId) === day,
-          isPaid: true,
-        })
-      ) {
-        continue
+    for (const [contactId, days] of comandaOpenSeen) {
+      for (const day of days) {
+        await markComandaOpenedSeen(contactId, day)
       }
-      await markComandaPaidSeen(contactId, day, new Date(), yesterday)
+    }
+    // Truncado/abort: 0051 incompleto — não fechar (pode faltar linha aberta).
+    if (!result.truncated && !stats.aborted) {
+      for (const [contactId, day] of comandaPaidSeen) {
+        if (
+          !shouldCloseComandaClock({
+            stillOpenInBatch: comandaOpenSeen.get(contactId)?.has(day) === true,
+            isPaid: true,
+          })
+        ) {
+          continue
+        }
+        await markComandaPaidSeen(contactId, day, new Date(), yesterday)
+      }
     }
     await rollupComandaDurations([today, yesterday])
   } catch (e) {
