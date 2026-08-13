@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   addCalendarDaysYmd,
+  classifyComandaDuration,
   computeComandaDurationMinutes,
+  shouldCloseComandaClock,
   shouldStartComandaClock,
 } from '@/lib/salon/visit-spans'
 
@@ -19,6 +21,12 @@ describe('computeComandaDurationMinutes', () => {
     expect(
       computeComandaDurationMinutes('2026-08-13T12:00:00.000Z', '2026-08-13T21:00:01.000Z'),
     ).toBeNull()
+    expect(
+      classifyComandaDuration('2026-08-13T12:00:00.000Z', '2026-08-13T12:00:02.000Z').kind,
+    ).toBe('too_short')
+    expect(
+      classifyComandaDuration('2026-08-13T12:00:00.000Z', '2026-08-13T21:00:01.000Z').kind,
+    ).toBe('too_long')
   })
 })
 
@@ -64,6 +72,40 @@ describe('shouldStartComandaClock', () => {
 
   it('não começa se já está Pago', () => {
     expect(shouldStartComandaClock({ ...base, isPaid: true })).toBe(false)
+  })
+
+  it('começa em Agendado depois da hora marcada', () => {
+    expect(
+      shouldStartComandaClock({
+        ...base,
+        inSalonOpen: false,
+        scheduleOrigin: 'agenda',
+        scheduledAt: '2026-08-13T13:00:00.000Z',
+        nowMs: Date.parse('2026-08-13T14:00:00.000Z'),
+      }),
+    ).toBe(true)
+  })
+
+  it('não começa em Agendado antes da hora marcada', () => {
+    expect(
+      shouldStartComandaClock({
+        ...base,
+        inSalonOpen: false,
+        scheduleOrigin: 'agenda',
+        scheduledAt: '2026-08-13T16:00:00.000Z',
+        nowMs: Date.parse('2026-08-13T14:00:00.000Z'),
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('shouldCloseComandaClock', () => {
+  it('não fecha se o 0051 ainda mostra linha aberta', () => {
+    expect(shouldCloseComandaClock({ stillOpenInBatch: true, isPaid: true })).toBe(false)
+  })
+
+  it('fecha quando só resta Pago', () => {
+    expect(shouldCloseComandaClock({ stillOpenInBatch: false, isPaid: true })).toBe(true)
   })
 })
 

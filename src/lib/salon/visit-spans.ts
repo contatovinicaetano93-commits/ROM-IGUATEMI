@@ -9,18 +9,31 @@ import { upsertSalonMetrics } from '@/lib/salon/metrics'
 export const MIN_COMANDA_DURATION_MINUTES = 1
 export const MAX_COMANDA_DURATION_MINUTES = 8 * 60
 
+export type ComandaDurationClass =
+  | { kind: 'ok'; minutes: number }
+  | { kind: 'too_short' }
+  | { kind: 'too_long' }
+  | { kind: 'invalid' }
+
+export function classifyComandaDuration(
+  openedSeenAt: string,
+  paidSeenAt: string,
+): ComandaDurationClass {
+  const start = new Date(openedSeenAt).getTime()
+  const end = new Date(paidSeenAt).getTime()
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return { kind: 'invalid' }
+  const minutes = (end - start) / 60_000
+  if (minutes < MIN_COMANDA_DURATION_MINUTES) return { kind: 'too_short' }
+  if (minutes > MAX_COMANDA_DURATION_MINUTES) return { kind: 'too_long' }
+  return { kind: 'ok', minutes: Math.round(minutes * 10) / 10 }
+}
+
 export function computeComandaDurationMinutes(
   openedSeenAt: string,
   paidSeenAt: string,
 ): number | null {
-  const start = new Date(openedSeenAt).getTime()
-  const end = new Date(paidSeenAt).getTime()
-  if (Number.isNaN(start) || Number.isNaN(end)) return null
-  const minutes = (end - start) / 60_000
-  if (minutes < MIN_COMANDA_DURATION_MINUTES || minutes > MAX_COMANDA_DURATION_MINUTES) {
-    return null
-  }
-  return Math.round(minutes * 10) / 10
+  const classified = classifyComandaDuration(openedSeenAt, paidSeenAt)
+  return classified.kind === 'ok' ? classified.minutes : null
 }
 
 export function addCalendarDaysYmd(day: string, delta: number): string {
@@ -29,7 +42,11 @@ export function addCalendarDaysYmd(day: string, delta: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** Relógio só no dia da visita (hoje/ontem) e só se estiver no salão — não Agendado futuro. */
+/**
+ * Relógio no dia da visita (hoje/ontem).
+ * Começa: no salão, walk-in/comanda, ou Agendado cuja hora marcada já passou.
+ * Não começa em Agendado futuro (ainda não deveria estar no salão).
+ */
 export function shouldStartComandaClock(opts: {
   apptDay: string | null
   today: string
@@ -39,11 +56,25 @@ export function shouldStartComandaClock(opts: {
   isOpenComanda: boolean
   inSalonOpen: boolean
   scheduleOrigin: 'comanda' | 'agenda'
+  scheduledAt?: string | null
+  nowMs?: number
 }): boolean {
   if (opts.isPaid || opts.isLost || !opts.isOpenComanda) return false
   if (opts.apptDay !== opts.today && opts.apptDay !== opts.yesterday) return false
   if (opts.inSalonOpen) return true
-  return opts.scheduleOrigin === 'comanda'
+  if (opts.scheduleOrigin === 'comanda') return true
+  if (!opts.scheduledAt) return false
+  const start = new Date(opts.scheduledAt).getTime()
+  if (Number.isNaN(start)) return false
+  return (opts.nowMs ?? Date.now()) >= start
+}
+
+/** Fecha só quando o 0051 não mostra mais linha aberta — ainda no salão + Pago antigo não queima a amostra. */
+export function shouldCloseComandaClock(opts: {
+  stillOpenInBatch: boolean
+  isPaid: boolean
+}): boolean {
+  return opts.isPaid && !opts.stillOpenInBatch
 }
 
 let ensurePromise: Promise<void> | null = null
@@ -65,6 +96,14 @@ async function ensureComandaSpansTable(): Promise<void> {
       `
       await sql`
         create index if not exists salon_comanda_spans_day_idx on salon_comanda_spans (day)
+      `
+      // Mesmo sync abria+fechava em ~2s e gravava paid sem duração — reabre pra fechar de verdade.
+      await sql`
+        update salon_comanda_spans
+        set paid_seen_at = null
+        where paid_seen_at is not null
+          and duration_minutes is null
+          and paid_seen_at < opened_seen_at + interval '1 minute'
       `
     })().catch((e) => {
       ensurePromise = null
@@ -106,7 +145,12 @@ export async function markComandaPaidSeen(
     `) as { opened_seen_at: string }[]
     const opened = rows[0]?.opened_seen_at
     if (!opened) continue
-    const duration = computeComandaDurationMinutes(opened, paidIso)
+    const classified = classifyComandaDuration(opened, paidIso)
+    if (classified.kind === 'too_short') {
+      // Mesmo ciclo do sync — não queima o span; o próximo 0051 fecha com intervalo real.
+      return false
+    }
+    const duration = classified.kind === 'ok' ? classified.minutes : null
     await sql`
       update salon_comanda_spans
       set

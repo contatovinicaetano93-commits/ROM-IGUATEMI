@@ -93,6 +93,7 @@ import {
   markComandaOpenedSeen,
   markComandaPaidSeen,
   rollupComandaDurations,
+  shouldCloseComandaClock,
   shouldStartComandaClock,
 } from '@/lib/salon/visit-spans'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
@@ -666,6 +667,7 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
           isOpenComanda,
           inSalonOpen: isAvecInSalonOpenStatus(status),
           scheduleOrigin,
+          scheduledAt,
         })
       ) {
         comandaOpenSeen.set(contact.id, apptDay!)
@@ -736,6 +738,14 @@ async function syncAppointments(stats: AvecSyncStats, mode: AvecSyncMode, syncRu
       await markComandaOpenedSeen(contactId, day)
     }
     for (const [contactId, day] of comandaPaidSeen) {
+      if (
+        !shouldCloseComandaClock({
+          stillOpenInBatch: comandaOpenSeen.get(contactId) === day,
+          isPaid: true,
+        })
+      ) {
+        continue
+      }
       await markComandaPaidSeen(contactId, day, new Date(), yesterday)
     }
     await rollupComandaDurations([today, yesterday])
