@@ -35,6 +35,7 @@ import {
   markComandaOpenedSeen,
   markComandaPaidSeen,
   rollupComandaDurations,
+  shouldStartComandaClock,
 } from '@/lib/salon/visit-spans'
 
 const EVENT_ALIASES: Record<string, string> = {
@@ -366,6 +367,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
         origin,
         status: payload.status,
         day: toSalonDateIso(when),
+        scheduledAt: when,
       })
     }
   } else if (event === 'service.completed' && payload.service_name) {
@@ -409,15 +411,29 @@ async function noteComandaSpan(opts: {
   origin?: ScheduleOrigin
   status?: string
   day?: string | null
+  scheduledAt?: string | null
 }) {
   try {
     const today = todayIso()
     const yesterday = addCalendarDaysYmd(today, -1)
     const day = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : today
     if (opts.kind === 'open') {
-      const inSalon = opts.status === 'em_atendimento'
-      if (!inSalon && opts.origin !== 'comanda') return
-      if (day !== today && day !== yesterday) return
+      const origin = opts.origin ?? 'agenda'
+      if (
+        !shouldStartComandaClock({
+          apptDay: day,
+          today,
+          yesterday,
+          isPaid: false,
+          isLost: false,
+          isOpenComanda: true,
+          inSalonOpen: opts.status === 'em_atendimento',
+          scheduleOrigin: origin,
+          scheduledAt: opts.scheduledAt ?? null,
+        })
+      ) {
+        return
+      }
       await markComandaOpenedSeen(opts.contactId, day)
       return
     }

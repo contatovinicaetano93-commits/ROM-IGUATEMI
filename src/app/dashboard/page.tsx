@@ -397,7 +397,7 @@ export default function DashboardPage() {
 
       <VisaoSection
         title="Clientes do salão"
-        hint="Snapshot Avec ~30d (0017 / 0007). Não é lead do CRM. TM = 1ª vez aberta no salão → 1ª vez Pago."
+        hint="Snapshot Avec ~30d (0017 / 0007). Não é lead do CRM. TM = aberta no salão (ou hora marcada) → 0051 só Pago."
       >
         <div className="grid grid-cols-2 gap-3">
           <InsightCard
@@ -464,10 +464,10 @@ export default function DashboardPage() {
           )}
           {!loading && tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
             <p className="mt-4 text-xs text-muted">
-              TM começa a acumular daqui pra frente: o sync precisa ver a mesma pessoa aberta no
-              salão (Em Atendimento / comanda) e depois Pago. Granularidade = intervalo do sync,
-              não o relógio da Avec. Meses passados ficam em — (a Avec não manda hora de
-              abrir/fechar).
+              TM começa a acumular quando o sync vê a pessoa no salão (Em Atendimento /
+              comanda / hora marcada já passou) e depois o 0051 só mostra Pago. Se ainda
+              estiver aberta + um Pago antigo no mesmo dia, não fecha. Granularidade = intervalo
+              do sync. Meses passados ficam em —.
             </p>
           )}
         </SectionCard>

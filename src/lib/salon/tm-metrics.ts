@@ -118,6 +118,27 @@ export function tmMonthWindows(
 
 async function sumDuration(start: string, end: string): Promise<{ avgMinutes: number | null; sampleCount: number }> {
   const sql = getSql()
+  try {
+    const spanRows = (await sql`
+      select
+        coalesce(sum(duration_minutes), 0) as sum_minutes,
+        count(*)::int as sample_count
+      from salon_comanda_spans
+      where day >= ${start}::date and day <= ${end}::date
+        and duration_minutes is not null
+    `) as { sum_minutes: string | number; sample_count: string | number }[]
+    const spanCount = Number(spanRows[0]?.sample_count ?? 0) || 0
+    if (spanCount > 0) {
+      const sumMinutes = Number(spanRows[0]?.sum_minutes ?? 0) || 0
+      return {
+        sampleCount: spanCount,
+        avgMinutes: Math.round((sumMinutes / spanCount) * 10) / 10,
+      }
+    }
+  } catch {
+    // Tabela ainda não existe neste isolate — cai no acumulado diário.
+  }
+
   const rows = (await sql`
     select
       coalesce(sum(service_duration_sum_minutes), 0) as sum_minutes,
@@ -137,7 +158,7 @@ async function sumDuration(start: string, end: string): Promise<{ avgMinutes: nu
 
 /**
  * TM — mês vs mesmo mês ano passado (ou mês escolhido) e trimestre vs mesmo tri YoY.
- * Fonte: salon_daily_metrics (spans comanda aberta→Pago).
+ * Fonte: salon_comanda_spans (1ª vista aberta → 1ª vista só Pago).
  */
 export async function fetchTmComparison(
   referenceDay = todayIso(),
