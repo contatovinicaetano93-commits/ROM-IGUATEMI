@@ -64,13 +64,14 @@ export function averageOccupancy(professionals: P1ProfessionalRow[]): number | n
   return Math.round(avg * 1000) / 1000
 }
 
-/** Receita perdida estimada: (cancelados + no-shows) × ticket médio. */
+/** Receita perdida estimada: (cancelados + no-shows) × ticket médio.
+ * Sem ticket → null (não inventar R$ 0,00 nos cards). */
 export function estimateLostRevenue(
   cancelled: number,
   noShows: number,
   ticketAvg: number | null,
-): number {
-  if (ticketAvg == null || !(ticketAvg > 0)) return 0
+): number | null {
+  if (ticketAvg == null || !(ticketAvg > 0)) return null
   const lost = (Math.max(0, cancelled) + Math.max(0, noShows)) * ticketAvg
   return Math.round(lost * 100) / 100
 }
@@ -140,7 +141,7 @@ export interface PeriodCompareBucket {
   cancelled: number
   no_shows: number
   ticket_avg: number | null
-  lost_revenue: number
+  lost_revenue: number | null
   /** Ocupação média do snapshot P1 do fim da janela comparável (null se sem dados). */
   occupancy_avg: number | null
 }
@@ -152,6 +153,8 @@ export interface PeriodAnalytics {
   to: string
   /** Snapshot P1 day used for rankings / occupancy / acquisition. */
   snapshot_day: string | null
+  /** true se P1/P2/P3 perto do fim da janela estão ausentes. */
+  snapshot_missing: boolean
   /**
    * Soma de salon_daily_metrics no mês (acumulado ROM / Avec 0088).
    * null = nenhum dia com valor conhecido (ex.: dia 1 sem caixa Avec).
@@ -164,10 +167,10 @@ export interface PeriodAnalytics {
   cancelled: number
   no_shows: number
   ticket_avg: number | null
-  lost_revenue: number
+  lost_revenue: number | null
   packages: P2PackageRow[]
-  packages_sold: number
-  packages_revenue: number
+  packages_sold: number | null
+  packages_revenue: number | null
   booking_channels: P2ChannelRow[]
   acquisition: P1AcquisitionRow[]
   return_rate: number | null
@@ -189,16 +192,15 @@ export async function computePeriodAnalytics(opts?: {
   const window = resolveMonthWindow(month)
   const { from, to } = window
   const prev = resolvePreviousComparableWindow(window)
-  const [totals, loss, prevTotals, prevLoss, p1, p2, p3, prevP1] = await Promise.all([
-    sumRevenueAndAttended(from, to),
-    sumAttendanceLoss(from, to),
-    sumRevenueAndAttended(prev.from, prev.to),
-    sumAttendanceLoss(prev.from, prev.to),
-    getSalonP1DailyNear(to),
-    getSalonP2DailyNear(to),
-    getSalonP3DailyNear(to),
-    getSalonP1DailyNear(prev.to),
-  ])
+  // Sequencial no pooler max:1 — Promise.all(8) estoura timeout da Visão no IG.
+  const totals = await sumRevenueAndAttended(from, to)
+  const loss = await sumAttendanceLoss(from, to)
+  const prevTotals = await sumRevenueAndAttended(prev.from, prev.to)
+  const prevLoss = await sumAttendanceLoss(prev.from, prev.to)
+  const p1 = await getSalonP1DailyNear(to)
+  const p2 = await getSalonP2DailyNear(to)
+  const p3 = await getSalonP3DailyNear(to)
+  const prevP1 = await getSalonP1DailyNear(prev.to)
   const ticket_avg =
     totals.revenue != null && totals.attended != null && totals.attended > 0
       ? Math.round((totals.revenue / totals.attended) * 100) / 100
@@ -209,8 +211,10 @@ export async function computePeriodAnalytics(opts?: {
       : null
   const professionals = p1?.professionals ?? []
   const allPackages = p2?.packages ?? []
-  const packages_revenue =
-    Math.round(allPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
+  // Sem P2 → null (não pintar R$ 0 / MoM falso).
+  const packages_revenue = p2
+    ? Math.round(allPackages.reduce((s, p) => s + Number(p.revenue || 0), 0) * 100) / 100
+    : null
 
   return {
     month,
@@ -218,6 +222,7 @@ export async function computePeriodAnalytics(opts?: {
     from,
     to,
     snapshot_day: p1?.day ?? p2?.day ?? p3?.day ?? null,
+    snapshot_missing: !p1 && !p2 && !p3,
     revenue: totals.revenue,
     attended: totals.attended,
     mtd: window.mtd,
@@ -227,7 +232,7 @@ export async function computePeriodAnalytics(opts?: {
     ticket_avg,
     lost_revenue: estimateLostRevenue(loss.cancelled, loss.no_shows, ticket_avg),
     packages: allPackages.slice(0, 10),
-    packages_sold: Number(p2?.packages_sold ?? 0) || 0,
+    packages_sold: p2 != null ? Number(p2.packages_sold ?? 0) || 0 : null,
     packages_revenue,
     booking_channels: (p2?.booking_channels ?? []).slice(0, 10),
     acquisition: (p1?.acquisition ?? []).slice(0, 10),

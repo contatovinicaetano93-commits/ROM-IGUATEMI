@@ -62,7 +62,7 @@ export interface MonthOverview {
     expenses: number
     cmv: number
     cash_flow: number | null
-    lost_revenue: number
+    lost_revenue: number | null
     occupancy_avg: number | null
   }
   source_notes: MonthOverviewSourceNote[]
@@ -230,6 +230,7 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
     from: window.from,
     to: window.to,
     snapshot_day: null,
+    snapshot_missing: true,
     revenue: revenue > 0 || attended > 0 ? revenue : null,
     attended: attended > 0 || revenue > 0 ? attended : null,
     mtd: window.mtd,
@@ -239,12 +240,12 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
     ticket_avg,
     lost_revenue: estimateLostRevenue(cancelled, no_shows, ticket_avg),
     packages: [],
-    packages_sold: 0,
-    packages_revenue: 0,
+    packages_sold: null,
+    packages_revenue: null,
     booking_channels: [],
     acquisition: [],
     return_rate: null,
-    new_clients_period: Number(row.new_clients) || 0,
+    new_clients_period: null,
     top_professionals: [],
     top_services: [],
     previous: {
@@ -255,7 +256,7 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
       cancelled: 0,
       no_shows: 0,
       ticket_avg: null,
-      lost_revenue: 0,
+      lost_revenue: null,
       occupancy_avg: null,
     },
   }

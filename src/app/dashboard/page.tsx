@@ -115,7 +115,7 @@ export default function DashboardPage() {
         // Um lambda: evita waterfall de 4 rotas × pooler max:1.
         const dashRes = await apiFetch(`/api/kpis/dashboard?month=${month}`, {
           cache: 'no-store',
-          timeoutMs: 45_000,
+          timeoutMs: 100_000,
         })
         const raw = await dashRes.text()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -342,14 +342,26 @@ export default function DashboardPage() {
         <InsightCard
           icon={<AlertTriangle size={15} />}
           label="Receita perdida · mês acum."
-          value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
+          value={
+            loading || !period
+              ? '—'
+              : period.lost_revenue == null
+                ? period.ticket_avg == null
+                  ? 'sem ticket'
+                  : '—'
+                : formatCurrency(period.lost_revenue)
+          }
           compare={
-            !loading && period?.previous
-              ? {
-                  text: `${fmtSignedCurrency(period.lost_revenue - period.previous.lost_revenue)} vs ${period.previous.label}`,
-                  // Menos receita perdida = melhor
-                  positive: period.lost_revenue - period.previous.lost_revenue <= 0,
-                }
+            !loading &&
+            period?.previous &&
+            period.lost_revenue != null &&
+            period.previous.lost_revenue != null
+              ? momCompareLine(
+                  period.lost_revenue,
+                  period.previous.lost_revenue,
+                  period.previous.label,
+                  { invertGood: true },
+                )
               : null
           }
         />
@@ -423,29 +435,41 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <InsightCard
           icon={<Sparkles size={15} />}
-          label={`Novos · ${period?.label ?? '—'}`}
+          label="Clientes novos no salão · Avec ~30d"
           value={
             loading || !period
               ? '—'
               : period.new_clients_period != null
                 ? String(period.new_clients_period)
-                : '—'
+                : period.snapshot_missing
+                  ? 'sem snapshot'
+                  : '—'
           }
         />
         <InsightCard
           icon={<Package size={15} />}
-          label={`Pacotes · ${period?.label ?? '—'}`}
-          value={loading || !period ? '—' : formatCurrency(period.packages_revenue)}
+          label="Pacotes vendidos · Avec ~30d"
+          value={
+            loading || !period
+              ? '—'
+              : period.packages_revenue != null
+                ? formatCurrency(period.packages_revenue)
+                : period.snapshot_missing
+                  ? 'sem snapshot'
+                  : '—'
+          }
         />
         <InsightCard
           icon={<TrendingUp size={15} />}
-          label={`Retorno · ${period?.label ?? '—'}`}
+          label="Taxa de retorno · Avec ~30d"
           value={
             loading || !period
               ? '—'
               : period.return_rate != null
                 ? formatPercentPoints(period.return_rate * 100, 0)
-                : '—'
+                : period.snapshot_missing
+                  ? 'sem snapshot'
+                  : '—'
           }
         />
       </div>
@@ -454,7 +478,9 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-6 lg:col-span-8 lg:gap-8">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5 sm:col-span-2 lg:col-span-1">
-              <p className="text-xs text-muted">Funil ativo (CRM · sem importado)</p>
+              <p className="text-xs text-muted">
+                Funil CRM ativo · leads do mês (sem dump Avec)
+              </p>
               {loading ? (
                 <div className="mt-2 h-10 w-32 animate-pulse rounded-lg bg-border" />
               ) : (
@@ -476,20 +502,20 @@ export default function DashboardPage() {
             </div>
             <InsightCard
               icon={<Users size={15} />}
-              label="Novos aguardando · funil"
+              label="Leads novos no CRM · aguardando"
               value={loading ? '—' : String(novos)}
             />
             <InsightCard
               icon={<Layers size={15} />}
-              label="Canais ativos · funil 30d"
+              label="Canais do funil CRM"
               value={loading ? '—' : String(activeChannels)}
             />
           </div>
 
-          <SectionCard title="Contatos por dia (funil · 30 dias)">
+          <SectionCard title={`Contatos por dia (funil CRM · ${month})`}>
             <p className="mb-2 text-xs text-muted">
-              Entradas reais no funil (exclui dump Avec / status importado) · {crmWindow.from} →{' '}
-              {crmWindow.to}
+              Leads que entraram no CRM no mês (exclui dump Avec / status importado) ·{' '}
+              {crmWindow.from} → {crmWindow.to}. Não é “cliente novo no salão”.
             </p>
             <div className="h-52 lg:h-72">
               <ResponsiveContainer width="100%" height="100%">

@@ -58,6 +58,6 @@ describe('analyticsFromMonthRow', () => {
     expect(a.no_shows).toBe(1)
     expect(a.packages).toEqual([])
     expect(a.top_professionals).toEqual([])
-    expect(a.new_clients_period).toBe(5)
+    expect(a.new_clients_period).toBeNull()
   })
 })
