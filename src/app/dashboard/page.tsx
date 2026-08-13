@@ -699,7 +699,10 @@ export default function DashboardPage() {
             compare={
               !loading && filaNovo === 0
                 ? {
-                    text: 'Ninguém parado em Novo — leads do mês já foram puxados (agendado/convertido).',
+                    text:
+                      leadsEntraramMes > 0
+                        ? 'Ninguém parado em Novo — fila atual vazia (inventário da base, não o mês).'
+                        : 'Fila Novo vazia. Este mês não teve entrada no CRM.',
                     positive: true,
                     muted: true,
                   }
