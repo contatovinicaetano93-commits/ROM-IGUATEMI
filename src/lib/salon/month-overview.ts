@@ -419,13 +419,13 @@ export function applyWindowTotalsToOverview(
     mtd: boolean
     totals: SalonWindowTotals
   },
-  previous: {
+  previous?: {
     from: string
     to: string
     month: string
     label: string
     totals: SalonWindowTotals
-  },
+  } | null,
 ): MonthOverview {
   const currentLabel = formatMonthWindowLabel(current.month, current.to, current.mtd)
   const currentBucket = bucketFromWindowTotals(
@@ -435,20 +435,7 @@ export function applyWindowTotalsToOverview(
     currentLabel,
     current.totals,
   )
-  const previousBucket = bucketFromWindowTotals(
-    previous.month,
-    previous.from,
-    previous.to,
-    previous.label,
-    previous.totals,
-  )
-  const prevKnown = knownDaily(previous.totals)
-  const prevLost = estimateLostRevenue(
-    previous.totals.cancelled,
-    previous.totals.no_shows,
-    previous.totals.ticket_avg,
-  )
-  return {
+  const overlaid: MonthOverview = {
     ...overview,
     label: currentLabel,
     finance: currentBucket,
@@ -468,17 +455,6 @@ export function applyWindowTotalsToOverview(
         current.totals.no_shows,
         current.totals.ticket_avg,
       ),
-      previous: {
-        ...overview.analytics.previous,
-        month: previous.month,
-        label: previous.label,
-        revenue: prevKnown ? previous.totals.revenue : null,
-        attended: prevKnown ? previous.totals.attended : null,
-        cancelled: previous.totals.cancelled,
-        no_shows: previous.totals.no_shows,
-        ticket_avg: previous.totals.ticket_avg,
-        lost_revenue: prevLost,
-      },
     },
     closing: {
       ...overview.closing,
@@ -490,6 +466,38 @@ export function applyWindowTotalsToOverview(
       expenses: current.totals.expenses,
       cmv: current.totals.cmv,
       cash_flow: currentBucket.cash_flow,
+    },
+  }
+  if (!previous) return overlaid
+
+  const previousBucket = bucketFromWindowTotals(
+    previous.month,
+    previous.from,
+    previous.to,
+    previous.label,
+    previous.totals,
+  )
+  const prevKnown = knownDaily(previous.totals)
+  const prevLost = estimateLostRevenue(
+    previous.totals.cancelled,
+    previous.totals.no_shows,
+    previous.totals.ticket_avg,
+  )
+  return {
+    ...overlaid,
+    analytics: {
+      ...overlaid.analytics,
+      previous: {
+        ...overview.analytics.previous,
+        month: previous.month,
+        label: previous.label,
+        revenue: prevKnown ? previous.totals.revenue : null,
+        attended: prevKnown ? previous.totals.attended : null,
+        cancelled: previous.totals.cancelled,
+        no_shows: previous.totals.no_shows,
+        ticket_avg: previous.totals.ticket_avg,
+        lost_revenue: prevLost,
+      },
     },
     previous_label: previous.label,
     previous_closing: {
@@ -516,31 +524,16 @@ async function overlayLiveWindowTotals(
   const comparable = resolveComparableWindow(currentWindow, compareMonth)
   const currentTotals = await readSalonWindowTotals(currentWindow.from, currentWindow.to)
   const previousTotals = await readSalonWindowTotals(comparable.from, comparable.to)
-  if (!currentTotals && !previousTotals) return overview
-  const fallbackCurrent: SalonWindowTotals = {
-    revenue: Number(overview.closing.revenue) || 0,
-    attended: Number(overview.closing.attended) || 0,
-    cancelled: overview.closing.cancelled,
-    no_shows: overview.closing.no_shows,
-    ticket_avg: overview.closing.ticket_avg,
-    expenses: overview.closing.expenses,
-    cmv: overview.closing.cmv,
-    cash_flow: overview.closing.cash_flow ?? 0,
-  }
-  const fallbackPrevious: SalonWindowTotals = {
-    revenue: Number(overview.previous_closing.revenue) || 0,
-    attended: Number(overview.previous_closing.attended) || 0,
-    cancelled: overview.previous_closing.cancelled,
-    no_shows: overview.previous_closing.no_shows,
-    ticket_avg: overview.previous_closing.ticket_avg,
-    expenses: overview.previous_closing.expenses,
-    cmv: overview.previous_closing.cmv,
-    cash_flow: overview.previous_closing.cash_flow ?? 0,
+  // Sem totais ao vivo do mês corrente, não mistura MTD com cache (mês cheio / recorte velho).
+  if (!currentTotals) return overview
+  // Comparável falhou: aplica só o corrente e não carimba rótulo MTD no lado cacheado.
+  if (!previousTotals) {
+    return applyWindowTotalsToOverview(overview, { ...currentWindow, totals: currentTotals })
   }
   return applyWindowTotalsToOverview(
     overview,
-    { ...currentWindow, totals: currentTotals ?? fallbackCurrent },
-    { ...comparable, totals: previousTotals ?? fallbackPrevious },
+    { ...currentWindow, totals: currentTotals },
+    { ...comparable, totals: previousTotals },
   )
 }
 

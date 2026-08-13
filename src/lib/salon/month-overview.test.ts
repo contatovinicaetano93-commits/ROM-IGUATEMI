@@ -173,4 +173,20 @@ describe('applyWindowTotalsToOverview', () => {
     expect(out.finance.from).toBe('2026-08-01')
     expect(out.finance.to).toBe('2026-08-13')
   })
+
+  it('não carimba MoM quando o comparável não veio — evita misturar MTD com mês cheio', () => {
+    const base = cachedOverview()
+    const out = applyWindowTotalsToOverview(base, {
+      month: '2026-08',
+      from: '2026-08-01',
+      to: '2026-08-13',
+      mtd: true,
+      totals: windowTotals(),
+    })
+    expect(out.closing.revenue).toBe(1_274_707.12)
+    expect(out.label).toBe('Ago/2026 (até dia 13)')
+    expect(out.previous_label).toBe(base.previous_label)
+    expect(out.previous_closing).toEqual(base.previous_closing)
+    expect(out.analytics.previous).toEqual(base.analytics.previous)
+  })
 })

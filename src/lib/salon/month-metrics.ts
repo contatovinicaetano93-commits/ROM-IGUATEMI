@@ -206,7 +206,8 @@ async function queryDailyTotals(from: string, to: string) {
   const sql = getSql()
   const rows = (await sql`
     select
-      coalesce(sum(revenue), 0)::float as revenue,
+      sum(revenue)::float as revenue,
+      count(revenue)::int as revenue_days,
       coalesce(sum(attended), 0)::int as attended,
       coalesce(sum(cancelled), 0)::int as cancelled,
       coalesce(sum(no_shows), 0)::int as no_shows,
@@ -216,7 +217,8 @@ async function queryDailyTotals(from: string, to: string) {
     from salon_daily_metrics
     where day >= ${from}::date and day <= ${to}::date
   `) as {
-    revenue: number
+    revenue: number | null
+    revenue_days: number
     attended: number
     cancelled: number
     no_shows: number
@@ -225,7 +227,10 @@ async function queryDailyTotals(from: string, to: string) {
     returning_clients: number
   }[]
   const r = rows[0]
-  const revenue = Math.round(Number(r?.revenue ?? 0) * 100) / 100
+  const revenueDays = Number(r?.revenue_days ?? 0)
+  // Sem dia com receita conhecida → null (não inventar R$0).
+  const revenue =
+    revenueDays > 0 ? Math.round(Number(r?.revenue ?? 0) * 100) / 100 : null
   const attended = Number(r?.attended ?? 0) || 0
   return {
     revenue,
@@ -235,13 +240,15 @@ async function queryDailyTotals(from: string, to: string) {
     appointments: Number(r?.appointments ?? 0) || 0,
     new_clients: Number(r?.new_clients ?? 0) || 0,
     returning_clients: Number(r?.returning_clients ?? 0) || 0,
-    ticket_avg: attended > 0 ? Math.round((revenue / attended) * 100) / 100 : null,
+    ticket_avg:
+      revenue != null && attended > 0 ? Math.round((revenue / attended) * 100) / 100 : null,
   }
 }
 
 async function sumDailyTotals(from: string, to: string) {
   try {
-    return await queryDailyTotals(from, to)
+    const daily = await queryDailyTotals(from, to)
+    return { ...daily, revenue: daily.revenue ?? 0 }
   } catch {
     return {
       revenue: 0,
@@ -268,8 +275,8 @@ export interface SalonWindowTotals {
 }
 
 /**
- * Soma diária no recorte (MTD ou mês cheio). null se a query de receita falhar —
- * o overview não deve trocar cache válido por R$ 0.
+ * Soma diária no recorte (MTD ou mês cheio). null se a query falhar ou se
+ * nenhum dia tiver receita conhecida — o overview não deve trocar cache por R$ 0.
  */
 export async function readSalonWindowTotals(
   from: string,
@@ -277,6 +284,7 @@ export async function readSalonWindowTotals(
 ): Promise<SalonWindowTotals | null> {
   try {
     const daily = await queryDailyTotals(from, to)
+    if (daily.revenue == null) return null
     const [expenses, cmv] = await Promise.all([sumExpenses(from, to), sumStockCogs(from, to)])
     return {
       revenue: daily.revenue,
@@ -300,10 +308,40 @@ async function sumExpenses(from: string, to: string): Promise<number> {
       select coalesce(sum(amount), 0)::float as total
       from finance_expenses
       where expense_date >= ${from}::date and expense_date <= ${to}::date
+        and not (
+          coalesce(source, 'manual') = 'omie'
+          and (
+            coalesce(omie_category_code, '') like '2.16%'
+            or coalesce(omie_category_code, '') like '2.17%'
+            or coalesce(omie_category_code, '') like '2.24%'
+            or coalesce(omie_category_code, '') like '0.01%'
+            or description ilike '%TED entre contas%'
+            or description ilike '%Adiantamento de Lucro%'
+            or description ilike '%Distribuição de Lucro%'
+            or description ilike '%Distribuicao de Lucro%'
+            or description ilike '%Mutuo %'
+            or description ilike '%Mútuo %'
+          )
+        )
     `) as { total: number }[]
     return Math.round(Number(rows[0]?.total ?? 0) * 100) / 100
   } catch {
-    return 0
+    try {
+      const rows = (await sql`
+        select coalesce(sum(amount), 0)::float as total
+        from finance_expenses
+        where expense_date >= ${from}::date and expense_date <= ${to}::date
+          and description not ilike '%TED entre contas%'
+          and description not ilike '%Adiantamento de Lucro%'
+          and description not ilike '%Distribuição de Lucro%'
+          and description not ilike '%Distribuicao de Lucro%'
+          and description not ilike '%Mutuo %'
+          and description not ilike '%Mútuo %'
+      `) as { total: number }[]
+      return Math.round(Number(rows[0]?.total ?? 0) * 100) / 100
+    } catch {
+      return 0
+    }
   }
 }
 
