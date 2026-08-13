@@ -212,7 +212,9 @@ export default function DashboardPage() {
   const channelData = data ? aggregateByChannel(data.byDay) : []
   const activeChannels = new Set(data?.byDay.map((d) => d.channel)).size
   const channelTotal = channelData.reduce((s, [, v]) => s + v, 0)
-  const novos = data?.byStatus.find((s) => s.status === 'novo')?.contacts_count ?? 0
+  const leadsEntraramMes =
+    data?.byDay.reduce((s, r) => s + (Number(r.contacts_count) || 0), 0) ?? 0
+  const filaNovo = data?.byStatus.find((s) => s.status === 'novo')?.contacts_count ?? 0
   const topChannel = channelData[0]
   const snapshotHint = period?.snapshot_day
     ? `Snapshot do mês · Avec ${period.snapshot_day}`
@@ -665,34 +667,47 @@ export default function DashboardPage() {
 
       <VisaoSection
         title="Funil CRM"
-        hint="Leads que entraram no ROM no mês — não é cliente novo no salão (isso está em Clientes do salão)."
+        hint="WhatsApp/manual que o ROM registrou — não é cliente novo no salão (isso está em Clientes do salão) nem dump Avec. O número grande é quem entrou no mês. Fila Novo = ainda não puxado."
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5">
-            <p className="text-xs text-muted">Funil CRM ativo · {month}</p>
+            <p className="text-xs text-muted">Entraram no CRM · {month}</p>
             {loading ? (
               <div className="mt-2 h-10 w-32 animate-pulse rounded-lg bg-border" />
             ) : (
-              <p className="mt-1 text-4xl font-semibold tabular-nums">{funnelContacts}</p>
+              <p className="mt-1 text-4xl font-semibold tabular-nums">{leadsEntraramMes}</p>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
               <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
                 <TrendingUp size={13} />
                 {(conversionRate * 100).toFixed(1)}%
               </span>
-              <span className="text-xs text-muted">conversão no funil</span>
+              <span className="text-xs text-muted">conversão na base ativa</span>
             </div>
             {!loading && (
               <p className="mt-2 text-[0.7rem] text-muted">
-                Importados: {importedContacts.toLocaleString('pt-BR')} · total na janela:{' '}
+                Base ativa (não é o mês): {funnelContacts.toLocaleString('pt-BR')} · importados
+                Avec: {importedContacts.toLocaleString('pt-BR')} · total cadastrado:{' '}
                 {totalContacts.toLocaleString('pt-BR')}
               </p>
             )}
           </div>
           <InsightCard
             icon={<Users size={15} />}
-            label="Leads novos no CRM · aguardando"
-            value={loading ? '—' : String(novos)}
+            label="Fila CRM · status Novo"
+            value={loading ? '—' : String(filaNovo)}
+            compare={
+              !loading && filaNovo === 0
+                ? {
+                    text:
+                      leadsEntraramMes > 0
+                        ? 'Ninguém parado em Novo — fila atual vazia (inventário da base, não o mês).'
+                        : 'Fila Novo vazia. Este mês não teve entrada no CRM.',
+                    positive: true,
+                    muted: true,
+                  }
+                : null
+            }
           />
           <InsightCard
             icon={<Layers size={15} />}

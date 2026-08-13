@@ -4,7 +4,6 @@ import {
   getFiscalSplitSummary,
   type FiscalSplitSummary,
 } from '@/lib/fiscal-split'
-import { omieFullMonthRange } from '@/lib/omie/dates'
 import { isOmieNonOperatingExpense } from '@/lib/omie/expense-filter'
 import { todayIso } from '@/lib/salon/format'
 import { getPaymentMixRange, type P2PaymentRow } from '@/lib/salon/p2-metrics'
@@ -630,16 +629,16 @@ async function buildBucket(
   const from = range?.from ?? base.from
   const to = range?.to ?? base.to
   const label = range?.label ?? labelMonthPt(monthKey)
-  // Despesas Omie: sempre mês calendário completo (mesma janela do sync por vencimento).
-  const expenseRange = omieFullMonthRange(monthKey)
+  // Despesas no mesmo recorte da receita (MTD se o mês está aberto).
+  // Lista /api/financeiro/despesas continua mês calendário (títulos a vencer).
   const [metricsRevenue, expenseBreakdown, payment_mix, fiscal_split, attended, daily, cmvCoverage] =
     await Promise.all([
       sumRevenue(from, to),
-      sumExpensesByCnpj(expenseRange.from, expenseRange.to),
+      sumExpensesByCnpj(from, to),
       getPaymentMixRange(from, to),
       getFiscalSplitSummary(from, to),
       sumAttended(from, to),
-      listDailyMetrics(expenseRange.from, expenseRange.to),
+      listDailyMetrics(from, to),
       sumStockCogs(from, to),
     ])
   const expenses = expenseBreakdown.total

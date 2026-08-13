@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { describe, expect, it } from 'vitest'
 import { mapSalonP3DailyRow } from '@/lib/salon/p3-metrics'
 
@@ -50,5 +53,12 @@ describe('mapSalonP3DailyRow', () => {
     })
     expect(known.return_rate).toBe(0.42)
     expect(known.new_clients_period).toBe(18)
+  })
+})
+
+describe('getSalonP3DailyNear SQL', () => {
+  it('não usa select * com alias de day (Postgres ORDER BY day ambíguo)', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'p3-metrics.ts'), 'utf8')
+    expect(src).not.toMatch(/sql`\s*select\s+\*/)
   })
 })
