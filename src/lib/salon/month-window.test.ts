@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatMonthWindowLabel,
   resolveMonthWindow,
   resolveComparableWindow,
   resolvePreviousComparableWindow,
@@ -80,5 +81,15 @@ describe('resolveComparableWindow', () => {
   it('alias resolvePreviousComparableWindow agora é YoY', () => {
     const current = resolveMonthWindow('2026-07', '2026-07-28')
     expect(resolvePreviousComparableWindow(current).month).toBe('2025-07')
+  })
+})
+
+describe('formatMonthWindowLabel', () => {
+  it('mês aberto mostra até o dia', () => {
+    expect(formatMonthWindowLabel('2026-08', '2026-08-13', true)).toBe('Ago/2026 (até dia 13)')
+  })
+
+  it('mês fechado é só o mês', () => {
+    expect(formatMonthWindowLabel('2026-07', '2026-07-31', false)).toBe('Jul/2026')
   })
 })

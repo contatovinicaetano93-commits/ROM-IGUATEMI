@@ -43,6 +43,13 @@ export function labelMonthPt(monthKey: string): string {
   return `${MONTH_PT[idx] ?? m}/${y}`
 }
 
+/** Rótulo do recorte: mês cheio, ou “até dia N” quando MTD. */
+export function formatMonthWindowLabel(month: string, to: string, mtd: boolean): string {
+  const base = labelMonthPt(month)
+  if (!mtd) return base
+  return `${base} (até dia ${Number(to.slice(8, 10))})`
+}
+
 /**
  * Resolve YYYY-MM → { from, to }.
  * Sempre MTD no mês corrente (alinha Visão/Financeiro/TM/Relatórios).
