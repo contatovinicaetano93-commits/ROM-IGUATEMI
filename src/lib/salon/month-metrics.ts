@@ -308,6 +308,47 @@ export async function getSalonMonthMetrics(monthKey: string): Promise<SalonMonth
 }
 
 /**
+ * Totais do recorte [from, to] a partir do diário — sem gravar cache.
+ * Usado no comparativo MTD (mês aberto) quando a linha de `salon_month_metrics`
+ * do mês comparado é o mês inteiro e distorceria o delta.
+ */
+export async function snapshotSalonMonthWindow(
+  monthKey: string,
+  from: string,
+  to: string,
+): Promise<SalonMonthMetricsRow> {
+  const [totals, expenses, cmv] = await Promise.all([
+    sumDailyTotals(from, to),
+    sumExpenses(from, to),
+    sumStockCogs(from, to),
+  ])
+  const cash_flow = Math.round((totals.revenue - expenses) * 100) / 100
+  return {
+    month: monthKey,
+    from_day: from,
+    to_day: to,
+    days_expected: 0,
+    days_present: 0,
+    days_missing: [],
+    status: 'in_progress',
+    revenue: totals.revenue,
+    attended: totals.attended,
+    cancelled: totals.cancelled,
+    no_shows: totals.no_shows,
+    appointments: totals.appointments,
+    new_clients: totals.new_clients,
+    returning_clients: totals.returning_clients,
+    ticket_avg: totals.ticket_avg,
+    expenses,
+    cmv,
+    cash_flow,
+    payload: null,
+    materialized_at: '',
+    updated_at: '',
+  }
+}
+
+/**
  * Materializa o fechamento do mês a partir do acumulado diário ROM.
  * `payload` guarda o bloco analítico no momento do fechamento.
  */

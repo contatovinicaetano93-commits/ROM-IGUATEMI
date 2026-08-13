@@ -16,10 +16,12 @@ import {
   FileText,
   Package,
 } from 'lucide-react'
-import { SectionCard, CountBadge, StatusPill, CHANNEL_LABEL } from '../_components/ui'
+import { SectionCard, CountBadge, CHANNEL_LABEL } from '../_components/ui'
 import { MonthYearField } from '../_components/MonthYearField'
+import { VisaoSection } from '../_components/VisaoSection'
 import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/lib/salon/format'
-import { fmtSignedCurrency, fmtSignedNumber, momCompareLine } from '@/lib/salon/mom-delta'
+import { momCompareLine } from '@/lib/salon/mom-delta'
+import { yearAgoMonthKey } from '@/lib/salon/month-window'
 
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
@@ -84,6 +86,7 @@ interface PerformanceData {
 export default function DashboardPage() {
   const brand = getBrand()
   const [month, setMonth] = useState(() => todayIso().slice(0, 7))
+  const [compareMonth, setCompareMonth] = useState('')
   const [data, setData] = useState<KpiData | null>(null)
   const [tm, setTm] = useState<TmComparison | null>(null)
   const [performance, setPerformance] = useState<PerformanceData | null>(null)
@@ -112,10 +115,13 @@ export default function DashboardPage() {
         setTm(null)
         setPerformance(null)
         setPeriod(null)
+        setData(null)
         // Um lambda: evita waterfall de 4 rotas × pooler max:1.
-        const dashRes = await apiFetch(`/api/kpis/dashboard?month=${month}`, {
+        const q = new URLSearchParams({ month })
+        if (compareMonth) q.set('compare', compareMonth)
+        const dashRes = await apiFetch(`/api/kpis/dashboard?${q}`, {
           cache: 'no-store',
-          timeoutMs: 45_000,
+          timeoutMs: 100_000,
         })
         const raw = await dashRes.text()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,7 +183,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [month])
+  }, [month, compareMonth])
 
   function exportPeriodCsv() {
     if (!period) return
@@ -206,7 +212,6 @@ export default function DashboardPage() {
     : []
   const channelData = data ? aggregateByChannel(data.byDay) : []
   const activeChannels = new Set(data?.byDay.map((d) => d.channel)).size
-  const statusTotal = data?.byStatus.reduce((s, r) => s + r.contacts_count, 0) ?? 0
   const channelTotal = channelData.reduce((s, [, v]) => s + v, 0)
   const novos = data?.byStatus.find((s) => s.status === 'novo')?.contacts_count ?? 0
   const topChannel = channelData[0]
@@ -221,14 +226,27 @@ export default function DashboardPage() {
           <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">{brand.dashboardTitle}</h1>
           <p className="mt-1 text-xs text-muted">
-            Acumulado ROM do mês (receita/cancel desde jan.) + snapshot Avec do mês selecionado. Operação
-            do dia em Hoje · dinheiro/comparativo em Financeiro · fechamento em Relatórios.
+            Salão no mês, clientes, mix, equipe e funil CRM. Comparativo padrão: mesmo mês do ano
+            passado (mesmo dia se o mês estiver aberto). Operação do dia em Hoje · dinheiro em
+            Financeiro · fechamento em Relatórios.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-[0.65rem] uppercase tracking-wide text-muted">Mês</span>
             <MonthYearField value={month} onChange={setMonth} aria-label="Mês da visão analítica" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.65rem] uppercase tracking-wide text-muted">Comparar com</span>
+            <MonthYearField
+              value={compareMonth}
+              onChange={setCompareMonth}
+              allowEmpty
+              emptyLabel="Automático (ano passado)"
+              pickMonth={yearAgoMonthKey(month)}
+              maxMonth={month}
+              aria-label="Comparar com"
+            />
           </label>
           <button
             type="button"
@@ -261,199 +279,404 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <InsightCard
-          icon={<TrendingUp size={15} />}
-          label={`Receita · mês acum. · ${period?.label ?? '—'}`}
-          value={
-            loading || !period
-              ? '—'
-              : period.revenue != null && period.revenue > 0
-                ? formatCurrency(period.revenue)
-                : period.revenue === 0
-                  ? 'sem receita'
-                  : period.mtd
-                    ? 'aguardando caixa'
-                    : 'sem dado'
-          }
-          compare={
-            !loading &&
-            period?.previous &&
-            period.revenue != null &&
-            period.previous.revenue != null
-              ? {
-                  text: `${fmtSignedCurrency(period.revenue - period.previous.revenue)} vs ${period.previous.label}`,
-                  positive: period.revenue - period.previous.revenue >= 0,
-                }
-              : null
-          }
-        />
-        <InsightCard
-          icon={<Users size={15} />}
-          label="Atendidos · mês acum."
-          value={
-            loading || !period
-              ? '—'
-              : period.attended != null
-                ? String(period.attended)
-                : period.mtd
-                  ? 'aguardando'
-                  : 'sem dado'
-          }
-          compare={
-            !loading &&
-            period?.previous &&
-            period.attended != null &&
-            period.previous.attended != null
-              ? {
-                  text: `${fmtSignedNumber(period.attended - period.previous.attended)} vs ${period.previous.label}`,
-                  positive: period.attended - period.previous.attended >= 0,
-                }
-              : null
-          }
-        />
-        <InsightCard
-          icon={<Percent size={15} />}
-          label={`Ocupação · mês calendário · ${period?.label ?? '—'}`}
-          value={
-            loading || !period
-              ? '—'
-              : period.occupancy_avg != null
-                ? formatPercentPoints(period.occupancy_avg * 100)
-                : '—'
-          }
-          compare={
-            !loading &&
-            period?.previous &&
-            period.occupancy_avg != null &&
-            period.previous.occupancy_avg != null
-              ? (() => {
-                  const line = momCompareLine(
-                    period.occupancy_avg * 100,
-                    period.previous.occupancy_avg * 100,
-                    period.previous.label,
-                    { kind: 'points' },
-                  )
-                  return line
-                })()
-              : null
-          }
-        />
-        <InsightCard
-          icon={<AlertTriangle size={15} />}
-          label="Receita perdida · mês acum."
-          value={loading || !period ? '—' : formatCurrency(period.lost_revenue)}
-          compare={
-            !loading && period?.previous
-              ? {
-                  text: `${fmtSignedCurrency(period.lost_revenue - period.previous.lost_revenue)} vs ${period.previous.label}`,
-                  // Menos receita perdida = melhor
-                  positive: period.lost_revenue - period.previous.lost_revenue <= 0,
-                }
-              : null
-          }
-        />
-        <InsightCard
-          icon={<Users size={15} />}
-          label="Cancel. + no-show · mês acum."
-          value={
-            loading || !period
-              ? '—'
-              : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
-          }
-          compare={
-            !loading && period?.previous
-              ? (() => {
-                  const cur = (period.cancelled ?? 0) + (period.no_shows ?? 0)
-                  const prev = period.previous.cancelled + period.previous.no_shows
-                  return {
-                    text: `${fmtSignedNumber(cur - prev)} vs ${period.previous.label}`,
-                    positive: cur - prev <= 0,
-                  }
-                })()
-              : null
-          }
-        />
-        <InsightCard
-          icon={<TrendingUp size={15} />}
-          label={period?.previous ? `Vs ${period.previous.label}` : 'Vs mês anterior'}
-          value={
-            loading ||
-            !period?.previous ||
-            period.revenue == null ||
-            period.previous.revenue == null
-              ? '—'
-              : fmtSignedCurrency(period.revenue - period.previous.revenue)
-          }
-          compare={
-            !loading &&
-            period?.previous &&
-            period.revenue != null &&
-            period.previous.revenue != null &&
-            period.attended != null &&
-            period.previous.attended != null
-              ? {
-                  text: `${period.label} ${formatCurrency(period.revenue)} · ${period.attended} atend. vs ${period.previous.label} ${formatCurrency(period.previous.revenue)} · ${period.previous.attended} atend.`,
-                  positive: period.revenue - period.previous.revenue >= 0,
-                  muted: true,
-                }
-              : null
-          }
-          emphasize
-        />
-      </div>
-
-      {period?.previous && !loading && period.revenue != null && period.previous.revenue != null ? (
+      {!loading && period?.previous ? (
         <p className="text-xs text-muted">
-          Comparativo MTD: {period.label} {formatCurrency(period.revenue)} ·{' '}
-          {period.attended ?? '—'} atend. vs {period.previous.label}{' '}
-          {formatCurrency(period.previous.revenue)} · {period.previous.attended ?? '—'} atend.
-          {period.return_rate != null
-            ? ` · Retorno ${formatPercentPoints(period.return_rate * 100, 0)}`
-            : ' · Retorno — (sem cohort confiável no ROM)'}
-          . Canais/pacotes/tops vêm do snapshot Avec do mês.
+          Verde = melhor · laranja = pior · vs {period.previous.label}
+          {period.mtd ? ` (recorte até dia ${Number(period.to.slice(8, 10))})` : ''}.
         </p>
       ) : period && !loading && period.revenue == null && period.mtd ? (
         <p className="text-xs text-muted">
-          Aguardando faturamento pago no Avec neste mês — agenda pode já estar ok; o MoM aparece
-          quando houver caixa conhecido.
+          Aguardando faturamento pago no Avec neste mês — o comparativo aparece quando houver caixa.
         </p>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <InsightCard
-          icon={<Sparkles size={15} />}
-          label={`Novos · ${period?.label ?? '—'}`}
-          value={loading || !period ? '—' : String(period.new_clients_period ?? 0)}
-        />
-        <InsightCard
-          icon={<Package size={15} />}
-          label={`Pacotes · ${period?.label ?? '—'}`}
-          value={loading || !period ? '—' : formatCurrency(period.packages_revenue)}
-        />
-        <InsightCard
-          icon={<TrendingUp size={15} />}
-          label={`Retorno · ${period?.label ?? '—'}`}
-          value={
-            loading || !period
-              ? '—'
-              : period.return_rate != null
-                ? formatPercentPoints(period.return_rate * 100, 0)
-                : '—'
-          }
-        />
-      </div>
+      <VisaoSection
+        title="Salão no mês"
+        hint="Acumulado ROM (0088 / 0002 / 0248). Mês aberto = até hoje."
+      >
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+          <InsightCard
+            icon={<TrendingUp size={15} />}
+            label={`Receita · ${period?.label ?? '—'}`}
+            value={
+              loading || !period
+                ? '—'
+                : period.revenue != null && period.revenue > 0
+                  ? formatCurrency(period.revenue)
+                  : period.revenue === 0
+                    ? 'sem receita'
+                    : period.mtd
+                      ? 'aguardando caixa'
+                      : 'sem dado'
+            }
+            compare={
+              period?.previous?.label
+                ? momCompareLine(period.revenue, period.previous.revenue, period.previous.label)
+                : null
+            }
+          />
+          <InsightCard
+            icon={<Users size={15} />}
+            label="Atendidos"
+            value={
+              loading || !period
+                ? '—'
+                : period.attended != null
+                  ? String(period.attended)
+                  : period.mtd
+                    ? 'aguardando'
+                    : 'sem dado'
+            }
+            compare={
+              period?.previous?.label
+                ? momCompareLine(period.attended, period.previous.attended, period.previous.label, {
+                    kind: 'number',
+                  })
+                : null
+            }
+          />
+          <InsightCard
+            icon={<TrendingUp size={15} />}
+            label="Ticket médio"
+            value={
+              loading || !period
+                ? '—'
+                : period.ticket_avg != null
+                  ? formatCurrency(period.ticket_avg)
+                  : 'sem ticket'
+            }
+            compare={
+              period?.previous?.label
+                ? momCompareLine(period.ticket_avg, period.previous.ticket_avg, period.previous.label)
+                : null
+            }
+          />
+          <InsightCard
+            icon={<Users size={15} />}
+            label="Cancel. + no-show"
+            value={
+              loading || !period ? '—' : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
+            }
+            compare={
+              period?.previous?.label
+                ? momCompareLine(
+                    (period.cancelled ?? 0) + (period.no_shows ?? 0),
+                    period.previous.cancelled + period.previous.no_shows,
+                    period.previous.label,
+                    { kind: 'number', invertGood: true },
+                  )
+                : null
+            }
+          />
+          <InsightCard
+            icon={<AlertTriangle size={15} />}
+            label="Receita perdida"
+            value={
+              loading || !period
+                ? '—'
+                : period.lost_revenue == null
+                  ? period.ticket_avg == null
+                    ? 'sem ticket'
+                    : '—'
+                  : formatCurrency(period.lost_revenue)
+            }
+            compare={
+              period?.previous?.label
+                ? momCompareLine(
+                    period.lost_revenue,
+                    period.previous.lost_revenue,
+                    period.previous.label,
+                    { invertGood: true },
+                  )
+                : null
+            }
+          />
+        </div>
+      </VisaoSection>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
-        <div className="flex flex-col gap-6 lg:col-span-8 lg:gap-8">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5 sm:col-span-2 lg:col-span-1">
-              <p className="text-xs text-muted">Funil ativo (CRM · sem importado)</p>
-              {loading ? (
-                <div className="mt-2 h-10 w-32 animate-pulse rounded-lg bg-border" />
-              ) : (
-                <p className="mt-1 text-4xl font-semibold tabular-nums">{funnelContacts}</p>
-              )}
+      <VisaoSection
+        title="Clientes do salão"
+        hint="Snapshot Avec ~30d (0017 / 0007). Não é lead do CRM. TM = duração real do 0002."
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <InsightCard
+            icon={<Sparkles size={15} />}
+            label="Clientes novos no salão"
+            value={
+              loading || !period
+                ? '—'
+                : period.new_clients_period != null
+                  ? String(period.new_clients_period)
+                  : period.snapshot_missing
+                    ? 'sem snapshot'
+                    : '—'
+            }
+            compare={
+              period?.previous?.label
+                ? momCompareLine(
+                    period.new_clients_period,
+                    period.previous.new_clients_period,
+                    period.previous.label,
+                    { kind: 'number' },
+                  )
+                : null
+            }
+          />
+          <InsightCard
+            icon={<TrendingUp size={15} />}
+            label="Taxa de retorno"
+            value={
+              loading || !period
+                ? '—'
+                : period.return_rate != null
+                  ? formatPercentPoints(period.return_rate * 100, 0)
+                  : period.snapshot_missing
+                    ? 'sem snapshot'
+                    : '—'
+            }
+            compare={
+              period?.previous?.return_rate != null && period.return_rate != null && period.previous.label
+                ? momCompareLine(
+                    period.return_rate * 100,
+                    period.previous.return_rate * 100,
+                    period.previous.label,
+                    { kind: 'points' },
+                  )
+                : null
+            }
+          />
+        </div>
+        <SectionCard title="Tempo médio de atendimento (TM)" badge={<Clock size={15} className="text-muted" />}>
+          {loading ? (
+            <div className="h-16 animate-pulse rounded-2xl bg-card" />
+          ) : tm ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TmCompareCol title="Mês" current={tm.month.current} previous={tm.month.previous} />
+              <TmCompareCol
+                title="Trimestre (vs mesmo tri ano passado)"
+                current={tm.quarter.current}
+                previous={tm.quarter.previous}
+              />
+            </div>
+          ) : (
+            <p className="text-xs text-muted">TM indisponível neste carregamento.</p>
+          )}
+          {!loading && tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
+            <p className="mt-4 text-xs text-muted">
+              TM histórico indisponível: a Avec 0002 desta unidade não envia início/fim do
+              atendimento nos dias passados (só data). Não inventamos TM pelo catálogo 0223.
+            </p>
+          )}
+        </SectionCard>
+      </VisaoSection>
+
+      <VisaoSection
+        title="Mix comercial"
+        hint={`${snapshotHint} · pacotes 0061 · serviços 0032 · como conheceu 0003 · agenda 0056.`}
+      >
+        <div className="max-w-sm">
+          <InsightCard
+            icon={<Package size={15} />}
+            label="Pacotes vendidos"
+            value={
+              loading || !period
+                ? '—'
+                : period.packages_revenue != null
+                  ? formatCurrency(period.packages_revenue)
+                  : period.snapshot_missing
+                    ? 'sem snapshot'
+                    : '—'
+            }
+            compare={
+              period?.previous?.label
+                ? momCompareLine(
+                    period.packages_revenue,
+                    period.previous.packages_revenue,
+                    period.previous.label,
+                  )
+                : null
+            }
+          />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SectionCard title={`Pacotes · ${period?.label ?? '—'}`}>
+            <p className="mb-2 text-xs text-muted">
+              {period?.packages_sold != null ? `${period.packages_sold} vendidos` : '—'} ·{' '}
+              {period ? formatCurrency(period.packages_revenue) : '—'}
+            </p>
+            {(period?.packages.length ?? 0) === 0 ? (
+              <p className="text-xs text-muted">Sem pacotes no snapshot.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {period!.packages.map((pkg) => (
+                  <li key={pkg.name} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{pkg.name}</span>
+                    <span className="shrink-0 tabular-nums text-muted">
+                      {formatCurrency(pkg.revenue)} · {pkg.quantity}×
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+          <SectionCard title="Top serviços">
+            <p className="mb-2 text-xs text-muted">Faturamento real ÷ qtd (ticket), não preço de tabela.</p>
+            {(period?.top_services.length ?? 0) === 0 ? (
+              <p className="text-xs text-muted">Sem ranking sincronizado.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {period!.top_services.map((s) => {
+                  const ticket = serviceTicketAvg(s.revenue, s.quantity)
+                  return (
+                    <li key={s.name} className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="truncate font-medium">{displayServiceName(s.name)}</span>
+                      <span className="shrink-0 tabular-nums text-muted">
+                        {formatCurrency(s.revenue)} · {s.quantity}×
+                        {ticket != null ? ` · ticket ${formatCurrency(ticket)}` : ''}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </SectionCard>
+          <SectionCard title="Como nos conheceram">
+            {(period?.acquisition.length ?? 0) === 0 ? (
+              <p className="text-xs text-muted">Sem dados de aquisição.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {period!.acquisition.map((a) => (
+                  <li key={a.channel} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{a.channel}</span>
+                    <span className="shrink-0 tabular-nums text-muted">{a.clients}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+          <SectionCard title={`Canais de agenda · ${period?.label ?? '—'}`}>
+            {(period?.booking_channels.length ?? 0) === 0 ? (
+              <p className="text-xs text-muted">Sem canais sincronizados.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {period!.booking_channels.map((c) => (
+                  <li key={c.channel} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium">{c.channel}</span>
+                    <span className="shrink-0 tabular-nums text-muted">{c.count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+        </div>
+      </VisaoSection>
+
+      <VisaoSection
+        title="Equipe"
+        hint="Ocupação 0126 + ranking 0021. Deltas vs o mês comparado no topo."
+      >
+        <div className="max-w-sm">
+          <InsightCard
+            icon={<Percent size={15} />}
+            label={`Ocupação · ${period?.label ?? '—'}`}
+            value={
+              loading || !period
+                ? '—'
+                : period.occupancy_avg != null
+                  ? formatPercentPoints(period.occupancy_avg * 100)
+                  : '—'
+            }
+            compare={
+              period?.previous?.occupancy_avg != null &&
+              period.occupancy_avg != null &&
+              period.previous.label
+                ? momCompareLine(
+                    (period.occupancy_avg ?? 0) * 100,
+                    (period.previous.occupancy_avg ?? 0) * 100,
+                    period.previous.label,
+                    { kind: 'points' },
+                  )
+                : null
+            }
+          />
+        </div>
+        <SectionCard
+          title={`Ranking de profissionais · ${period?.label ?? month}`}
+          badge={<Trophy size={15} className="text-muted" />}
+        >
+          {!performance || performance.professionals.length === 0 ? (
+            <p className="text-xs text-muted">
+              Sem dado ainda — depende da Avec (0021 + 0126) no mês selecionado. Detalhe em Relatórios.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <p className="mb-3 text-xs text-muted">
+                Escopo: {period?.from ?? '—'} → {period?.to ?? '—'}
+                {period?.mtd ? ' (mês em aberto · MTD)' : ' (mês fechado)'}
+                {performance.reference_day ? ` · snapshot ${performance.reference_day}` : ''}
+                {performance.compare_label ? ` · vs ${performance.compare_label}` : ''}
+              </p>
+              <table className="w-full min-w-[560px] text-sm">
+                <thead>
+                  <tr className="text-left text-[0.65rem] uppercase tracking-wide text-muted">
+                    <th className="pb-2 font-medium">#</th>
+                    <th className="pb-2 font-medium">Profissional</th>
+                    <th className="pb-2 font-medium">Faturamento</th>
+                    <th className="pb-2 font-medium">Atendimentos</th>
+                    <th className="pb-2 font-medium">Ticket médio</th>
+                    <th className="pb-2 font-medium">Ocupação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {performance.professionals.slice(0, 10).map((pro, i) => (
+                    <tr key={pro.name}>
+                      <td className="py-2 tabular-nums text-muted">{i + 1}</td>
+                      <td className="py-2 font-medium text-foreground/90">{pro.name}</td>
+                      <td className="py-2 tabular-nums">
+                        <div className="flex flex-col gap-0.5">
+                          <span>{formatCurrency(pro.revenue)}</span>
+                          {pro.delta && <DeltaUnder value={pro.delta.revenue} suffix="" isCurrency />}
+                        </div>
+                      </td>
+                      <td className="py-2 tabular-nums">
+                        <div className="flex flex-col gap-0.5">
+                          <span>{pro.attended}</span>
+                          {pro.delta && <DeltaUnder value={pro.delta.attended} suffix="" />}
+                        </div>
+                      </td>
+                      <td className="py-2 tabular-nums">{formatCurrency(pro.ticket_avg)}</td>
+                      <td className="py-2 tabular-nums">
+                        <div className="flex flex-col gap-0.5">
+                          <span>{pro.occupancy != null ? formatPercent(pro.occupancy) : '—'}</span>
+                          {pro.delta?.occupancy != null && (
+                            <DeltaUnder value={Math.round(pro.delta.occupancy * 100)} suffix="pp" />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
+      </VisaoSection>
+
+      <VisaoSection
+        title="Funil CRM"
+        hint="Cards: estoque ativo do funil (não recorta o mês). Gráfico e canais: leads que entraram no ROM no mês — não é cliente novo no salão (isso está em Clientes do salão)."
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5">
+            <p className="text-xs text-muted">Funil CRM ativo · estoque</p>
+            {loading ? (
+              <div className="mt-2 h-10 w-32 animate-pulse rounded-lg bg-border" />
+            ) : (
+              <p className="mt-1 text-4xl font-semibold tabular-nums">{funnelContacts}</p>
+            )}
+            {loading ? (
+              <div className="mt-3 h-5 w-40 animate-pulse rounded bg-border" />
+            ) : (
               <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                 <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
                   <TrendingUp size={13} />
@@ -461,30 +684,34 @@ export default function DashboardPage() {
                 </span>
                 <span className="text-xs text-muted">conversão no funil</span>
               </div>
-              {!loading && (
-                <p className="mt-2 text-[0.7rem] text-muted">
-                  Base Avec importada: {importedContacts.toLocaleString('pt-BR')} · total na base:{' '}
-                  {totalContacts.toLocaleString('pt-BR')}
-                </p>
-              )}
-            </div>
-            <InsightCard
-              icon={<Users size={15} />}
-              label="Novos aguardando · funil"
-              value={loading ? '—' : String(novos)}
-            />
-            <InsightCard
-              icon={<Layers size={15} />}
-              label="Canais ativos · funil 30d"
-              value={loading ? '—' : String(activeChannels)}
-            />
+            )}
+            {!loading && (
+              <p className="mt-2 text-[0.7rem] text-muted">
+                Importados: {importedContacts.toLocaleString('pt-BR')} · total na base:{' '}
+                {totalContacts.toLocaleString('pt-BR')}
+              </p>
+            )}
           </div>
-
-          <SectionCard title="Contatos por dia (funil · 30 dias)">
-            <p className="mb-2 text-xs text-muted">
-              Entradas reais no funil (exclui dump Avec / status importado) · {crmWindow.from} →{' '}
-              {crmWindow.to}
-            </p>
+          <InsightCard
+            icon={<Users size={15} />}
+            label="Leads novos no CRM · aguardando"
+            value={loading ? '—' : String(novos)}
+          />
+          <InsightCard
+            icon={<Layers size={15} />}
+            label="Canais do funil CRM"
+            value={loading ? '—' : String(activeChannels)}
+          />
+        </div>
+        <SectionCard title={`Contatos por dia · ${month}`}>
+          <p className="mb-2 text-xs text-muted">
+            {loading || !data
+              ? '—'
+              : `${crmWindow.from} → ${crmWindow.to}. Exclui dump Avec / status importado.`}
+          </p>
+          {loading || !data ? (
+            <p className="py-6 text-center text-sm text-muted">Carregando…</p>
+          ) : (
             <div className="h-52 lg:h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 6, right: 6, left: -20, bottom: 0 }}>
@@ -517,45 +744,22 @@ export default function DashboardPage() {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-          </SectionCard>
-
-          <SectionCard title="Tempo Médio de atendimento (TM)" badge={<Clock size={15} className="text-muted" />}>
-            {loading ? (
-              <div className="h-16 animate-pulse rounded-2xl bg-card" />
-            ) : tm ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <TmCompareCol title="Mês" current={tm.month.current} previous={tm.month.previous} />
-                <TmCompareCol title="Trimestre" current={tm.quarter.current} previous={tm.quarter.previous} />
-              </div>
-            ) : (
-              <p className="text-xs text-muted">TM indisponível neste carregamento.</p>
-            )}
-            {!loading && tm && tm.month.current.sampleCount === 0 && tm.month.previous.sampleCount === 0 && (
-              <p className="mt-4 text-xs text-muted">
-                TM histórico indisponível: a Avec 0002 desta unidade não envia início/fim do
-                atendimento nos dias passados (só data). Não inventamos TM pelo catálogo 0223.
-              </p>
-            )}
-          </SectionCard>
-
-          {!loading && topChannel && channelTotal > 0 && (
-            <div className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
-              <Sparkles size={17} className="mt-0.5 shrink-0 text-gold" />
-              <p className="text-sm leading-relaxed text-foreground/90">
-                <span className="font-semibold text-gold">
-                  {CHANNEL_LABEL[topChannel[0]] ?? topChannel[0]}
-                </span>{' '}
-                lidera entradas no funil nos últimos 30 dias ({topChannel[1]} de {channelTotal}) —
-                dump Avec importado não entra nesta conta.
-              </p>
-            </div>
           )}
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <SectionCard
-              title="Contatos por canal (funil · 30 dias)"
-              badge={<CountBadge value={`${channelTotal}`} />}
-            >
+        </SectionCard>
+        <SectionCard
+          title={`Contatos por canal · ${month}`}
+          badge={<CountBadge value={loading ? '—' : `${channelTotal}`} />}
+        >
+          {loading || !data ? (
+            <p className="py-6 text-center text-sm text-muted">Carregando…</p>
+          ) : (
+            <>
+              {topChannel && channelTotal > 0 ? (
+                <p className="mb-3 text-xs text-muted">
+                  <span className="font-semibold text-gold">{CHANNEL_LABEL[topChannel[0]] ?? topChannel[0]}</span>{' '}
+                  lidera entradas ({topChannel[1]} de {channelTotal}).
+                </p>
+              ) : null}
               <div className="divide-y divide-border">
                 {channelData.map(([channel, count]) => (
                   <div key={channel} className="flex items-center justify-between py-3 text-sm">
@@ -564,214 +768,32 @@ export default function DashboardPage() {
                   </div>
                 ))}
                 {channelData.length === 0 && (
-                  <p className="py-6 text-center text-sm text-muted">
-                    Nenhuma entrada de funil nos últimos 30 dias.
-                  </p>
+                  <p className="py-6 text-center text-sm text-muted">Nenhuma entrada de funil neste mês.</p>
                 )}
               </div>
-            </SectionCard>
-
-            <SectionCard title="Status na base (inventário)" badge={<CountBadge value={`${statusTotal}`} />}>
-              <p className="mb-2 text-xs text-muted">
-                Inclui importado (base Avec 0004) — não é volume de aquisição do mês.
-              </p>
-              <div className="flex flex-col gap-2.5">
-                {[...(data?.byStatus ?? [])]
-                  .sort(
-                    (a, b) =>
-                      b.contacts_count - a.contacts_count ||
-                      a.status.localeCompare(b.status, 'pt-BR'),
-                  )
-                  .map((row) => (
-                    <div key={row.status} className="flex items-center justify-between">
-                      <StatusPill status={row.status} />
-                      <span className="text-sm font-semibold tabular-nums text-foreground/90">
-                        {row.contacts_count}
-                      </span>
-                    </div>
-                  ))}
-                {data && data.byStatus.length === 0 && (
-                  <p className="py-6 text-center text-sm text-muted">Nenhum contato registrado ainda.</p>
-                )}
-              </div>
-            </SectionCard>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-6 lg:col-span-4">
-          <SectionCard title={`Canais de agenda · ${period?.label ?? '—'}`}>
-            <p className="mb-2 text-xs text-muted">{snapshotHint} · 0056.</p>
-            {(period?.booking_channels.length ?? 0) === 0 ? (
-              <p className="text-xs text-muted">Sem canais sincronizados.</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {period!.booking_channels.map((c) => (
-                  <li key={c.channel} className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate font-medium">{c.channel}</span>
-                    <span className="shrink-0 tabular-nums text-muted">{c.count}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Como nos conheceram">
-            <p className="mb-2 text-xs text-muted">{snapshotHint} · 0003.</p>
-            {(period?.acquisition.length ?? 0) === 0 ? (
-              <p className="text-xs text-muted">Sem dados de aquisição.</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {period!.acquisition.map((a) => (
-                  <li key={a.channel} className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate font-medium">{a.channel}</span>
-                    <span className="shrink-0 tabular-nums text-muted">{a.clients}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionCard>
-
-          <SectionCard title={`Pacotes · ${period?.label ?? '—'}`}>
-            <p className="mb-2 text-xs text-muted">
-              {snapshotHint} · 0061 · {period?.packages_sold ?? 0} vendidos ·{' '}
-              {period ? formatCurrency(period.packages_revenue) : '—'}
-            </p>
-            {(period?.packages.length ?? 0) === 0 ? (
-              <p className="text-xs text-muted">Sem pacotes no snapshot.</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {period!.packages.map((p) => (
-                  <li key={p.name} className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate font-medium">{p.name}</span>
-                    <span className="shrink-0 tabular-nums text-muted">
-                      {formatCurrency(p.revenue)} · {p.quantity}×
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Top serviços">
-            <p className="mb-2 text-xs text-muted">
-              {snapshotHint} · 0032 · faturamento real ÷ qtd (ticket médio), não preço de tabela no
-              nome.
-            </p>
-            {(period?.top_services.length ?? 0) === 0 ? (
-              <p className="text-xs text-muted">Sem ranking sincronizado.</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {period!.top_services.map((s) => {
-                  const ticket = serviceTicketAvg(s.revenue, s.quantity)
-                  return (
-                    <li key={s.name} className="flex items-baseline justify-between gap-3 text-sm">
-                      <span className="truncate font-medium">{displayServiceName(s.name)}</span>
-                      <span className="shrink-0 tabular-nums text-muted">
-                        {formatCurrency(s.revenue)} · {s.quantity}×
-                        {ticket != null ? ` · ticket ${formatCurrency(ticket)}` : ''}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </SectionCard>
-
-          <p className="text-xs text-muted">
-            Operação do dia:{' '}
-            <Link href="/hoje" className="text-gold hover:underline">
-              Hoje
-            </Link>
-            {' · '}
-            Caixa:{' '}
-            <Link href="/financeiro" className="text-gold hover:underline">
-              Financeiro
-            </Link>
-            {' · '}
-            Ranking completo:{' '}
-            <Link href="/relatorios" className="text-gold hover:underline">
-              Relatórios
-            </Link>
-          </p>
-        </div>
-      </div>
-
-      <SectionCard
-        title={`Ranking de profissionais · mês calendário ${period?.label ?? month}`}
-        badge={<Trophy size={15} className="text-muted" />}
-      >
-        {!performance || performance.professionals.length === 0 ? (
-          <p className="text-xs text-muted">
-            Sem dado ainda — depende da Avec (0021 + 0126) no mês calendário selecionado. Detalhe em
-            Relatórios.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <p className="mb-3 text-xs text-muted">
-              Escopo: {period?.from ?? '—'} → {period?.to ?? '—'}
-              {period?.mtd ? ' (mês em aberto · MTD)' : ' (mês fechado)'}
-              {performance.reference_day ? ` · snapshot ${performance.reference_day}` : ''}
-              {performance.compare_label
-                ? ` · deltas vs ${performance.compare_label}`
-                : ' · deltas vs período comparável do mês anterior'}
-            </p>
-            <table className="w-full min-w-[560px] text-sm">
-              <thead>
-                <tr className="text-left text-[0.65rem] uppercase tracking-wide text-muted">
-                  <th className="pb-2 font-medium">#</th>
-                  <th className="pb-2 font-medium">Profissional</th>
-                  <th className="pb-2 font-medium">Faturamento</th>
-                  <th className="pb-2 font-medium">Atendimentos</th>
-                  <th className="pb-2 font-medium">Ticket médio</th>
-                  <th className="pb-2 font-medium">Ocupação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {performance.professionals.slice(0, 10).map((p, i) => (
-                  <tr key={p.name}>
-                    <td className="py-2 tabular-nums text-muted">{i + 1}</td>
-                    <td className="py-2 font-medium text-foreground/90">{p.name}</td>
-                    <td className="py-2 tabular-nums">
-                      <div className="flex flex-col gap-0.5">
-                        <span>{formatCurrency(p.revenue)}</span>
-                        {p.delta && <DeltaUnder value={p.delta.revenue} suffix="" isCurrency />}
-                      </div>
-                    </td>
-                    <td className="py-2 tabular-nums">
-                      <div className="flex flex-col gap-0.5">
-                        <span>{p.attended}</span>
-                        {p.delta && <DeltaUnder value={p.delta.attended} suffix="" />}
-                      </div>
-                    </td>
-                    <td className="py-2 tabular-nums">{formatCurrency(p.ticket_avg)}</td>
-                    <td className="py-2 tabular-nums">
-                      <div className="flex flex-col gap-0.5">
-                        <span>{p.occupancy != null ? formatPercent(p.occupancy) : '—'}</span>
-                        {p.delta?.occupancy != null && (
-                          <DeltaUnder value={Math.round(p.delta.occupancy * 100)} suffix="pp" />
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {performance.compare_day && (
-              <p className="mt-3 text-[0.65rem] text-muted">
-                Comparação:{' '}
-                {performance.compare_mtd_aligned
-                  ? `mesmo recorte de dias — ${performance.reference_day} vs ${performance.compare_day}`
-                  : `mês fechado — ${performance.reference_day} vs ${performance.compare_day}`}
-                {performance.compare_label ? ` (${performance.compare_label})` : ''}
-              </p>
-            )}
-          </div>
-        )}
-      </SectionCard>
+            </>
+          )}
+        </SectionCard>
+        <p className="text-xs text-muted">
+          Operação do dia:{' '}
+          <Link href="/hoje" className="text-gold hover:underline">
+            Hoje
+          </Link>
+          {' · '}
+          Caixa:{' '}
+          <Link href="/financeiro" className="text-gold hover:underline">
+            Financeiro
+          </Link>
+          {' · '}
+          Fechamento:{' '}
+          <Link href="/relatorios" className="text-gold hover:underline">
+            Relatórios
+          </Link>
+        </p>
+      </VisaoSection>
     </main>
   )
 }
-
 function InsightCard({
   icon,
   label,
@@ -820,11 +842,11 @@ function DeltaUnder({
   suffix,
   isCurrency,
 }: {
-  value: number
+  value: number | null | undefined
   suffix: string
   isCurrency?: boolean
 }) {
-  if (value === 0) return null
+  if (value == null || value === 0) return null
   const positive = value > 0
   const formatted = isCurrency ? formatCurrency(Math.abs(value)) : `${Math.abs(value)}${suffix}`
   return (

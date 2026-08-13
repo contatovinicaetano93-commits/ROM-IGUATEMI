@@ -1,10 +1,24 @@
 /**
  * Janela de mês unificada para Visão analítica, Financeiro, TM e Relatórios.
  * Mês corrente: 1º → hoje (MTD). Mês fechado: 1º → último dia.
+ *
+ * Comparativo padrão: mesmo mês do ano passado (YoY), mesmo dia se MTD.
+ * Mês comparado escolhido à mão também recorta o mesmo dia quando o base está aberto.
  */
 import { todayIso } from '@/lib/salon/format'
 
 export type MonthWindow = { from: string; to: string; month: string; mtd: boolean }
+
+export type ComparableWindow = {
+  month: string
+  from: string
+  to: string
+  label: string
+  mtd_aligned: boolean
+}
+
+/** Primeiro mês disponível no seletor “Comparar com”. */
+export const COMPARE_MONTHS_FROM = '2025-01'
 
 const MONTH_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -18,13 +32,12 @@ function calendarMonthRange(monthKey: string): { from: string; to: string } {
   return { from: `${monthKey}-01`, to: `${monthKey}-${String(lastDay).padStart(2, '0')}` }
 }
 
-function previousMonthKey(monthKey: string): string {
+export function yearAgoMonthKey(monthKey: string): string {
   const [y, m] = monthKey.split('-').map(Number)
-  const d = new Date(Date.UTC(y!, m! - 2, 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  return `${y! - 1}-${String(m).padStart(2, '0')}`
 }
 
-function labelMonthPt(monthKey: string): string {
+export function labelMonthPt(monthKey: string): string {
   const [y, m] = monthKey.split('-')
   const idx = Number(m) - 1
   return `${MONTH_PT[idx] ?? m}/${y}`
@@ -49,16 +62,8 @@ export function resolveMonthWindow(
   }
 }
 
-/**
- * Janela do mês anterior comparável ao mês base escolhido:
- * - mês corrente (MTD) → mês anterior até o mesmo dia
- * - mês fechado → mês anterior cheio
- */
-export function resolvePreviousComparableWindow(
-  current: MonthWindow,
-): { month: string; from: string; to: string; label: string; mtd_aligned: boolean } {
-  const month = previousMonthKey(current.month)
-  const full = resolveMonthWindow(month, current.to)
+function alignToCurrentDay(current: MonthWindow, month: string): ComparableWindow {
+  const full = calendarMonthRange(month)
   if (!current.mtd) {
     return {
       month,
@@ -79,4 +84,25 @@ export function resolvePreviousComparableWindow(
     label: `${labelMonthPt(month)} (até dia ${clamped})`,
     mtd_aligned: true,
   }
+}
+
+/**
+ * Janela comparável ao mês base.
+ * Sem `compareMonth` → mesmo mês do ano passado.
+ * Com `compareMonth` → aquele mês, recortado no mesmo dia se o base estiver aberto.
+ */
+export function resolveComparableWindow(
+  current: MonthWindow,
+  compareMonth?: string | null,
+): ComparableWindow {
+  const month =
+    compareMonth && /^\d{4}-\d{2}$/.test(compareMonth)
+      ? compareMonth
+      : yearAgoMonthKey(current.month)
+  return alignToCurrentDay(current, month)
+}
+
+/** @deprecated use resolveComparableWindow — default é YoY, não mês anterior. */
+export function resolvePreviousComparableWindow(current: MonthWindow): ComparableWindow {
+  return resolveComparableWindow(current)
 }

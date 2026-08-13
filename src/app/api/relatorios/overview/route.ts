@@ -19,19 +19,21 @@ export async function GET(req: NextRequest) {
     if (month && !/^\d{4}-\d{2}$/.test(month)) {
       return err('Parâmetro month inválido (esperado YYYY-MM)', 422)
     }
+    const compareRaw = req.nextUrl.searchParams.get('compare')?.trim()
+    const compareMonth = compareRaw && /^\d{4}-\d{2}$/.test(compareRaw) ? compareRaw : null
 
     const format = req.nextUrl.searchParams.get('format')
     // UI: só lê (cache salon_month_metrics quando existir). Materializa com ?materialize=1.
     const materialize = req.nextUrl.searchParams.get('materialize') === '1'
-    const cacheKey = `relatorios:overview:v2:${month ?? 'cur'}:mat=${materialize ? 1 : 0}`
+    const cacheKey = `relatorios:overview:v3:${month ?? 'cur'}:cmp=${compareMonth ?? 'yoy'}:mat=${materialize ? 1 : 0}`
     const payload = materialize
       ? await (async () => {
-          const overview = await computeMonthOverview({ month, materialize })
+          const overview = await computeMonthOverview({ month, materialize, compareMonth })
           const sync = await loadAvecSyncMeta()
           return { ...overview, sync }
         })()
       : await ttlGetOrSet(cacheKey, 60_000, async () => {
-          const overview = await computeMonthOverview({ month, materialize: false })
+          const overview = await computeMonthOverview({ month, materialize: false, compareMonth })
           const sync = await loadAvecSyncMeta()
           return { ...overview, sync }
         })

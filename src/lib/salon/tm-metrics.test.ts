@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { tmMonthWindows, tmQuarterWindows } from '@/lib/salon/tm-metrics'
 
 describe('tmMonthWindows', () => {
-  it('MTD alinha mês anterior no mesmo dia', () => {
+  it('MTD alinha mesmo mês do ano passado no mesmo dia', () => {
     const w = tmMonthWindows('2026-08-07')
     expect(w.current).toMatchObject({
       key: '2026-08',
@@ -11,32 +11,27 @@ describe('tmMonthWindows', () => {
       mtd: true,
     })
     expect(w.previous).toMatchObject({
-      key: '2026-07',
-      start: '2026-07-01',
-      end: '2026-07-07',
+      key: '2025-08',
+      start: '2025-08-01',
+      end: '2025-08-07',
       mtd_aligned: true,
     })
     expect(w.previous.label).toContain('até dia 7')
   })
 
-  it('fim do mês MTD alinha ao mês anterior completo (dia clampado)', () => {
-    const w = tmMonthWindows('2026-07-31')
-    expect(w.current).toMatchObject({
-      start: '2026-07-01',
-      end: '2026-07-31',
-      mtd: true,
-    })
+  it('mês escolhido à mão recorta o mesmo dia', () => {
+    const w = tmMonthWindows('2026-08-07', '2026-03')
     expect(w.previous).toMatchObject({
-      start: '2026-06-01',
-      end: '2026-06-30',
+      key: '2026-03',
+      start: '2026-03-01',
+      end: '2026-03-07',
       mtd_aligned: true,
     })
   })
 })
 
 describe('tmQuarterWindows', () => {
-  it('Q aberto usa mesmo nº de dias no Q anterior', () => {
-    // 2026-Q3 começa 01/07; em 07/08 = 38 dias
+  it('Q aberto usa mesmo nº de dias no mesmo Q do ano passado', () => {
     const w = tmQuarterWindows('2026-08-07')
     expect(w.current).toMatchObject({
       key: '2026-Q3',
@@ -44,10 +39,9 @@ describe('tmQuarterWindows', () => {
       end: '2026-08-07',
     })
     expect(w.previous).toMatchObject({
-      key: '2026-Q2',
-      start: '2026-04-01',
-      end: '2026-05-08',
+      key: '2025-Q3',
+      start: '2025-07-01',
+      end: '2025-08-07',
     })
-    expect(w.previous.label).toContain('38d')
   })
 })
