@@ -23,6 +23,7 @@ import {
 } from '@/lib/avec/normalize'
 import { toSalonDateIso, todayIso } from '@/lib/salon/format'
 import {
+  isAvecInSalonOpenStatus,
   isAvecOpenStatus,
   isAvecPaidStatus,
 } from '@/lib/avec/appointment-status'
@@ -200,6 +201,8 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
   const statusMap: Record<string, NormalizedAvecWebhook['status']> = {
     novo: 'novo',
     em_atendimento: 'em_atendimento',
+    'em atendimento': 'em_atendimento',
+    aguardando: 'em_atendimento',
     agendado: 'agendado',
     convertido: 'convertido',
     perdido: 'perdido',
@@ -227,7 +230,9 @@ export function normalizeAvecWebhookBody(raw: unknown): NormalizedAvecWebhook {
     status = 'perdido'
   }
   if (!status && statusRaw) {
-    if (isAvecPaidStatus(statusRaw) && !isAvecOpenStatus(statusRaw)) {
+    if (isAvecInSalonOpenStatus(statusRaw)) {
+      status = 'em_atendimento'
+    } else if (isAvecPaidStatus(statusRaw) && !isAvecOpenStatus(statusRaw)) {
       status = 'convertido'
     }
   }
@@ -415,7 +420,8 @@ async function noteComandaSpan(opts: {
     const yesterday = addCalendarDaysYmd(today, -1)
     const day = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : today
     if (opts.kind === 'open') {
-      const inSalon = opts.status === 'em_atendimento'
+      const inSalon =
+        opts.status === 'em_atendimento' || isAvecInSalonOpenStatus(opts.status ?? '')
       if (!inSalon && opts.origin !== 'comanda') return
       if (day !== today && day !== yesterday) return
       await markComandaOpenedSeen(opts.contactId, day)

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   addCalendarDaysYmd,
   computeComandaDurationMinutes,
+  isComandaPaidTooSoon,
   shouldStartComandaClock,
 } from '@/lib/salon/visit-spans'
 
@@ -19,6 +20,23 @@ describe('computeComandaDurationMinutes', () => {
     expect(
       computeComandaDurationMinutes('2026-08-13T12:00:00.000Z', '2026-08-13T21:00:01.000Z'),
     ).toBeNull()
+  })
+})
+
+describe('isComandaPaidTooSoon', () => {
+  it('não fecha no mesmo instante / write lag', () => {
+    expect(
+      isComandaPaidTooSoon('2026-08-13T12:00:00.000Z', '2026-08-13T12:00:30.000Z'),
+    ).toBe(true)
+  })
+
+  it('fecha depois do intervalo mínimo; > 8h ainda pode fechar (duração null)', () => {
+    expect(
+      isComandaPaidTooSoon('2026-08-13T12:00:00.000Z', '2026-08-13T12:10:00.000Z'),
+    ).toBe(false)
+    expect(
+      isComandaPaidTooSoon('2026-08-13T12:00:00.000Z', '2026-08-13T21:00:01.000Z'),
+    ).toBe(false)
   })
 })
 

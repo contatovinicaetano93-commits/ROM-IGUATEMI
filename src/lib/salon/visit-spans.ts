@@ -23,6 +23,14 @@ export function computeComandaDurationMinutes(
   return Math.round(minutes * 10) / 10
 }
 
+/** Pago no mesmo instante da abertura (mesmo sync / write lag) — não fecha o relógio. */
+export function isComandaPaidTooSoon(openedSeenAt: string, paidSeenAt: string): boolean {
+  const start = new Date(openedSeenAt).getTime()
+  const end = new Date(paidSeenAt).getTime()
+  if (Number.isNaN(start) || Number.isNaN(end)) return true
+  return (end - start) / 60_000 < MIN_COMANDA_DURATION_MINUTES
+}
+
 export function addCalendarDaysYmd(day: string, delta: number): string {
   const d = new Date(`${day}T12:00:00Z`)
   d.setUTCDate(d.getUTCDate() + delta)
@@ -106,6 +114,8 @@ export async function markComandaPaidSeen(
     `) as { opened_seen_at: string }[]
     const opened = rows[0]?.opened_seen_at
     if (!opened) continue
+    // < 1 min = mesmo snapshot (open+Pago) ou write lag — não trava o span.
+    if (isComandaPaidTooSoon(opened, paidIso)) return false
     const duration = computeComandaDurationMinutes(opened, paidIso)
     await sql`
       update salon_comanda_spans
