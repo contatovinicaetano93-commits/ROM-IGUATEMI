@@ -221,7 +221,7 @@ export default function RelatoriosOverviewPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {([
               {
-                label: 'Receita',
+                label: 'Receita bruta',
                 value:
                   data.closing.revenue != null && data.closing.revenue > 0
                     ? formatCurrency(data.closing.revenue)
@@ -273,7 +273,7 @@ export default function RelatoriosOverviewPage() {
                     : null,
               },
               {
-                label: 'Fluxo',
+                label: 'Fluxo (receita − despesas)',
                 value:
                   data.closing.cash_flow != null &&
                   data.closing.revenue != null &&
@@ -352,9 +352,11 @@ export default function RelatoriosOverviewPage() {
           </div>
 
           <p className="text-xs text-muted">
-            Comparativo vs {data.previous_label} (mesmo recorte MTD quando o mês atual está em
-            andamento). Verde = melhor · laranja = pior (em despesas/CMV/cancel/no-show, cair é
-            melhor).
+            Receita = caixa pago no Avec (bruta — não desconta despesa). Fluxo = receita −
+            despesas no mesmo recorte. Mês aberto = até hoje (não é o mês cheio). Despesas Omie
+            no ROM existem a partir de jan/2026 — 2025 de despesas/fluxo fica sem comparativo
+            real. Verde = melhor · laranja = pior (em despesas/CMV/cancel/no-show, cair é
+            melhor). Vs {data.previous_label}.
           </p>
 
           <div className="grid gap-4 lg:grid-cols-2">
