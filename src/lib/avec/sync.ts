@@ -1331,12 +1331,6 @@ async function syncReturningFrom0002(
     if (mode === 'full') {
       await snapshotReport('0002-returning', params, result.rows, stats, syncRunId)
     }
-    if (result.truncated) {
-      stats.warnings.push(
-        'recorrentes 0002: truncado — upsert de contatos pulado (mix já veio do ROM)',
-      )
-      return
-    }
     if (mode === 'fast') {
       for (const day of [addCalendarDaysYmd(today, -1), today]) {
         try {

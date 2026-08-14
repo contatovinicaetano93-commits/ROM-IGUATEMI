@@ -27,7 +27,7 @@ export async function computeDayClientMix(day: string): Promise<DayClientMix> {
         select distinct
           cs.contact_id,
           nullif(regexp_replace(coalesce(c.phone, ''), '\D', '', 'g'), '') as digits,
-          lower(trim(c.name)) as name_norm
+          lower(regexp_replace(trim(c.name), '[[:space:]]+', ' ', 'g')) as name_norm
         from client_services cs
         join contacts c on c.id = cs.contact_id
         where cs.active = true
