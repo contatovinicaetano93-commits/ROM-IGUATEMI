@@ -74,8 +74,7 @@ import { purgeAvecStorageBloat, saveReportSnapshot } from '@/lib/avec/snapshots'
 import { applyVisitDayToService } from '@/lib/avec/last-done-backfill'
 import { syncDirectorVisits } from '@/lib/avec/sync-director-visits'
 import { getDeploymentContext } from '@/lib/deployment'
-import { getSalonMetrics, upsertSalonMetrics } from '@/lib/salon/metrics'
-import { computeDayClientMix } from '@/lib/salon/day-client-mix'
+import { getSalonMetrics, upsertSalonMetrics, clearSalonDayClientMix } from '@/lib/salon/metrics'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
 import {
   isAvecCancelledStatus,
@@ -903,22 +902,17 @@ async function syncAttendances(stats: AvecSyncStats, mode: AvecSyncMode, syncRun
     }
   }
 
-  // Mix 1ª visita × recorrente: sempre da base ROM (last_done + histórico),
-  // nunca total_visitas do 0002 (janela do relatório — no fast quase tudo vira “novo”).
+  // Mix 1ª visita × recorrente: NÃO gravar — ainda sem fonte confiável.
   const mixDays =
     mode === 'fast'
       ? [addCalendarDaysYmd(today, -1), today]
       : listDaysInclusive(addCalendarDaysYmd(today, -7), today)
   for (const day of mixDays) {
     try {
-      const mix = await computeDayClientMix(day)
-      await upsertSalonMetrics(day, {
-        new_clients: mix.new_clients,
-        returning_clients: mix.returning_clients,
-      })
+      await clearSalonDayClientMix(day)
     } catch (e) {
       stats.errors.push(
-        `mix ROM ${day}: ${e instanceof Error ? e.message : String(e)}`,
+        `mix clear ${day}: ${e instanceof Error ? e.message : String(e)}`,
       )
     }
   }
@@ -1331,33 +1325,18 @@ async function syncReturningFrom0002(
     if (mode === 'full') {
       await snapshotReport('0002-returning', params, result.rows, stats, syncRunId)
     }
-    if (mode === 'fast') {
-      for (const day of [addCalendarDaysYmd(today, -1), today]) {
-        try {
-          const mix = await computeDayClientMix(day)
-          await upsertSalonMetrics(day, {
-            new_clients: mix.new_clients,
-            returning_clients: mix.returning_clients,
-          })
-        } catch (e) {
-          stats.errors.push(
-            `mix ROM ${day}: ${e instanceof Error ? e.message : String(e)}`,
-          )
-        }
-      }
-    } else {
-      for (const day of listDaysInclusive(from, today)) {
-        try {
-          const mix = await computeDayClientMix(day)
-          await upsertSalonMetrics(day, {
-            new_clients: mix.new_clients,
-            returning_clients: mix.returning_clients,
-          })
-        } catch (e) {
-          stats.errors.push(
-            `mix ROM ${day}: ${e instanceof Error ? e.message : String(e)}`,
-          )
-        }
+    // Não gravar mix 1ª visita — sem fonte confiável; limpa inflados.
+    const days =
+      mode === 'fast'
+        ? [addCalendarDaysYmd(today, -1), today]
+        : listDaysInclusive(from, today)
+    for (const day of days) {
+      try {
+        await clearSalonDayClientMix(day)
+      } catch (e) {
+        stats.errors.push(
+          `mix clear ${day}: ${e instanceof Error ? e.message : String(e)}`,
+        )
       }
     }
     attendancesCoveredReturning = true
