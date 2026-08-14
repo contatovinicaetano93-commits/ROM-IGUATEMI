@@ -293,7 +293,7 @@ export default function DashboardPage() {
 
       <VisaoSection
         title="Salão no mês"
-        hint="Acumulado ROM (0088 / 0002 / 0248). Mês aberto = até hoje."
+        hint="Receita, atendidos e ticket acumulados no mês. Se o mês ainda está aberto, conta só até hoje."
       >
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
           <InsightCard
@@ -397,7 +397,7 @@ export default function DashboardPage() {
 
       <VisaoSection
         title="Clientes do salão"
-        hint="Snapshot Avec ~30d (0017 / 0007). Não é lead do CRM. TM = aberta no salão (ou hora marcada) → 0051 só Pago."
+        hint="Quem veio pela 1ª vez e quantos % dos clientes do período já tinham vindo antes. Não é lead do CRM. Tempo médio = da entrada no salão até o pagamento."
       >
         <div className="grid grid-cols-2 gap-3">
           <InsightCard
@@ -475,7 +475,7 @@ export default function DashboardPage() {
 
       <VisaoSection
         title="Mix comercial"
-        hint={`${snapshotHint} · pacotes 0061 · serviços 0032 · como conheceu 0003 · agenda 0056.`}
+        hint={`${snapshotHint} · Pacotes vendidos, serviços mais feitos, como o cliente conheceu o salão e canais de agenda.`}
       >
         <div className="max-w-sm">
           <InsightCard
@@ -576,12 +576,13 @@ export default function DashboardPage() {
 
       <VisaoSection
         title="Equipe"
-        hint="Ocupação 0126 + ranking 0021. Deltas vs o mês comparado no topo."
+        hint="Lotação média da agenda por profissional e ranking de faturamento. Comparativo vs o mês escolhido no topo."
       >
         <div className="max-w-sm">
           <InsightCard
             icon={<Percent size={15} />}
-            label={`Ocupação · ${period?.label ?? '—'}`}
+            label={`Lotação da agenda · ${period?.label ?? '—'}`}
+            hint="Média de quanto da agenda de cada profissional está preenchida no período."
             value={
               loading || !period
                 ? '—'
@@ -609,7 +610,7 @@ export default function DashboardPage() {
         >
           {!performance || performance.professionals.length === 0 ? (
             <p className="text-xs text-muted">
-              Sem dado ainda — depende da Avec (0021 + 0126) no mês selecionado. Detalhe em Relatórios.
+              Sem dado ainda — ranking e lotação da equipe vêm do sync Avec do mês. Detalhe em Relatórios.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -627,7 +628,7 @@ export default function DashboardPage() {
                     <th className="pb-2 font-medium">Faturamento</th>
                     <th className="pb-2 font-medium">Atendimentos</th>
                     <th className="pb-2 font-medium">Ticket médio</th>
-                    <th className="pb-2 font-medium">Ocupação</th>
+                    <th className="pb-2 font-medium">Lotação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -667,7 +668,7 @@ export default function DashboardPage() {
 
       <VisaoSection
         title="Funil CRM"
-        hint="Leads novos que o ROM registrou (WhatsApp/manual) — não é cliente novo no salão nem dump Avec. O número grande = leads que entraram no mês. Fila Novo = ainda não puxado."
+        hint="Leads novos que o ROM registrou (WhatsApp/manual) — não é cliente novo no salão nem importação em massa da Avec. O número grande = leads que entraram no mês. Fila Novo = ainda não puxado."
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5">
@@ -794,12 +795,14 @@ function InsightCard({
   value,
   compare,
   emphasize,
+  hint,
 }: {
   icon: React.ReactNode
   label: string
   value: string
   compare?: { text: string; positive: boolean; muted?: boolean } | null
   emphasize?: boolean
+  hint?: string
 }) {
   return (
     <div
@@ -814,6 +817,7 @@ function InsightCard({
       <p className="break-words text-[clamp(1rem,2.8vw,1.5rem)] font-semibold leading-tight tabular-nums">
         {value}
       </p>
+      {hint ? <p className="mt-1 text-[0.65rem] leading-snug text-muted">{hint}</p> : null}
       {compare ? (
         <p
           className={`mt-1.5 break-words text-[0.7rem] leading-snug ${
