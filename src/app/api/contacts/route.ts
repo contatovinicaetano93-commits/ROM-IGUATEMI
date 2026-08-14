@@ -179,8 +179,9 @@ export async function GET(req: NextRequest) {
         let queues: Awaited<ReturnType<typeof countContactQueues>> | { base_ativa: number } | null =
           null
         if (pendingOnly) {
-          queues = await countContactQueues({ channel, day })
-          if (urgencyQueue) queueTotal = queues[urgencyQueue]
+          const fullQueues = await countContactQueues({ channel, day })
+          queues = fullQueues
+          if (urgencyQueue) queueTotal = fullQueues[urgencyQueue]
         } else if (baseAtivaPromise) {
           // Filtered search (Hoje CTAs) has no urgency scan; still expose base ativa.
           queues = { base_ativa: await baseAtivaPromise }

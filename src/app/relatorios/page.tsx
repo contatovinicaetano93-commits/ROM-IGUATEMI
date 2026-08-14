@@ -364,7 +364,7 @@ export default function RelatoriosOverviewPage() {
             <SectionCard title="Operação (Visão analítica)">
               <ul className="flex flex-col gap-2 text-sm">
                 <li className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-muted">Ocupação média</span>
+                  <span className="text-muted">Lotação média da agenda</span>
                   <span className="text-right">
                     <span className="tabular-nums">
                       {data.analytics.occupancy_avg != null
