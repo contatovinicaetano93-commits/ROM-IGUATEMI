@@ -402,7 +402,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 gap-3">
           <InsightCard
             icon={<Sparkles size={15} />}
-            label="Clientes novos no salão"
+            label="1ª visita no salão"
             value={
               loading || !period
                 ? '—'
