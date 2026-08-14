@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { todayIso } from '@/lib/salon/format'
+import { computeDayClientMix } from '@/lib/salon/day-client-mix'
 
 export interface SalonDailyMetrics {
   day: string
@@ -110,9 +111,8 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
 /**
  * Recalcula Agendados/Movimento do dia a partir do ROM (fallback/webhook).
  *
- * Mix novos/recorrentes (`new_clients` / `returning_clients`) vem do 0002 no sync
- * Avec (`total_visitas` na `ultima_visita`) — NÃO sobrescrever aqui: o dump Avec
- * cria contacts com source avec_* e o count orgânico zerava o card no Cérebro.
+ * Mix 1ª visita × recorrente também vem da base ROM (`computeDayClientMix`) —
+ * não do total_visitas do 0002 (janela do relatório).
  *
  * Movimento/Agendados = cabeças (DISTINCT contact_id) com aberto (scheduled_at)
  * ou concluído (last_done_at) no dia — não linhas de serviço.
@@ -142,7 +142,11 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
         )
     `) as unknown as { n: number }[]
 
+  const mix = await computeDayClientMix(day)
+
   await upsertSalonMetrics(day, {
     appointments: apptRows[0].n,
+    new_clients: mix.new_clients,
+    returning_clients: mix.returning_clients,
   })
 }
