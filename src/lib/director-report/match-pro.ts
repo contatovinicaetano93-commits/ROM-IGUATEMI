@@ -34,9 +34,9 @@ export function proNameTokens(key: string): string[] {
   return key.split(/\s+/).filter(Boolean)
 }
 
-/** Tokens úteis para match (ignora de/da/do…). */
+/** Tokens úteis para match (ignora de/da/do…). Mantém letra sola — inicial, não partícula. */
 export function significantNameTokens(key: string): string[] {
-  return proNameTokens(key).filter((t) => !NAME_PARTICLES.has(t))
+  return proNameTokens(key).filter((t) => t.length === 1 || !NAME_PARTICLES.has(t))
 }
 
 /** Primeiro + último token — útil quando 0021 manda nome completo e 0126 manda apelido+sobrenome. */
@@ -117,9 +117,18 @@ export function surnameCompatible(a: string, b: string): boolean {
 
 const LEADING_COMPOUND = new Set(['maria', 'jose', 'ana', 'paulo', 'joao', 'luis', 'luiz'])
 
-function primaryFirstToken(tokens: string[]): { first: string; rest: string[] } {
+function primaryFirstToken(
+  tokens: string[],
+  keepFirst?: string,
+): { first: string; rest: string[] } {
   if (tokens.length === 0) return { first: '', rest: [] }
-  if (tokens.length >= 2 && LEADING_COMPOUND.has(tokens[0]!)) {
+  // "Ana Paula" / "Maria Clara": o prenome útil é o 2º token — salvo quando o
+  // apelido ancora no composto (ANA.D, MARIA.C).
+  if (
+    tokens.length >= 2 &&
+    LEADING_COMPOUND.has(tokens[0]!) &&
+    tokens[0] !== keepFirst
+  ) {
     return { first: tokens[1]!, rest: tokens.slice(2) }
   }
   return { first: tokens[0]!, rest: tokens.slice(1) }
@@ -155,7 +164,8 @@ export function namesLooselyMatch(aKey: string, bKey: string): boolean {
   if (ta.length === 0 || tb.length === 0) return false
 
   const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta]
-  const { first: longFirst } = primaryFirstToken(longer)
+  const shortFirst = shorter[0]!
+  const { first: longFirst } = primaryFirstToken(longer, shortFirst)
 
   // Apelido único (JANDER) ou colado (GABRIELPERTANELA).
   if (shorter.length === 1) {
@@ -180,7 +190,6 @@ export function namesLooselyMatch(aKey: string, bKey: string): boolean {
     return firstNameCompatible(nick, longFirst)
   }
 
-  const shortFirst = shorter[0]!
   const shortRest = shorter.slice(1)
   // Com sobrenome extra, aceita prefixo curto (lu↔luiza, ma↔marina).
   if (!firstNameCompatible(shortFirst, longFirst, shortRest.length > 0 ? 2 : 3)) return false
@@ -256,6 +265,31 @@ export type OccupancyMergeable = {
   occupancy: number | null
 }
 
+/** Mais tokens (e nome mais longo) = apelido 0126 mais específico. */
+function occupancyClaimScore(name: string): number {
+  const key = occupancyMergeKey(name)
+  return significantNameTokens(key).length * 100 + key.length
+}
+
+/** Um órfão, ou o único com score estritamente maior — empate não inventa dono. */
+function uniqueBestOccupancyClaim<T extends OccupancyMergeable>(claimants: T[]): T | null {
+  if (claimants.length === 1) return claimants[0]!
+  let best: T | null = null
+  let bestScore = -1
+  let tied = false
+  for (const c of claimants) {
+    const score = occupancyClaimScore(c.name)
+    if (score > bestScore) {
+      best = c
+      bestScore = score
+      tied = false
+    } else if (score === bestScore) {
+      tied = true
+    }
+  }
+  return tied ? null : best
+}
+
 /**
  * Funde linhas órfãs de lotação (0126 apelido, sem faturamento) nas linhas de
  * faturamento (0021). Usado no sync e na leitura — corrige snapshots já gravados.
@@ -279,12 +313,21 @@ export function coalesceProfessionalsOccupancy<T extends OccupancyMergeable>(pro
     if (!prev || p.revenue > prev.revenue) byPro.set(key, p)
   }
 
-  const consumed = new Set<T>()
+  const claims = new Map<T, T[]>()
   for (const orphan of orphans) {
     const hit = findNearProInMap(byPro, orphan.name)
     if (!hit) continue
-    if (hit.value.occupancy == null) hit.value.occupancy = orphan.occupancy
-    consumed.add(orphan)
+    const list = claims.get(hit.value)
+    if (list) list.push(orphan)
+    else claims.set(hit.value, [orphan])
+  }
+
+  const consumed = new Set<T>()
+  for (const [pro, claimants] of claims) {
+    const winner = uniqueBestOccupancyClaim(claimants)
+    if (!winner) continue
+    if (pro.occupancy == null) pro.occupancy = winner.occupancy
+    consumed.add(winner)
   }
 
   const leftoverOrphans = orphans.filter((o) => !consumed.has(o))

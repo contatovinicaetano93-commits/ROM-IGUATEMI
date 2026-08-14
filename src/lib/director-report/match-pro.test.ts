@@ -92,6 +92,24 @@ describe('firstNameCompatible / namesLooselyMatch', () => {
       ),
     ).toBe(true)
     expect(
+      namesLooselyMatch(
+        occupancyMergeKey('ANA.D'),
+        occupancyMergeKey('Ana Paula Domene'),
+      ),
+    ).toBe(true)
+    expect(
+      namesLooselyMatch(
+        occupancyMergeKey('MARIA.C'),
+        occupancyMergeKey('Maria Clara Souza'),
+      ),
+    ).toBe(true)
+    expect(
+      namesLooselyMatch(
+        occupancyMergeKey('PAULA.D'),
+        occupancyMergeKey('Ana Paula Domene'),
+      ),
+    ).toBe(true)
+    expect(
       namesLooselyMatch(occupancyMergeKey('JANDER'), occupancyMergeKey('JANDERSON DE SA BARROS')),
     ).toBe(true)
     expect(
@@ -112,6 +130,21 @@ describe('firstNameCompatible / namesLooselyMatch', () => {
     expect(
       namesLooselyMatch(occupancyMergeKey('JANDER'), occupancyMergeKey('JANAINA SANTANA')),
     ).toBe(false)
+  })
+
+  it('não descarta inicial E como partícula', () => {
+    expect(
+      namesLooselyMatch(
+        occupancyMergeKey('ALAN.E'),
+        occupancyMergeKey('Alan Fernando de Albuquerque'),
+      ),
+    ).toBe(false)
+    expect(
+      namesLooselyMatch(
+        occupancyMergeKey('ALAN.E'),
+        occupancyMergeKey('Alan Eduardo Silva'),
+      ),
+    ).toBe(true)
   })
 })
 
@@ -194,6 +227,57 @@ describe('coalesceProfessionalsOccupancy', () => {
     expect(merged.some((p) => p.name === 'DANI.MARINIELLO')).toBe(false)
     expect(merged.some((p) => p.name === 'LUCAS.KAMPOS')).toBe(false)
     expect(merged.some((p) => p.name === 'TERMINAL SALAO')).toBe(true)
+  })
+
+  it('não cola ALAN.E em Alan sem a letra E', () => {
+    const merged = coalesceProfessionalsOccupancy([
+      {
+        name: 'Alan Fernando de Albuquerque',
+        revenue: 1000,
+        attended: 5,
+        ticket_avg: 200,
+        occupancy: null,
+      },
+      {
+        name: 'ALAN.E',
+        revenue: 0,
+        attended: 0,
+        ticket_avg: 0,
+        occupancy: 0.5,
+      },
+    ])
+    expect(merged.find((p) => p.name === 'Alan Fernando de Albuquerque')?.occupancy).toBeNull()
+    expect(merged.some((p) => p.name === 'ALAN.E')).toBe(true)
+  })
+
+  it('não colapsa dois órfãos 0126 no mesmo 0021', () => {
+    const merged = coalesceProfessionalsOccupancy([
+      {
+        name: 'LUCAS CAMPOS DE MACEDO',
+        revenue: 63334,
+        attended: 42,
+        ticket_avg: 1508,
+        occupancy: null,
+      },
+      {
+        name: 'LUCAS',
+        revenue: 0,
+        attended: 0,
+        ticket_avg: 0,
+        occupancy: 0.3,
+      },
+      {
+        name: 'LUCAS.KAMPOS',
+        revenue: 0,
+        attended: 0,
+        ticket_avg: 0,
+        occupancy: 0.65625,
+      },
+    ])
+    const lucas = merged.find((p) => p.name === 'LUCAS CAMPOS DE MACEDO')
+    expect(lucas?.occupancy).toBeCloseTo(0.65625)
+    expect(merged.some((p) => p.name === 'LUCAS.KAMPOS')).toBe(false)
+    expect(merged.some((p) => p.name === 'LUCAS')).toBe(true)
   })
 })
 
