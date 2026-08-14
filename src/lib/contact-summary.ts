@@ -48,6 +48,11 @@ export interface ContactQueueCounts extends UrgencyQueueCounts {
   novos: number
   /** Passou da janela Novos e segue sem next_due — fora do funil de cadência. */
   sem_servicos: number
+  /**
+   * Estoque do Funil CRM (Visão): status ≠ importado e fora de dumps Avec.
+   * Não é fila de trabalho — só referência + link.
+   */
+  base_ativa: number
 }
 
 export interface ContactListResult {
@@ -712,15 +717,31 @@ export async function listContactsWithoutServices(opts?: {
   return { items: withUrgency(contacts, byContact), total }
 }
 
-/** Totais das filas Contatos (reativar + novos da janela + sem serviço). */
+/** Estoque do Funil CRM — mesma regra de `funnel_contacts` em Visão (não é fila). */
+export async function countBaseAtiva(): Promise<number> {
+  const sql = getSql()
+  const rows = (await sql`
+    select count(*)::int as n
+    from contacts
+    where anonymized_at is null
+      and status <> 'importado'
+      and coalesce(source, '') not like 'avec_sync_clients%'
+      and coalesce(source, '') not like 'avec_backfill%'
+      and coalesce(source, '') not like 'avec_lake%'
+  `) as { n: number }[]
+  return Number(rows[0]?.n) || 0
+}
+
+/** Totais das filas Contatos (reativar + novos da janela + sem serviço) + base ativa. */
 export async function countContactQueues(opts?: {
   channel?: string | null
   day?: string | null
 }): Promise<ContactQueueCounts> {
-  const [urgency, novos, sem_servicos] = await Promise.all([
+  const [urgency, novos, sem_servicos, base_ativa] = await Promise.all([
     countUrgencyQueues({ channel: opts?.channel }),
     countNewContactsNotInAvec({ day: opts?.day }),
     countContactsWithoutServices({ day: opts?.day }),
+    countBaseAtiva(),
   ])
-  return { ...urgency, novos, sem_servicos }
+  return { ...urgency, novos, sem_servicos, base_ativa }
 }
