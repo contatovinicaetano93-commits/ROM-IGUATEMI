@@ -1,21 +1,25 @@
 import { getSql } from '@/lib/db'
 
 export type DayClientMix = {
-  /** Cabeças com last_done no dia cuja 1ª conclusão conhecida no ROM é esse dia. */
+  /** 1ª visita no dia: cadastro criado no dia + 1º last_done no dia + sem visita anterior. */
   new_clients: number
-  /** Cabeças com last_done no dia que já tinham visita antes (ROM e/ou salon_client_visits). */
+  /** Já vinham: visita/last_done antes, ou já estavam na base ROM antes do dia. */
   returning_clients: number
   /** Distinct contact_id com last_done no dia. */
   attended_people: number
 }
 
 /**
- * Mix 1ª visita × recorrente a partir da base ROM — não usa total_visitas do 0002
- * (esse campo é da janela do relatório; no fast de 2 dias quase todo mundo vira “novo”).
+ * Mix 1ª visita × recorrente a partir da base ROM.
  *
- * 1ª visita = min(last_done_at) do contato é o dia, e sem visited_on anterior em
- * salon_client_visits (quando a tabela existe).
- * Recorrente = já tinha last_done antes OU histórico em salon_client_visits.
+ * Não usa `total_visitas` do 0002 (é da janela do relatório).
+ *
+ * Histórico de `last_done` no ROM é incompleto (muita gente só ganha carimbo
+ * no dia em que o sync marca done). Por isso:
+ * - **1ª visita** = contact criado no dia (SP) + primeiro last_done no dia +
+ *   sem visita anterior em salon_client_visits
+ * - **Já vinham** = todo o resto atendido no dia (já estava na base ou tem
+ *   evidência de visita anterior)
  */
 export async function computeDayClientMix(day: string): Promise<DayClientMix> {
   const sql = getSql()
@@ -26,8 +30,9 @@ export async function computeDayClientMix(day: string): Promise<DayClientMix> {
       with attended as (
         select distinct
           cs.contact_id,
+          (c.created_at at time zone 'America/Sao_Paulo')::date as created_sp,
           nullif(regexp_replace(coalesce(c.phone, ''), '\D', '', 'g'), '') as digits,
-          lower(regexp_replace(trim(c.name), '[[:space:]]+', ' ', 'g')) as name_norm
+          lower(trim(regexp_replace(coalesce(c.name, ''), '^[0-9]+\s*-\s*', ''))) as name_norm
         from client_services cs
         join contacts c on c.id = cs.contact_id
         where cs.active = true
@@ -45,43 +50,68 @@ export async function computeDayClientMix(day: string): Promise<DayClientMix> {
           and cs.last_done_at is not null
         group by cs.contact_id
       ),
-      visit_prior as (
+      prior as (
         select distinct a.contact_id
         from attended a
-        join salon_client_visits v
-          on v.source_report = '0002'
-         and v.visited_on < ${day}::date
-         and (
-           (
-             a.digits is not null
-             and length(a.digits) >= 8
-             and v.client_key = 'p:' || right(a.digits, 11)
-           )
-           or (
-             a.name_norm is not null
-             and length(a.name_norm) >= 3
-             and v.client_key = 'n:' || a.name_norm
-           )
-         )
+        where exists (
+          select 1
+          from client_services cs
+          where cs.contact_id = a.contact_id
+            and cs.active = true
+            and cs.last_done_at is not null
+            and (cs.last_done_at at time zone 'America/Sao_Paulo')::date < ${day}::date
+        )
+        or exists (
+          select 1
+          from salon_client_visits v
+          where v.source_report = '0002'
+            and v.visited_on < ${day}::date
+            and a.digits is not null
+            and length(a.digits) >= 8
+            and (
+              v.client_key = 'p:' || right(a.digits, 11)
+              or right(regexp_replace(coalesce(v.phone, ''), '\D', '', 'g'), 11) = right(a.digits, 11)
+              or right(regexp_replace(coalesce(v.mobile, ''), '\D', '', 'g'), 11) = right(a.digits, 11)
+            )
+        )
+        or exists (
+          select 1
+          from salon_client_visits v
+          where v.source_report = '0002'
+            and v.visited_on < ${day}::date
+            and length(a.name_norm) >= 5
+            and (
+              v.client_key = 'n:' || a.name_norm
+              or lower(trim(regexp_replace(coalesce(v.client_name, ''), '^[0-9]+\s*-\s*', ''))) = a.name_norm
+            )
+        )
       )
       select
         count(*)::int as attended_people,
         count(*) filter (
-          where cf.first_on = ${day}::date and vp.contact_id is null
+          where cf.first_on = ${day}::date
+            and a.created_sp = ${day}::date
+            and p.contact_id is null
         )::int as new_clients,
         count(*) filter (
-          where cf.first_on < ${day}::date or vp.contact_id is not null
+          where not (
+            cf.first_on = ${day}::date
+            and a.created_sp = ${day}::date
+            and p.contact_id is null
+          )
         )::int as returning_clients
       from attended a
       join cs_first cf on cf.contact_id = a.contact_id
-      left join visit_prior vp on vp.contact_id = a.contact_id
+      left join prior p on p.contact_id = a.contact_id
     `) as DayClientMix[]
     return normalizeMix(rows[0])
   }
 
   const rows = (await sql`
     with attended as (
-      select distinct cs.contact_id
+      select distinct
+        cs.contact_id,
+        (c.created_at at time zone 'America/Sao_Paulo')::date as created_sp
       from client_services cs
       join contacts c on c.id = cs.contact_id
       where cs.active = true
@@ -101,8 +131,12 @@ export async function computeDayClientMix(day: string): Promise<DayClientMix> {
     )
     select
       count(*)::int as attended_people,
-      count(*) filter (where cf.first_on = ${day}::date)::int as new_clients,
-      count(*) filter (where cf.first_on < ${day}::date)::int as returning_clients
+      count(*) filter (
+        where cf.first_on = ${day}::date and a.created_sp = ${day}::date
+      )::int as new_clients,
+      count(*) filter (
+        where not (cf.first_on = ${day}::date and a.created_sp = ${day}::date)
+      )::int as returning_clients
     from attended a
     join cs_first cf on cf.contact_id = a.contact_id
   `) as DayClientMix[]
