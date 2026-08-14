@@ -290,6 +290,7 @@ function ContatosPageContent() {
           const total = json.meta?.total
           setTotalInBase(typeof total === 'number' ? total : null)
           const q = json.meta?.queues
+          const baseAtiva = typeof q?.base_ativa === 'number' ? q.base_ativa : undefined
           if (q && typeof q.overdue === 'number') {
             setQueueCounts({
               overdue: q.overdue,
@@ -297,12 +298,22 @@ function ContatosPageContent() {
               scheduled: q.scheduled,
               novos: typeof q.novos === 'number' ? q.novos : 0,
               sem_servicos: typeof q.sem_servicos === 'number' ? q.sem_servicos : 0,
-              base_ativa: typeof q.base_ativa === 'number' ? q.base_ativa : 0,
+              base_ativa: baseAtiva ?? 0,
             })
           } else if (mode === 'novos' && typeof total === 'number') {
-            setQueueCounts((prev) => ({ ...prev, novos: total }))
+            setQueueCounts((prev) => ({
+              ...prev,
+              novos: total,
+              ...(baseAtiva != null ? { base_ativa: baseAtiva } : {}),
+            }))
           } else if (mode === 'sem_servicos' && typeof total === 'number') {
-            setQueueCounts((prev) => ({ ...prev, sem_servicos: total }))
+            setQueueCounts((prev) => ({
+              ...prev,
+              sem_servicos: total,
+              ...(baseAtiva != null ? { base_ativa: baseAtiva } : {}),
+            }))
+          } else if (baseAtiva != null) {
+            setQueueCounts((prev) => ({ ...prev, base_ativa: baseAtiva }))
           }
         }
       } catch (e) {
