@@ -667,11 +667,11 @@ export default function DashboardPage() {
 
       <VisaoSection
         title="Funil CRM"
-        hint="WhatsApp/manual que o ROM registrou — não é cliente novo no salão (isso está em Clientes do salão) nem dump Avec. O número grande é quem entrou no mês. Fila Novo = ainda não puxado."
+        hint="Leads novos que o ROM registrou (WhatsApp/manual) — não é cliente novo no salão nem dump Avec. O número grande = leads que entraram no mês. Fila Novo = ainda não puxado."
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="animate-rise rounded-2xl border border-gold/25 bg-gradient-to-b from-gold/10 to-card p-5">
-            <p className="text-xs text-muted">Entraram no CRM · {month}</p>
+            <p className="text-xs text-muted">Leads novos · entraram no CRM · {month}</p>
             {loading ? (
               <div className="mt-2 h-10 w-32 animate-pulse rounded-lg bg-border" />
             ) : (
@@ -682,12 +682,12 @@ export default function DashboardPage() {
                 <TrendingUp size={13} />
                 {(conversionRate * 100).toFixed(1)}%
               </span>
-              <span className="text-xs text-muted">conversão na base ativa</span>
+              <span className="text-xs text-muted">conversão na base ativa (não dos leads do mês)</span>
             </div>
             {!loading && (
               <p className="mt-2 text-[0.7rem] text-muted">
-                Base ativa (não é o mês): {funnelContacts.toLocaleString('pt-BR')} · importados
-                Avec: {importedContacts.toLocaleString('pt-BR')} · total cadastrado:{' '}
+                Base ativa (estoque atual, não o mês): {funnelContacts.toLocaleString('pt-BR')} ·
+                importados Avec: {importedContacts.toLocaleString('pt-BR')} · total cadastrado:{' '}
                 {totalContacts.toLocaleString('pt-BR')}
               </p>
             )}
