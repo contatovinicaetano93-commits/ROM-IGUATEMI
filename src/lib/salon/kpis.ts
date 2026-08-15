@@ -7,8 +7,8 @@ export interface ContactKpis {
   byDay: { day: string; channel: string; contacts_count: number }[]
   byStatus: { status: string; contacts_count: number }[]
   conversion: {
-    /** Convertidos ÷ funil ativo (sem importado / fontes Avec dump). */
-    conversion_rate: number
+    /** Convertidos ÷ entrada no mês. null quando não há entrada (não é 0%). */
+    conversion_rate: number | null
     /** Base completa (inclui importado). */
     total_contacts: number
     /** Entrada no mês no funil (status ≠ importado, fora de dumps Avec). */
@@ -60,32 +60,29 @@ export async function fetchContactKpis(
     `,
     sql`
       select
-        coalesce(
-          count(*) filter (
-            where status = 'convertido'
-              and coalesce(source, '') not like 'avec_sync_clients%'
-              and coalesce(source, '') not like 'avec_backfill%'
-              and coalesce(source, '') not like 'avec_lake%'
-              and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-                >= ${month.from}::date
-              and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-                <= ${month.to}::date
-          )::float
-            / nullif(
-              count(*) filter (
-                where status <> 'importado'
-                  and coalesce(source, '') not like 'avec_sync_clients%'
-                  and coalesce(source, '') not like 'avec_backfill%'
-                  and coalesce(source, '') not like 'avec_lake%'
-                  and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-                    >= ${month.from}::date
-                  and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-                    <= ${month.to}::date
-              ),
-              0
-            )::float,
-          0
-        ) as conversion_rate,
+        count(*) filter (
+          where status = 'convertido'
+            and coalesce(source, '') not like 'avec_sync_clients%'
+            and coalesce(source, '') not like 'avec_backfill%'
+            and coalesce(source, '') not like 'avec_lake%'
+            and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+              >= ${month.from}::date
+            and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+              <= ${month.to}::date
+        )::float
+          / nullif(
+            count(*) filter (
+              where status <> 'importado'
+                and coalesce(source, '') not like 'avec_sync_clients%'
+                and coalesce(source, '') not like 'avec_backfill%'
+                and coalesce(source, '') not like 'avec_lake%'
+                and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+                  >= ${month.from}::date
+                and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+                  <= ${month.to}::date
+            ),
+            0
+          )::float as conversion_rate,
         count(*)::int as total_contacts,
         count(*) filter (
           where status <> 'importado'
@@ -109,7 +106,10 @@ export async function fetchContactKpis(
     byStatus: byStatus as ContactKpis['byStatus'],
     conversion: conversionRows[0]
       ? {
-          conversion_rate: Number(conversionRows[0].conversion_rate) || 0,
+          conversion_rate:
+            conversionRows[0].conversion_rate == null
+              ? null
+              : Number(conversionRows[0].conversion_rate),
           total_contacts: Number(conversionRows[0].total_contacts) || 0,
           funnel_contacts: Number(conversionRows[0].funnel_contacts) || 0,
           imported_contacts: Number(conversionRows[0].imported_contacts) || 0,
