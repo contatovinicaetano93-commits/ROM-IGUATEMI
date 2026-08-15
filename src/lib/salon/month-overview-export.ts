@@ -234,7 +234,7 @@ export function buildMonthOverviewPrintHtml(overview: MonthOverview): string {
     ${row('Pacotes vendidos', String(a.packages_sold))}
     ${row('Receita pacotes', money(a.packages_revenue))}
     ${row('Taxa de retorno', a.return_rate != null ? pct(a.return_rate) : '—')}
-    ${row('Novos no período', String(a.new_clients_period))}
+    ${row('Novos no período', a.new_clients_period != null ? String(a.new_clients_period) : '—')}
     ${row('Snapshot ops', a.snapshot_day ?? '—')}
   </table>
 
@@ -308,7 +308,7 @@ export function buildPeriodAnalyticsPrintHtml(period: PeriodAnalytics, unit: str
     ${row('Pacotes vendidos', String(period.packages_sold))}
     ${row('Receita pacotes', money(period.packages_revenue))}
     ${row('Taxa de retorno', period.return_rate != null ? pct(period.return_rate) : '—')}
-    ${row('Novos no período', String(period.new_clients_period))}
+    ${row('Novos no período', period.new_clients_period != null ? String(period.new_clients_period) : '—')}
   </table>
   <h2>Top serviços</h2>
   <table>

@@ -110,9 +110,8 @@ export async function upsertSalonMetrics(day: string, patch: SalonMetricsPatch) 
 /**
  * Recalcula Agendados/Movimento do dia a partir do ROM (fallback/webhook).
  *
- * Mix novos/recorrentes (`new_clients` / `returning_clients`) vem do 0002 no sync
- * Avec (`total_visitas` na `ultima_visita`) — NÃO sobrescrever aqui: o dump Avec
- * cria contacts com source avec_* e o count orgânico zerava o card no Cérebro.
+ * Mix novos/recorrentes (`new_clients` / `returning_clients`): NÃO gravar aqui.
+ * Sync Avec só chama `clearSalonDayClientMix` (ainda sem fonte confiável de 1ª visita/dia).
  *
  * Movimento/Agendados = cabeças (DISTINCT contact_id) com aberto (scheduled_at)
  * ou concluído (last_done_at) no dia — não linhas de serviço.

@@ -395,7 +395,10 @@ export default function RelatoriosOverviewPage() {
                     {data.analytics.return_rate != null
                       ? formatPercentPoints(data.analytics.return_rate * 100, 0)
                       : '—'}{' '}
-                    · {data.analytics.new_clients_period}
+                    ·{' '}
+                    {data.analytics.new_clients_period != null
+                      ? data.analytics.new_clients_period
+                      : '—'}
                   </span>
                 </li>
                 <li className="text-xs text-muted">
