@@ -40,7 +40,7 @@ interface KpiData {
   byDay: { day: string; channel: string; contacts_count: number }[]
   byStatus: { status: string; contacts_count: number }[]
   conversion: {
-    conversion_rate: number
+    conversion_rate: number | null
     total_contacts: number
     funnel_contacts?: number
     imported_contacts?: number
@@ -201,7 +201,7 @@ export default function DashboardPage() {
   const funnelContacts = data?.conversion?.funnel_contacts ?? 0
   const importedContacts = data?.conversion?.imported_contacts ?? 0
   const totalContacts = data?.conversion?.total_contacts ?? 0
-  const conversionRate = data?.conversion?.conversion_rate ?? 0
+  const conversionRate = data?.conversion?.conversion_rate ?? null
   const crmWindow = data?.window ?? contactKpiWindow(30)
   const chartData = data
     ? buildContactsPerDayChart(data.byDay, crmWindow.from, crmWindow.to).map((p) => ({
@@ -681,13 +681,13 @@ export default function DashboardPage() {
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
               <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
                 <TrendingUp size={13} />
-                {(conversionRate * 100).toFixed(1)}%
+                {formatPercent(conversionRate, 1)}
               </span>
-              <span className="text-xs text-muted">conversão na base ativa (não dos leads do mês)</span>
+              <span className="text-xs text-muted">conversão no funil do mês (CRM)</span>
             </div>
             {!loading && (
               <p className="mt-2 text-[0.7rem] text-muted">
-                Base ativa (estoque atual, não o mês): {funnelContacts.toLocaleString('pt-BR')} ·
+                Entrada no mês (funil CRM): {funnelContacts.toLocaleString('pt-BR')} ·
                 importados Avec: {importedContacts.toLocaleString('pt-BR')} · total cadastrado:{' '}
                 {totalContacts.toLocaleString('pt-BR')}
               </p>

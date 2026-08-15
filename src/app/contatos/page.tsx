@@ -387,7 +387,7 @@ function ContatosPageContent() {
           </p>
           {queueCounts.base_ativa > 0 ? (
             <p className="mt-1 text-[0.7rem] text-muted">
-              Base ativa: {queueCounts.base_ativa.toLocaleString('pt-BR')}
+              Entrada no mês: {queueCounts.base_ativa.toLocaleString('pt-BR')}
               {' · '}
               <Link
                 href="/dashboard"
