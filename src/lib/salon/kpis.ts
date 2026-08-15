@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { contactKpiWindow } from '@/lib/salon/contact-kpi-chart'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 
 export interface ContactKpis {
   /** Entrada real no funil (exclui dump Avec `importado`). */
@@ -26,10 +27,11 @@ export async function fetchContactKpis(
 ): Promise<ContactKpis> {
   const sql = getSql()
   const window = contactKpiWindow(dayLimit, referenceDay)
+  const month = resolveMonthWindow(window.to.slice(0, 7), window.to)
 
-  // byDay = entrada real no funil (exclui dump Avec 0004 / status importado).
+  // byDay = entrada real no funil na janela rolling (exclui dump Avec 0004 / importado).
   // byStatus = inventário completo da base (transparência).
-  // conversion_rate = convertidos ÷ funil ativo (mesmas exclusões do byDay).
+  // conversion_rate / funnel_contacts = convertidos ÷ entrada no mês (não a rolling).
   const [byDay, byStatus, conversionRows] = await Promise.all([
     sql`
       select
@@ -65,9 +67,9 @@ export async function fetchContactKpis(
               and coalesce(source, '') not like 'avec_backfill%'
               and coalesce(source, '') not like 'avec_lake%'
               and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-                >= ${window.from}::date
+                >= ${month.from}::date
               and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-                <= ${window.to}::date
+                <= ${month.to}::date
           )::float
             / nullif(
               count(*) filter (
@@ -76,9 +78,9 @@ export async function fetchContactKpis(
                   and coalesce(source, '') not like 'avec_backfill%'
                   and coalesce(source, '') not like 'avec_lake%'
                   and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-                    >= ${window.from}::date
+                    >= ${month.from}::date
                   and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-                    <= ${window.to}::date
+                    <= ${month.to}::date
               ),
               0
             )::float,
@@ -91,9 +93,9 @@ export async function fetchContactKpis(
             and coalesce(source, '') not like 'avec_backfill%'
             and coalesce(source, '') not like 'avec_lake%'
             and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-              >= ${window.from}::date
+              >= ${month.from}::date
             and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
-              <= ${window.to}::date
+              <= ${month.to}::date
         )::int as funnel_contacts,
         count(*) filter (where status = 'importado')::int as imported_contacts
       from contacts
