@@ -2,9 +2,10 @@ import { getSql } from '@/lib/db'
 import { DUE_SOON_DAYS } from '@/lib/salon/constants'
 
 /**
- * Contatos novos do dia (Hoje KPI) — paridade com Contatos Novos
+ * Sem vínculo Avec do dia (Hoje KPI) — paridade com Contatos · Sem vínculo
  * (`countNewContactsNotInAvec`): `avec_client_id` null, exclui só `importado`
  * (dump). Convertidos/atendidos na janela continuam contando. Janela fixa de 1 dia.
+ * Não é “1ª visita no salão” do Cérebro/Visão.
  */
 export async function countNovosHoje(day: string): Promise<number> {
   const sql = getSql()
