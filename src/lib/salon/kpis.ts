@@ -10,7 +10,7 @@ export interface ContactKpis {
     conversion_rate: number
     /** Base completa (inclui importado). */
     total_contacts: number
-    /** Funil ativo: status ≠ importado e fora de fontes Avec dump. */
+    /** Entrada no mês no funil (status ≠ importado, fora de dumps Avec). */
     funnel_contacts: number
     /** Dump 0004 / base Avec. */
     imported_contacts: number
@@ -64,6 +64,10 @@ export async function fetchContactKpis(
               and coalesce(source, '') not like 'avec_sync_clients%'
               and coalesce(source, '') not like 'avec_backfill%'
               and coalesce(source, '') not like 'avec_lake%'
+              and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+                >= ${window.from}::date
+              and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+                <= ${window.to}::date
           )::float
             / nullif(
               count(*) filter (
@@ -71,6 +75,10 @@ export async function fetchContactKpis(
                   and coalesce(source, '') not like 'avec_sync_clients%'
                   and coalesce(source, '') not like 'avec_backfill%'
                   and coalesce(source, '') not like 'avec_lake%'
+                  and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+                    >= ${window.from}::date
+                  and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+                    <= ${window.to}::date
               ),
               0
             )::float,
@@ -82,6 +90,10 @@ export async function fetchContactKpis(
             and coalesce(source, '') not like 'avec_sync_clients%'
             and coalesce(source, '') not like 'avec_backfill%'
             and coalesce(source, '') not like 'avec_lake%'
+            and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+              >= ${window.from}::date
+            and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+              <= ${window.to}::date
         )::int as funnel_contacts,
         count(*) filter (where status = 'importado')::int as imported_contacts
       from contacts

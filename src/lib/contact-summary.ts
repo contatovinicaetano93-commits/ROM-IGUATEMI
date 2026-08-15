@@ -3,6 +3,7 @@ import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
 import { DUE_SOON_DAYS, NOVOS_WINDOW_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { todayIso, toSalonDateIso } from '@/lib/salon/format'
+import { resolveMonthWindow } from '@/lib/salon/month-window'
 import { compareByOverdueThenName, urgencyForServices } from '@/lib/salon/urgency'
 
 export interface ContactListItem extends ContactRow {
@@ -49,8 +50,8 @@ export interface ContactQueueCounts extends UrgencyQueueCounts {
   /** Passou da janela Novos e segue sem next_due — fora do funil de cadência. */
   sem_servicos: number
   /**
-   * Estoque do Funil CRM (Visão): status ≠ importado e fora de dumps Avec.
-   * Não é fila de trabalho — só referência + link.
+   * Entrada no mês (funil CRM / Visão): first_contact/created no mês corrente,
+   * status ≠ importado e fora de dumps Avec. Não é fila — só referência + link.
    */
   base_ativa: number
 }
@@ -717,9 +718,10 @@ export async function listContactsWithoutServices(opts?: {
   return { items: withUrgency(contacts, byContact), total }
 }
 
-/** Estoque do Funil CRM — mesma regra de `funnel_contacts` em Visão (não é fila). */
+/** Entrada no mês — mesma regra de `funnel_contacts` em Visão (não é fila). */
 export async function countBaseAtiva(): Promise<number> {
   const sql = getSql()
+  const { from, to } = resolveMonthWindow(todayIso().slice(0, 7))
   const rows = (await sql`
     select count(*)::int as n
     from contacts
@@ -728,11 +730,15 @@ export async function countBaseAtiva(): Promise<number> {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+        >= ${from}::date
+      and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
+        <= ${to}::date
   `) as { n: number }[]
   return Number(rows[0]?.n) || 0
 }
 
-/** Totais das filas Contatos (reativar + novos da janela + sem serviço) + base ativa. */
+/** Totais das filas Contatos (reativar + Sem vínculo + sem serviço) + entrada no mês. */
 export async function countContactQueues(opts?: {
   channel?: string | null
   day?: string | null

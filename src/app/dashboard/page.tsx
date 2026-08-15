@@ -683,11 +683,11 @@ export default function DashboardPage() {
                 <TrendingUp size={13} />
                 {(conversionRate * 100).toFixed(1)}%
               </span>
-              <span className="text-xs text-muted">conversão na base ativa (não dos leads do mês)</span>
+              <span className="text-xs text-muted">conversão no funil do mês (CRM)</span>
             </div>
             {!loading && (
               <p className="mt-2 text-[0.7rem] text-muted">
-                Base ativa (estoque atual, não o mês): {funnelContacts.toLocaleString('pt-BR')} ·
+                Entrada no mês (funil CRM): {funnelContacts.toLocaleString('pt-BR')} ·
                 importados Avec: {importedContacts.toLocaleString('pt-BR')} · total cadastrado:{' '}
                 {totalContacts.toLocaleString('pt-BR')}
               </p>
