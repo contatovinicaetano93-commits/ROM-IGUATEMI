@@ -448,7 +448,7 @@ export default function AdminPage() {
           ) : kpis ? (
             <div className="space-y-3 text-sm">
               <Row
-                label="Funil ativo (sem importado)"
+                label="Entrada no mês (funil CRM)"
                 value={String(kpis.conversion?.funnel_contacts ?? 0)}
                 highlight
               />
