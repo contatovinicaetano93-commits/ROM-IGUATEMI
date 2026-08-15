@@ -149,31 +149,6 @@ async function computeReturnRateFromAvec(
   }
 }
 
-/**
- * Fallback ROM quando 0007/local falham: mix do mês em salon_month_metrics
- * (returning / (returning + new)). Melhor que null no Cérebro enquanto o JWT Avec renova.
- */
-async function computeReturnRateFromMonthMetrics(): Promise<number | null> {
-  const sql = getSql()
-  try {
-    const rows = (await sql`
-      select
-        coalesce(returning_clients, 0)::int as returning_clients,
-        coalesce(new_clients, 0)::int as new_clients
-      from salon_month_metrics
-      where month = to_char(timezone('America/Sao_Paulo', now()), 'YYYY-MM')
-      limit 1
-    `) as { returning_clients: number; new_clients: number }[]
-    const returning = Number(rows[0]?.returning_clients ?? 0)
-    const neu = Number(rows[0]?.new_clients ?? 0)
-    const denom = returning + neu
-    if (denom <= 0 || returning <= 0) return null
-    return Math.round((returning / denom) * 10000) / 10000
-  } catch {
-    return null
-  }
-}
-
 function asRows(result: unknown): Record<string, unknown>[] {
   if (Array.isArray(result)) {
     return result.every((item) => item && typeof item === 'object')
@@ -290,23 +265,20 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
           return_rate = Math.round((sum / n) * 10000) / 10000
           returnRateOk = true
         } else if (nonReturners > 0) {
-          // Lista 0007 = sem retorno. Preferir cohort local; senão 0002 (P1) ∩ 0007; senão mix do mês.
+          // Lista 0007 = sem retorno. Preferir cohort local; senão 0002 ∩ 0007.
+          // Sem mix inventado de salon_month_metrics — null se nenhuma fonte.
           const local = await computeLocalReturnRate(day)
           const viaAvec =
             local == null
               ? await computeReturnRateFromAvec(nonReturnerRows, reportParams, stats, syncRunId)
               : null
-          const viaMonth =
-            local == null && viaAvec == null ? await computeReturnRateFromMonthMetrics() : null
-          const rate = local ?? viaAvec ?? viaMonth
+          const rate = local ?? viaAvec
           if (rate != null) {
             return_rate = rate
             returnRateOk = true
             stats.p3_rows = (stats.p3_rows ?? 0) + nonReturners
             if (local == null && viaAvec != null) {
               stats.warnings?.push('P3 return_rate: usando cohort 0002 ∩ lista 0007')
-            } else if (local == null && viaMonth != null) {
-              stats.warnings?.push('P3 return_rate: usando mix returning/new do salon_month_metrics')
             }
           } else {
             stats.warnings?.push(
@@ -320,20 +292,14 @@ export async function syncP3Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
     }
   }
 
-  // Fallback ROM se 0007 falhou/vazio
+  // Fallback ROM se 0007 falhou/vazio — só local; sem inventar via mix do mês.
   if (!returnRateOk && !returnRateTruncated) {
     try {
       const local = await computeLocalReturnRate(day)
-      const fromMonth = local == null ? await computeReturnRateFromMonthMetrics() : null
-      const rate = local ?? fromMonth
-      if (rate != null) {
-        return_rate = rate
+      if (local != null) {
+        return_rate = local
         returnRateOk = true
-        stats.warnings?.push(
-          local != null
-            ? 'P3 return_rate: usando cálculo local (client_services)'
-            : 'P3 return_rate: usando mix returning/new do salon_month_metrics',
-        )
+        stats.warnings?.push('P3 return_rate: usando cálculo local (client_services)')
       }
     } catch (e) {
       stats.warnings?.push(`P3 return_rate local: ${e instanceof Error ? e.message : String(e)}`)
