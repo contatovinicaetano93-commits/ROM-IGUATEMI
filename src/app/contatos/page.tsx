@@ -208,7 +208,7 @@ function ContatosPageContent() {
     dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : null
   const channelParam = searchParams.get('channel')?.trim().toLowerCase() ?? ''
   const statusParam = searchParams.get('status')?.trim().toLowerCase() ?? ''
-  /** Deep-link Hoje WA: ?channel=whatsapp&status=novo (não é a fila Novos Avec). */
+  /** Deep-link Hoje WA: ?channel=whatsapp&status=novo (CRM status — não é Sem vínculo / queue=novos). */
   const urlChannel =
     !ignoreUrlFilters && URL_CHANNELS.has(channelParam) ? channelParam : null
   const urlStatus =
