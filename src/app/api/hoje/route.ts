@@ -44,7 +44,8 @@ export async function GET(req: NextRequest) {
         const salonRaw = await getSalonMetrics(day)
         const playbookAll = await listActionItems({ limit: 60 })
         const scheduleRaw = await listTodaySchedules(day, 200)
-        // novos: paridade com Contatos · Novos (últimos NOVOS_WINDOW_DAYS).
+        // sem vínculo: paridade com Contatos · Sem vínculo (últimos NOVOS_WINDOW_DAYS).
+        // Não é 1ª visita no salão.
         const [novos, whatsapp_novos] = await Promise.all([
           countNewContactsNotInAvec({ day }),
           countWhatsappNovosToday(day),

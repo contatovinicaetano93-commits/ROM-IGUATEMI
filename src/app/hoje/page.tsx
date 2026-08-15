@@ -405,7 +405,7 @@ export default function HojePage() {
             {!loading && data?.playbook.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
                 <p className="font-medium text-foreground/90">Tudo em dia 🎉</p>
-                <p className="mt-1 text-xs">Sem ações urgentes. Confira os contatos novos ou a visão analítica.</p>
+                <p className="mt-1 text-xs">Sem ações urgentes. Confira Sem vínculo Avec ou a visão analítica.</p>
               </div>
             )}
 
@@ -478,8 +478,10 @@ export default function HojePage() {
           <div className="flex items-center gap-3">
             <Users size={18} className="text-gold" />
             <div>
-              <p className="text-sm font-medium">{data!.leads.novos} contato(s) novo(s)</p>
-              <p className="text-xs text-muted">Contatos · últimos 30 dias (exceto Importado Avec)</p>
+              <p className="text-sm font-medium">
+                {data!.leads.novos} sem vínculo Avec
+              </p>
+              <p className="text-xs text-muted">Contatos · últimos 30 dias · cadastro solto</p>
             </div>
           </div>
           <ChevronRight size={16} className="text-muted" />

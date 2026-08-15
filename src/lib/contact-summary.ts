@@ -42,11 +42,11 @@ export interface UrgencyQueueCounts {
   scheduled: number
 }
 
-/** Filas da tela Contatos — urgência + novos da janela + sem serviço. */
+/** Filas da tela Contatos — urgência + Sem vínculo (API `novos`) + sem serviço. */
 export interface ContactQueueCounts extends UrgencyQueueCounts {
-  /** Contatos criados na janela Novos (SP) ainda sem avec_client_id. */
+  /** Cadastros ROM na janela Sem vínculo (SP) ainda sem avec_client_id — não é 1ª visita. */
   novos: number
-  /** Passou da janela Novos e segue sem next_due — fora do funil de cadência. */
+  /** Passou da janela Sem vínculo e segue sem next_due — fora do funil de cadência. */
   sem_servicos: number
 }
 

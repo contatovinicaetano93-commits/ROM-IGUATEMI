@@ -390,7 +390,7 @@ export default function RelatoriosOverviewPage() {
                   </span>
                 </li>
                 <li className="flex justify-between gap-3">
-                  <span className="text-muted">Retorno / novos</span>
+                  <span className="text-muted">Retorno / 1ª visita</span>
                   <span className="tabular-nums">
                     {data.analytics.return_rate != null
                       ? formatPercentPoints(data.analytics.return_rate * 100, 0)
@@ -400,7 +400,7 @@ export default function RelatoriosOverviewPage() {
                 </li>
                 <li className="text-xs text-muted">
                   Snapshot ops: {data.analytics.snapshot_day ?? '—'} (Avec P1–P3 do mês, não soma
-                  diária). Retorno — = sem cohort confiável no ROM para o mês. Pacotes/retorno/novos
+                  diária). Retorno — = sem cohort confiável no ROM para o mês. Pacotes/retorno/1ª visita
                   sem delta MoM (janela Avec, não acumulado mensal ROM).
                 </li>
               </ul>
