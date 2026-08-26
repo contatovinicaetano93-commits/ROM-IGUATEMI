@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fmtScheduleParts, toSalonDateIso, whatsAppUrl } from './format'
+import { fmtScheduleParts, toSalonDateIso, toSortableIso, whatsAppUrl } from './format'
 
 describe('toSalonDateIso', () => {
   it('converte instante perto da meia-noite SP sem usar slice UTC', () => {
@@ -12,6 +12,14 @@ describe('toSalonDateIso', () => {
   it('retorna null para inválido', () => {
     expect(toSalonDateIso(null)).toBeNull()
     expect(toSalonDateIso('não-é-data')).toBeNull()
+  })
+})
+
+describe('toSortableIso', () => {
+  it('normaliza Date do postgres.js e string', () => {
+    expect(toSortableIso(new Date('2026-08-08T13:00:00.000Z'))).toBe('2026-08-08T13:00:00.000Z')
+    expect(toSortableIso('2026-08-08T13:00:00.000Z')).toBe('2026-08-08T13:00:00.000Z')
+    expect(toSortableIso(null)).toBe('')
   })
 })
 
