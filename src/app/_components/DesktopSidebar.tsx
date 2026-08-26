@@ -4,20 +4,30 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Activity, Wallet, GraduationCap, Boxes, Stethoscope, FileBarChart } from 'lucide-react'
-import { APP_NAV, ADMIN_NAV } from './nav'
+import { APP_NAV, ADMIN_NAV, NAV_ZONE_LABEL, groupNavByZone } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
 import { getBrand } from '@/lib/brand'
+
+function navLinkClass(active: boolean, compact = false) {
+  const pad = compact ? 'px-4 py-2.5 text-xs' : 'px-4 py-3 text-sm font-medium'
+  return `flex items-center gap-3 rounded-xl ${pad} transition-colors ${
+    active
+      ? 'border border-gold/40 bg-gold/10 text-gold'
+      : compact
+        ? 'text-muted hover:bg-card hover:text-foreground'
+        : 'text-foreground/85 hover:bg-card hover:text-foreground'
+  }`
+}
 
 export function DesktopSidebar() {
   const pathname = usePathname()
   const brand = getBrand()
   const [showAdminNav, setShowAdminNav] = useState(false)
   const [role, setRole] = useState<string | null>(null)
-  const navItems = useMemo(
-    () =>
-      APP_NAV.filter((item) => !('adminOnly' in item) || !item.adminOnly || showAdminNav),
-    [showAdminNav]
-  )
+  const navGroups = useMemo(() => {
+    const items = APP_NAV.filter((item) => !item.adminOnly || showAdminNav)
+    return groupNavByZone(items)
+  }, [showAdminNav])
 
   useEffect(() => {
     fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
@@ -30,9 +40,6 @@ export function DesktopSidebar() {
       .catch(() => setShowAdminNav(false))
   }, [])
 
-  // Financeiro tem acesso duplo (Financeiro + Estoque); Estoque é isolado só
-  // no Estoque. Nenhum dos dois vê hoje/contatos/dashboard/admin — nav
-  // própria, sem links mortos (que o middleware ia redirecionar de qualquer jeito).
   if (role === 'financeiro' || role === 'estoque') {
     const links =
       role === 'financeiro'
@@ -46,30 +53,21 @@ export function DesktopSidebar() {
     return (
       <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
         <div className="flex items-baseline gap-1.5 border-b border-border px-6 py-6">
-          <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">{brand.shortMonogram}</span>
+          <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">
+            {brand.shortMonogram}
+          </span>
           <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">
             {role === 'financeiro' ? 'Financeiro' : 'Estoque'}
           </span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-4">
           {links.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-                pathname === href ? 'border border-gold/40 bg-gold/10 text-gold' : 'text-foreground/85 hover:bg-card hover:text-foreground'
-              }`}
-            >
+            <Link key={href} href={href} className={navLinkClass(pathname === href)}>
               <Icon size={20} strokeWidth={pathname === href ? 2.2 : 1.8} />
               {label}
             </Link>
           ))}
-          <Link
-            href="/onboarding"
-            className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-              pathname.startsWith('/onboarding') ? 'border border-gold/40 bg-gold/10 text-gold' : 'text-foreground/85 hover:bg-card hover:text-foreground'
-            }`}
-          >
+          <Link href="/onboarding" className={navLinkClass(pathname.startsWith('/onboarding'))}>
             <GraduationCap size={20} strokeWidth={pathname.startsWith('/onboarding') ? 2.2 : 1.8} />
             Onboarding
           </Link>
@@ -93,44 +91,59 @@ export function DesktopSidebar() {
   return (
     <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
       <div className="flex items-baseline gap-1.5 border-b border-border px-6 py-6">
-        <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">{brand.shortMonogram}</span>
-        <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">{brand.locationSubtitle}</span>
+        <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">
+          {brand.shortMonogram}
+        </span>
+        <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">
+          {brand.locationSubtitle}
+        </span>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 p-4">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(`${href}/`)
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={active ? 'page' : undefined}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-                active
-                  ? 'border border-gold/40 bg-gold/10 text-gold'
-                  : 'text-foreground/85 hover:bg-card hover:text-foreground'
-              }`}
-            >
-              <Icon size={20} strokeWidth={active ? 2.2 : 1.8} />
-              {label}
-            </Link>
-          )
-        })}
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-4">
+        {navGroups.map(({ zone, items }) => (
+          <div key={zone} className={zone === 'operar' ? '' : 'mt-3'}>
+            <p className="px-4 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-muted/80">
+              {NAV_ZONE_LABEL[zone]}
+            </p>
+            <div className="flex flex-col gap-1">
+              {items.map(({ href, label, icon: Icon }) => {
+                const active = pathname === href || pathname.startsWith(`${href}/`)
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    aria-current={active ? 'page' : undefined}
+                    className={navLinkClass(active)}
+                  >
+                    <Icon size={20} strokeWidth={active ? 2.2 : 1.8} />
+                    {label}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
-      <div className="flex flex-col gap-1 px-4 pb-2">
+      <div className="flex flex-col gap-1 border-t border-border/60 px-4 pb-2 pt-3">
         {showAdminNav && (
           <>
             <Link
               href="/financeiro"
-              className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground"
+              className={navLinkClass(
+                pathname === '/financeiro' || pathname.startsWith('/financeiro/'),
+                true,
+              )}
             >
               <Wallet size={16} />
               Financeiro
             </Link>
             <Link
               href="/estoque"
-              className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground"
+              className={navLinkClass(
+                pathname === '/estoque' || pathname.startsWith('/estoque/'),
+                true,
+              )}
             >
               <Boxes size={16} />
               Estoque
@@ -139,9 +152,7 @@ export function DesktopSidebar() {
         )}
         <Link
           href={ADMIN_NAV.href}
-          className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-xs text-muted transition-colors hover:bg-card hover:text-foreground ${
-            pathname === '/admin' || pathname === '/admin/' ? 'text-gold' : ''
-          }`}
+          className={navLinkClass(pathname === '/admin' || pathname === '/admin/', true)}
         >
           <Activity size={16} />
           {ADMIN_NAV.label}
