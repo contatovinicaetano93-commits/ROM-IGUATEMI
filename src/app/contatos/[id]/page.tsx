@@ -31,7 +31,7 @@ import {
   CHANNEL_LABEL,
   STATUS_LABEL,
 } from '../../_components/ui'
-import { fmtSchedule, whatsAppUrl, formatCurrency, toDatetimeLocalValue, fromDatetimeLocalValue } from '@/lib/salon/format'
+import { fmtSchedule, whatsAppUrl, formatCurrency, formatVisitDate, toDatetimeLocalValue, fromDatetimeLocalValue } from '@/lib/salon/format'
 import { CATEGORY_LABEL } from '@/lib/salon/constants'
 import { apiFetch } from '@/lib/api-client'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
@@ -798,7 +798,7 @@ function ContactDetailPageContent() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{v.service_name}</p>
                   <p className="mt-0.5 text-xs text-muted">
-                    {new Date(v.done_at).toLocaleDateString('pt-BR')}
+                    {formatVisitDate(v.done_at)}
                     {v.professional_name ? ` · ${v.professional_name}` : ''}
                     {canViewRevenue && v.price != null ? ` · ${formatCurrency(v.price)}` : ''}
                   </p>
