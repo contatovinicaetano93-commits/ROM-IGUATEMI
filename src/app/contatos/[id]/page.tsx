@@ -85,6 +85,20 @@ interface ClientStats {
   completed_services_count: number
   ltv_projection: number | null
 }
+interface ServiceVisit {
+  id: string
+  service_name: string
+  category: string | null
+  done_at: string
+  done_on: string
+  professional_name: string | null
+  price: number | null
+  source: 'avec' | 'manual' | 'webhook' | 'conversion'
+}
+interface ServiceVisitStats {
+  service_count: number
+  visit_days: number
+}
 interface Profile {
   contact: Contact
   services: Service[]
@@ -92,9 +106,20 @@ interface Profile {
   events: ContactEvent[]
   last_visit: LastVisitData | null
   client_stats: ClientStats
+  service_visits: ServiceVisit[]
+  service_visit_stats: ServiceVisitStats
+  service_visits_has_more: boolean
+  can_view_revenue?: boolean
 }
 
 const STATUS_FLOW = ['importado', 'novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']
+
+const VISIT_SOURCE_LABEL: Record<ServiceVisit['source'], string> = {
+  avec: 'Avec',
+  manual: 'Manual',
+  webhook: 'Webhook',
+  conversion: 'Conversão',
+}
 
 const REC_TONE: Record<string, string> = {
   overdue: 'border-danger/40 bg-danger/10',
@@ -218,6 +243,7 @@ function ContactDetailPageContent() {
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [mutationOk, setMutationOk] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [visitsLoadingMore, setVisitsLoadingMore] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
 
   const load = useCallback(async () => {
@@ -282,6 +308,34 @@ function ContactDetailPageContent() {
       { method: 'POST' },
       'Conversa assumida — a IA volta a responder normal quando você quiser.'
     )
+  }
+
+  async function loadMoreServiceVisits() {
+    if (!data || visitsLoadingMore || !data.service_visits_has_more) return
+    setVisitsLoadingMore(true)
+    try {
+      const offset = data.service_visits.length
+      const res = await apiFetch(
+        `/api/contacts/${id}/service-visits?offset=${offset}&limit=30`,
+        { cache: 'no-store' },
+      )
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        setMutationError(json.error ?? 'Não foi possível carregar mais serviços')
+        return
+      }
+      const next = (json.data?.visits ?? []) as ServiceVisit[]
+      setData({
+        ...data,
+        service_visits: [...data.service_visits, ...next],
+        service_visit_stats: json.data?.stats ?? data.service_visit_stats,
+        service_visits_has_more: Boolean(json.data?.has_more),
+      })
+    } catch (e) {
+      setMutationError(String(e))
+    } finally {
+      setVisitsLoadingMore(false)
+    }
   }
 
   useEffect(() => {
@@ -385,7 +439,18 @@ function ContactDetailPageContent() {
     )
   }
 
-  const { contact, services, recommendations, events, last_visit, client_stats } = data
+  const {
+    contact,
+    services,
+    recommendations,
+    events,
+    last_visit,
+    client_stats,
+    service_visits = [],
+    service_visit_stats = { service_count: 0, visit_days: 0 },
+    service_visits_has_more = false,
+  } = data
+  const canViewRevenue = Boolean(data.can_view_revenue ?? isAdmin)
   const isAwaitingHuman = (() => {
     for (const e of events) {
       if (e.payload?.handoff_resolved === true) return false
@@ -704,6 +769,57 @@ function ContactDetailPageContent() {
             </div>
           ))}
         </div>
+      </SectionCard>
+
+      {/* Histórico de serviços realizados (log append-only desde o deploy) */}
+      <SectionCard
+        title="Histórico de serviços"
+        badge={
+          service_visit_stats.service_count > 0 ? (
+            <span className="text-[0.65rem] font-medium text-muted">
+              {service_visit_stats.service_count} serviço
+              {service_visit_stats.service_count === 1 ? '' : 's'} · {service_visit_stats.visit_days}{' '}
+              dia{service_visit_stats.visit_days === 1 ? '' : 's'}
+            </span>
+          ) : null
+        }
+      >
+        {service_visits.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted">
+            Ainda sem visitas registradas — passa a preencher a partir do próximo sync.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {service_visits.map((v) => (
+              <div
+                key={v.id}
+                className="flex items-start justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{v.service_name}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {new Date(v.done_at).toLocaleDateString('pt-BR')}
+                    {v.professional_name ? ` · ${v.professional_name}` : ''}
+                    {canViewRevenue && v.price != null ? ` · ${formatCurrency(v.price)}` : ''}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-border/60 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-muted">
+                  {VISIT_SOURCE_LABEL[v.source] ?? v.source}
+                </span>
+              </div>
+            ))}
+            {service_visits_has_more && (
+              <button
+                type="button"
+                onClick={() => void loadMoreServiceVisits()}
+                disabled={visitsLoadingMore}
+                className="mt-1 rounded-xl border border-border py-2.5 text-sm font-medium text-muted active:text-foreground disabled:opacity-60"
+              >
+                {visitsLoadingMore ? 'Carregando…' : 'Carregar mais'}
+              </button>
+            )}
+          </div>
+        )}
       </SectionCard>
 
       {/* Histórico de atendimento (timeline) */}

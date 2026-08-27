@@ -28,6 +28,7 @@
     { "id": "025_omie_expenses", "file": "delta-omie-expenses.sql", "panels": ["brasil", "iguatemi"] },
     { "id": "026_nullable_daily_kpis", "file": "delta-nullable-daily-kpis.sql", "panels": ["brasil", "iguatemi"] },
     { "id": "027_director_visits", "file": "delta-director-visits.sql", "panels": ["brasil", "iguatemi"] },
-    { "id": "028_director_0021_months", "file": "delta-director-0021-months.sql", "panels": ["brasil", "iguatemi"] }
+    { "id": "028_director_0021_months", "file": "delta-director-0021-months.sql", "panels": ["brasil", "iguatemi"] },
+    { "id": "029_client_service_visits", "file": "delta-client-service-visits.sql", "panels": ["brasil", "iguatemi"] }
   ]
 }
