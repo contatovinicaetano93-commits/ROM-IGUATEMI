@@ -474,7 +474,7 @@ function ContatosPageContent() {
 
       {mode === 'ativados' && (
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
-          Entra aqui ao clicar Reativar (fila Reativar ou ficha) ou Chamar em Sem serviço. Sai
+          Entra aqui ao clicar Reativar (fila Reativar, Sem serviço ou ficha). Sai
           automaticamente quando o sync Avec registrar agenda ou visita — ou após 30 dias sem
           retorno.
         </p>
