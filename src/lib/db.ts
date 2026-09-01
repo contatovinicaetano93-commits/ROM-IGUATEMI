@@ -24,8 +24,9 @@ try {
  * não está disponível neste agente.
  */
 export type Sql = {
+  /** Tagged template + helper sql(ids) para IN (...). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (strings: TemplateStringsArray, ...values: any[]): Promise<any[]>
+  (first: TemplateStringsArray | readonly any[], ...rest: any[]): any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   begin: <T>(fn: (sql: Sql) => Promise<T>) => Promise<T>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,16 +65,16 @@ export function isDbPoolExhaustedError(e: unknown): boolean {
 }
 
 function wrap(sql: PostgresSql): Sql {
-  const tagged = ((strings: TemplateStringsArray, ...values: unknown[]) =>
-    sql(strings, ...(values as never[]))) as unknown as Sql
+  // Reutiliza postgres.js (tagged template + helper sql(ids)).
+  const client = sql as unknown as Sql
 
-  tagged.begin = <T>(fn: (tx: Sql) => Promise<T>) =>
+  client.begin = <T>(fn: (tx: Sql) => Promise<T>) =>
     sql.begin(async (tx) => fn(wrap(tx as unknown as PostgresSql))) as Promise<T>
 
-  tagged.unsafe = async (query: string, params: unknown[] = []) =>
+  client.unsafe = async (query: string, params: unknown[] = []) =>
     sql.unsafe(query, params as never[]) as unknown as unknown[]
 
-  return tagged
+  return client
 }
 
 function readDeployOverlayUrl(): string | null {
