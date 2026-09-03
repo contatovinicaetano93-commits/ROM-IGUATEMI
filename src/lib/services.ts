@@ -1,11 +1,8 @@
 import { getSql } from '@/lib/db'
 import { enrichServices } from '@/lib/recommendations'
-import { todayIso, toSalonDateIso } from '@/lib/salon/format'
-import {
-  isComandaOrigin,
-  notesWithScheduleOrigin,
-  type ScheduleOrigin,
-} from '@/lib/salon/schedule-origin'
+import { todayIso, toSalonDateIso, toSortableIso } from '@/lib/salon/format'
+import { notesWithScheduleOrigin, type ScheduleOrigin } from '@/lib/salon/schedule-origin'
+import { classifyNonBillable, type NonBillableKind } from '@/lib/salon/non-billable'
 import { enqueueAftercare } from '@/lib/whatsapp/aftercare'
 import { logEvent } from '@/lib/contacts'
 
@@ -479,19 +476,23 @@ export async function listUpcomingSchedules(days = 7, limit = 20): Promise<Sched
   `) as ScheduledServiceRow[]
 }
 
+export type PipelineCourtesyRow = ScheduledServiceRow & {
+  non_billable_kind: NonBillableKind
+}
+
 /**
  * Pipeline do dia:
- * - scheduled = booking com horário
- * - walkIn ("No salão") = sem agendamento prévio: comanda aberta na hora / encaixe
- * - completed = pagos/fechados no dia
+ * - scheduled = abertos do dia (agenda + encaixe), sem teste/cortesia
+ * - courtesy = teste ou cortesia do dia (abertos + concluídos)
+ * - completed = pagos/fechados do dia, sem teste/cortesia
  */
 export async function listTodayPipeline(day: string): Promise<{
   scheduled: ScheduledServiceRow[]
-  walkIn: ScheduledServiceRow[]
+  courtesy: PipelineCourtesyRow[]
   completed: ScheduledServiceRow[]
 }> {
   const sql = getSql()
-  const [openRows, completed] = await Promise.all([
+  const [openRows, completedRows] = await Promise.all([
     sql`
       select cs.*, c.name as contact_name
       from client_services cs
@@ -524,15 +525,33 @@ export async function listTodayPipeline(day: string): Promise<{
   ])
 
   const scheduled: ScheduledServiceRow[] = []
-  const walkIn: ScheduledServiceRow[] = []
+  const courtesy: PipelineCourtesyRow[] = []
+  const completed: ScheduledServiceRow[] = []
+
   for (const row of openRows as ScheduledServiceRow[]) {
-    if (isComandaOrigin(row)) walkIn.push(row)
+    const kind = classifyNonBillable(row)
+    if (kind) courtesy.push({ ...row, non_billable_kind: kind })
     else scheduled.push(row)
   }
 
-  return {
-    scheduled,
-    walkIn,
-    completed: completed as ScheduledServiceRow[],
+  for (const row of completedRows as ScheduledServiceRow[]) {
+    const kind = classifyNonBillable(row)
+    if (kind) courtesy.push({ ...row, non_billable_kind: kind })
+    else completed.push(row)
   }
+
+  courtesy.sort((a, b) => {
+    const key = (row: ScheduledServiceRow) =>
+      toSortableIso(
+        (row.last_done_at && toSalonDateIso(row.last_done_at) === day
+          ? row.last_done_at
+          : null) ??
+          row.scheduled_at ??
+          row.last_done_at ??
+          '',
+      )
+    return key(a).localeCompare(key(b))
+  })
+
+  return { scheduled, courtesy, completed }
 }
