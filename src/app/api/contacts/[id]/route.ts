@@ -11,7 +11,7 @@ import {
   setPreferredManicurist,
   setPreferredHairstylist,
 } from '@/lib/contacts'
-import { listServices, autoCompleteServicesOnConversion, pickLastVisit, computeClientStats } from '@/lib/services'
+import { listServices, autoCompleteServicesOnConversion, pickLastVisit, computeClientStats, listServiceVisits, getServiceVisitStats, SERVICE_VISIT_PAGE_SIZE } from '@/lib/services'
 import { enrichServices, computeRecommendations } from '@/lib/recommendations'
 import { isNailService, isHairService } from '@/lib/avec/normalize'
 
@@ -99,6 +99,14 @@ export async function GET(req: NextRequest, ctx: Ctx) {
           ltv_projection: null,
         }
 
+    const [service_visits_raw, service_visit_stats] = await Promise.all([
+      listServiceVisits(id, { limit: SERVICE_VISIT_PAGE_SIZE, offset: 0 }),
+      getServiceVisitStats(id),
+    ])
+    const service_visits = service_visits_raw.map((v) =>
+      canViewRevenue ? v : { ...v, price: null },
+    )
+
     return ok({
       contact: contactOut,
       services,
@@ -106,6 +114,9 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       events,
       last_visit,
       client_stats,
+      service_visits,
+      service_visit_stats,
+      service_visits_has_more: service_visit_stats.service_count > service_visits.length,
       can_view_revenue: canViewRevenue,
     })
   } catch (e) {

@@ -74,14 +74,13 @@ export interface ClientStats {
   /** Média de last_price entre os serviços com preço registrado — null se nenhum tiver preço. */
   ticket_avg: number | null
   /** Média de cadence_days definida pelo salão nos serviços ativos — não é frequência real medida
-   *  (client_services guarda só a última ocorrência de cada serviço, não um log de visitas). */
+   *  (o log de visitas fica em client_service_visits; client_services guarda só a última ocorrência). */
   cadence_avg_days: number | null
   /** Serviços distintos com pelo menos uma execução registrada (não é contagem de visitas). */
   completed_services_count: number
   /**
    * Projeção, não histórico real: ticket_avg × (365 / cadence_avg_days) × LTV_HORIZON_YEARS.
-   * Não existe log de receita por cliente hoje (client_services só guarda o último preço de
-   * cada serviço) — quando isso existir, dá pra trocar por LTV medido de verdade.
+   * Histórico de preço por visita começa em client_service_visits (daqui pra frente).
    */
   ltv_projection: number | null
 }
@@ -139,16 +138,138 @@ export async function addService(contactId: string, input: AddServiceInput): Pro
   return rows[0]
 }
 
+export type ServiceVisitSource = 'avec' | 'manual' | 'webhook' | 'conversion'
+
 export interface MarkServiceDoneOpts {
   doneAt?: string | null
   professionalName?: string | null
   lastPrice?: number | null
+  /** Origem do registro no log client_service_visits. Default: manual. */
+  source?: ServiceVisitSource
+}
+
+export interface ClientServiceVisit {
+  id: string
+  contact_id: string
+  client_service_id: string | null
+  service_name: string
+  category: string | null
+  done_at: string
+  done_on: string
+  professional_name: string | null
+  price: number | null
+  source: ServiceVisitSource
+  created_at: string
+}
+
+export interface ServiceVisitStats {
+  /** Linhas no histórico (1 por serviço × dia). */
+  service_count: number
+  /** Dias distintos com pelo menos um serviço. */
+  visit_days: number
+}
+
+export const SERVICE_VISIT_PAGE_SIZE = 30
+
+/** Grava/atualiza 1 linha no histórico (idempotente por serviço × dia SP). */
+export async function recordServiceVisit(input: {
+  contactId: string
+  clientServiceId: string
+  serviceName: string
+  category?: string | null
+  doneAt: string
+  professionalName?: string | null
+  price?: number | null
+  source?: ServiceVisitSource
+}): Promise<void> {
+  const sql = getSql()
+  const source = input.source ?? 'manual'
+  await sql`
+    insert into client_service_visits (
+      contact_id,
+      client_service_id,
+      service_name,
+      category,
+      done_at,
+      done_on,
+      professional_name,
+      price,
+      source
+    ) values (
+      ${input.contactId},
+      ${input.clientServiceId},
+      ${input.serviceName},
+      ${input.category ?? null},
+      ${input.doneAt}::timestamptz,
+      (${input.doneAt}::timestamptz at time zone 'America/Sao_Paulo')::date,
+      ${input.professionalName ?? null},
+      ${input.price ?? null},
+      ${source}
+    )
+    on conflict (client_service_id, done_on) do update set
+      service_name = excluded.service_name,
+      category = coalesce(excluded.category, client_service_visits.category),
+      done_at = case
+        when excluded.done_at > client_service_visits.done_at then excluded.done_at
+        else client_service_visits.done_at
+      end,
+      professional_name = coalesce(excluded.professional_name, client_service_visits.professional_name),
+      price = coalesce(excluded.price, client_service_visits.price)
+  `
+}
+
+export async function listServiceVisits(
+  contactId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<ClientServiceVisit[]> {
+  const sql = getSql()
+  const limit = Math.min(Math.max(opts.limit ?? SERVICE_VISIT_PAGE_SIZE, 1), 100)
+  const offset = Math.max(opts.offset ?? 0, 0)
+  const rows = (await sql`
+    select
+      id,
+      contact_id,
+      client_service_id,
+      service_name,
+      category,
+      done_at,
+      done_on::text as done_on,
+      professional_name,
+      price,
+      source,
+      created_at
+    from client_service_visits
+    where contact_id = ${contactId}
+    order by done_at desc, id desc
+    limit ${limit} offset ${offset}
+  `) as ClientServiceVisit[]
+  return rows.map((r) => ({
+    ...r,
+    price: r.price != null ? Number(r.price) : null,
+  }))
+}
+
+export async function getServiceVisitStats(contactId: string): Promise<ServiceVisitStats> {
+  const sql = getSql()
+  const rows = (await sql`
+    select
+      count(*)::int as service_count,
+      count(distinct done_on)::int as visit_days
+    from client_service_visits
+    where contact_id = ${contactId}
+  `) as { service_count: number; visit_days: number }[]
+  const row = rows[0]
+  return {
+    service_count: row?.service_count ?? 0,
+    visit_days: row?.visit_days ?? 0,
+  }
 }
 
 // Marca o serviço como realizado — reinicia o ciclo.
 // Só limpa scheduled_at do mesmo dia SP do doneAt (não apaga remarcação futura).
 // Não regride last_done_at (greatest) — evita aftercare duplicado quando 0051/0002
 // mandam horários diferentes no mesmo dia SP.
+// Também registra em client_service_visits (idempotente por dia SP).
 export async function markServiceDone(
   serviceId: string,
   opts: MarkServiceDoneOpts = {}
@@ -181,6 +302,16 @@ export async function markServiceDone(
   `) as ClientService[]
   const service = rows[0] ?? null
   if (service) {
+    await recordServiceVisit({
+      contactId: service.contact_id,
+      clientServiceId: service.id,
+      serviceName: service.name,
+      category: service.category,
+      doneAt,
+      professionalName: opts.professionalName ?? service.professional_name,
+      price: opts.lastPrice ?? null,
+      source: opts.source ?? 'manual',
+    })
     const prevDay = prevDone ? toSalonDateIso(prevDone) : null
     const newDay = toSalonDateIso(service.last_done_at)
     // Aftercare no máx. 1× por dia SP do serviço.
@@ -429,7 +560,7 @@ export async function autoCompleteServicesOnConversion(contactId: string): Promi
 
   const marked: string[] = []
   for (const s of toMark) {
-    await markServiceDone(s.id)
+    await markServiceDone(s.id, { source: 'conversion' })
     marked.push(s.name)
   }
   return marked
