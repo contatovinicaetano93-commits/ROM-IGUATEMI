@@ -424,7 +424,13 @@ export default function DashboardPage() {
         <InsightCard
           icon={<Sparkles size={15} />}
           label={`Novos · ${period?.label ?? '—'}`}
-          value={loading || !period ? '—' : String(period.new_clients_period ?? 0)}
+          value={
+            loading || !period
+              ? '—'
+              : period.new_clients_period != null
+                ? String(period.new_clients_period)
+                : '—'
+          }
         />
         <InsightCard
           icon={<Package size={15} />}

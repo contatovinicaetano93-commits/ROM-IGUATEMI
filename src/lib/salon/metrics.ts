@@ -146,3 +146,15 @@ export async function recomputeSalonMetricsFromRom(day = todayIso()) {
     appointments: apptRows[0].n,
   })
 }
+
+/** Zera mix 1ª visita/recorrente (ainda sem fonte confiável). */
+export async function clearSalonDayClientMix(day: string) {
+  const sql = getSql()
+  await sql`
+    update salon_daily_metrics
+    set new_clients = null,
+        returning_clients = null,
+        updated_at = now()
+    where day = ${day}::date
+  `
+}

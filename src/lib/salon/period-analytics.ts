@@ -171,7 +171,7 @@ export interface PeriodAnalytics {
   booking_channels: P2ChannelRow[]
   acquisition: P1AcquisitionRow[]
   return_rate: number | null
-  new_clients_period: number
+  new_clients_period: number | null
   top_professionals: P1ProfessionalRow[]
   top_services: P1ServiceRow[]
   /** Mês anterior (mesmo recorte MTD quando aplicável) — comparativo na Visão. */
@@ -231,8 +231,8 @@ export async function computePeriodAnalytics(opts?: {
     packages_revenue,
     booking_channels: (p2?.booking_channels ?? []).slice(0, 10),
     acquisition: (p1?.acquisition ?? []).slice(0, 10),
-    return_rate: p3 != null && p3.return_rate != null ? Number(p3.return_rate) : null,
-    new_clients_period: Number(p3?.new_clients_period ?? 0) || 0,
+    return_rate: p3?.return_rate ?? null,
+    new_clients_period: p3?.new_clients_period ?? null,
     top_professionals: professionals.slice(0, 8),
     top_services: (p1?.services ?? []).slice(0, 8),
     previous: {
