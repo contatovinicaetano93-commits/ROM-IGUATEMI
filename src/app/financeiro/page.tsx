@@ -19,6 +19,7 @@ import {
   formatPercentPoints,
   todayIso,
 } from '@/lib/salon/format'
+import { yearAgoMonthKey } from '@/lib/salon/month-window'
 import { formatKpiSources } from '@/lib/kpi-source'
 import type { AvecSyncMeta } from '@/lib/avec/sync-meta-surface'
 import { financeiroSyncStaleMessage, isFinanceiroStale } from '@/lib/avec/sync-meta-surface'
@@ -81,7 +82,7 @@ interface FinanceKpiBucket {
   cmv_coverage: CmvCoverage
   margin_after_cmv: number | null
   gross_margin: number | null
-  cash_flow: number
+  cash_flow: number | null
   payment_mix: { method: string; amount: number; share: number }[]
   payment_reconciliation: PaymentReconciliation
   fiscal_split: FiscalSplitSummary
@@ -490,7 +491,9 @@ export default function FinanceiroPage() {
         'Fluxo (receita − despesas)',
         csvMoney(cur.cash_flow),
         csvMoney(prev.cash_flow),
-        csvMoney(cur.cash_flow - prev.cash_flow),
+        cur.cash_flow != null && prev.cash_flow != null
+          ? csvMoney(cur.cash_flow - prev.cash_flow)
+          : '—',
       ),
       csvRow(
         'CMV (saídas de estoque)',
@@ -738,7 +741,9 @@ export default function FinanceiroPage() {
                 setCompareMonth(m)
               }}
               allowEmpty
-              emptyLabel="Automático"
+              emptyLabel="Automático (ano passado)"
+              pickMonth={yearAgoMonthKey(month)}
+              maxMonth={month}
               aria-label="Comparar com"
             />
           </label>
@@ -945,10 +950,30 @@ export default function FinanceiroPage() {
         />
         <FinanceKpiCard
           label="Fluxo (receita − despesas)"
-          value={loading || !kpis ? '—' : formatCurrency(kpis.current.cash_flow)}
-          delta={kpis ? fmtDelta(kpis.current.cash_flow, kpis.previous.cash_flow) : null}
+          value={
+            loading || !kpis
+              ? '—'
+              : awaitingCaixa || kpis.current.cash_flow == null
+                ? 'aguardando caixa'
+                : formatCurrency(kpis.current.cash_flow)
+          }
+          delta={
+            kpis &&
+            !awaitingCaixa &&
+            kpis.current.cash_flow != null &&
+            kpis.previous.cash_flow != null
+              ? fmtDelta(kpis.current.cash_flow, kpis.previous.cash_flow)
+              : null
+          }
           compareLabel={kpis?.previous.label ?? 'período comparado'}
-          positive={kpis ? kpis.current.cash_flow >= kpis.previous.cash_flow : null}
+          positive={
+            kpis &&
+            !awaitingCaixa &&
+            kpis.current.cash_flow != null &&
+            kpis.previous.cash_flow != null
+              ? kpis.current.cash_flow >= kpis.previous.cash_flow
+              : null
+          }
           loading={loading}
           source={formatKpiSources('rom')}
         />

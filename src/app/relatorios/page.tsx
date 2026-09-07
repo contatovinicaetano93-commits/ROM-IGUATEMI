@@ -9,6 +9,7 @@ import { apiFetch } from '@/lib/api-client'
 import { useClientLoader } from '@/lib/use-client-loader'
 import { getBrand } from '@/lib/brand'
 import { formatCurrency, formatPercentPoints, todayIso } from '@/lib/salon/format'
+import { yearAgoMonthKey } from '@/lib/salon/month-window'
 import { momCompareLine } from '@/lib/salon/mom-delta'
 import {
   buildMonthOverviewCsv,
@@ -29,6 +30,7 @@ type OverviewPayload = MonthOverview & { sync?: AvecSyncMeta }
 export default function RelatoriosOverviewPage() {
   const brand = getBrand()
   const [month, setMonth] = useState(currentMonthKey)
+  const [compareMonth, setCompareMonth] = useState('')
   const [data, setData] = useState<OverviewPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -41,6 +43,7 @@ export default function RelatoriosOverviewPage() {
     }
     try {
       const q = new URLSearchParams({ month })
+      if (compareMonth) q.set('compare', compareMonth)
       // Leitura rápida por padrão; "Atualizar fechamento" rematerializa o mês.
       if (opts?.materialize) q.set('materialize', '1')
       // Leitura rápida (~45s); "Atualizar fechamento" pode chegar perto do maxDuration 300s.
@@ -64,7 +67,7 @@ export default function RelatoriosOverviewPage() {
     } finally {
       setLoading(false)
     }
-  }, [month])
+  }, [month, compareMonth])
 
   useClientLoader(() => void load(), [load])
 
@@ -115,6 +118,22 @@ export default function RelatoriosOverviewPage() {
               aria-label="Mês do overview"
             />
           </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.65rem] uppercase tracking-wide text-muted">Comparar com</span>
+            <MonthYearField
+              value={compareMonth}
+              onChange={(m) => {
+                setLoading(true)
+                setError(null)
+                setCompareMonth(m)
+              }}
+              allowEmpty
+              emptyLabel="Automático (ano passado)"
+              pickMonth={yearAgoMonthKey(month)}
+              maxMonth={month}
+              aria-label="Comparar com"
+            />
+          </label>
           <button
             type="button"
             onClick={() => void load({ materialize: true })}
@@ -158,6 +177,13 @@ export default function RelatoriosOverviewPage() {
         </p>
       )}
 
+      {data && data.analytics.mtd && (data.closing.revenue == null || data.closing.revenue <= 0) && (
+        <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted">
+          Aguardando faturamento pago no Avec neste mês — receita, fluxo e MoM aparecem quando houver
+          caixa conhecido. Não é falha de sync de agenda.
+        </p>
+      )}
+
       {loading && !data ? (
         <p className="text-sm text-muted">Carregando overview…</p>
       ) : data ? (
@@ -196,16 +222,34 @@ export default function RelatoriosOverviewPage() {
             {([
               {
                 label: 'Receita',
-                value: formatCurrency(data.closing.revenue),
+                value:
+                  data.closing.revenue != null && data.closing.revenue > 0
+                    ? formatCurrency(data.closing.revenue)
+                    : data.closing.revenue === 0
+                      ? data.analytics.mtd
+                        ? 'aguardando caixa'
+                        : 'sem receita'
+                      : data.analytics.mtd
+                        ? 'aguardando caixa'
+                        : '—',
                 compare: momCompareLine(
-                  data.closing.revenue,
-                  data.previous_closing.revenue,
+                  data.closing.revenue != null && data.closing.revenue > 0
+                    ? data.closing.revenue
+                    : null,
+                  data.previous_closing.revenue != null && data.previous_closing.revenue > 0
+                    ? data.previous_closing.revenue
+                    : null,
                   data.previous_label,
                 ),
               },
               {
                 label: 'Atendidos',
-                value: String(data.closing.attended),
+                value:
+                  data.closing.attended != null && data.closing.attended > 0
+                    ? String(data.closing.attended)
+                    : data.analytics.mtd && (data.closing.revenue == null || data.closing.revenue <= 0)
+                      ? 'aguardando caixa'
+                      : String(data.closing.attended ?? '—'),
                 compare: momCompareLine(
                   data.closing.attended,
                   data.previous_closing.attended,
@@ -230,10 +274,23 @@ export default function RelatoriosOverviewPage() {
               },
               {
                 label: 'Fluxo',
-                value: formatCurrency(data.closing.cash_flow),
+                value:
+                  data.closing.cash_flow != null &&
+                  data.closing.revenue != null &&
+                  data.closing.revenue > 0
+                    ? formatCurrency(data.closing.cash_flow)
+                    : data.analytics.mtd && (data.closing.revenue == null || data.closing.revenue <= 0)
+                      ? 'aguardando caixa'
+                      : data.closing.cash_flow != null
+                        ? formatCurrency(data.closing.cash_flow)
+                        : '—',
                 compare: momCompareLine(
-                  data.closing.cash_flow,
-                  data.previous_closing.cash_flow,
+                  data.closing.revenue != null && data.closing.revenue > 0
+                    ? data.closing.cash_flow
+                    : null,
+                  data.previous_closing.revenue != null && data.previous_closing.revenue > 0
+                    ? data.previous_closing.cash_flow
+                    : null,
                   data.previous_label,
                 ),
               },
@@ -322,8 +379,8 @@ export default function RelatoriosOverviewPage() {
                       >
                         {
                           momCompareLine(
-                            data.analytics.occupancy_avg * 100,
-                            data.previous_closing.occupancy_avg * 100,
+                            (data.analytics.occupancy_avg ?? 0) * 100,
+                            (data.previous_closing.occupancy_avg ?? 0) * 100,
                             data.previous_label,
                             { kind: 'points' },
                           )?.text
@@ -358,16 +415,19 @@ export default function RelatoriosOverviewPage() {
                 <li className="flex justify-between gap-3">
                   <span className="text-muted">Pacotes / receita</span>
                   <span className="tabular-nums">
-                    {data.analytics.packages_sold} · {formatCurrency(data.analytics.packages_revenue)}
+                    {data.analytics.packages_sold != null ? data.analytics.packages_sold : '—'} ·{' '}
+                    {data.analytics.packages_revenue != null
+                      ? formatCurrency(data.analytics.packages_revenue)
+                      : '—'}
                   </span>
                 </li>
                 <li className="flex justify-between gap-3">
-                  <span className="text-muted">Retorno / novos</span>
+                  <span className="text-muted">Retorno / novos no salão</span>
                   <span className="tabular-nums">
                     {data.analytics.return_rate != null
                       ? formatPercentPoints(data.analytics.return_rate * 100, 0)
                       : '—'}{' '}
-                    · {data.analytics.new_clients_period}
+                    · {data.analytics.new_clients_period != null ? data.analytics.new_clients_period : '—'}
                   </span>
                 </li>
                 <li className="text-xs text-muted">
