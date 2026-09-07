@@ -41,10 +41,40 @@ describe('period-analytics', () => {
     expect(coerceOccupancyFraction(1.063)).toBeCloseTo(1.063)
     expect(coerceOccupancyFraction(67.79)).toBeCloseTo(0.6779)
     expect(estimateLostRevenue(2, 3, 100)).toBe(500)
+    expect(estimateLostRevenue(2, 3, null)).toBeNull()
+    expect(estimateLostRevenue(2, 3, 0)).toBeNull()
     expect(monthToDateRange('2026-07', '2026-07-26')).toEqual({
       from: '2026-07-01',
       to: '2026-07-26',
     })
+  })
+
+  it('não inventa pacotes/novos quando P2/P3 ausentes', async () => {
+    sqlMock
+      .mockResolvedValueOnce([{ revenue: 10000, attended: 50, revenue_days: 1, attended_days: 1 }])
+      .mockResolvedValueOnce([{ cancelled: 2, no_shows: 3 }])
+      .mockResolvedValueOnce([{ revenue: 9000, attended: 45, revenue_days: 1, attended_days: 1 }])
+      .mockResolvedValueOnce([{ cancelled: 1, no_shows: 1 }])
+    getSalonP1DailyNear.mockResolvedValue({
+      day: '2026-07-31',
+      professionals: [
+        { name: 'Ana', revenue: 1000, attended: 10, ticket_avg: 100, occupancy: 0.7 },
+      ],
+      services: [],
+      acquisition: [],
+      reactivation_count: 0,
+      updated_at: 'now',
+    })
+    getSalonP2DailyNear.mockResolvedValue(null)
+    getSalonP3DailyNear.mockResolvedValue(null)
+
+    const { computePeriodAnalytics } = await import('@/lib/salon/period-analytics')
+    const result = await computePeriodAnalytics({ month: '2026-07' })
+    expect(result.packages_revenue).toBeNull()
+    expect(result.packages_sold).toBeNull()
+    expect(result.new_clients_period).toBeNull()
+    expect(result.return_rate).toBeNull()
+    expect(result.snapshot_missing).toBe(false)
   })
 
   it('monta bucket comercial do período', async () => {

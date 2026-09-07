@@ -35,9 +35,9 @@ async function financeSummary(): Promise<string> {
     `Receita: ${formatCurrency(c.revenue)}`,
     `Despesas: ${formatCurrency(c.expenses)}`,
     `Margem bruta: ${c.gross_margin != null ? `${c.gross_margin}%` : '—'}`,
-    `Fluxo: ${formatCurrency(c.cash_flow)}`,
+    `Fluxo: ${c.cash_flow != null ? formatCurrency(c.cash_flow) : 'aguardando caixa'}`,
   ]
-  if (c.revenue === 0) {
+  if (c.revenue_source === 'empty' || c.revenue === 0) {
     lines.push('', '_Receita ainda não sincronizada pela Avec esse mês._')
   }
   return lines.join('\n')

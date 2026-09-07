@@ -185,7 +185,8 @@ describe('finance', () => {
 
       expect(result.current.gross_margin).toBeNull()
       expect(result.current.margin_after_cmv).toBeNull()
-      expect(result.current.cash_flow).toBe(-500)
+      expect(result.current.cash_flow).toBeNull()
+      expect(result.current.revenue_source).toBe('empty')
     })
 
     it('vira o ano corretamente ao calcular o mês anterior a janeiro', async () => {

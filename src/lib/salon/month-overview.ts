@@ -44,7 +44,7 @@ export interface MonthOverview {
     ticket_avg: number | null
     expenses: number
     cmv: number
-    cash_flow: number
+    cash_flow: number | null
     days_expected: number
     days_present: number
     days_missing: string[]
@@ -61,8 +61,8 @@ export interface MonthOverview {
     ticket_avg: number | null
     expenses: number
     cmv: number
-    cash_flow: number
-    lost_revenue: number
+    cash_flow: number | null
+    lost_revenue: number | null
     occupancy_avg: number | null
   }
   source_notes: MonthOverviewSourceNote[]
@@ -79,7 +79,7 @@ const SOURCE_NOTES: MonthOverviewSourceNote[] = [
   {
     field: 'despesas',
     source: 'rom_manual',
-    note: 'Cadastro manual no Financeiro ROM.',
+    note: 'Omie Contas a Pagar (por vencimento, CNPJs serviços/comércio) + lançamentos manuais. Exclui não-operacionais.',
   },
   {
     field: 'CMV',
@@ -130,7 +130,7 @@ function stubFinanceFromRow(row: SalonMonthMetricsRow): FinanceKpis['current'] {
     cmv_coverage: { ...EMPTY_CMV_COVERAGE, cmv },
     margin_after_cmv,
     gross_margin,
-    cash_flow: Number(row.cash_flow) || 0,
+    cash_flow: revenue > 0 ? Number(row.cash_flow) || 0 : null,
     payment_mix: [],
     payment_reconciliation: {
       revenue,
@@ -169,7 +169,7 @@ function emptyFinanceBucket(monthKey: string): FinanceKpis['current'] {
     cmv_coverage: { ...EMPTY_CMV_COVERAGE },
     margin_after_cmv: null,
     gross_margin: null,
-    cash_flow: 0,
+    cash_flow: null,
     payment_mix: [],
     payment_reconciliation: {
       revenue: 0,
@@ -230,6 +230,7 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
     from: window.from,
     to: window.to,
     snapshot_day: null,
+    snapshot_missing: true,
     revenue: revenue > 0 || attended > 0 ? revenue : null,
     attended: attended > 0 || revenue > 0 ? attended : null,
     mtd: window.mtd,
@@ -239,12 +240,12 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
     ticket_avg,
     lost_revenue: estimateLostRevenue(cancelled, no_shows, ticket_avg),
     packages: [],
-    packages_sold: 0,
-    packages_revenue: 0,
+    packages_sold: null,
+    packages_revenue: null,
     booking_channels: [],
     acquisition: [],
     return_rate: null,
-    new_clients_period: Number(row.new_clients) || 0,
+    new_clients_period: null,
     top_professionals: [],
     top_services: [],
     previous: {
@@ -255,7 +256,7 @@ export function analyticsFromMonthRow(row: SalonMonthMetricsRow): PeriodAnalytic
       cancelled: 0,
       no_shows: 0,
       ticket_avg: null,
-      lost_revenue: 0,
+      lost_revenue: null,
       occupancy_avg: null,
     },
   }
