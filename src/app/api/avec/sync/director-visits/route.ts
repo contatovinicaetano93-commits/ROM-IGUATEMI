@@ -18,6 +18,7 @@ import {
   SYNC_LOCK_KEYS,
   withSyncLock,
 } from '@/lib/sync-lock'
+import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 
 /**
  * Sync só das visitas 0002 → salon_client_visits (Relatório gerência offline).
@@ -29,6 +30,7 @@ import {
  * Query: `?status=1` só cobertura · `?quarter=2026-Q2` um trimestre · `?force=1` refaz.
  */
 export const maxDuration = 800
+warnIfLongMaxDuration('/api/avec/sync/director-visits', maxDuration)
 
 function emptyStats(): AvecSyncStats {
   const deployment = getDeploymentContext()

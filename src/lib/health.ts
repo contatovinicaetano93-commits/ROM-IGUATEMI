@@ -4,8 +4,14 @@ import { isAvecConfigured, isAvecMock, getAvecBaseUrl } from '@/lib/avec/client'
 import { isAuthEnabled, isFinanceAuthConfigured, isStockAuthConfigured } from '@/lib/auth'
 import { isAiConfigured } from '@/lib/ai/client'
 import { getBrand, getRomPanelId } from '@/lib/brand'
-import { getLastAvecSync } from '@/lib/avec/sync'
+import { getLastAvecSync, getRecentHardPlatformTimeoutFullRuns } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
+import {
+  computePanelSyncOk,
+  hardTimeoutHealthMessage,
+  isClassic300sHardTimeout,
+  isHardPlatformTimeoutAvecRun,
+} from '@/lib/avec/sync-run-health'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
@@ -164,7 +170,36 @@ async function probeOpsCoverageYtd() {
 /** Resposta mínima — segura para monitoramento externo sem login. */
 export async function getPublicHealthStatus() {
   const { connected, db_quota } = await probeDatabase()
-  return { ok: connected, db_quota }
+  let sync_ok = connected
+  let sync_reason: string | null = connected ? null : 'database disconnected'
+  let hard_timeout_ok = true
+  if (connected) {
+    try {
+      const [lastFast, lastFull, hardTimeoutHits] = await Promise.all([
+        getLastAvecSync('fast'),
+        getLastAvecSync('full'),
+        getRecentHardPlatformTimeoutFullRuns(24),
+      ])
+      const sync = computePanelSyncOk(lastFast, lastFull)
+      sync_ok = sync.ok
+      sync_reason = sync.reason
+      const hardHits = hardTimeoutHits.filter(isHardPlatformTimeoutAvecRun)
+      hard_timeout_ok = hardHits.length === 0
+    } catch (e) {
+      logger.warn('public health sync probe failed', {
+        error: e instanceof Error ? e.message : String(e),
+      })
+      sync_ok = false
+      sync_reason = 'sync probe failed'
+    }
+  }
+  return {
+    ok: connected && sync_ok && hard_timeout_ok,
+    db_quota,
+    sync_ok,
+    sync_reason,
+    hard_timeout_ok,
+  }
 }
 
 export async function getHealthStatus() {
@@ -183,6 +218,7 @@ export async function getHealthStatus() {
   let opsYtd: Awaited<ReturnType<typeof probeOpsCoverageYtd>> | null = null
   let stockLastFast: Awaited<ReturnType<typeof getLastStockSync>> = null
   let stockLastFull: Awaited<ReturnType<typeof getLastStockSync>> = null
+  let hardTimeoutHits: Awaited<ReturnType<typeof getRecentHardPlatformTimeoutFullRuns>> = []
 
   if (connected) {
     try {
@@ -220,12 +256,34 @@ export async function getHealthStatus() {
     } catch (e) {
       logger.warn('health stock_full failed', { error: e instanceof Error ? e.message : String(e) })
     }
+    try {
+      hardTimeoutHits = await getRecentHardPlatformTimeoutFullRuns(24)
+    } catch (e) {
+      logger.warn('health hard_timeout probe failed', {
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
   }
+
+  const hardHits = hardTimeoutHits.filter(isHardPlatformTimeoutAvecRun)
+  const classic300 = hardHits.filter(isClassic300sHardTimeout).length
+  const hard_timeout = {
+    ok: hardHits.length === 0,
+    hits_24h: hardHits.length,
+    classic_300s_hits: classic300,
+    message: hardTimeoutHealthMessage({ count: hardHits.length, classic300 }),
+    latest_id: hardHits[0]?.id ?? null,
+    latest_created_at: hardHits[0]?.created_at ?? null,
+  }
+  const syncProbe = computePanelSyncOk(lastFast, lastFull)
+  const sync_ok = syncProbe.ok
 
   const awaitingToken = !isAvecConfigured() && !isAvecMock()
 
   return {
-    ok: connected && validation.ok,
+    ok: connected && validation.ok && hard_timeout.ok && sync_ok,
+    sync_ok,
+    sync_reason: syncProbe.reason,
     deployment,
     validation,
     readiness: {
@@ -262,6 +320,8 @@ export async function getHealthStatus() {
       last_fast: lastFast,
       last_full: lastFull,
       kpi_layers: kpiLayers,
+      /** RED quando full morre por kill duro (~300s) sem aborted limpo — Fluid/maxDuration. */
+      hard_timeout,
     },
     whatsapp: {
       configured:
