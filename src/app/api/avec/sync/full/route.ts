@@ -3,7 +3,7 @@ import { err, handleError } from '@/lib/api-response'
 import { authorizeAvecSync, executeAvecSync } from '@/lib/avec/sync-http'
 import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 
-/** Sync Avec full — Pro permite até 800s. */
+/** Sync Avec full — Pro + Fluid Compute até 800s; sem Fluid, cap 300s na Vercel. */
 export const maxDuration = 800
 warnIfLongMaxDuration('/api/avec/sync/full', maxDuration)
 

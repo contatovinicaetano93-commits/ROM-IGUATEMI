@@ -8,6 +8,7 @@ import {
 } from '@/lib/avec/sync-director-0021'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
+import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
   is0021MonthCoverageReady,

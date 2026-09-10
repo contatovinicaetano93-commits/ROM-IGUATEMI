@@ -57,8 +57,10 @@ export function financeCompareMoneyBars(kpis: FinanceKpis): CompareBarSeries[] {
 
 export interface DailyComparePoint {
   day: number
-  current: number
-  previous: number
+  /** null = dia sem métrica Avec (não inventar R$0 no gráfico). */
+  current: number | null
+  /** null = dia sem métrica Avec (não inventar R$0 no gráfico). */
+  previous: number | null
 }
 
 /** Alinha receita diária dos dois meses pelo dia do calendário (1–31). */
@@ -76,8 +78,9 @@ export function alignDailyRevenue(
   for (let d = 1; d <= maxDay; d++) {
     out.push({
       day: d,
-      current: curMap.get(d) ?? 0,
-      previous: prevMap.get(d) ?? 0,
+      // null ?? null permanece null; undefined (dia ausente) vira null — nunca 0.
+      current: curMap.get(d) ?? null,
+      previous: prevMap.get(d) ?? null,
     })
   }
   return out
@@ -165,16 +168,28 @@ function svgDailyLines(
   const padB = 36
   const chartW = width - padL - padR
   const chartH = height - padT - padB
-  const maxVal = Math.max(1, ...points.flatMap((p) => [p.current, p.previous]))
+  const known = points.flatMap((p) => [p.current, p.previous]).filter((v): v is number => v != null)
+  const maxVal = Math.max(1, ...known)
 
   const xAt = (i: number) =>
     padL + (points.length === 1 ? chartW / 2 : (i / (points.length - 1)) * chartW)
   const yAt = (v: number) => padT + chartH - (v / maxVal) * chartH
 
-  const pathFor = (key: 'current' | 'previous') =>
-    points
-      .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(1)} ${yAt(p[key]).toFixed(1)}`)
-      .join(' ')
+  /** Quebra o traço em dias sem métrica — não plota null como zero. */
+  const pathFor = (key: 'current' | 'previous') => {
+    let d = ''
+    let drawing = false
+    for (let i = 0; i < points.length; i++) {
+      const v = points[i]![key]
+      if (v == null) {
+        drawing = false
+        continue
+      }
+      d += `${drawing ? 'L' : 'M'} ${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)} `
+      drawing = true
+    }
+    return d.trim()
+  }
 
   const dayLabels = points
     .filter((_, i) => i === 0 || i === points.length - 1 || i % 5 === 4)

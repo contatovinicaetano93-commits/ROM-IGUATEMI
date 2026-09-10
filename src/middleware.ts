@@ -143,7 +143,6 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/financeiro/omie/sync' ||
     pathname === '/api/director-report' ||
     pathname === '/api/lgpd/purge' ||
-    pathname === '/api/reminders/financeiro' ||
     pathname === '/api/reminders/aftercare' ||
     pathname === '/api/admin/migrations' ||
     pathname === '/api/admin/revenue-backfill' ||

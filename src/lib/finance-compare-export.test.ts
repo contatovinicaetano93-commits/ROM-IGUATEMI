@@ -115,7 +115,42 @@ describe('finance-compare-export', () => {
   it('alignDailyRevenue alinha pelo dia do mês', () => {
     const aligned = alignDailyRevenue(sample.current.daily, sample.previous.daily)
     expect(aligned[0]).toEqual({ day: 1, current: 160_550.35, previous: 50_000 })
-    expect(aligned[1]).toEqual({ day: 2, current: 160_859.74, previous: 0 })
+    expect(aligned[1]).toEqual({ day: 2, current: 160_859.74, previous: null })
+  })
+
+  it('alignDailyRevenue preserva null de receita (não coalesces para 0)', () => {
+    const aligned = alignDailyRevenue(
+      [
+        {
+          day: '2026-07-01',
+          revenue: null,
+          attended: null,
+          ticket_avg: null,
+          expenses_servicos: 10,
+          expenses_comercio: 0,
+        },
+        {
+          day: '2026-07-02',
+          revenue: 100,
+          attended: 1,
+          ticket_avg: 100,
+          expenses_servicos: 0,
+          expenses_comercio: 0,
+        },
+      ],
+      [
+        {
+          day: '2026-06-01',
+          revenue: 50,
+          attended: 1,
+          ticket_avg: 50,
+          expenses_servicos: 0,
+          expenses_comercio: 0,
+        },
+      ],
+    )
+    expect(aligned[0]).toEqual({ day: 1, current: null, previous: 50 })
+    expect(aligned[1]).toEqual({ day: 2, current: 100, previous: null })
   })
 
   it('buildFinanceComparePrintHtml inclui resumo, page-break e SVGs', () => {

@@ -8,6 +8,7 @@ import {
 } from '@/lib/avec/sync-director-visits'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
+import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 import { getDeploymentContext } from '@/lib/deployment'
 import { isVisitCoverageReady, listVisitCoverage, probe0011FromDb } from '@/lib/director-report/from-db'
 import { previousQuarterKey } from '@/lib/director-report/local-0011'
