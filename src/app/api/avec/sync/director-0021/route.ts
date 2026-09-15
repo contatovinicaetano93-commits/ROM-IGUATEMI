@@ -21,7 +21,6 @@ import {
   SYNC_LOCK_KEYS,
   withSyncLock,
 } from '@/lib/sync-lock'
-import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 
 /**
  * Sync Avec 0021 → salon_director_0021_months (faturamento por profissional, mês calendário).

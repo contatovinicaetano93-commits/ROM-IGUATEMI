@@ -19,7 +19,6 @@ import {
   SYNC_LOCK_KEYS,
   withSyncLock,
 } from '@/lib/sync-lock'
-import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 
 /**
  * Sync só das visitas 0002 → salon_client_visits (Relatório gerência offline).
