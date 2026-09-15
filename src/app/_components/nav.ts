@@ -14,7 +14,7 @@ export const APP_NAV = [
   { href: '/hoje', label: 'Hoje', shortLabel: 'Hoje', icon: Sun },
   { href: '/pipeline', label: 'Pipeline', shortLabel: 'Pipe', icon: Columns3 },
   { href: '/contatos', label: 'Contatos', shortLabel: 'Contatos', icon: Users },
-  { href: '/dashboard', label: 'Visão analítica', shortLabel: 'Análise', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Visão analítica', shortLabel: 'Análise', icon: LayoutDashboard, adminOnly: true },
   { href: '/onboarding', label: 'Onboarding', shortLabel: 'Onboarding', icon: GraduationCap },
   { href: '/relatorios', label: 'Relatórios', shortLabel: 'Relatórios', icon: FileBarChart, adminOnly: true },
   {
@@ -26,7 +26,8 @@ export const APP_NAV = [
   },
 ] as const
 
-export const BOTTOM_NAV = APP_NAV.slice(0, 4)
+/** Staff: bottom bar sem Visão analítica. */
+export const BOTTOM_NAV = APP_NAV.filter((i) => i.href !== '/dashboard').slice(0, 4)
 
 export const ADMIN_NAV = { href: '/admin', label: 'Diagnóstico', shortLabel: 'API' } as const
 
@@ -49,5 +50,11 @@ export function pageTitleFromPath(pathname: string) {
   if (pathname.startsWith('/dashboard')) return 'Visão analítica'
   if (pathname.startsWith('/financeiro')) return 'Financeiro'
   if (pathname.startsWith('/estoque')) return 'Estoque'
+  if (pathname.startsWith('/flow')) return 'RomFlow'
+  if (pathname.startsWith('/pessoas')) return 'Pessoas'
+  if (pathname.startsWith('/empresa')) return 'Empresa'
+  if (pathname.startsWith('/rh')) return 'RH'
+  if (pathname.startsWith('/treinamentos')) return 'Treinamentos'
+  if (pathname.startsWith('/ajuda')) return 'Ajuda'
   return brand.displayName
 }

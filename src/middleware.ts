@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { isAuthorized, isAuthEnabled, getSession } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
+import { isIntranetPath } from '@/lib/intranet/paths'
 
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/webhooks']
 
@@ -47,12 +48,16 @@ function isOnboardingPath(pathname: string) {
   return pathname === '/onboarding' || pathname.startsWith('/onboarding/') || pathname.startsWith('/api/onboarding/')
 }
 
-/** Staff: operação do dia (sem receita comercial / admin). */
+function isHojePath(pathname: string) {
+  return pathname === '/hoje' || pathname.startsWith('/api/hoje')
+}
+
+/** Staff: operação do dia + intranet (sem receita comercial / admin). */
 function isStaffPath(pathname: string) {
   return (
+    isIntranetPath(pathname) ||
     pathname === '/' ||
-    pathname === '/hoje' ||
-    pathname.startsWith('/api/hoje') ||
+    isHojePath(pathname) ||
     pathname === '/pipeline' ||
     pathname.startsWith('/api/pipeline') ||
     pathname === '/contatos' ||
@@ -78,7 +83,6 @@ function isAdminOnlyPath(pathname: string) {
     pathname.startsWith('/api/avec/sync/') ||
     pathname === '/api/avec/purge-snapshots' ||
     pathname === '/api/avec/refresh-token' ||
-    pathname === '/api/avec/probe-0011' ||
     pathname === '/api/seed' ||
     (pathname.startsWith('/api/admin/') && !isFinanceAllowedAdminApi(pathname)) ||
     pathname === '/api/lgpd/purge' ||
@@ -107,7 +111,23 @@ function isProtectedPage(pathname: string) {
     pathname === '/onboarding' ||
     pathname.startsWith('/onboarding/') ||
     pathname === '/observability' ||
-    pathname.startsWith('/observability/')
+    pathname.startsWith('/observability/') ||
+    pathname === '/pessoas' ||
+    pathname.startsWith('/pessoas/') ||
+    pathname === '/empresa' ||
+    pathname.startsWith('/empresa/') ||
+    pathname === '/rh' ||
+    pathname.startsWith('/rh/') ||
+    pathname === '/treinamentos' ||
+    pathname.startsWith('/treinamentos/') ||
+    pathname === '/ajuda' ||
+    pathname.startsWith('/ajuda/') ||
+    pathname === '/flow' ||
+    pathname.startsWith('/flow/') ||
+    pathname === '/operacao' ||
+    pathname.startsWith('/operacao/') ||
+    pathname === '/adm' ||
+    pathname.startsWith('/adm/')
   )
 }
 
@@ -152,7 +172,7 @@ export async function middleware(req: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
     }
     const login = new URL('/login', req.url)
-    login.searchParams.set('next', pathname === '/' ? '/hoje' : pathname)
+    login.searchParams.set('next', pathname)
     return NextResponse.redirect(login)
   }
 
@@ -170,7 +190,14 @@ export async function middleware(req: NextRequest) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito — use a conta admin para analytics/admin' }, { status: 403 })
     }
-    return NextResponse.redirect(new URL('/hoje', req.url))
+    return NextResponse.redirect(new URL('/', req.url))
+  }
+
+  if (role === 'mkt' && (isProtectedPage(pathname) || isProtectedApi(pathname)) && !isStaffPath(pathname)) {
+    if (isProtectedApi(pathname)) {
+      return NextResponse.json({ error: 'Acesso restrito ao marketing da intranet' }, { status: 403 })
+    }
+    return NextResponse.redirect(new URL('/', req.url))
   }
 
   // Admin-only: diagnóstico, sync manual, visão analítica, observability.
@@ -179,7 +206,7 @@ export async function middleware(req: NextRequest) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao admin' }, { status: 403 })
     }
-    return NextResponse.redirect(new URL(role === 'financeiro' ? '/financeiro' : '/hoje', req.url))
+    return NextResponse.redirect(new URL(role === 'financeiro' ? '/financeiro' : '/', req.url))
   }
 
   if (
@@ -188,36 +215,40 @@ export async function middleware(req: NextRequest) {
     !financePath &&
     !stockPath &&
     !onboardingPath &&
-    !relatoriosPath
+    !relatoriosPath &&
+    !isIntranetPath(pathname) &&
+    !isHojePath(pathname)
   ) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
     }
-    return NextResponse.redirect(new URL('/financeiro', req.url))
+    return NextResponse.redirect(new URL('/', req.url))
   }
 
   if (
     role === 'estoque' &&
     (isProtectedPage(pathname) || isProtectedApi(pathname)) &&
     !stockPath &&
-    !onboardingPath
+    !onboardingPath &&
+    !isIntranetPath(pathname) &&
+    !isHojePath(pathname)
   ) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
     }
-    return NextResponse.redirect(new URL('/estoque', req.url))
+    return NextResponse.redirect(new URL('/', req.url))
   }
   if ((financePath || relatoriosPath) && role !== 'admin' && role !== 'financeiro') {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
     }
-    return NextResponse.redirect(new URL('/hoje', req.url))
+    return NextResponse.redirect(new URL('/', req.url))
   }
   if (stockPath && role !== 'admin' && role !== 'financeiro' && role !== 'estoque') {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
     }
-    return NextResponse.redirect(new URL('/hoje', req.url))
+    return NextResponse.redirect(new URL('/', req.url))
   }
 
   return NextResponse.next()
@@ -243,6 +274,22 @@ export const config = {
     '/onboarding/:path*',
     '/observability',
     '/observability/:path*',
+    '/pessoas',
+    '/pessoas/:path*',
+    '/empresa',
+    '/empresa/:path*',
+    '/rh',
+    '/rh/:path*',
+    '/treinamentos',
+    '/treinamentos/:path*',
+    '/ajuda',
+    '/ajuda/:path*',
+    '/flow',
+    '/flow/:path*',
+    '/operacao',
+    '/operacao/:path*',
+    '/adm',
+    '/adm/:path*',
     '/api/:path*',
   ],
 }

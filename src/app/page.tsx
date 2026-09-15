@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
+import { IntranetHome } from './_components/intranet/IntranetHome'
 
 export default function Home() {
-  redirect('/hoje')
+  return <IntranetHome />
 }
