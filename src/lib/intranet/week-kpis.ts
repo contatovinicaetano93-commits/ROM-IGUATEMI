@@ -1,4 +1,8 @@
-import { coerceOccupancyFraction } from '@/lib/salon/period-analytics'
+/** Cópia local da regra de ocupação — este módulo é usado no client da home. */
+function coerceOccupancyFraction(raw: number): number | null {
+  if (!Number.isFinite(raw) || raw < 0) return null
+  return raw > 2 ? raw / 100 : raw
+}
 
 export type WeekKpiTotals = {
   revenue: number | null
