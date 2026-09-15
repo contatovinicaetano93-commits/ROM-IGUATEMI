@@ -79,6 +79,25 @@ export class AuditLogger {
       return []
     }
   }
+
+  static async listByResourcePrefix(prefix: string, limit = 200): Promise<AuditLog[]> {
+    const sql = getSql()
+    const like = `${prefix}%`
+    try {
+      return (await sql`
+        select * from audit_logs
+        where resource like ${like}
+        order by created_at desc
+        limit ${limit}
+      `) as AuditLog[]
+    } catch (e) {
+      logger.warn('Failed to fetch audit logs by resource prefix', {
+        prefix,
+        error: e instanceof Error ? e.message : String(e),
+      })
+      return []
+    }
+  }
 }
 
 export function extractIP(req: Request): string {

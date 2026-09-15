@@ -93,7 +93,7 @@ export async function listFlowCategories(): Promise<Category[]> {
   try {
     await ensureFlowCatalog()
     const sql = getIntranetSql()
-    const rows = (await sql`select * from flow_categories where is_active = true order by name`) as ExpenseRow[]
+    const rows = (await sql`select * from flow_categories order by name`) as ExpenseRow[]
     return rows.map(mapCategory)
   } catch (error) {
     if (isMissingRelation(error)) {
@@ -223,6 +223,38 @@ export async function applyExpenseAction(
     note: payload.note ?? null,
   })
   return updated
+}
+
+export async function createFlowCategory(name: string, color: string): Promise<Category> {
+  await ensureFlowCatalog()
+  const trimmed = name.trim()
+  if (!trimmed) throw new Error('Informe o nome da categoria.')
+  const category: Category = {
+    id: `cat_${crypto.randomUUID().slice(0, 8)}`,
+    name: trimmed,
+    color: color || '#b08b57',
+    is_active: true,
+  }
+  const sql = getIntranetSql()
+  await sql`
+    insert into flow_categories (id, name, color, is_active)
+    values (${category.id}, ${category.name}, ${category.color}, ${category.is_active})
+  `
+  return category
+}
+
+export async function updateFlowCategory(id: string, patch: Partial<Pick<Category, 'is_active' | 'name' | 'color'>>): Promise<void> {
+  await ensureFlowCatalog()
+  const sql = getIntranetSql()
+  if (patch.is_active !== undefined) {
+    await sql`update flow_categories set is_active = ${patch.is_active} where id = ${id}`
+  }
+  if (patch.name !== undefined) {
+    await sql`update flow_categories set name = ${patch.name} where id = ${id}`
+  }
+  if (patch.color !== undefined) {
+    await sql`update flow_categories set color = ${patch.color} where id = ${id}`
+  }
 }
 
 function mapCompany(row: ExpenseRow): Company {

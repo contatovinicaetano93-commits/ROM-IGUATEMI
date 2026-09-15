@@ -5,7 +5,8 @@ import { resolveFlowUser } from '@/lib/flow/from-session'
 import { listFlowCategories, listFlowCompanies, listVisibleExpenses, createExpense } from '@/lib/flow/store'
 import { persistStoredFile } from '@/lib/flow/files'
 import { notifyIntranet } from '@/lib/cms'
-import { parseArea, parseExpenseType, canAccessArea } from '@/lib/flow/workflow'
+import { employeeToFlowUser, listEmployees } from '@/lib/employees'
+import { parseArea, parseExpenseType, canAccessArea, defaultPaymentDate } from '@/lib/flow/workflow'
 import type { PaymentMethod, StoredFile } from '@/lib/flow/types'
 
 export async function GET(req: NextRequest) {
@@ -13,12 +14,18 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return err(auth.message, auth.status)
   const user = await resolveFlowUser(auth.session)
   try {
-    const [companies, categories, expenses] = await Promise.all([
+    const [companies, categories, expenses, employees] = await Promise.all([
       listFlowCompanies(),
       listFlowCategories(),
       listVisibleExpenses(user),
+      listEmployees(),
     ])
-    return ok({ companies, categories, expenses, user })
+    const users = employees.map(employeeToFlowUser)
+    if (!users.some((item) => item.id === user.id)) {
+      users.unshift(user)
+    }
+    const people = users.map((person) => ({ id: person.id, name: person.name, email: person.email }))
+    return ok({ companies, categories, expenses, user, people, users })
   } catch (error) {
     return err(error instanceof Error ? error.message : 'Falha ao carregar o RomFlow', 500)
   }
@@ -39,7 +46,6 @@ export async function POST(req: NextRequest) {
   try {
     const receipt = await persistStoredFile((body.receipt as StoredFile | null) ?? null, 'receipts')
     const rawDate = typeof body.max_payment_date === 'string' ? body.max_payment_date : ''
-    const { defaultPaymentDate } = await import('@/lib/flow/workflow')
     const expenseType = parseExpenseType(body.expense_type)
     const expense = await createExpense(user, {
       title,
@@ -70,7 +76,7 @@ export async function POST(req: NextRequest) {
     await notifyIntranet({
       title: `Nova solicitação: ${expense.title}`,
       body: `${user.name} · ${expense.area}`,
-      href: `/flow/${expense.id}`,
+      href: `/flow`,
     })
     return ok({ expense }, undefined, 201)
   } catch (error) {

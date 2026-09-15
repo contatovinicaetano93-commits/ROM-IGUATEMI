@@ -2,8 +2,9 @@ import 'server-only'
 
 import { getIntranetSql } from '@/lib/db'
 import type { AuthRole } from '@/lib/auth'
-import type { FlowRole, RequestArea } from '@/lib/flow/types'
-import { parseAreas, parseRole } from '@/lib/flow/workflow'
+import type { FlowRole, RequestArea, User } from '@/lib/flow/types'
+import { defaultAreasForRole, parseAreas, parseRole } from '@/lib/flow/workflow'
+import { AuditLogger } from '@/lib/audit'
 import { hashPassword, MIN_EMPLOYEE_PASSWORD } from '@/lib/intranet/password'
 import { companiesForPanel } from '@/lib/intranet/companies'
 import { getRomPanelId } from '@/lib/brand'
@@ -19,6 +20,7 @@ export type EmployeeRecord = {
   can_publish: boolean
   companyIds: string[]
   areaIds: RequestArea[]
+  created_at: string
 }
 
 function isMissingRelation(error: unknown): boolean {
@@ -63,7 +65,7 @@ export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_ha
   try {
     const sql = getIntranetSql()
     const rows = (await sql`
-      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish,
+      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.created_at,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
         coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids
       from intranet_employees e
@@ -141,6 +143,160 @@ export async function createEmployee(input: {
   return rest
 }
 
+export function employeeToFlowUser(person: Omit<EmployeeRecord, 'password_hash'>): User {
+  return {
+    id: person.id,
+    name: person.name,
+    email: person.email,
+    role: person.flow_role,
+    status: person.status,
+    companyIds: person.companyIds,
+    areaIds: person.areaIds,
+    created: person.created_at,
+  }
+}
+
+function isEmployeeId(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+}
+
+export async function findEmployeeById(id: string): Promise<EmployeeRecord | null> {
+  if (!isEmployeeId(id)) return null
+  try {
+    const sql = getIntranetSql()
+    const rows = (await sql`
+      select e.*,
+        coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
+        coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids
+      from intranet_employees e
+      where e.id = ${id}::uuid
+      limit 1
+    `) as Array<Record<string, unknown>>
+    const row = rows[0]
+    if (!row) return null
+    return mapEmployee(row)
+  } catch (error) {
+    if (isMissingRelation(error)) return null
+    throw error
+  }
+}
+
+async function replaceEmployeeCompanies(id: string, companyIds: string[]): Promise<void> {
+  const sql = getIntranetSql()
+  await sql`delete from intranet_employee_companies where employee_id = ${id}::uuid`
+  for (const companyId of companyIds) {
+    await sql`
+      insert into intranet_employee_companies (employee_id, company_id)
+      values (${id}::uuid, ${companyId})
+      on conflict do nothing
+    `
+  }
+}
+
+async function replaceEmployeeAreas(id: string, areaIds: RequestArea[]): Promise<void> {
+  const sql = getIntranetSql()
+  await sql`delete from intranet_employee_areas where employee_id = ${id}::uuid`
+  for (const area of areaIds) {
+    await sql`
+      insert into intranet_employee_areas (employee_id, area)
+      values (${id}::uuid, ${area})
+      on conflict do nothing
+    `
+  }
+}
+
+async function countActiveMasters(): Promise<number> {
+  const people = await listEmployees()
+  return people.filter((person) => person.flow_role === 'master' && person.status === 'active').length
+}
+
+export async function updateEmployeeAccess(
+  actor: User,
+  userId: string,
+  role: FlowRole,
+  companyIds: string[],
+  areaIds: RequestArea[],
+): Promise<Omit<EmployeeRecord, 'password_hash'>> {
+  if (actor.role !== 'master') {
+    throw new Error('Apenas o master pode editar acessos.')
+  }
+  const current = await findEmployeeById(userId)
+  if (!current) throw new Error('Usuário não encontrado.')
+  const resolvedRole = parseRole(role)
+  const panel = getRomPanelId()
+  const allowed = new Set(companiesForPanel(panel).map((item) => item.id))
+  const resolvedCompanies = companyIds.filter((id) => allowed.has(id))
+  if (resolvedCompanies.length === 0) throw new Error('Selecione ao menos uma empresa da unidade.')
+  const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds)
+  if (actor.id === userId && resolvedRole !== 'master') {
+    throw new Error('Você não pode remover o próprio perfil de master.')
+  }
+  if (current.flow_role === 'master' && resolvedRole !== 'master') {
+    const masters = await countActiveMasters()
+    if (masters <= 1) throw new Error('É preciso manter ao menos um master.')
+  }
+  const sql = getIntranetSql()
+  await sql`
+    update intranet_employees
+    set flow_role = ${resolvedRole}, updated_at = now()
+    where id = ${userId}::uuid
+  `
+  await replaceEmployeeCompanies(userId, resolvedCompanies)
+  await replaceEmployeeAreas(userId, resolvedAreas)
+  await AuditLogger.log(actor.email, actor.role, 'UPDATE_USER', `flow:user:${userId}`, {
+    from: current.flow_role,
+    to: resolvedRole,
+    companies: resolvedCompanies,
+    areas: resolvedAreas,
+  })
+  const updated = await findEmployeeById(userId)
+  if (!updated) throw new Error('Usuário não encontrado.')
+  const { password_hash: _passwordHash, ...rest } = updated
+  return rest
+}
+
+export async function toggleEmployeeStatus(actor: User, userId: string): Promise<void> {
+  if (actor.id === userId) {
+    throw new Error('Você não pode desativar o próprio acesso.')
+  }
+  const current = await findEmployeeById(userId)
+  if (!current) throw new Error('Usuário não encontrado.')
+  const next = current.status === 'active' ? 'inactive' : 'active'
+  const sql = getIntranetSql()
+  await sql`
+    update intranet_employees
+    set status = ${next}, updated_at = now()
+    where id = ${userId}::uuid
+  `
+}
+
+export async function revokeEmployeeAccess(actor: User, userId: string): Promise<void> {
+  if (actor.role !== 'master') {
+    throw new Error('Apenas o master pode excluir acessos.')
+  }
+  if (actor.id === userId) {
+    throw new Error('Você não pode excluir o próprio acesso.')
+  }
+  const current = await findEmployeeById(userId)
+  if (!current) throw new Error('Usuário não encontrado.')
+  if (current.flow_role === 'master' && current.status === 'active') {
+    const others = (await listEmployees()).filter(
+      (person) => person.id !== userId && person.flow_role === 'master' && person.status === 'active',
+    )
+    if (others.length === 0) throw new Error('É preciso manter ao menos um master ativo.')
+  }
+  const sql = getIntranetSql()
+  await sql`
+    update intranet_employees
+    set status = 'inactive', updated_at = now()
+    where id = ${userId}::uuid
+  `
+  await AuditLogger.log(actor.email, actor.role, 'REVOKE_USER', `flow:user:${userId}`, {
+    from: current.status,
+    to: 'inactive',
+  })
+}
+
 function mapEmployee(row: Record<string, unknown>): EmployeeRecord {
   const companyIds = Array.isArray(row.company_ids)
     ? row.company_ids.map(String)
@@ -165,5 +321,6 @@ function mapEmployee(row: Record<string, unknown>): EmployeeRecord {
     can_publish: Boolean(row.can_publish),
     companyIds,
     areaIds,
+    created_at: String(row.created_at ?? ''),
   }
 }
