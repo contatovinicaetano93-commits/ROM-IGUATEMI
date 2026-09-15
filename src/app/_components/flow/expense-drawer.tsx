@@ -384,7 +384,7 @@ export function ExpenseDrawer({
       </aside>
       {modal
         ? createPortal(
-            <div className="flow-modal-layer">
+            <div className="rom-flow flow-modal-layer">
               <button
                 className="modal-overlay"
                 aria-label="Fechar"

@@ -12,6 +12,11 @@ import {
 } from "@/lib/flow/format";
 import type { AuditLog, EmailLog, User } from "@/lib/flow/types";
 
+function findAuditActor(users: User[], userKey: string) {
+  const needle = userKey.toLowerCase();
+  return users.find((user) => user.id === userKey || user.email.toLowerCase() === needle);
+}
+
 export function AuditPage({
   logs,
   emailLogs,
@@ -25,8 +30,8 @@ export function AuditPage({
   const filtered = useMemo(
     () =>
       logs.filter((item) => {
-        const actor = users.find((user) => user.id === item.user);
-        return `${actor?.name ?? ""} ${AUDIT_LABEL[item.action]} ${item.resource}`
+        const actor = findAuditActor(users, item.user);
+        return `${actor?.name ?? item.user} ${AUDIT_LABEL[item.action]} ${item.resource}`
           .toLowerCase()
           .includes(query.toLowerCase());
       }),
@@ -105,16 +110,16 @@ export function AuditPage({
               </thead>
               <tbody>
                 {filtered.map((item) => {
-                  const actor = users.find((user) => user.id === item.user);
+                  const actor = findAuditActor(users, item.user);
                   return (
                     <tr key={item.id}>
                       <td>{formatDateTime(item.created)}</td>
                       <td>
                         <div className="audit-user">
-                          <i>{initials(actor?.name || "RO")}</i>
+                          <i>{initials(actor?.name || actor?.email || item.user || "RO")}</i>
                           <span>
-                            <strong>{actor?.name || "Sistema"}</strong>
-                            <small>{actor?.email}</small>
+                            <strong>{actor?.name || actor?.email || item.user || "Sistema"}</strong>
+                            <small>{actor?.email || (actor ? "" : item.user)}</small>
                           </span>
                         </div>
                       </td>

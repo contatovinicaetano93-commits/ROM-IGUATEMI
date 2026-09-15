@@ -328,6 +328,11 @@
   cursor: not-allowed;
 }
 
+.rom-flow.flow-modal-layer {
+  background: transparent;
+  min-height: 0;
+}
+
 .flow-modal-layer .modal-overlay {
   z-index: 1;
 }
