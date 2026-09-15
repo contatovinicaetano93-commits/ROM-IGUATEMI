@@ -22,7 +22,7 @@ export type IntranetPost = {
 
 function isMissingRelation(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error)
-  return /intranet_posts|does not exist|relation/i.test(msg)
+  return /intranet_posts|intranet_notifications|does not exist|relation|DATABASE_URL não configurada/i.test(msg)
 }
 
 function parseKind(value: unknown): IntranetPostKind {
@@ -49,8 +49,8 @@ function mapPost(row: Record<string, unknown>): IntranetPost {
 }
 
 export async function listPublishedPosts(kind?: IntranetPostKind): Promise<IntranetPost[]> {
-  const sql = getSql()
   try {
+    const sql = getSql()
     const rows = kind
       ? ((await sql`
           select * from intranet_posts
@@ -72,8 +72,8 @@ export async function listPublishedPosts(kind?: IntranetPostKind): Promise<Intra
 }
 
 export async function listAllPosts(): Promise<IntranetPost[]> {
-  const sql = getSql()
   try {
+    const sql = getSql()
     const rows = (await sql`
       select * from intranet_posts
       order by created_at desc
@@ -130,8 +130,8 @@ export async function createPost(input: {
 export async function listUnreadNotifications(readerKey: string): Promise<
   Array<{ id: string; title: string; body: string; href: string | null; created_at: string }>
 > {
-  const sql = getSql()
   try {
+    const sql = getSql()
     const rows = (await sql`
       select n.id, n.title, n.body, n.href, n.created_at
       from intranet_notifications n
@@ -149,8 +149,8 @@ export async function listUnreadNotifications(readerKey: string): Promise<
 }
 
 export async function markNotificationsRead(readerKey: string): Promise<void> {
-  const sql = getSql()
   try {
+    const sql = getSql()
     await sql`
       insert into intranet_notification_reads (notification_id, reader_key)
       select n.id, ${readerKey}
@@ -169,8 +169,8 @@ export async function notifyIntranet(input: {
   href?: string | null
   audience_key?: string | null
 }): Promise<void> {
-  const sql = getSql()
   try {
+    const sql = getSql()
     await sql`
       insert into intranet_notifications (audience_key, title, body, href)
       values (${input.audience_key ?? null}, ${input.title}, ${input.body ?? ''}, ${input.href ?? null})

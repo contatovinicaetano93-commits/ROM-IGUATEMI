@@ -32,13 +32,13 @@ type ExpenseRow = Record<string, unknown>
 
 function isMissingRelation(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error)
-  return /flow_companies|flow_expenses|does not exist|relation/i.test(msg)
+  return /flow_companies|flow_expenses|does not exist|relation|DATABASE_URL não configurada/i.test(msg)
 }
 
 export async function ensureFlowCatalog(): Promise<void> {
-  const sql = getSql()
   const panel = getRomPanelId()
   try {
+    const sql = getSql()
     for (const company of companiesForPanel(panel)) {
       await sql`
         insert into flow_companies (id, name, legal_name, slug, initials, color, is_active)
@@ -74,11 +74,11 @@ export async function ensureFlowCatalog(): Promise<void> {
 }
 
 export async function listFlowCompanies(): Promise<Company[]> {
-  await ensureFlowCatalog()
-  const sql = getSql()
   const panel = getRomPanelId()
-  const allowed = new Set(companiesForPanel(panel).map((c) => c.id))
   try {
+    await ensureFlowCatalog()
+    const sql = getSql()
+    const allowed = new Set(companiesForPanel(panel).map((c) => c.id))
     const rows = (await sql`select * from flow_companies where is_active = true order by name`) as ExpenseRow[]
     return rows
       .map(mapCompany)
@@ -90,9 +90,9 @@ export async function listFlowCompanies(): Promise<Company[]> {
 }
 
 export async function listFlowCategories(): Promise<Category[]> {
-  await ensureFlowCatalog()
-  const sql = getSql()
   try {
+    await ensureFlowCatalog()
+    const sql = getSql()
     const rows = (await sql`select * from flow_categories where is_active = true order by name`) as ExpenseRow[]
     return rows.map(mapCategory)
   } catch (error) {
@@ -104,10 +104,10 @@ export async function listFlowCategories(): Promise<Category[]> {
 }
 
 export async function listVisibleExpenses(user: User): Promise<Expense[]> {
-  await ensureFlowCatalog()
-  const sql = getSql()
   const panel = getRomPanelId()
   try {
+    await ensureFlowCatalog()
+    const sql = getSql()
     const rows = (await sql`
       select * from flow_expenses order by created_at desc limit 300
     `) as ExpenseRow[]

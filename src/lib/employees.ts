@@ -23,7 +23,7 @@ export type EmployeeRecord = {
 
 function isMissingRelation(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error)
-  return /intranet_employees|does not exist|relation/i.test(msg)
+  return /intranet_employees|does not exist|relation|DATABASE_URL não configurada/i.test(msg)
 }
 
 function parsePanelRole(value: unknown): AuthRole {
@@ -40,8 +40,8 @@ function parsePanelRole(value: unknown): AuthRole {
 }
 
 export async function findEmployeeByEmail(email: string): Promise<EmployeeRecord | null> {
-  const sql = getSql()
   try {
+    const sql = getSql()
     const rows = (await sql`
       select e.*,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
@@ -60,8 +60,8 @@ export async function findEmployeeByEmail(email: string): Promise<EmployeeRecord
 }
 
 export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_hash'>[]> {
-  const sql = getSql()
   try {
+    const sql = getSql()
     const rows = (await sql`
       select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
