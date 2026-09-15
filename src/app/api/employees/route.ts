@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
-import { requireAdmin, requireSession } from '@/lib/auth'
+import { requireSession } from '@/lib/auth'
 import { createEmployee, listEmployees } from '@/lib/employees'
 import { ensureFlowCatalog } from '@/lib/flow/store'
+import { requireFlowMaster } from '@/lib/flow/require-master'
 import { parseAreas, parseRole } from '@/lib/flow/workflow'
 
 export async function GET(req: NextRequest) {
@@ -17,7 +18,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAdmin(req)
+  const session = await requireSession(req)
+  if (!session.ok) return err(session.message, session.status)
+  const auth = session.session.role === 'admin' ? session : await requireFlowMaster(req)
   if (!auth.ok) return err(auth.message, auth.status)
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') return err('Dados inválidos', 400)
