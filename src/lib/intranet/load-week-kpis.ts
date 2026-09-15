@@ -13,7 +13,10 @@ function addDays(iso: string, days: number): string {
   return date.toISOString().slice(0, 10)
 }
 
-export async function loadWeekKpis(): Promise<WeekKpiTotals & { from: string; to: string }> {
+export async function loadWeekKpis(opts?: {
+  includeRevenue?: boolean
+}): Promise<WeekKpiTotals & { from: string; to: string }> {
+  const includeRevenue = opts?.includeRevenue === true
   const to = todayIso()
   const from = addDays(to, -6)
   const empty = { ...buildWeekKpis({ revenues: [], attended: [], occupancies: [] }), from, to }
@@ -37,7 +40,9 @@ export async function loadWeekKpis(): Promise<WeekKpiTotals & { from: string; to
       averageOccupancy(asJsonArray<P1ProfessionalRow>(row.professionals)),
     )
     const kpis = buildWeekKpis({
-      revenues: metricRows.map((row) => (row.revenue == null ? null : Number(row.revenue))),
+      revenues: includeRevenue
+        ? metricRows.map((row) => (row.revenue == null ? null : Number(row.revenue)))
+        : [],
       attended: metricRows.map((row) => (row.attended == null ? null : Number(row.attended))),
       occupancies,
     })

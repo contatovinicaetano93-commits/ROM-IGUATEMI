@@ -48,13 +48,16 @@ function isOnboardingPath(pathname: string) {
   return pathname === '/onboarding' || pathname.startsWith('/onboarding/') || pathname.startsWith('/api/onboarding/')
 }
 
+function isHojePath(pathname: string) {
+  return pathname === '/hoje' || pathname.startsWith('/api/hoje')
+}
+
 /** Staff: operação do dia + intranet (sem receita comercial / admin). */
 function isStaffPath(pathname: string) {
   return (
     isIntranetPath(pathname) ||
     pathname === '/' ||
-    pathname === '/hoje' ||
-    pathname.startsWith('/api/hoje') ||
+    isHojePath(pathname) ||
     pathname === '/pipeline' ||
     pathname.startsWith('/api/pipeline') ||
     pathname === '/contatos' ||
@@ -213,7 +216,8 @@ export async function middleware(req: NextRequest) {
     !stockPath &&
     !onboardingPath &&
     !relatoriosPath &&
-    !isIntranetPath(pathname)
+    !isIntranetPath(pathname) &&
+    !isHojePath(pathname)
   ) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
@@ -226,7 +230,8 @@ export async function middleware(req: NextRequest) {
     (isProtectedPage(pathname) || isProtectedApi(pathname)) &&
     !stockPath &&
     !onboardingPath &&
-    !isIntranetPath(pathname)
+    !isIntranetPath(pathname) &&
+    !isHojePath(pathname)
   ) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
