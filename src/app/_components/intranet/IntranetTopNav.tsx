@@ -40,7 +40,8 @@ export function IntranetTopNav() {
   const role = session?.role
   const links = INTRANET_NAV.filter((item) => {
     if (!('roles' in item) || !item.roles) return true
-    if (!session?.auth_enabled) return true
+    if (!session) return false
+    if (!session.auth_enabled) return true
     return role != null && (item.roles as readonly string[]).includes(role)
   })
 

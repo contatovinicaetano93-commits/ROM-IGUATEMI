@@ -71,7 +71,8 @@ export function IntranetHome() {
   const role = session?.role
   const shortcuts = SHORTCUTS.filter((item) => {
     if (!item.roles) return true
-    if (!session?.auth_enabled) return true
+    if (!session) return false
+    if (!session.auth_enabled) return true
     return role != null && item.roles.includes(role)
   })
   const news = (data?.posts ?? []).filter((p) => p.kind === 'news').slice(0, 3)

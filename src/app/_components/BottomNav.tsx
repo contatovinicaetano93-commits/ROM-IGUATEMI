@@ -36,12 +36,14 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
           { href: '/', shortLabel: 'Início', icon: Home },
           { href: '/estoque', shortLabel: 'Estoque', icon: Boxes },
           { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
+          { href: '/hoje', shortLabel: 'Hoje', icon: Sun },
         ]
       : role === 'financeiro'
         ? [
             { href: '/', shortLabel: 'Início', icon: Home },
             { href: '/financeiro', shortLabel: 'Financeiro', icon: Wallet },
             { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
+            { href: '/hoje', shortLabel: 'Hoje', icon: Sun },
           ]
         : CORE
 
