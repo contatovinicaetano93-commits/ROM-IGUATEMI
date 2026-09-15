@@ -10,7 +10,9 @@ export default function EmpresaPage() {
   const { session } = useClientSession()
   const [posts, setPosts] = useState<Post[]>([])
   const [error, setError] = useState<string | null>(null)
-  const canPublish = session?.canPublish || session?.role === 'admin' || session?.role === 'mkt' || !session?.auth_enabled
+  const canPublish =
+    session != null &&
+    (!session.auth_enabled || Boolean(session.canPublish) || session.role === 'admin' || session.role === 'mkt')
 
   useEffect(() => {
     fetch('/api/cms', { credentials: 'include' })

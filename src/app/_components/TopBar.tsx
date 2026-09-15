@@ -12,7 +12,7 @@ import { getBrand } from '@/lib/brand'
 export function TopBar() {
   const [open, setOpen] = useState(false)
   const { session } = useClientSession()
-  const showAdminNav = !session?.auth_enabled || Boolean(session?.can_view_revenue)
+  const showAdminNav = Boolean(session && (!session.auth_enabled || session.can_view_revenue))
   const role = session?.role ?? null
   const pathname = usePathname()
   const title = pageTitleFromPath(pathname)

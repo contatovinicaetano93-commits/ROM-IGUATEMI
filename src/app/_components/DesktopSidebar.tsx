@@ -13,7 +13,7 @@ export function DesktopSidebar() {
   const pathname = usePathname()
   const brand = getBrand()
   const { session } = useClientSession()
-  const showAdminNav = !session?.auth_enabled || Boolean(session?.can_view_revenue)
+  const showAdminNav = Boolean(session && (!session.auth_enabled || session.can_view_revenue))
   const role = session?.role ?? null
   const navItems = useMemo(
     () =>

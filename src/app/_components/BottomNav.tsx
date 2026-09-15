@@ -36,17 +36,16 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
           { href: '/', shortLabel: 'Início', icon: Home },
           { href: '/estoque', shortLabel: 'Estoque', icon: Boxes },
           { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
-          { href: '/hoje', shortLabel: 'Hoje', icon: Sun },
         ]
       : role === 'financeiro'
         ? [
             { href: '/', shortLabel: 'Início', icon: Home },
             { href: '/financeiro', shortLabel: 'Financeiro', icon: Wallet },
             { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
-            { href: '/hoje', shortLabel: 'Hoje', icon: Sun },
           ]
         : CORE
 
+  const canOpenDashboard = role === 'admin' || Boolean(session && !session.auth_enabled)
   const extras = [
     { href: '/pipeline', label: 'Pipeline' },
     { href: '/pessoas', label: 'Pessoas' },
@@ -54,9 +53,9 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
     { href: '/rh', label: 'RH' },
     { href: '/treinamentos', label: 'Treinamentos' },
     { href: '/ajuda', label: 'Ajuda' },
+    ...(role === 'admin' ? [{ href: '/dashboard', label: 'Rom Adm' }] : []),
     ...(role === 'admin' || role === 'financeiro'
       ? [
-          { href: '/dashboard', label: 'Rom Adm' },
           { href: '/relatorios', label: 'Relatórios' },
           { href: '/financeiro', label: 'Financeiro' },
         ]
@@ -117,15 +116,17 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
                   {item.label}
                 </Link>
               ))}
-              <Link
-                href="/dashboard"
-                onClick={() => setMore(false)}
-                className="rounded-xl border border-border px-3 py-3 text-sm"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <LayoutDashboard size={16} /> Visão analítica
-                </span>
-              </Link>
+              {canOpenDashboard && (
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMore(false)}
+                  className="rounded-xl border border-border px-3 py-3 text-sm"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <LayoutDashboard size={16} /> Visão analítica
+                  </span>
+                </Link>
+              )}
               <Link href="/" onClick={() => setMore(false)} className="rounded-xl border border-border px-3 py-3 text-sm">
                 <span className="inline-flex items-center gap-2">
                   <Bell size={16} /> Notícias

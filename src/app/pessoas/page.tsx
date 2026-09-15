@@ -11,7 +11,7 @@ export default function PessoasPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const canManage = session?.role === 'admin' || !session?.auth_enabled
+  const canManage = session != null && (!session.auth_enabled || session.role === 'admin')
 
   useEffect(() => {
     fetch('/api/employees', { credentials: 'include' })
