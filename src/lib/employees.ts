@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getSql } from '@/lib/db'
+import { getIntranetSql } from '@/lib/db'
 import type { AuthRole } from '@/lib/auth'
 import type { FlowRole, RequestArea } from '@/lib/flow/types'
 import { parseAreas, parseRole } from '@/lib/flow/workflow'
@@ -41,7 +41,7 @@ function parsePanelRole(value: unknown): AuthRole {
 
 export async function findEmployeeByEmail(email: string): Promise<EmployeeRecord | null> {
   try {
-    const sql = getSql()
+    const sql = getIntranetSql()
     const rows = (await sql`
       select e.*,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
@@ -61,7 +61,7 @@ export async function findEmployeeByEmail(email: string): Promise<EmployeeRecord
 
 export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_hash'>[]> {
   try {
-    const sql = getSql()
+    const sql = getIntranetSql()
     const rows = (await sql`
       select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
@@ -99,7 +99,7 @@ export async function createEmployee(input: {
   if (companyIds.length === 0) throw new Error('Selecione ao menos uma empresa da unidade.')
   const areaIds = parseAreas(input.areaIds ?? [])
   const flowRole = parseRole(input.flow_role)
-  const sql = getSql()
+  const sql = getIntranetSql()
   const passwordHash = await hashPassword(input.password)
   const canPublish = Boolean(input.can_publish) || input.panel_role === 'admin' || input.panel_role === 'mkt'
   const rows = (await sql`

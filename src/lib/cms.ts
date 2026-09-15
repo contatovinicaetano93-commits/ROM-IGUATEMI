@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getSql } from '@/lib/db'
+import { getIntranetSql } from '@/lib/db'
 
 export type IntranetPostKind = 'news' | 'event' | 'banner'
 
@@ -50,7 +50,7 @@ function mapPost(row: Record<string, unknown>): IntranetPost {
 
 export async function listPublishedPosts(kind?: IntranetPostKind): Promise<IntranetPost[]> {
   try {
-    const sql = getSql()
+    const sql = getIntranetSql()
     const rows = kind
       ? ((await sql`
           select * from intranet_posts
@@ -73,7 +73,7 @@ export async function listPublishedPosts(kind?: IntranetPostKind): Promise<Intra
 
 export async function listAllPosts(): Promise<IntranetPost[]> {
   try {
-    const sql = getSql()
+    const sql = getIntranetSql()
     const rows = (await sql`
       select * from intranet_posts
       order by created_at desc
@@ -100,7 +100,7 @@ export async function createPost(input: {
   author_name: string
   author_id?: string | null
 }): Promise<IntranetPost> {
-  const sql = getSql()
+  const sql = getIntranetSql()
   const publishedAt = input.publish === false ? null : new Date().toISOString()
   const rows = (await sql`
     insert into intranet_posts (
@@ -131,7 +131,7 @@ export async function listUnreadNotifications(readerKey: string): Promise<
   Array<{ id: string; title: string; body: string; href: string | null; created_at: string }>
 > {
   try {
-    const sql = getSql()
+    const sql = getIntranetSql()
     const rows = (await sql`
       select n.id, n.title, n.body, n.href, n.created_at
       from intranet_notifications n
@@ -150,7 +150,7 @@ export async function listUnreadNotifications(readerKey: string): Promise<
 
 export async function markNotificationsRead(readerKey: string): Promise<void> {
   try {
-    const sql = getSql()
+    const sql = getIntranetSql()
     await sql`
       insert into intranet_notification_reads (notification_id, reader_key)
       select n.id, ${readerKey}
@@ -170,7 +170,7 @@ export async function notifyIntranet(input: {
   audience_key?: string | null
 }): Promise<void> {
   try {
-    const sql = getSql()
+    const sql = getIntranetSql()
     await sql`
       insert into intranet_notifications (audience_key, title, body, href)
       values (${input.audience_key ?? null}, ${input.title}, ${input.body ?? ''}, ${input.href ?? null})

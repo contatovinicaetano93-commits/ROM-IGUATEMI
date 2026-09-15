@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getSql } from '@/lib/db'
+import { getIntranetSql } from '@/lib/db'
 import { getRomPanelId } from '@/lib/brand'
 import { companiesForPanel, FLOW_CATEGORIES, isCompanyAllowedOnPanel } from '@/lib/intranet/companies'
 import { asJsonObject } from '@/lib/jsonb'
@@ -38,7 +38,7 @@ function isMissingRelation(error: unknown): boolean {
 export async function ensureFlowCatalog(): Promise<void> {
   const panel = getRomPanelId()
   try {
-    const sql = getSql()
+    const sql = getIntranetSql()
     for (const company of companiesForPanel(panel)) {
       await sql`
         insert into flow_companies (id, name, legal_name, slug, initials, color, is_active)
@@ -77,7 +77,7 @@ export async function listFlowCompanies(): Promise<Company[]> {
   const panel = getRomPanelId()
   try {
     await ensureFlowCatalog()
-    const sql = getSql()
+    const sql = getIntranetSql()
     const allowed = new Set(companiesForPanel(panel).map((c) => c.id))
     const rows = (await sql`select * from flow_companies where is_active = true order by name`) as ExpenseRow[]
     return rows
@@ -92,7 +92,7 @@ export async function listFlowCompanies(): Promise<Company[]> {
 export async function listFlowCategories(): Promise<Category[]> {
   try {
     await ensureFlowCatalog()
-    const sql = getSql()
+    const sql = getIntranetSql()
     const rows = (await sql`select * from flow_categories where is_active = true order by name`) as ExpenseRow[]
     return rows.map(mapCategory)
   } catch (error) {
@@ -107,7 +107,7 @@ export async function listVisibleExpenses(user: User): Promise<Expense[]> {
   const panel = getRomPanelId()
   try {
     await ensureFlowCatalog()
-    const sql = getSql()
+    const sql = getIntranetSql()
     const rows = (await sql`
       select * from flow_expenses order by created_at desc limit 300
     `) as ExpenseRow[]
@@ -155,7 +155,7 @@ export async function createExpense(
     created: now,
     updated: now,
   }
-  const sql = getSql()
+  const sql = getIntranetSql()
   await sql`
     insert into flow_expenses (
       id, title, description, area, expense_type, event_project, event_date, amount, category,
@@ -206,7 +206,7 @@ export async function applyExpenseAction(
     approver: action === 'approve' ? user.id : current.approver,
     updated: now,
   }
-  const sql = getSql()
+  const sql = getIntranetSql()
   await sql`
     update flow_expenses set
       status = ${updated.status},
