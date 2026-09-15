@@ -11,6 +11,9 @@ export async function GET(req: NextRequest) {
     user: session?.user ?? null,
     role: session?.role ?? null,
     can_view_revenue: session?.can_view_revenue ?? false,
+    displayName: session?.displayName ?? session?.user ?? null,
+    employeeId: session?.employeeId ?? null,
+    canPublish: session?.canPublish ?? false,
     staff_login_configured: isStaffAuthConfigured(),
   })
 }

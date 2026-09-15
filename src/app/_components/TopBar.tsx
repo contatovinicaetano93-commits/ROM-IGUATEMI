@@ -1,39 +1,28 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X, ChevronRight, Wallet, Boxes, GraduationCap, Stethoscope, FileBarChart } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV, pageTitleFromPath } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
+import { useClientSession } from './SessionProvider'
 import { getBrand } from '@/lib/brand'
 
 export function TopBar() {
   const [open, setOpen] = useState(false)
-  const [showAdminNav, setShowAdminNav] = useState(false)
-  const [role, setRole] = useState<string | null>(null)
+  const { session } = useClientSession()
+  const showAdminNav = !session?.auth_enabled || Boolean(session?.can_view_revenue)
+  const role = session?.role ?? null
   const pathname = usePathname()
   const title = pageTitleFromPath(pathname)
   const brand = getBrand()
   const navItems = useMemo(
     () =>
       APP_NAV.filter((item) => !('adminOnly' in item) || !item.adminOnly || showAdminNav),
-    [showAdminNav]
+    [showAdminNav],
   )
 
-  useEffect(() => {
-    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => {
-        const session = json.data
-        setShowAdminNav(!session?.auth_enabled || Boolean(session?.can_view_revenue))
-        setRole(session?.role ?? null)
-      })
-      .catch(() => setShowAdminNav(false))
-  }, [])
-
-  // Financeiro/estoque são isolados pelo middleware — menu próprio, sem links
-  // mortos que só levariam a um redirect de volta.
   const isolatedLinks =
     role === 'financeiro'
       ? [
@@ -55,7 +44,6 @@ export function TopBar() {
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
         <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] lg:px-8 lg:pt-4">
-          {/* Mobile: menu + logo centralizado */}
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -66,9 +54,13 @@ export function TopBar() {
           </button>
 
           <div className="min-w-0 flex-1 lg:flex lg:items-center lg:justify-between">
-            <Link href="/hoje" className="flex items-baseline justify-center gap-1 lg:justify-start">
-              <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold lg:hidden">{brand.shortMonogram}</span>
-              <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted lg:hidden">{brand.locationSubtitle}</span>
+            <Link href="/" className="flex items-baseline justify-center gap-1 lg:justify-start">
+              <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold lg:hidden">
+                {brand.shortMonogram}
+              </span>
+              <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted lg:hidden">
+                {brand.locationSubtitle}
+              </span>
               <span className="hidden text-lg font-semibold text-foreground lg:inline">{title}</span>
             </Link>
             <p className="mt-0.5 hidden text-xs text-muted lg:block">{brand.tagline}</p>
@@ -86,15 +78,18 @@ export function TopBar() {
         </div>
       </header>
 
-      {/* Drawer só no mobile — desktop usa sidebar fixa */}
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="animate-fade-in absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <aside className="animate-slide-in-left absolute inset-y-0 left-0 flex w-[82%] max-w-xs flex-col border-r border-border bg-surface pt-[env(safe-area-inset-top)]">
             <div className="flex items-center justify-between px-5 py-5">
               <div className="flex items-baseline gap-1">
-                <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold">{brand.shortMonogram}</span>
-                <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted">{brand.locationSubtitle}</span>
+                <span className="font-mono text-lg font-semibold tracking-[0.2em] text-gold">
+                  {brand.shortMonogram}
+                </span>
+                <span className="text-[0.6rem] uppercase tracking-[0.3em] text-muted">
+                  {brand.locationSubtitle}
+                </span>
               </div>
               <button
                 type="button"

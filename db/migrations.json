@@ -245,6 +245,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "031_intranet",
+      "file": "delta-intranet.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

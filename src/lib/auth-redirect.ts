@@ -2,6 +2,7 @@
 
 /** Destinos internos permitidos ao voltar de um contato. */
 const ALLOWED_RETURN_PREFIXES = [
+  '/',
   '/hoje',
   '/contatos',
   '/pipeline',
@@ -12,9 +13,17 @@ const ALLOWED_RETURN_PREFIXES = [
   '/relatorios',
   '/admin',
   '/observability',
+  '/pessoas',
+  '/empresa',
+  '/rh',
+  '/treinamentos',
+  '/ajuda',
+  '/flow',
+  '/operacao',
+  '/adm',
 ] as const
 
-export function sanitizeRedirectPath(next: string | null | undefined, fallback = '/hoje') {
+export function sanitizeRedirectPath(next: string | null | undefined, fallback = '/') {
   if (!next || !next.startsWith('/') || next.startsWith('//')) return fallback
   if (next.includes('://') || next.includes('\\')) return fallback
   return next

@@ -1,38 +1,26 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Activity, Wallet, GraduationCap, Boxes, Stethoscope, FileBarChart } from 'lucide-react'
 import { APP_NAV, ADMIN_NAV } from './nav'
 import { AdminSessionBar } from './AdminSessionBar'
+import { useClientSession } from './SessionProvider'
 import { getBrand } from '@/lib/brand'
 
 export function DesktopSidebar() {
   const pathname = usePathname()
   const brand = getBrand()
-  const [showAdminNav, setShowAdminNav] = useState(false)
-  const [role, setRole] = useState<string | null>(null)
+  const { session } = useClientSession()
+  const showAdminNav = !session?.auth_enabled || Boolean(session?.can_view_revenue)
+  const role = session?.role ?? null
   const navItems = useMemo(
     () =>
       APP_NAV.filter((item) => !('adminOnly' in item) || !item.adminOnly || showAdminNav),
-    [showAdminNav]
+    [showAdminNav],
   )
 
-  useEffect(() => {
-    fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => {
-        const session = json.data
-        setShowAdminNav(!session?.auth_enabled || Boolean(session?.can_view_revenue))
-        setRole(session?.role ?? null)
-      })
-      .catch(() => setShowAdminNav(false))
-  }, [])
-
-  // Financeiro tem acesso duplo (Financeiro + Estoque); Estoque é isolado só
-  // no Estoque. Nenhum dos dois vê hoje/contatos/dashboard/admin — nav
-  // própria, sem links mortos (que o middleware ia redirecionar de qualquer jeito).
   if (role === 'financeiro' || role === 'estoque') {
     const links =
       role === 'financeiro'
@@ -46,18 +34,32 @@ export function DesktopSidebar() {
     return (
       <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
         <div className="flex items-baseline gap-1.5 border-b border-border px-6 py-6">
-          <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">{brand.shortMonogram}</span>
+          <Link href="/" className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">
+            {brand.shortMonogram}
+          </Link>
           <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">
             {role === 'financeiro' ? 'Financeiro' : 'Estoque'}
           </span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-4">
+          <Link
+            href="/"
+            className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+              pathname === '/'
+                ? 'border border-gold/40 bg-gold/10 text-gold'
+                : 'text-foreground/85 hover:bg-card hover:text-foreground'
+            }`}
+          >
+            Intranet
+          </Link>
           {links.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
               className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-                pathname === href ? 'border border-gold/40 bg-gold/10 text-gold' : 'text-foreground/85 hover:bg-card hover:text-foreground'
+                pathname === href
+                  ? 'border border-gold/40 bg-gold/10 text-gold'
+                  : 'text-foreground/85 hover:bg-card hover:text-foreground'
               }`}
             >
               <Icon size={20} strokeWidth={pathname === href ? 2.2 : 1.8} />
@@ -67,7 +69,9 @@ export function DesktopSidebar() {
           <Link
             href="/onboarding"
             className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-              pathname.startsWith('/onboarding') ? 'border border-gold/40 bg-gold/10 text-gold' : 'text-foreground/85 hover:bg-card hover:text-foreground'
+              pathname.startsWith('/onboarding')
+                ? 'border border-gold/40 bg-gold/10 text-gold'
+                : 'text-foreground/85 hover:bg-card hover:text-foreground'
             }`}
           >
             <GraduationCap size={20} strokeWidth={pathname.startsWith('/onboarding') ? 2.2 : 1.8} />
@@ -93,11 +97,25 @@ export function DesktopSidebar() {
   return (
     <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col border-r border-border bg-surface">
       <div className="flex items-baseline gap-1.5 border-b border-border px-6 py-6">
-        <span className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">{brand.shortMonogram}</span>
-        <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">{brand.locationSubtitle}</span>
+        <Link href="/" className="font-mono text-xl font-semibold tracking-[0.2em] text-gold">
+          {brand.shortMonogram}
+        </Link>
+        <span className="text-[0.65rem] uppercase tracking-[0.3em] text-muted">
+          {brand.locationSubtitle}
+        </span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-4">
+        <Link
+          href="/"
+          className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+            pathname === '/'
+              ? 'border border-gold/40 bg-gold/10 text-gold'
+              : 'text-foreground/85 hover:bg-card hover:text-foreground'
+          }`}
+        >
+          Intranet
+        </Link>
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`)
           return (

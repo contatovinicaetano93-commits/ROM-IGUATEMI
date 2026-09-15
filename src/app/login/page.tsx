@@ -1,11 +1,14 @@
 'use client'
 
+// redeploy-marker: login user/username fix
+
 import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
 import { PrimaryButton } from '../_components/ui'
 import { sanitizeRedirectPath } from '@/lib/auth-redirect'
 import { getBrand } from '@/lib/brand'
+import posthog from 'posthog-js'
 
 function LoginForm() {
   const brand = getBrand()
@@ -27,7 +30,7 @@ function LoginForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: username.trim(),
+          user: username.trim(),
           password: password.trim(),
         }),
         credentials: 'include',
@@ -38,13 +41,10 @@ function LoginForm() {
         return
       }
       // Financeiro/estoque têm painel próprio — não faz sentido cair no playbook do dia por padrão.
+      const dest = next
       const role = json.data?.role
-      const dest =
-        role === 'financeiro' && !next.startsWith('/financeiro')
-          ? '/financeiro'
-          : role === 'estoque' && !next.startsWith('/estoque')
-            ? '/estoque'
-            : next
+      posthog.identify(json.data?.user ?? username.trim(), { role })
+      posthog.capture('user_logged_in', { role })
       // Hard navigation garante que o cookie da sessão seja lido pelo middleware
       window.location.assign(dest)
     } catch (err) {
