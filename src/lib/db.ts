@@ -160,3 +160,52 @@ export function getSql(): Sql {
   }
   return wrap(cached)
 }
+
+function readIntranetOverlayUrl(): string | null {
+  const candidates = [
+    join(process.cwd(), 'secrets', 'intranet-database-url.txt'),
+    join(process.cwd(), '.secrets', 'intranet-database-url.txt'),
+  ]
+  for (const path of candidates) {
+    try {
+      if (!existsSync(path)) continue
+      const url = readFileSync(path, 'utf8').trim()
+      if (url.startsWith('postgres')) return url
+    } catch {
+      // ignore
+    }
+  }
+  return null
+}
+
+/** Intranet: INTRANET_DATABASE_URL → overlay → mesmo banco do salão. */
+export function peekResolvedIntranetDatabaseUrl(): string | null {
+  const env = process.env.INTRANET_DATABASE_URL?.trim()
+  if (env) return env
+  const overlay = readIntranetOverlayUrl()
+  if (overlay) return overlay
+  return peekResolvedDatabaseUrl()
+}
+
+let intranetCached: PostgresSql | null = null
+let intranetCachedUrl: string | null = null
+
+export function getIntranetSql(): Sql {
+  const raw = peekResolvedIntranetDatabaseUrl()
+  if (!raw) throw new Error('DATABASE_URL não configurada')
+  const url = toTransactionPoolerUrl(raw)
+
+  if (!intranetCached || intranetCachedUrl !== url) {
+    intranetCached?.end({ timeout: 1 }).catch(() => {})
+    intranetCached = postgres(url, {
+      ssl: 'require',
+      max: 1,
+      prepare: false,
+      idle_timeout: 5,
+      max_lifetime: 60 * 2,
+      connect_timeout: 10,
+    })
+    intranetCachedUrl = url
+  }
+  return wrap(intranetCached)
+}
