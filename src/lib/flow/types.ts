@@ -157,6 +157,74 @@ export type Expense = {
   updated: string
 }
 
+export type Invitation = {
+  id: string
+  email: string
+  role: Role
+  companyIds: string[]
+  areaIds: RequestArea[]
+  token: string
+  invitedBy: string
+  created: string
+  expires: string
+  accepted: boolean
+}
+
+export type AuditLog = {
+  id: string
+  user: string
+  action: AuditAction
+  resource: string
+  before: string
+  after: string
+  created: string
+}
+
+export type EmailLogKind = 'invite' | 'expense_created' | 'expense_status'
+
+export type EmailLogStatus = 'sent' | 'failed'
+
+export type EmailLog = {
+  id: string
+  kind: EmailLogKind
+  expenseId: string | null
+  invitationId: string | null
+  toEmail: string
+  toName: string
+  toRole: Role | null
+  subject: string
+  status: EmailLogStatus
+  error: string
+  resendId: string | null
+  created: string
+}
+
+export type Database = {
+  revision: number
+  companies: Company[]
+  categories: Category[]
+  users: User[]
+  invitations: Invitation[]
+  expenses: Expense[]
+  auditLogs: AuditLog[]
+  emailLogs: EmailLog[]
+}
+
+export type FlowPerson = {
+  id: string
+  name: string
+  email: string
+}
+
+export type FlowBootstrap = {
+  companies: Company[]
+  categories: Category[]
+  expenses: Expense[]
+  user: User
+  people: FlowPerson[]
+  users: User[]
+}
+
 export function assertNever(value: never): never {
   throw new Error(`Unhandled value: ${String(value)}`)
 }

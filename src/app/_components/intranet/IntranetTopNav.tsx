@@ -7,6 +7,7 @@ import { Bell, Menu, Search, X } from 'lucide-react'
 import { INTRANET_NAV } from './nav'
 import { useClientSession } from '../SessionProvider'
 import { getBrand } from '@/lib/brand'
+import { intranetSectionLabel } from '@/lib/intranet/section'
 import { LogoutButton } from '../LogoutButton'
 
 const SEARCH_TARGETS = [
@@ -14,7 +15,7 @@ const SEARCH_TARGETS = [
   { href: '/pessoas', label: 'Pessoas' },
   { href: '/empresa', label: 'Empresa e políticas' },
   { href: '/rh', label: 'RH e benefícios' },
-  { href: '/flow', label: 'RomFlow · solicitações' },
+  { href: '/flow', label: 'Rom Flow · solicitações' },
   { href: '/hoje', label: 'Operação · Hoje' },
   { href: '/pipeline', label: 'Pipeline' },
   { href: '/contatos', label: 'Contatos' },
@@ -35,6 +36,7 @@ export function IntranetTopNav() {
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const section = intranetSectionLabel(pathname)
   const name = session?.displayName || session?.user || 'Equipe'
   const initial = name.trim().charAt(0).toUpperCase() || 'R'
   const role = session?.role
@@ -66,6 +68,12 @@ export function IntranetTopNav() {
           <Link href="/" className="font-serif text-2xl tracking-[0.18em] text-foreground">
             {brand.shortMonogram}
           </Link>
+          <div className="min-w-0">
+            <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted">Intranet</p>
+            <p className="font-serif text-lg leading-none text-foreground" data-testid="intranet-section">
+              {section}
+            </p>
+          </div>
           <nav className="hidden flex-1 items-center justify-center gap-6 text-[0.82rem] text-muted lg:flex">
             {links.map((item) => {
               const active = item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(`${item.href}/`)
