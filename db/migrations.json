@@ -253,6 +253,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "032_intranet_policy",
+      "file": "delta-intranet-policy.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

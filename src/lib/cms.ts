@@ -1,8 +1,9 @@
 import 'server-only'
 
 import { getIntranetSql } from '@/lib/db'
+import { parseIntranetPostKind, type IntranetPostKind } from '@/lib/cms-kinds'
 
-export type IntranetPostKind = 'news' | 'event' | 'banner'
+export type { IntranetPostKind }
 
 export type IntranetPost = {
   id: string
@@ -25,15 +26,10 @@ function isMissingRelation(error: unknown): boolean {
   return /intranet_posts|intranet_notifications|does not exist|relation|DATABASE_URL não configurada/i.test(msg)
 }
 
-function parseKind(value: unknown): IntranetPostKind {
-  if (value === 'news' || value === 'event' || value === 'banner') return value
-  return 'news'
-}
-
 function mapPost(row: Record<string, unknown>): IntranetPost {
   return {
     id: String(row.id),
-    kind: parseKind(row.kind),
+    kind: parseIntranetPostKind(row.kind),
     title: String(row.title),
     body: String(row.body ?? ''),
     excerpt: String(row.excerpt ?? ''),

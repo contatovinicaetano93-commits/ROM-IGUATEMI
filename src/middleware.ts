@@ -120,6 +120,8 @@ function isProtectedPage(pathname: string) {
     pathname.startsWith('/rh/') ||
     pathname === '/treinamentos' ||
     pathname.startsWith('/treinamentos/') ||
+    pathname === '/sistemas' ||
+    pathname.startsWith('/sistemas/') ||
     pathname === '/ajuda' ||
     pathname.startsWith('/ajuda/') ||
     pathname === '/flow' ||
@@ -282,6 +284,8 @@ export const config = {
     '/rh/:path*',
     '/treinamentos',
     '/treinamentos/:path*',
+    '/sistemas',
+    '/sistemas/:path*',
     '/ajuda',
     '/ajuda/:path*',
     '/flow',

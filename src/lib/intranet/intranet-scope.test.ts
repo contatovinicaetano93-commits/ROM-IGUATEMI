@@ -11,7 +11,7 @@ describe('intranet paths', () => {
     expect(isIntranetShellPath('/flow/nova')).toBe(true)
     expect(isIntranetShellPath('/hoje')).toBe(false)
     expect(isIntranetPath('/api/flow')).toBe(true)
-    expect(isIntranetShellPath('/onboarding')).toBe(true)
+    expect(isIntranetShellPath('/sistemas')).toBe(true)
   })
 })
 

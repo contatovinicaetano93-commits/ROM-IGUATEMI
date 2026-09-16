@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
 import { requirePublisher, requireSession } from '@/lib/auth'
 import { createPost, listAllPosts, listPublishedPosts } from '@/lib/cms'
+import { parseIntranetPostKind } from '@/lib/cms-kinds'
 
 export async function GET(req: NextRequest) {
   const auth = await requireSession(req)
@@ -9,12 +10,13 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const kind = url.searchParams.get('kind')
   const all = url.searchParams.get('all') === '1'
-  const parsedKind = kind === 'news' || kind === 'event' || kind === 'banner' ? kind : undefined
+  const parsedKind = kind == null || kind === '' ? undefined : parseIntranetPostKind(kind)
+  const kindFilter = kind === parsedKind ? parsedKind : undefined
   try {
     if (all && (auth.session.role === 'admin' || auth.session.role === 'mkt' || auth.session.canPublish)) {
       return ok({ posts: await listAllPosts() })
     }
-    return ok({ posts: await listPublishedPosts(parsedKind) })
+    return ok({ posts: await listPublishedPosts(kindFilter) })
   } catch (error) {
     return err(error instanceof Error ? error.message : 'Falha ao ler publicações', 500)
   }
@@ -25,9 +27,9 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return err(auth.message, auth.status)
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') return err('Dados inválidos', 400)
-  const kind = body.kind === 'event' || body.kind === 'banner' || body.kind === 'news' ? body.kind : null
+  const kind = parseIntranetPostKind(body.kind)
   const title = typeof body.title === 'string' ? body.title.trim() : ''
-  if (!kind || !title) return err('Tipo e título são obrigatórios', 400)
+  if (body.kind !== kind || !title) return err('Tipo e título são obrigatórios', 400)
   try {
     const post = await createPost({
       kind,

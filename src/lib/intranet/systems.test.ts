@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest'
+import { HOME_SHORTCUTS, flowAreaSystems, systemsForRole } from '@/lib/intranet/systems'
+
+describe('home shortcuts', () => {
+  it('mostra Meus Sistemas, políticas, onboarding e suporte', () => {
+    expect(HOME_SHORTCUTS.map((item) => item.label)).toEqual([
+      'Meus Sistemas',
+      'Documentos e Políticas',
+      'Onboarding',
+      'Suporte',
+    ])
+    expect(HOME_SHORTCUTS.map((item) => item.href)).toEqual([
+      '/sistemas',
+      '/empresa#politicas',
+      '/onboarding',
+      '/ajuda',
+    ])
+  })
+})
+
+describe('systemsForRole', () => {
+  it('libera operação e gestão para o admin', () => {
+    const hrefs = systemsForRole('admin').map((item) => item.href)
+    expect(hrefs).toContain('/flow')
+    expect(hrefs).toContain('/pipeline')
+    expect(hrefs).toContain('/financeiro')
+    expect(hrefs).toContain('/dashboard')
+  })
+
+  it('staff e mkt veem operação, sem financeiro nem Rom Adm', () => {
+    for (const role of ['staff', 'mkt'] as const) {
+      const hrefs = systemsForRole(role).map((item) => item.href)
+      expect(hrefs).toContain('/pipeline')
+      expect(hrefs).toContain('/contatos')
+      expect(hrefs).not.toContain('/financeiro')
+      expect(hrefs).not.toContain('/dashboard')
+    }
+  })
+
+  it('financeiro vê hoje, omie e estoque, sem pipeline', () => {
+    const hrefs = systemsForRole('financeiro').map((item) => item.href)
+    expect(hrefs).toContain('/hoje')
+    expect(hrefs).toContain('/financeiro')
+    expect(hrefs).toContain('/estoque')
+    expect(hrefs).not.toContain('/pipeline')
+    expect(hrefs).not.toContain('/dashboard')
+  })
+
+  it('estoque vê só frente de caixa e estoque além da intranet', () => {
+    const hrefs = systemsForRole('estoque').map((item) => item.href)
+    expect(hrefs).toContain('/hoje')
+    expect(hrefs).toContain('/estoque')
+    expect(hrefs).not.toContain('/financeiro')
+    expect(hrefs).not.toContain('/pipeline')
+  })
+
+  it('lista as áreas do Flow liberadas para a pessoa', () => {
+    expect(flowAreaSystems(['compras', 'rh']).map((item) => item.label)).toEqual([
+      'Solicitação compras',
+      'Solicitação RH',
+    ])
+  })
+})
