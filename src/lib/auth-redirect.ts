@@ -17,6 +17,7 @@ const ALLOWED_RETURN_PREFIXES = [
   '/empresa',
   '/rh',
   '/treinamentos',
+  '/sistemas',
   '/ajuda',
   '/flow',
   '/operacao',

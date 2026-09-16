@@ -4,6 +4,8 @@ export const INTRANET_PAGE_PREFIXES = [
   '/empresa',
   '/rh',
   '/treinamentos',
+  '/onboarding',
+  '/sistemas',
   '/ajuda',
   '/flow',
   '/operacao',

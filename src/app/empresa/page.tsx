@@ -3,8 +3,35 @@
 import { useEffect, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { useClientSession } from '../_components/SessionProvider'
+import type { IntranetPostKind } from '@/lib/cms-kinds'
 
-type Post = { id: string; kind: string; title: string; excerpt: string; published_at: string | null }
+type Post = {
+  id: string
+  kind: IntranetPostKind
+  title: string
+  excerpt: string
+  body: string
+  location: string | null
+  starts_at: string | null
+  published_at: string | null
+}
+
+function kindLabel(kind: IntranetPostKind): string {
+  switch (kind) {
+    case 'news':
+      return 'Notícia'
+    case 'event':
+      return 'Evento'
+    case 'banner':
+      return 'Banner'
+    case 'policy':
+      return 'Política'
+    default: {
+      const _never: never = kind
+      return _never
+    }
+  }
+}
 
 export default function EmpresaPage() {
   const { session } = useClientSession()
@@ -27,7 +54,7 @@ export default function EmpresaPage() {
     const form = new FormData(e.currentTarget)
     const res = await fetch('/api/cms', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'content-type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
         kind: form.get('kind'),
@@ -47,21 +74,51 @@ export default function EmpresaPage() {
     e.currentTarget.reset()
   }
 
+  const news = posts.filter((post) => post.kind === 'news')
+  const events = posts.filter((post) => post.kind === 'event')
+  const policies = posts.filter((post) => post.kind === 'policy')
+
   return (
-    <IntranetPage kicker="Cultura" title="Empresa">
-      <p className="text-sm text-muted" id="documentos">
-        Políticas, notícias e eventos da unidade. Publicação pelo marketing.
+    <IntranetPage kicker="Cultura" title="MKT Notícias">
+      <p className="text-sm text-muted">
+        Notícias e eventos da unidade, mais o manual de políticas ROM Concept. Publicação pelo marketing.
       </p>
-      <ul className="mt-4 space-y-3">
-        {posts.length === 0 && <li className="text-sm text-muted">Nada publicado ainda.</li>}
-        {posts.map((post) => (
-          <li key={post.id} className="rounded-2xl border border-border bg-card p-4">
-            <p className="text-[0.65rem] uppercase tracking-wide text-muted">{post.kind}</p>
-            <p className="font-medium">{post.title}</p>
-            <p className="text-sm text-muted">{post.excerpt}</p>
-          </li>
-        ))}
-      </ul>
+
+      <section id="noticias" className="mt-8 scroll-mt-24">
+        <h2 className="font-serif text-xl">Notícias</h2>
+        <ul className="mt-3 space-y-3">
+          {news.length === 0 && <li className="text-sm text-muted">O marketing ainda não publicou notícias.</li>}
+          {news.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
+        </ul>
+      </section>
+
+      <section id="politicas" className="mt-8 scroll-mt-24">
+        <h2 className="font-serif text-xl">Manual de políticas ROM Concept</h2>
+        <p className="mt-1 text-sm text-muted">O marketing publica aqui as políticas da casa.</p>
+        <ul className="mt-3 space-y-3">
+          {policies.length === 0 && (
+            <li className="text-sm text-muted">O manual ainda não foi publicado.</li>
+          )}
+          {policies.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
+        </ul>
+      </section>
+
+      <section id="eventos" className="mt-8 scroll-mt-24">
+        <h2 className="font-serif text-xl">Eventos</h2>
+        <p className="mt-1 text-sm text-muted">Agenda do que a ROM vai realizar.</p>
+        <ul className="mt-3 space-y-3">
+          {events.length === 0 && (
+            <li className="text-sm text-muted">Nenhum evento publicado ainda.</li>
+          )}
+          {events.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
+        </ul>
+      </section>
 
       {canPublish && (
         <form onSubmit={onSubmit} className="mt-8 grid gap-3 rounded-2xl border border-border bg-card p-5">
@@ -70,6 +127,7 @@ export default function EmpresaPage() {
             <option value="news">Notícia</option>
             <option value="event">Evento</option>
             <option value="banner">Banner</option>
+            <option value="policy">Política</option>
           </select>
           <input name="title" required placeholder="Título" className="rounded-xl border border-border bg-background px-3 py-2" />
           <input name="excerpt" placeholder="Linha de apoio" className="rounded-xl border border-border bg-background px-3 py-2" />
@@ -81,5 +139,15 @@ export default function EmpresaPage() {
         </form>
       )}
     </IntranetPage>
+  )
+}
+
+function PostCard({ post }: { post: Post }) {
+  return (
+    <li className="rounded-2xl border border-border bg-card p-4">
+      <p className="text-[0.65rem] uppercase tracking-wide text-muted">{kindLabel(post.kind)}</p>
+      <p className="font-medium">{post.title}</p>
+      <p className="text-sm text-muted">{post.excerpt || post.body.slice(0, 160)}</p>
+    </li>
   )
 }

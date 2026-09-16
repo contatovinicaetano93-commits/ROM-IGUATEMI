@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
       posts,
       notifications,
       tasks,
+      areas: user.areaIds,
     })
   } catch (error) {
     return err(error instanceof Error ? error.message : 'Falha ao carregar a intranet', 500)

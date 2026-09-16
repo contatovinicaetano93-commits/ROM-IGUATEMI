@@ -94,7 +94,7 @@ create index if not exists flow_expenses_created_idx on flow_expenses (created_a
 
 create table if not exists intranet_posts (
   id uuid primary key default gen_random_uuid(),
-  kind text not null check (kind in ('news', 'event', 'banner')),
+  kind text not null check (kind in ('news', 'event', 'banner', 'policy')),
   title text not null,
   body text not null default '',
   excerpt text not null default '',

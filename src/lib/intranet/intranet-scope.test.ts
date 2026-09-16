@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { INTRANET_NAV } from '@/app/_components/intranet/nav'
 import { isIntranetPath, isIntranetShellPath } from '@/lib/intranet/paths'
 import { intranetSectionLabel } from '@/lib/intranet/section'
 import { defaultFlowRole } from '@/lib/flow/roles'
@@ -11,6 +12,24 @@ describe('intranet paths', () => {
     expect(isIntranetShellPath('/flow/nova')).toBe(true)
     expect(isIntranetShellPath('/hoje')).toBe(false)
     expect(isIntranetPath('/api/flow')).toBe(true)
+    expect(isIntranetShellPath('/sistemas')).toBe(true)
+  })
+})
+
+describe('intranet top bar', () => {
+  it('troca Empresa por MKT Notícias, tira RH e troca Treinamentos por Onboarding', () => {
+    expect(INTRANET_NAV.map((item) => item.label)).toEqual([
+      'Início',
+      'Pessoas',
+      'MKT Notícias',
+      'Rom Flow',
+      'Financeiro',
+      'Operação',
+      'Onboarding',
+      'Ajuda',
+    ])
+    expect(INTRANET_NAV.find((item) => item.label === 'MKT Notícias')?.href).toBe('/empresa')
+    expect(INTRANET_NAV.find((item) => item.label === 'Onboarding')?.href).toBe('/onboarding')
   })
 })
 
