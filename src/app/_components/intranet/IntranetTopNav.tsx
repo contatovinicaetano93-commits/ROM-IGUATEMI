@@ -12,9 +12,9 @@ import { LogoutButton } from '../LogoutButton'
 const SEARCH_TARGETS = [
   { href: '/', label: 'Início' },
   { href: '/pessoas', label: 'Pessoas' },
-  { href: '/empresa', label: 'Empresa e políticas' },
+  { href: '/empresa', label: 'MKT Notícias' },
   { href: '/rh', label: 'RH e benefícios' },
-  { href: '/flow', label: 'RomFlow · solicitações' },
+  { href: '/flow', label: 'Rom Flow · solicitações' },
   { href: '/hoje', label: 'Operação · Hoje' },
   { href: '/pipeline', label: 'Pipeline' },
   { href: '/contatos', label: 'Contatos' },
