@@ -51,10 +51,6 @@ export function parseGrantableModules(value: unknown): GrantableModuleKey[] {
   return ALL_KEYS.filter((key) => seen.has(key))
 }
 
-export function roleModuleKeys(role: AuthRole): readonly GrantableModuleKey[] {
-  return ROLE_MODULES[role]
-}
-
 export function extrasBeyondRole(
   role: AuthRole,
   selected: readonly GrantableModuleKey[],
