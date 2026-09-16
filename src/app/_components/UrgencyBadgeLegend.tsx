@@ -30,7 +30,7 @@ export function UrgencyBadgeLegend({
       </span>
       {showScheduled && (
         <span className="inline-flex items-center gap-1">
-          <span className="inline-flex items-center justify-center rounded-full bg-sky-500/15 px-1 py-0.5 text-sky-300">
+          <span className="inline-flex items-center justify-center rounded-full bg-sky-500/15 px-1 py-0.5 text-sky-800">
             <Calendar size={9} aria-hidden />
           </span>
           agendado ≤7 dias

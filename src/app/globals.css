@@ -1,17 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0908;
-  --surface: #100e0c;
-  --card: #16130f;
-  --card-elevated: #1d1913;
-  --foreground: #f3efe8;
-  --border: #2a2621;
-  --muted: #928b7e;
+  /* Identidade única da intranet — creme/cobre em todo o Rom Club. */
+  --background: #f4f1ec;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --card-elevated: #fbf8f3;
+  --foreground: #1c1916;
+  --border: #e4ddd3;
+  --muted: #7a7268;
 
-  --gold: #d4a94e;
-  --gold-strong: #e6bd5c;
-  --gold-bright: #f0b429;
+  --gold: #b08b57;
+  --gold-strong: #9a7344;
+  --gold-bright: #c4a574;
 
   --success: #3ecf8e;
   --danger: #ef5f6b;

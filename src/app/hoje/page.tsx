@@ -301,7 +301,7 @@ export default function HojePage() {
           className="flex w-full items-center justify-between gap-3 rounded-xl py-0.5 text-left active:opacity-90"
         >
           <h2 className="flex items-center gap-1.5 text-sm font-medium">
-            <Calendar size={15} className="text-sky-300" /> Pessoas com agenda aberta
+            <Calendar size={15} className="text-sky-800" /> Pessoas com agenda aberta
           </h2>
           <span className="flex items-center gap-2">
             <CountBadge
@@ -357,7 +357,7 @@ export default function HojePage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
-                      <p className="mt-0.5 truncate text-xs text-sky-300/90">{s.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-sky-800/90">{s.name}</p>
                     </div>
                     <ChevronRight size={16} className="shrink-0 text-muted" />
                   </Link>

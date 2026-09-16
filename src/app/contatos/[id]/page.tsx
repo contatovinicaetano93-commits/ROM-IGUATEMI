@@ -740,7 +740,7 @@ function ContactDetailPageContent() {
                 <ServiceStateBadge state={s.state} days={s.days_until} />
               </div>
               {s.scheduled_at && (
-                <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-sky-500/10 px-2 py-1 text-[0.65rem] font-medium text-sky-300">
+                <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-sky-500/10 px-2 py-1 text-[0.65rem] font-medium text-sky-800">
                   <Calendar size={11} /> Agendado: {fmtSchedule(s.scheduled_at)}
                 </p>
               )}

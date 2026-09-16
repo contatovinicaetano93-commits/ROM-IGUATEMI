@@ -117,7 +117,7 @@ function PipelineColumn({
                         {item.contact_name ?? 'Cliente'}
                       </p>
                       {kind ? (
-                        <span className="shrink-0 text-[0.65rem] uppercase tracking-wide text-sky-300">
+                        <span className="shrink-0 text-[0.65rem] uppercase tracking-wide text-sky-800">
                           {kind}
                         </span>
                       ) : null}
@@ -131,7 +131,7 @@ function PipelineColumn({
                     <div className="shrink-0 text-right">
                       <p
                         className={`text-base font-semibold tabular-nums ${
-                          tone === 'sky' ? 'text-sky-300' : 'text-gold'
+                          tone === 'sky' ? 'text-sky-800' : 'text-gold'
                         }`}
                       >
                         {when.time}

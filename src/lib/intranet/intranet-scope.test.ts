@@ -10,9 +10,14 @@ describe('intranet paths', () => {
   it('home e shells usam o layout claro', () => {
     expect(isIntranetShellPath('/')).toBe(true)
     expect(isIntranetShellPath('/flow/nova')).toBe(true)
-    expect(isIntranetShellPath('/hoje')).toBe(false)
     expect(isIntranetPath('/api/flow')).toBe(true)
     expect(isIntranetShellPath('/sistemas')).toBe(true)
+  })
+
+  it('hoje e financeiro continuam módulos operacionais no grant, não rotas da intranet', () => {
+    expect(isIntranetShellPath('/hoje')).toBe(false)
+    expect(isIntranetShellPath('/financeiro')).toBe(false)
+    expect(isIntranetPath('/estoque')).toBe(false)
   })
 })
 

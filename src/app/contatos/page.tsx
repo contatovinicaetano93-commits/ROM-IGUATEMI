@@ -83,7 +83,7 @@ function serviceLine(c: Contact, queue: ReactivateQueue | null): string {
 function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos' | 'ativados') {
   if (queue === 'ativados') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[0.65rem] font-semibold text-sky-300">
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[0.65rem] font-semibold text-sky-800">
         <Clock size={10} /> Aguardando agenda
       </span>
     )
@@ -118,7 +118,7 @@ function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos' |
   }
   if (queue === 'scheduled') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[0.65rem] font-semibold text-sky-300">
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[0.65rem] font-semibold text-sky-800">
         <Calendar size={10} /> Agendado
       </span>
     )
