@@ -1,5 +1,6 @@
 import type { AuthRole } from '@/lib/auth'
 import type { RequestArea } from '@/lib/flow/types'
+import { hasPanelModule, moduleKeyFromHref, type GrantableModuleKey } from '@/lib/intranet/modules'
 
 export type IntranetSystemGroup = 'intranet' | 'operacao' | 'gestao' | 'flow'
 
@@ -65,6 +66,17 @@ export function systemsForRole(role: AuthRole): IntranetSystem[] {
       return _never
     }
   }
+}
+
+export function systemsForAccess(
+  role: AuthRole,
+  extras: readonly GrantableModuleKey[] = [],
+): IntranetSystem[] {
+  return [...INTRANET, ...OPERACAO, ...GESTAO].filter((item) => {
+    const key = moduleKeyFromHref(item.href)
+    if (!key) return true
+    return hasPanelModule(role, extras, key)
+  })
 }
 
 export function flowAreaSystems(areaIds: RequestArea[]): IntranetSystem[] {

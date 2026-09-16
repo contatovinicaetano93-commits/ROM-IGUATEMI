@@ -261,6 +261,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "033_intranet_modules",
+      "file": "delta-intranet-modules.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

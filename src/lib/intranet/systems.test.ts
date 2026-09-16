@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HOME_SHORTCUTS, flowAreaSystems, systemsForRole } from '@/lib/intranet/systems'
+import { HOME_SHORTCUTS, flowAreaSystems, systemsForAccess, systemsForRole } from '@/lib/intranet/systems'
 
 describe('home shortcuts', () => {
   it('mostra Meus Sistemas, políticas, onboarding e suporte', () => {
@@ -59,5 +59,13 @@ describe('systemsForRole', () => {
       'Solicitação compras',
       'Solicitação RH',
     ])
+  })
+
+  it('systemsForAccess soma extras ao pacote do papel', () => {
+    const hrefs = systemsForAccess('staff', ['financeiro', 'dashboard']).map((item) => item.href)
+    expect(hrefs).toContain('/pipeline')
+    expect(hrefs).toContain('/financeiro')
+    expect(hrefs).toContain('/dashboard')
+    expect(hrefs).not.toContain('/relatorios')
   })
 })

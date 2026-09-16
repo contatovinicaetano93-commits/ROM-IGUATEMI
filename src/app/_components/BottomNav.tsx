@@ -8,7 +8,6 @@ import {
   Boxes,
   ClipboardList,
   Home,
-  LayoutDashboard,
   MoreHorizontal,
   Sun,
   Users,
@@ -16,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { useClientSession } from './SessionProvider'
+import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
 
 const CORE = [
   { href: '/', shortLabel: 'Início', icon: Home },
@@ -28,17 +28,23 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
   const pathname = usePathname()
   const { session } = useClientSession()
   const role = session?.role ?? null
+  const extras = parseGrantableModules(session?.modules)
+  const openAuth = Boolean(session && !session.auth_enabled)
+  const canFinance = openAuth || (role != null && hasPanelModule(role, extras, 'financeiro'))
+  const canStock = openAuth || (role != null && hasPanelModule(role, extras, 'estoque'))
+  const canDashboard = openAuth || (role != null && hasPanelModule(role, extras, 'dashboard'))
+  const canRelatorios = openAuth || (role != null && hasPanelModule(role, extras, 'relatorios'))
   const [more, setMore] = useState(false)
 
   const items =
-    role === 'estoque'
+    canStock && !canFinance
       ? [
           { href: '/', shortLabel: 'Início', icon: Home },
           { href: '/estoque', shortLabel: 'Estoque', icon: Boxes },
           { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
           { href: '/hoje', shortLabel: 'Hoje', icon: Sun },
         ]
-      : role === 'financeiro'
+      : canFinance
         ? [
             { href: '/', shortLabel: 'Início', icon: Home },
             { href: '/financeiro', shortLabel: 'Financeiro', icon: Wallet },
@@ -47,24 +53,17 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
           ]
         : CORE
 
-  const canOpenDashboard = role === 'admin' || Boolean(session && !session.auth_enabled)
-  const extras = [
+  const extrasMenu = [
     { href: '/pipeline', label: 'Pipeline' },
     { href: '/pessoas', label: 'Pessoas' },
     { href: '/empresa', label: 'Empresa' },
     { href: '/rh', label: 'RH' },
     { href: '/treinamentos', label: 'Treinamentos' },
     { href: '/ajuda', label: 'Ajuda' },
-    ...(role === 'admin' ? [{ href: '/dashboard', label: 'Rom Adm' }] : []),
-    ...(role === 'admin' || role === 'financeiro'
-      ? [
-          { href: '/relatorios', label: 'Relatórios' },
-          { href: '/financeiro', label: 'Financeiro' },
-        ]
-      : []),
-    ...(role === 'admin' || role === 'financeiro' || role === 'estoque'
-      ? [{ href: '/estoque', label: 'Estoque' }]
-      : []),
+    ...(canDashboard ? [{ href: '/dashboard', label: 'Rom Adm' }] : []),
+    ...(canRelatorios ? [{ href: '/relatorios', label: 'Relatórios' }] : []),
+    ...(canFinance ? [{ href: '/financeiro', label: 'Financeiro' }] : []),
+    ...(canStock ? [{ href: '/estoque', label: 'Estoque' }] : []),
   ]
 
   return (
@@ -108,7 +107,7 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {extras.map((item) => (
+              {extrasMenu.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -118,17 +117,6 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
                   {item.label}
                 </Link>
               ))}
-              {canOpenDashboard && (
-                <Link
-                  href="/dashboard"
-                  onClick={() => setMore(false)}
-                  className="rounded-xl border border-border px-3 py-3 text-sm"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <LayoutDashboard size={16} /> Visão analítica
-                  </span>
-                </Link>
-              )}
               <Link href="/" onClick={() => setMore(false)} className="rounded-xl border border-border px-3 py-3 text-sm">
                 <span className="inline-flex items-center gap-2">
                   <Bell size={16} /> Notícias

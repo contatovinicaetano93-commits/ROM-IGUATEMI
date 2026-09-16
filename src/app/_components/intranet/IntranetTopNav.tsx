@@ -8,6 +8,7 @@ import { INTRANET_NAV } from './nav'
 import { useClientSession } from '../SessionProvider'
 import { getBrand } from '@/lib/brand'
 import { intranetSectionLabel } from '@/lib/intranet/section'
+import { canSeeNavHref, parseGrantableModules } from '@/lib/intranet/modules'
 import { LogoutButton } from '../LogoutButton'
 
 const SEARCH_TARGETS = [
@@ -40,18 +41,24 @@ export function IntranetTopNav() {
   const name = session?.displayName || session?.user || 'Equipe'
   const initial = name.trim().charAt(0).toUpperCase() || 'R'
   const role = session?.role
+  const extras = parseGrantableModules(session?.modules)
   const links = INTRANET_NAV.filter((item) => {
-    if (!('roles' in item) || !item.roles) return true
     if (!session) return false
     if (!session.auth_enabled) return true
-    return role != null && (item.roles as readonly string[]).includes(role)
+    if (role == null) return false
+    return canSeeNavHref(item.href, role, extras)
   })
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (q.length < 2) return []
-    return SEARCH_TARGETS.filter((item) => item.label.toLowerCase().includes(q) || item.href.includes(q)).slice(0, 8)
-  }, [query])
+    return SEARCH_TARGETS.filter((item) => {
+      if (!(item.label.toLowerCase().includes(q) || item.href.includes(q))) return false
+      if (!session || !session.auth_enabled) return true
+      if (role == null) return false
+      return canSeeNavHref(item.href, role, extras)
+    }).slice(0, 8)
+  }, [extras, query, role, session])
 
   return (
     <>

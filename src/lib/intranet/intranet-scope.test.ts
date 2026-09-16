@@ -24,6 +24,7 @@ describe('intranet top bar', () => {
       'MKT Notícias',
       'Rom Flow',
       'Financeiro',
+      'Estoque',
       'Operação',
       'Onboarding',
       'Ajuda',

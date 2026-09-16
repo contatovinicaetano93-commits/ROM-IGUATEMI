@@ -4,6 +4,7 @@ export const INTRANET_NAV = [
   { href: '/empresa', label: 'MKT Notícias' },
   { href: '/flow', label: 'Rom Flow' },
   { href: '/financeiro', label: 'Financeiro', roles: ['admin', 'financeiro'] as const },
+  { href: '/estoque', label: 'Estoque', roles: ['admin', 'financeiro', 'estoque'] as const },
   { href: '/hoje', label: 'Operação' },
   { href: '/onboarding', label: 'Onboarding' },
   { href: '/ajuda', label: 'Ajuda' },
