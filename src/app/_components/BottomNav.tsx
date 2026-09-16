@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { useClientSession } from './SessionProvider'
-import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
+import { canSeeNavHref, hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
 
 const CORE = [
   { href: '/', shortLabel: 'Início', icon: Home },
@@ -55,6 +55,7 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
 
   const extrasMenu = [
     { href: '/pipeline', label: 'Pipeline' },
+    { href: '/contatos', label: 'Contatos' },
     { href: '/pessoas', label: 'Pessoas' },
     { href: '/empresa', label: 'Empresa' },
     { href: '/rh', label: 'RH' },
@@ -64,7 +65,7 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
     ...(canRelatorios ? [{ href: '/relatorios', label: 'Relatórios' }] : []),
     ...(canFinance ? [{ href: '/financeiro', label: 'Financeiro' }] : []),
     ...(canStock ? [{ href: '/estoque', label: 'Estoque' }] : []),
-  ]
+  ].filter((item) => openAuth || canSeeNavHref(item.href, role, extras))
 
   return (
     <>
