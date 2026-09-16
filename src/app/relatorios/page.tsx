@@ -143,13 +143,13 @@ export default function RelatoriosOverviewPage() {
       </div>
 
       {error && (
-        <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-800">
           {error}
         </p>
       )}
 
       {data?.sync && (isRelatoriosStale(data.sync) || data.sync.status === 'partial' || data.sync.status === 'error') && (
-        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800">
           {isRelatoriosStale(data.sync)
             ? relatoriosSyncStaleMessage(data.sync)
             : data.sync.status === 'partial'
@@ -165,10 +165,10 @@ export default function RelatoriosOverviewPage() {
           <div
             className={`flex flex-wrap items-start gap-3 rounded-xl border px-4 py-3 text-sm ${
               incomplete
-                ? 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+                ? 'border-amber-500/40 bg-amber-500/10 text-amber-800'
                 : inProgress
                   ? 'border-border bg-card text-muted'
-                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800'
             }`}
           >
             {incomplete && <AlertTriangle size={18} className="mt-0.5 shrink-0" />}
