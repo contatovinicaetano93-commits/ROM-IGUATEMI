@@ -348,7 +348,7 @@ export default function HojePage() {
                     className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-3.5 active:bg-surface sm:p-4"
                   >
                     <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-sky-500/10 px-1.5 py-2 text-center">
-                      <span className="text-sm font-semibold tabular-nums leading-none text-sky-200">
+                      <span className="text-sm font-semibold tabular-nums leading-none text-sky-800">
                         {when.time}
                       </span>
                       <span className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted">
