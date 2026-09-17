@@ -1,6 +1,8 @@
 import type { NextRequest } from 'next/server'
 import { secretsEqual } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
+import type { GrantableModuleKey } from '@/lib/intranet/modules'
+import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
 
 export const AUTH_COOKIE = 'rom_session'
 const DEFAULT_ADMIN_USER = 'admin'
@@ -14,6 +16,7 @@ export interface AuthSession {
   displayName: string
   employeeId: string | null
   canPublish: boolean
+  modules: GrantableModuleKey[]
 }
 
 export function canPublishContent(session: AuthSession | null | undefined) {
@@ -29,6 +32,7 @@ function sessionFromRole(user: string, role: AuthRole, extra?: Partial<AuthSessi
     displayName: extra?.displayName ?? user,
     employeeId: extra?.employeeId ?? null,
     canPublish: extra?.canPublish ?? (role === 'admin' || role === 'mkt'),
+    modules: parseGrantableModules(extra?.modules ?? []),
   }
 }
 
@@ -208,6 +212,7 @@ type V3Claims = {
   n: string
   e: string | null
   p: boolean
+  m?: GrantableModuleKey[]
 }
 
 function utf8ToB64Url(value: string): string {
@@ -244,7 +249,7 @@ function parseAuthRole(value: unknown): AuthRole | null {
 export function buildAuthSession(
   user: string,
   role: AuthRole,
-  extra?: Partial<Pick<AuthSession, 'displayName' | 'employeeId' | 'canPublish'>>,
+  extra?: Partial<Pick<AuthSession, 'displayName' | 'employeeId' | 'canPublish' | 'modules'>>,
 ): AuthSession {
   return sessionFromRole(user, role, extra)
 }
@@ -260,6 +265,7 @@ export async function createV3SessionToken(session: AuthSession, expiresAtMs?: n
     n: session.displayName,
     e: session.employeeId,
     p: session.canPublish,
+    m: session.modules,
   }
   const payload = utf8ToB64Url(JSON.stringify(claims))
   const sig = await hmacHex(secret, `rom-session-v3:${exp}:${payload}`)
@@ -289,6 +295,7 @@ async function parseV3SessionToken(
         displayName: typeof claims.n === 'string' && claims.n ? claims.n : claims.u,
         employeeId: typeof claims.e === 'string' && claims.e ? claims.e : null,
         canPublish: Boolean(claims.p) || role === 'admin' || role === 'mkt',
+        modules: parseGrantableModules(claims.m),
       }),
     }
   } catch {
@@ -410,14 +417,39 @@ export async function requireAdmin(req: NextRequest) {
   return createRoleValidator(['admin'], 'Acesso restrito ao admin operacional')(req)
 }
 
-/** Painel Financeiro (Sprint 4) — admin ou financeiro. Staff nunca acessa. */
-export async function requireFinance(req: NextRequest) {
-  return createRoleValidator(['admin', 'financeiro'], 'Acesso restrito ao financeiro')(req)
+function requireModule(
+  req: NextRequest,
+  key: GrantableModuleKey,
+  restrictionMessage: string,
+) {
+  return (async () => {
+    const auth = await requireSession(req)
+    if (!auth.ok) return auth
+    if (!hasPanelModule(auth.session.role, auth.session.modules, key)) {
+      return { ok: false as const, status: 403 as const, message: restrictionMessage }
+    }
+    return auth
+  })()
 }
 
-/** Painel Estoque — admin, financeiro (acesso duplo) ou estoque. Staff nunca acessa. */
+/** Painel Financeiro — papel financeiro/admin ou extra do colaborador. */
+export async function requireFinance(req: NextRequest) {
+  return requireModule(req, 'financeiro', 'Acesso restrito ao financeiro')
+}
+
+/** Overview de Relatórios — pacote financeiro ou extra relatorios. */
+export async function requireRelatorios(req: NextRequest) {
+  return requireModule(req, 'relatorios', 'Acesso restrito aos relatórios')
+}
+
+/** Painel Estoque — papel estoque/financeiro/admin ou extra. */
 export async function requireStock(req: NextRequest) {
-  return createRoleValidator(['admin', 'financeiro', 'estoque'], 'Acesso restrito ao estoque')(req)
+  return requireModule(req, 'estoque', 'Acesso restrito ao estoque')
+}
+
+/** Visão analítica / KPIs — admin ou extra Rom Adm. */
+export async function requireDashboard(req: NextRequest) {
+  return requireModule(req, 'dashboard', 'Acesso restrito à visão analítica')
 }
 
 /** Publicação de notícias/eventos/banners — admin ou marketing. */

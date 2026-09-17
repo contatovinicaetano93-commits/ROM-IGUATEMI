@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/auth'
 import { createEmployee, listEmployees } from '@/lib/employees'
 import { ensureFlowCatalog } from '@/lib/flow/store'
 import { requireFlowMaster } from '@/lib/flow/require-master'
+import { parseGrantableModules } from '@/lib/intranet/modules'
 import { parseAreas, parseRole } from '@/lib/flow/workflow'
 
 export async function GET(req: NextRequest) {
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
       can_publish: isPanelAdmin ? Boolean(body.can_publish) : false,
       companyIds: Array.isArray(body.companyIds) ? body.companyIds.map(String) : undefined,
       areaIds: parseAreas(body.areaIds),
+      modules: isPanelAdmin ? parseGrantableModules(body.modules) : [],
     })
     return ok({ employee }, undefined, 201)
   } catch (error) {

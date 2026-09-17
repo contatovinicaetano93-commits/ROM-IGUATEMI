@@ -102,4 +102,16 @@ describe('auth dual login', () => {
     const token = await createV3SessionToken(session)
     expect(token).toMatch(/^v3\.\d+\.[A-Za-z0-9_-]+\.[0-9a-f]{64}$/)
   })
+
+  it('guarda extras de módulo no token v3', async () => {
+    setEnv({ ROM_ADMIN_USER: 'admin', ROM_ADMIN_PASSWORD: 'admin-pass' })
+    const session = buildAuthSession('ana@rom', 'staff', {
+      displayName: 'Ana',
+      employeeId: 'emp-1',
+      modules: ['financeiro'],
+    })
+    expect(session.modules).toEqual(['financeiro'])
+    const token = await createV3SessionToken(session)
+    expect(token).toMatch(/^v3\.\d+\.[A-Za-z0-9_-]+\.[0-9a-f]{64}$/)
+  })
 })

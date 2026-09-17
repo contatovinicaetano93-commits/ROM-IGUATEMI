@@ -7,6 +7,7 @@ import { defaultAreasForRole, parseAreas, parseRole } from '@/lib/flow/workflow'
 import { AuditLogger } from '@/lib/audit'
 import { hashPassword, MIN_EMPLOYEE_PASSWORD } from '@/lib/intranet/password'
 import { companiesForPanel } from '@/lib/intranet/companies'
+import { extrasBeyondRole, parseGrantableModules, type GrantableModuleKey } from '@/lib/intranet/modules'
 import { getRomPanelId } from '@/lib/brand'
 
 export type EmployeeRecord = {
@@ -20,12 +21,13 @@ export type EmployeeRecord = {
   can_publish: boolean
   companyIds: string[]
   areaIds: RequestArea[]
+  modules: GrantableModuleKey[]
   created_at: string
 }
 
 function isMissingRelation(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error)
-  return /intranet_employees|does not exist|relation|DATABASE_URL não configurada/i.test(msg)
+  return /intranet_employees|intranet_employee_modules|does not exist|relation|DATABASE_URL não configurada/i.test(msg)
 }
 
 function parsePanelRole(value: unknown): AuthRole {
@@ -47,7 +49,8 @@ export async function findEmployeeByEmail(email: string): Promise<EmployeeRecord
     const rows = (await sql`
       select e.*,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
-        coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids
+        coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids,
+        coalesce((select array_agg(module_key) from intranet_employee_modules m where m.employee_id = e.id), '{}') as module_keys
       from intranet_employees e
       where lower(e.email) = ${email.trim().toLowerCase()}
       limit 1
@@ -67,7 +70,8 @@ export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_ha
     const rows = (await sql`
       select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.created_at,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
-        coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids
+        coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids,
+        coalesce((select array_agg(module_key) from intranet_employee_modules m where m.employee_id = e.id), '{}') as module_keys
       from intranet_employees e
       order by e.name
     `) as Array<Record<string, unknown>>
@@ -91,6 +95,7 @@ export async function createEmployee(input: {
   can_publish?: boolean
   companyIds?: string[]
   areaIds?: RequestArea[]
+  modules?: GrantableModuleKey[]
 }): Promise<Omit<EmployeeRecord, 'password_hash'>> {
   if (input.password.trim().length < MIN_EMPLOYEE_PASSWORD) {
     throw new Error(`A senha deve ter no mínimo ${MIN_EMPLOYEE_PASSWORD} caracteres.`)
@@ -134,10 +139,13 @@ export async function createEmployee(input: {
       on conflict do nothing
     `
   }
+  const modules = extrasBeyondRole(input.panel_role, parseGrantableModules(input.modules))
+  await replaceEmployeeModules(id, modules)
   const mapped = mapEmployee({
     ...created,
     company_ids: companyIds,
     area_ids: areas,
+    module_keys: modules,
   })
   const { password_hash: _passwordHash, ...rest } = mapped
   return rest
@@ -167,7 +175,8 @@ export async function findEmployeeById(id: string): Promise<EmployeeRecord | nul
     const rows = (await sql`
       select e.*,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
-        coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids
+        coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids,
+        coalesce((select array_agg(module_key) from intranet_employee_modules m where m.employee_id = e.id), '{}') as module_keys
       from intranet_employees e
       where e.id = ${id}::uuid
       limit 1
@@ -200,6 +209,18 @@ async function replaceEmployeeAreas(id: string, areaIds: RequestArea[]): Promise
     await sql`
       insert into intranet_employee_areas (employee_id, area)
       values (${id}::uuid, ${area})
+      on conflict do nothing
+    `
+  }
+}
+
+async function replaceEmployeeModules(id: string, modules: GrantableModuleKey[]): Promise<void> {
+  const sql = getIntranetSql()
+  await sql`delete from intranet_employee_modules where employee_id = ${id}::uuid`
+  for (const key of modules) {
+    await sql`
+      insert into intranet_employee_modules (employee_id, module_key)
+      values (${id}::uuid, ${key})
       on conflict do nothing
     `
   }
@@ -248,6 +269,26 @@ export async function updateEmployeeAccess(
     to: resolvedRole,
     companies: resolvedCompanies,
     areas: resolvedAreas,
+  })
+  const updated = await findEmployeeById(userId)
+  if (!updated) throw new Error('Usuário não encontrado.')
+  const { password_hash: _passwordHash, ...rest } = updated
+  return rest
+}
+
+export async function updateEmployeeModules(
+  actorEmail: string,
+  actorRole: AuthRole,
+  userId: string,
+  selected: readonly GrantableModuleKey[],
+): Promise<Omit<EmployeeRecord, 'password_hash'>> {
+  const current = await findEmployeeById(userId)
+  if (!current) throw new Error('Usuário não encontrado.')
+  const extras = extrasBeyondRole(current.panel_role, parseGrantableModules(selected))
+  await replaceEmployeeModules(userId, extras)
+  await AuditLogger.log(actorEmail, actorRole, 'UPDATE_USER', `intranet:modules:${userId}`, {
+    from: current.modules,
+    to: extras,
   })
   const updated = await findEmployeeById(userId)
   if (!updated) throw new Error('Usuário não encontrado.')
@@ -321,6 +362,7 @@ function mapEmployee(row: Record<string, unknown>): EmployeeRecord {
     can_publish: Boolean(row.can_publish),
     companyIds,
     areaIds,
+    modules: parseGrantableModules(row.module_keys),
     created_at: String(row.created_at ?? ''),
   }
 }

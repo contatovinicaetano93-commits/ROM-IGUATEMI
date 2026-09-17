@@ -1,5 +1,6 @@
 import type { AuthRole } from '@/lib/auth'
 import type { RequestArea } from '@/lib/flow/types'
+import { hasPanelModule, moduleKeyFromHref, type GrantableModuleKey } from '@/lib/intranet/modules'
 
 export type IntranetSystemGroup = 'intranet' | 'operacao' | 'gestao' | 'flow'
 
@@ -45,26 +46,15 @@ const FLOW_AREAS: Record<RequestArea, { label: string; description: string }> = 
   rh: { label: 'Solicitação RH', description: 'Férias, admissão e benefícios.' },
 }
 
-function pick(items: IntranetSystem[], hrefs: readonly string[]): IntranetSystem[] {
-  return items.filter((item) => hrefs.includes(item.href))
-}
-
-export function systemsForRole(role: AuthRole): IntranetSystem[] {
-  switch (role) {
-    case 'admin':
-      return [...INTRANET, ...OPERACAO, ...GESTAO]
-    case 'staff':
-    case 'mkt':
-      return [...INTRANET, ...OPERACAO]
-    case 'financeiro':
-      return [...INTRANET, ...pick(OPERACAO, ['/hoje']), ...pick(GESTAO, ['/financeiro', '/estoque', '/relatorios'])]
-    case 'estoque':
-      return [...INTRANET, ...pick(OPERACAO, ['/hoje']), ...pick(GESTAO, ['/estoque'])]
-    default: {
-      const _never: never = role
-      return _never
-    }
-  }
+export function systemsForAccess(
+  role: AuthRole,
+  extras: readonly GrantableModuleKey[] = [],
+): IntranetSystem[] {
+  return [...INTRANET, ...OPERACAO, ...GESTAO].filter((item) => {
+    const key = moduleKeyFromHref(item.href)
+    if (!key) return true
+    return hasPanelModule(role, extras, key)
+  })
 }
 
 export function flowAreaSystems(areaIds: RequestArea[]): IntranetSystem[] {

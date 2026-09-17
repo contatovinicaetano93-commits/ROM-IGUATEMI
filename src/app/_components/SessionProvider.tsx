@@ -13,6 +13,7 @@ export interface ClientSession {
   displayName?: string | null
   employeeId?: string | null
   canPublish?: boolean
+  modules?: string[]
   staff_login_configured?: boolean
 }
 

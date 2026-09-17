@@ -7,10 +7,11 @@ import { useClientSession } from '../_components/SessionProvider'
 import {
   flowAreaSystems,
   systemGroupLabel,
-  systemsForRole,
+  systemsForAccess,
   type IntranetSystem,
   type IntranetSystemGroup,
 } from '@/lib/intranet/systems'
+import { parseGrantableModules } from '@/lib/intranet/modules'
 import type { RequestArea } from '@/lib/flow/types'
 
 const GROUPS: IntranetSystemGroup[] = ['intranet', 'operacao', 'gestao', 'flow']
@@ -39,8 +40,8 @@ export default function SistemasPage() {
     const modules = !session || (session.auth_enabled && !session.authenticated)
       ? []
       : !session.auth_enabled
-        ? systemsForRole('admin')
-        : systemsForRole(role)
+        ? systemsForAccess('admin')
+        : systemsForAccess(role, parseGrantableModules(session.modules))
     return [...modules, ...flowAreaSystems(areaIds)]
   }, [areaIds, session])
 
