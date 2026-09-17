@@ -120,3 +120,17 @@ describe('flow company scope', () => {
     expect(canSeeExpense(user, { ...mine, company: 'cmp_baru_iguatemi' })).toBe(false)
   })
 })
+
+describe('intranet page chrome', () => {
+  it('IntranetPage segue o enquadramento da Agenda/Visão (sans + largura 1600)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const src = readFileSync(join(process.cwd(), 'src/app/_components/intranet/IntranetPage.tsx'), 'utf8')
+    expect(src).toContain('max-w-[1600px]')
+    expect(src).toContain('text-gold')
+    expect(src).toContain('text-xl font-semibold')
+    expect(src).not.toContain('font-serif text-3xl')
+    expect(src).not.toContain('max-w-[1100px]')
+    expect(src).not.toContain('Voltar ao início')
+  })
+})

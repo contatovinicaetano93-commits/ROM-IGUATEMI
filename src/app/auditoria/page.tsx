@@ -52,24 +52,24 @@ export default function AuditoriaPage() {
 
   if (!loading && session?.auth_enabled && session.role !== 'admin') {
     return (
-      <IntranetPage kicker="Registro" title="Auditoria">
-        <p className="text-sm text-muted">Só o admin da unidade vê este histórico.</p>
-      </IntranetPage>
+      <IntranetPage
+        kicker="Registro"
+        title="Auditoria"
+        subtitle="Só o admin da unidade vê este histórico."
+      />
     )
   }
 
   return (
-    <IntranetPage kicker="Registro" title="Auditoria">
-      <p className="text-sm text-muted">
-        Quem publicou, aprovou no Rom Flow ou mudou acesso. Lista o que o sistema já gravou — se estiver vazia, ainda não
-        houve ação.
-      </p>
-      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
-      {rows && rows.length === 0 && !error && (
-        <p className="mt-4 text-sm text-muted">Nenhum registro ainda.</p>
-      )}
+    <IntranetPage
+      kicker="Registro"
+      title="Auditoria"
+      subtitle="Quem publicou, aprovou no Rom Flow ou mudou acesso. Lista o que o sistema já gravou — se estiver vazia, ainda não houve ação."
+    >
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {rows && rows.length === 0 && !error && <p className="text-sm text-muted">Nenhum registro ainda.</p>}
       {rows && rows.length > 0 && (
-        <ul className="mt-6 divide-y divide-border rounded-2xl border border-border bg-card">
+        <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
           {rows.map((row) => (
             <li key={row.id} className="px-4 py-3">
               <div className="flex items-baseline justify-between gap-3">
@@ -81,7 +81,7 @@ export default function AuditoriaPage() {
                 {row.status === 'error' ? ' · erro' : ''}
               </p>
               {row.href ? (
-                <Link href={row.href} className="mt-1 inline-block text-xs text-gold-strong">
+                <Link href={row.href} className="mt-1 inline-block text-xs font-medium text-gold-strong">
                   Abrir
                 </Link>
               ) : null}

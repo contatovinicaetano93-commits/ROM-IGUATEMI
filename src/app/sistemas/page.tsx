@@ -51,14 +51,15 @@ export default function SistemasPage() {
   })).filter((block) => block.items.length > 0)
 
   return (
-    <IntranetPage kicker="Acesso" title="Meus Sistemas">
-      <p className="text-sm text-muted">
-        Só aparecem as áreas e seções liberadas para o seu perfil nesta unidade.
-      </p>
-      <div className="mt-6 space-y-8">
+    <IntranetPage
+      kicker="Acesso"
+      title="Meus Sistemas"
+      subtitle="Só aparecem as áreas e seções liberadas para o seu perfil nesta unidade."
+    >
+      <div className="space-y-6">
         {grouped.map((block) => (
           <section key={block.group}>
-            <h2 className="mb-3 text-sm font-semibold">{systemGroupLabel(block.group)}</h2>
+            <h2 className="mb-3 text-sm font-medium">{systemGroupLabel(block.group)}</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               {block.items.map((item) => (
                 <SystemCard key={`${item.group}-${item.href}-${item.label}`} item={item} />
@@ -73,8 +74,8 @@ export default function SistemasPage() {
 
 function SystemCard({ item }: { item: IntranetSystem }) {
   return (
-    <Link href={item.href} className="rounded-2xl border border-border bg-card p-5">
-      <p className="font-medium">{item.label}</p>
+    <Link href={item.href} className="rounded-2xl border border-border bg-card p-5 transition-colors hover:bg-background">
+      <p className="text-sm font-medium">{item.label}</p>
       <p className="mt-1 text-sm text-muted">{item.description}</p>
     </Link>
   )
