@@ -23,22 +23,23 @@ describe('intranet paths', () => {
 })
 
 describe('intranet top bar', () => {
-  it('troca Empresa por MKT Notícias, tira RH e troca Treinamentos por Onboarding', () => {
+  it('segue o mapa do painel admin: Home, gestão, notícias, agenda e visão', () => {
     expect(INTRANET_NAV.map((item) => item.label)).toEqual([
-      'Início',
-      'Pessoas',
-      'MKT Notícias',
+      'Home',
+      'Gestão de usuário',
+      'Notícias e eventos',
       'Rom Flow',
       'Financeiro',
       'Estoque',
-      'Operação',
-      'Pipeline',
+      'Operação do dia',
+      'Agenda do dia',
+      'Visão analítica',
       'Contatos',
-      'Onboarding',
-      'Ajuda',
     ])
-    expect(INTRANET_NAV.find((item) => item.label === 'MKT Notícias')?.href).toBe('/empresa')
-    expect(INTRANET_NAV.find((item) => item.label === 'Onboarding')?.href).toBe('/onboarding')
+    expect(INTRANET_NAV.find((item) => item.label === 'Agenda do dia')?.href).toBe('/pipeline')
+    expect(INTRANET_NAV.find((item) => item.label === 'Visão analítica')?.href).toBe('/dashboard')
+    expect(INTRANET_NAV.some((item) => item.href === '/onboarding')).toBe(false)
+    expect(INTRANET_NAV.some((item) => item.href === '/ajuda')).toBe(false)
   })
 })
 
@@ -46,8 +47,11 @@ describe('intranet section label', () => {
   it('mostra Rom Flow no top bar das rotas do módulo', () => {
     expect(intranetSectionLabel('/flow')).toBe('Rom Flow')
     expect(intranetSectionLabel('/flow/nova')).toBe('Rom Flow')
-    expect(intranetSectionLabel('/')).toBe('Início')
-    expect(intranetSectionLabel('/pessoas')).toBe('Pessoas')
+    expect(intranetSectionLabel('/')).toBe('Home')
+    expect(intranetSectionLabel('/pessoas')).toBe('Gestão de usuário')
+    expect(intranetSectionLabel('/dashboard')).toBe('Visão analítica')
+    expect(intranetSectionLabel('/relatorios')).toBe('Visão analítica')
+    expect(intranetSectionLabel('/pipeline')).toBe('Agenda do dia')
     expect(intranetSectionLabel('/auditoria')).toBe('Auditoria')
   })
 })

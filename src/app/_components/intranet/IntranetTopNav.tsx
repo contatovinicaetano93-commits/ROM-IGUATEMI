@@ -13,21 +13,22 @@ import { LogoutButton } from '../LogoutButton'
 import { IntranetBell } from './IntranetBell'
 
 const SEARCH_TARGETS = [
-  { href: '/', label: 'Início' },
-  { href: '/pessoas', label: 'Pessoas' },
-  { href: '/empresa', label: 'MKT Notícias' },
+  { href: '/', label: 'Home' },
+  { href: '/pessoas', label: 'Gestão de usuário' },
+  { href: '/empresa', label: 'Notícias e eventos' },
   { href: '/rh', label: 'RH e benefícios' },
   { href: '/flow', label: 'Rom Flow · solicitações' },
-  { href: '/hoje', label: 'Operação · Hoje' },
-  { href: '/pipeline', label: 'Pipeline' },
+  { href: '/hoje', label: 'Operação do dia' },
+  { href: '/pipeline', label: 'Agenda do dia' },
   { href: '/contatos', label: 'Contatos' },
-  { href: '/dashboard', label: 'Rom Adm · visão analítica' },
-  { href: '/relatorios', label: 'Relatórios' },
+  { href: '/dashboard', label: 'Visão analítica' },
+  { href: '/relatorios', label: 'Relatórios · visão analítica' },
   { href: '/financeiro', label: 'Financeiro e Omie' },
   { href: '/estoque', label: 'Estoque' },
   { href: '/treinamentos', label: 'Treinamentos' },
   { href: '/onboarding', label: 'Onboarding' },
-  { href: '/ajuda', label: 'Ajuda e suporte' },
+  { href: '/ajuda', label: 'Suporte' },
+  { href: '/sistemas', label: 'Meus sistemas' },
   { href: '/auditoria', label: 'Auditoria' },
 ]
 
@@ -74,11 +75,10 @@ export function IntranetTopNav() {
           >
             <Menu size={22} />
           </button>
-          <Link href="/" className="font-serif text-2xl tracking-[0.18em] text-foreground">
-            {brand.shortMonogram}
+          <Link href="/" className="font-serif text-lg tracking-[0.08em] text-foreground sm:text-xl lg:text-2xl">
+            {brand.displayName}
           </Link>
           <div className="min-w-0">
-            <p className="text-[0.62rem] uppercase tracking-[0.22em] text-muted">Intranet</p>
             <p className="font-serif text-lg leading-none text-foreground" data-testid="intranet-section">
               {section}
             </p>
@@ -120,9 +120,7 @@ export function IntranetTopNav() {
                 {initial}
               </span>
               <span className="hidden text-sm text-foreground sm:inline">{name.split(' ')[0]}</span>
-              <div className="hidden lg:block">
-                <LogoutButton label="Sair" />
-              </div>
+              <LogoutButton className="hidden lg:inline-flex" label="Sair" />
             </div>
           </div>
         </div>
@@ -133,7 +131,7 @@ export function IntranetTopNav() {
           <div className="absolute inset-0 bg-black/30" onClick={() => setMenuOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-[80%] max-w-xs flex-col bg-surface pt-[env(safe-area-inset-top)] shadow-xl">
             <div className="flex items-center justify-between px-5 py-4">
-              <span className="font-serif text-xl tracking-[0.18em]">{brand.shortMonogram}</span>
+              <span className="font-serif text-lg tracking-[0.08em]">{brand.displayName}</span>
               <button type="button" aria-label="Fechar" onClick={() => setMenuOpen(false)}>
                 <X size={20} />
               </button>
