@@ -34,6 +34,7 @@ export type Sql = {
 }
 
 let cached: PostgresSql | null = null
+let cachedWrapped: Sql | null = null
 let cachedUrl: string | null = null
 
 /**
@@ -64,17 +65,25 @@ export function isDbPoolExhaustedError(e: unknown): boolean {
   )
 }
 
-function wrap(sql: PostgresSql): Sql {
-  // Reutiliza postgres.js (tagged template + helper sql(ids)).
+export function wrapSqlClient(sql: PostgresSql): Sql {
+  // `client` é o mesmo objeto postgres.js. Tem de capturar unsafe/begin
+  // originais antes de reatribuir — senão wrap.unsafe chama a si mesmo
+  // (RangeError no POST /api/admin/migrations).
+  const unsafe = sql.unsafe.bind(sql)
+  const begin = sql.begin.bind(sql)
   const client = sql as unknown as Sql
 
   client.begin = <T>(fn: (tx: Sql) => Promise<T>) =>
-    sql.begin(async (tx) => fn(wrap(tx as unknown as PostgresSql))) as Promise<T>
+    begin(async (tx) => fn(wrapSqlClient(tx as unknown as PostgresSql))) as Promise<T>
 
   client.unsafe = async (query: string, params: unknown[] = []) =>
-    sql.unsafe(query, params as never[]) as unknown as unknown[]
+    unsafe(query, params as never[]) as unknown as unknown[]
 
   return client
+}
+
+function wrap(sql: PostgresSql): Sql {
+  return wrapSqlClient(sql)
 }
 
 function readDeployOverlayUrl(): string | null {
@@ -144,7 +153,7 @@ function resolveDatabaseUrl(): string {
 export function getSql(): Sql {
   const url = resolveDatabaseUrl()
 
-  if (!cached || cachedUrl !== url) {
+  if (!cached || !cachedWrapped || cachedUrl !== url) {
     cached?.end({ timeout: 1 }).catch(() => {})
     cached = postgres(url, {
       ssl: 'require',
@@ -157,8 +166,9 @@ export function getSql(): Sql {
       connect_timeout: 10,
     })
     cachedUrl = url
+    cachedWrapped = wrap(cached)
   }
-  return wrap(cached)
+  return cachedWrapped
 }
 
 function readIntranetOverlayUrl(): string | null {
@@ -188,6 +198,7 @@ export function peekResolvedIntranetDatabaseUrl(): string | null {
 }
 
 let intranetCached: PostgresSql | null = null
+let intranetCachedWrapped: Sql | null = null
 let intranetCachedUrl: string | null = null
 
 export function getIntranetSql(): Sql {
@@ -195,7 +206,7 @@ export function getIntranetSql(): Sql {
   if (!raw) throw new Error('DATABASE_URL não configurada')
   const url = toTransactionPoolerUrl(raw)
 
-  if (!intranetCached || intranetCachedUrl !== url) {
+  if (!intranetCached || !intranetCachedWrapped || intranetCachedUrl !== url) {
     intranetCached?.end({ timeout: 1 }).catch(() => {})
     intranetCached = postgres(url, {
       ssl: 'require',
@@ -206,6 +217,7 @@ export function getIntranetSql(): Sql {
       connect_timeout: 10,
     })
     intranetCachedUrl = url
+    intranetCachedWrapped = wrap(intranetCached)
   }
-  return wrap(intranetCached)
+  return intranetCachedWrapped
 }
