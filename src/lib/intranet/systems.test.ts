@@ -28,7 +28,7 @@ describe('systemsForAccess', () => {
     expect(hrefs).toContain('/auditoria')
   })
 
-  it('staff e mkt veem operação, sem financeiro nem Rom Adm', () => {
+  it('staff e mkt veem operação, sem financeiro nem Visão analítica', () => {
     for (const role of ['staff', 'mkt'] as const) {
       const hrefs = systemsForAccess(role).map((item) => item.href)
       expect(hrefs).toContain('/pipeline')

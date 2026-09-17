@@ -29,7 +29,7 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/dashboard', 'financeiro', [])).toBe(false)
   })
 
-  it('estoque não entra em financeiro nem Rom Adm', () => {
+  it('estoque não entra em financeiro nem Visão analítica', () => {
     expect(canAccessProtectedPath('/estoque', 'estoque', [])).toBe(true)
     expect(canAccessProtectedPath('/hoje', 'estoque', [])).toBe(true)
     expect(canAccessProtectedPath('/financeiro', 'estoque', [])).toBe(false)

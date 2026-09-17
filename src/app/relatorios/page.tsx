@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { AlertTriangle, Download, FileText, RefreshCw } from 'lucide-react'
 import { MonthYearField } from '../_components/MonthYearField'
 import { SectionCard } from '../_components/ui'
+import { VisaoAnaliticaNav } from '../_components/intranet/VisaoAnaliticaNav'
 import { apiFetch } from '@/lib/api-client'
 import { useClientLoader } from '@/lib/use-client-loader'
 import { getBrand } from '@/lib/brand'
@@ -96,11 +97,12 @@ export default function RelatoriosOverviewPage() {
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Relatórios</p>
-          <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Overview do mês</h1>
+          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
+          <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Relatórios · overview do mês</h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
             Fechamento oficial {brand.displayName} — dados acumulados no ROM (não Avec ao vivo).
           </p>
+          <VisaoAnaliticaNav />
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">

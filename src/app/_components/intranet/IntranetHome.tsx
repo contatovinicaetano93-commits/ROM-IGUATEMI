@@ -84,7 +84,7 @@ export function IntranetHome() {
               href="/empresa#noticias"
               className="mt-5 inline-flex rounded-full border border-white/40 px-4 py-2 text-sm text-white hover:bg-white/10"
             >
-              Ver novidades
+              Ver novidade
             </Link>
           </div>
           <p className="absolute bottom-8 right-8 hidden max-w-xs text-right font-serif text-lg text-white/80 lg:block">

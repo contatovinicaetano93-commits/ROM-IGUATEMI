@@ -20,24 +20,24 @@ export const HOME_SHORTCUTS = [
 
 const INTRANET: IntranetSystem[] = [
   { href: '/flow', label: 'Rom Flow', description: 'Solicitações, aprovações e pagamentos.', group: 'intranet' },
-  { href: '/pessoas', label: 'Pessoas', description: 'Diretório da unidade.', group: 'intranet' },
-  { href: '/empresa', label: 'MKT Notícias', description: 'Notícias, eventos e políticas.', group: 'intranet' },
+  { href: '/pessoas', label: 'Gestão de usuário', description: 'Diretório e acessos da unidade.', group: 'intranet' },
+  { href: '/empresa', label: 'Notícias e eventos', description: 'Notícias, eventos e políticas.', group: 'intranet' },
   { href: '/onboarding', label: 'Onboarding', description: 'Vídeos e treinamento da casa.', group: 'intranet' },
-  { href: '/ajuda', label: 'Ajuda', description: 'Suporte da equipe.', group: 'intranet' },
+  { href: '/ajuda', label: 'Suporte', description: 'Suporte da equipe.', group: 'intranet' },
   { href: '/auditoria', label: 'Auditoria', description: 'Quem publicou, aprovou ou mudou acesso.', group: 'intranet' },
 ]
 
 const OPERACAO: IntranetSystem[] = [
-  { href: '/hoje', label: 'Operação', description: 'Frente de caixa do dia.', group: 'operacao' },
-  { href: '/pipeline', label: 'Pipeline', description: 'Funil do salão.', group: 'operacao' },
+  { href: '/hoje', label: 'Operação do dia', description: 'Frente de caixa do dia.', group: 'operacao' },
+  { href: '/pipeline', label: 'Agenda do dia', description: 'Funil e agenda do salão.', group: 'operacao' },
   { href: '/contatos', label: 'Contatos', description: 'Base de clientes.', group: 'operacao' },
 ]
 
 const GESTAO: IntranetSystem[] = [
   { href: '/financeiro', label: 'Financeiro', description: 'Despesas e Omie.', group: 'gestao' },
   { href: '/estoque', label: 'Estoque', description: 'Produtos e alertas.', group: 'gestao' },
-  { href: '/relatorios', label: 'Relatórios', description: 'Visão de período.', group: 'gestao' },
-  { href: '/dashboard', label: 'Rom Adm', description: 'Visão analítica.', group: 'gestao' },
+  { href: '/dashboard', label: 'Visão analítica', description: 'KPIs do mês e fechamento em Relatórios.', group: 'gestao' },
+  { href: '/relatorios', label: 'Relatórios', description: 'Fechamento oficial do mês.', group: 'gestao' },
 ]
 
 const FLOW_AREAS: Record<RequestArea, { label: string; description: string }> = {

@@ -18,8 +18,8 @@ import { useClientSession } from './SessionProvider'
 import { canSeeNavHref, hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
 
 const CORE = [
-  { href: '/', shortLabel: 'Início', icon: Home },
-  { href: '/hoje', shortLabel: 'Hoje', icon: Sun },
+  { href: '/', shortLabel: 'Home', icon: Home },
+  { href: '/hoje', shortLabel: 'Operação', icon: Sun },
   { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
   { href: '/contatos', shortLabel: 'Contatos', icon: Users },
 ]
@@ -39,29 +39,30 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
   const items =
     canStock && !canFinance
       ? [
-          { href: '/', shortLabel: 'Início', icon: Home },
+          { href: '/', shortLabel: 'Home', icon: Home },
           { href: '/estoque', shortLabel: 'Estoque', icon: Boxes },
           { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
-          { href: '/hoje', shortLabel: 'Hoje', icon: Sun },
+          { href: '/hoje', shortLabel: 'Operação', icon: Sun },
         ]
       : canFinance
         ? [
-            { href: '/', shortLabel: 'Início', icon: Home },
+            { href: '/', shortLabel: 'Home', icon: Home },
             { href: '/financeiro', shortLabel: 'Financeiro', icon: Wallet },
             { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
-            { href: '/hoje', shortLabel: 'Hoje', icon: Sun },
+            { href: '/hoje', shortLabel: 'Operação', icon: Sun },
           ]
         : CORE
 
   const extrasMenu = [
-    { href: '/pipeline', label: 'Pipeline' },
+    { href: '/pipeline', label: 'Agenda do dia' },
     { href: '/contatos', label: 'Contatos' },
-    { href: '/pessoas', label: 'Pessoas' },
-    { href: '/empresa', label: 'Empresa' },
+    { href: '/pessoas', label: 'Gestão de usuário' },
+    { href: '/empresa', label: 'Notícias e eventos' },
     { href: '/rh', label: 'RH' },
     { href: '/treinamentos', label: 'Treinamentos' },
-    { href: '/ajuda', label: 'Ajuda' },
-    ...(canDashboard ? [{ href: '/dashboard', label: 'Rom Adm' }] : []),
+    { href: '/onboarding', label: 'Onboarding' },
+    { href: '/ajuda', label: 'Suporte' },
+    ...(canDashboard ? [{ href: '/dashboard', label: 'Visão analítica' }] : []),
     ...(canRelatorios ? [{ href: '/relatorios', label: 'Relatórios' }] : []),
     ...(canFinance ? [{ href: '/financeiro', label: 'Financeiro' }] : []),
     ...(canStock ? [{ href: '/estoque', label: 'Estoque' }] : []),

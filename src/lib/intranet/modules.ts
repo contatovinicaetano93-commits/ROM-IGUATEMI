@@ -15,12 +15,12 @@ export type GrantableModule = {
 }
 
 export const GRANTABLE_MODULES: readonly GrantableModule[] = [
-  { key: 'pipeline', href: '/pipeline', label: 'Pipeline' },
+  { key: 'pipeline', href: '/pipeline', label: 'Agenda do dia' },
   { key: 'contatos', href: '/contatos', label: 'Contatos' },
   { key: 'financeiro', href: '/financeiro', label: 'Financeiro' },
   { key: 'estoque', href: '/estoque', label: 'Estoque' },
   { key: 'relatorios', href: '/relatorios', label: 'Relatórios' },
-  { key: 'dashboard', href: '/dashboard', label: 'Rom Adm' },
+  { key: 'dashboard', href: '/dashboard', label: 'Visão analítica' },
 ] as const
 
 const ALL_KEYS: readonly GrantableModuleKey[] = GRANTABLE_MODULES.map((item) => item.key)

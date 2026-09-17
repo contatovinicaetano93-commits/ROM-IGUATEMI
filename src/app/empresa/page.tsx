@@ -79,7 +79,7 @@ export default function EmpresaPage() {
   const policies = posts.filter((post) => post.kind === 'policy')
 
   return (
-    <IntranetPage kicker="Cultura" title="MKT Notícias">
+    <IntranetPage kicker="Cultura" title="Notícias e eventos">
       <p className="text-sm text-muted">
         Notícias e eventos da unidade, mais o manual de políticas ROM Concept. Publicação pelo marketing.
       </p>

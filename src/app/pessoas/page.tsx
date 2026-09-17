@@ -128,7 +128,7 @@ export default function PessoasPage() {
   }
 
   return (
-    <IntranetPage kicker="Diretório" title="Pessoas">
+    <IntranetPage kicker="Diretório" title="Gestão de usuário">
       <p className="text-sm text-muted">
         Colaboradores desta unidade. O papel define o pacote; os extras liberam um sistema sem mudar o cargo.
       </p>
