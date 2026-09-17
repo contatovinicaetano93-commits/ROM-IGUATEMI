@@ -7,7 +7,6 @@ import { Menu, Search, X } from 'lucide-react'
 import { INTRANET_NAV } from './nav'
 import { useClientSession } from '../SessionProvider'
 import { getBrand } from '@/lib/brand'
-import { intranetSectionLabel } from '@/lib/intranet/section'
 import { canSeeNavHref, parseGrantableModules } from '@/lib/intranet/modules'
 import { LogoutButton } from '../LogoutButton'
 import { IntranetBell } from './IntranetBell'
@@ -40,7 +39,6 @@ export function IntranetTopNav() {
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const section = intranetSectionLabel(pathname)
   const name = session?.displayName || session?.user || 'Equipe'
   const initial = name.trim().charAt(0).toUpperCase() || 'R'
   const role = session?.role
@@ -66,7 +64,8 @@ export function IntranetTopNav() {
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] items-center gap-4 px-4 py-3 lg:px-8">
+        {/* Faixa 1: marca + utilitários — sem título de seção (já existe no chrome da página) */}
+        <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-5 py-3 lg:px-8">
           <button
             type="button"
             className="flex h-10 w-10 items-center justify-center text-foreground lg:hidden"
@@ -75,40 +74,24 @@ export function IntranetTopNav() {
           >
             <Menu size={22} />
           </button>
-          <Link href="/" className="font-serif text-lg tracking-[0.08em] text-foreground sm:text-xl lg:text-2xl">
+          <Link
+            href="/"
+            className="shrink-0 font-serif text-lg tracking-[0.08em] text-foreground sm:text-xl lg:text-2xl"
+          >
             {brand.displayName}
           </Link>
-          <div className="min-w-0">
-            <p className="font-serif text-lg leading-none text-foreground" data-testid="intranet-section">
-              {section}
-            </p>
-          </div>
-          <nav className="hidden flex-1 items-center justify-center gap-6 text-[0.82rem] text-muted lg:flex">
-            {links.map((item) => {
-              const active = item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(`${item.href}/`)
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={active ? 'text-foreground' : 'hover:text-foreground'}
-                >
-                  {item.label}
-                </Link>
-              )
-            })}
-          </nav>
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              className="hidden h-10 items-center gap-2 rounded-full border border-border bg-background px-4 text-sm text-muted lg:flex"
+              className="hidden h-9 items-center gap-2 rounded-full border border-border bg-background px-3 text-sm text-muted xl:flex"
               onClick={() => setSearchOpen(true)}
             >
               <Search size={16} />
-              Pesquisar na intranet…
+              Pesquisar…
             </button>
             <button
               type="button"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-foreground lg:hidden"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-foreground xl:hidden"
               aria-label="Buscar"
               onClick={() => setSearchOpen(true)}
             >
@@ -116,14 +99,43 @@ export function IntranetTopNav() {
             </button>
             <IntranetBell />
             <div className="flex items-center gap-2 pl-1">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1c1916] text-xs font-semibold text-white">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-xs font-semibold text-background">
                 {initial}
               </span>
-              <span className="hidden text-sm text-foreground sm:inline">{name.split(' ')[0]}</span>
+              <span className="hidden max-w-[7rem] truncate text-sm text-foreground sm:inline">{name.split(' ')[0]}</span>
               <LogoutButton className="hidden lg:inline-flex" label="Sair" />
             </div>
           </div>
         </div>
+
+        {/* Faixa 2: módulos em linha única, sem quebra — nomes curtos só na barra */}
+        <nav
+          className="hidden border-t border-border/80 lg:block"
+          aria-label="Módulos da intranet"
+        >
+          <div className="mx-auto flex max-w-[1600px] items-stretch justify-center gap-5 overflow-x-auto px-5 xl:gap-7 lg:px-8">
+            {links.map((item) => {
+              const active =
+                item.href === '/'
+                  ? pathname === '/'
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={item.label}
+                  className={
+                    active
+                      ? 'shrink-0 whitespace-nowrap border-b-2 border-foreground px-1 py-2.5 text-[0.8rem] font-medium tracking-wide text-foreground'
+                      : 'shrink-0 whitespace-nowrap border-b-2 border-transparent px-1 py-2.5 text-[0.8rem] tracking-wide text-muted hover:text-foreground'
+                  }
+                >
+                  {item.short}
+                </Link>
+              )
+            })}
+          </div>
+        </nav>
       </header>
 
       {menuOpen && (

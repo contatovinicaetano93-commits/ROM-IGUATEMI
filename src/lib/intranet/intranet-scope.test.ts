@@ -36,6 +36,18 @@ describe('intranet top bar', () => {
       'Visão analítica',
       'Contatos',
     ])
+    expect(INTRANET_NAV.map((item) => item.short)).toEqual([
+      'Home',
+      'Usuários',
+      'Notícias',
+      'Rom Flow',
+      'Financeiro',
+      'Estoque',
+      'Operação',
+      'Agenda',
+      'Visão',
+      'Contatos',
+    ])
     expect(INTRANET_NAV.find((item) => item.label === 'Agenda do dia')?.href).toBe('/pipeline')
     expect(INTRANET_NAV.find((item) => item.label === 'Visão analítica')?.href).toBe('/dashboard')
     expect(INTRANET_NAV.some((item) => item.href === '/onboarding')).toBe(false)
@@ -118,5 +130,19 @@ describe('flow company scope', () => {
     expect(canSeeExpense(user, mine)).toBe(true)
     expect(canSeeExpense(user, { ...mine, requester: 'other' })).toBe(false)
     expect(canSeeExpense(user, { ...mine, company: 'cmp_baru_iguatemi' })).toBe(false)
+  })
+})
+
+describe('intranet page chrome', () => {
+  it('IntranetPage segue o enquadramento da Agenda/Visão (sans + largura 1600)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const src = readFileSync(join(process.cwd(), 'src/app/_components/intranet/IntranetPage.tsx'), 'utf8')
+    expect(src).toContain('max-w-[1600px]')
+    expect(src).toContain('text-gold')
+    expect(src).toContain('text-xl font-semibold')
+    expect(src).not.toContain('font-serif text-3xl')
+    expect(src).not.toContain('max-w-[1100px]')
+    expect(src).not.toContain('Voltar ao início')
   })
 })

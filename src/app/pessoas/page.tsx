@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
+import { PanelButton, SectionCard } from '../_components/ui'
 import { useClientSession, type ClientAuthRole } from '../_components/SessionProvider'
 import { GRANTABLE_MODULES, hasPanelModule, parseGrantableModules, type GrantableModuleKey } from '@/lib/intranet/modules'
 
@@ -128,106 +129,119 @@ export default function PessoasPage() {
   }
 
   return (
-    <IntranetPage kicker="Diretório" title="Gestão de usuário">
-      <p className="text-sm text-muted">
-        Colaboradores desta unidade. O papel define o pacote; os extras liberam um sistema sem mudar o cargo.
-      </p>
-      <ul className="mt-4 divide-y divide-border rounded-2xl border border-border bg-card">
-        {employees.length === 0 && (
-          <li className="px-4 py-6 text-sm text-muted">Ninguém cadastrado ainda. O admin cria o primeiro acesso.</li>
-        )}
-        {employees.map((person) => {
-          const extras = parseGrantableModules(person.modules)
-          return (
-            <li key={person.id} className="px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">{person.name}</p>
-                  <p className="text-xs text-muted">{person.email}</p>
-                  {extras.length > 0 && (
-                    <p className="mt-1 text-[0.65rem] uppercase tracking-wide text-gold-strong">
-                      extra: {extras.join(' · ')}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs uppercase tracking-wide text-muted">{person.panel_role}</span>
-                  {canManage && person.panel_role !== 'admin' && (
-                    <button
-                      type="button"
-                      className="text-xs text-gold-strong"
-                      onClick={() => {
-                        setEditingId(person.id)
-                        setEditModules(extras)
-                      }}
-                    >
-                      Sistemas
-                    </button>
-                  )}
-                </div>
-              </div>
-              {editingId === person.id && (
-                <div className="mt-3 rounded-xl border border-border bg-background p-3">
-                  <ModuleChecks role={person.panel_role} selected={editModules} onToggle={toggleEdit} />
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => void saveModules(person)}
-                      className="rounded-full bg-[#1c1916] px-3 py-1.5 text-xs text-white"
-                    >
-                      {saving ? 'Salvando…' : 'Salvar sistemas'}
-                    </button>
-                    <button type="button" className="text-xs text-muted" onClick={() => setEditingId(null)}>
-                      Cancelar
-                    </button>
+    <IntranetPage
+      kicker="Diretório"
+      title="Gestão de usuário"
+      subtitle="Colaboradores desta unidade. O papel define o pacote; os extras liberam um sistema sem mudar o cargo."
+    >
+      <SectionCard title="Colaboradores" badge={<span className="text-xs text-muted">{employees.length}</span>}>
+        <ul className="divide-y divide-border">
+          {employees.length === 0 && (
+            <li className="py-4 text-sm text-muted">Ninguém cadastrado ainda. O admin cria o primeiro acesso.</li>
+          )}
+          {employees.map((person) => {
+            const extras = parseGrantableModules(person.modules)
+            return (
+              <li key={person.id} className="py-3 first:pt-0 last:pb-0">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">{person.name}</p>
+                    <p className="text-xs text-muted">{person.email}</p>
+                    {extras.length > 0 && (
+                      <p className="mt-1 text-[0.65rem] uppercase tracking-wide text-gold-strong">
+                        extra: {extras.join(' · ')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase tracking-wide text-muted">{person.panel_role}</span>
+                    {canManage && person.panel_role !== 'admin' && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-gold-strong"
+                        onClick={() => {
+                          setEditingId(person.id)
+                          setEditModules(extras)
+                        }}
+                      >
+                        Sistemas
+                      </button>
+                    )}
                   </div>
                 </div>
-              )}
-            </li>
-          )
-        })}
-      </ul>
+                {editingId === person.id && (
+                  <div className="mt-3 rounded-xl border border-border bg-background p-3">
+                    <ModuleChecks role={person.panel_role} selected={editModules} onToggle={toggleEdit} />
+                    <div className="mt-3 flex gap-2">
+                      <PanelButton
+                        type="button"
+                        disabled={saving}
+                        onClick={() => void saveModules(person)}
+                        className="px-3 py-1.5 text-xs"
+                      >
+                        {saving ? 'Salvando…' : 'Salvar sistemas'}
+                      </PanelButton>
+                      <PanelButton type="button" variant="outline" className="px-3 py-1.5 text-xs" onClick={() => setEditingId(null)}>
+                        Cancelar
+                      </PanelButton>
+                    </div>
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </SectionCard>
 
       {canManage && (
-        <form onSubmit={onSubmit} className="mt-8 grid gap-3 rounded-2xl border border-border bg-card p-5 sm:grid-cols-2">
-          <h2 className="sm:col-span-2 font-serif text-xl">Novo colaborador</h2>
-          <input name="name" required placeholder="Nome" className="rounded-xl border border-border bg-background px-3 py-2" />
-          <input name="email" type="email" required placeholder="E-mail" className="rounded-xl border border-border bg-background px-3 py-2" />
-          <input name="password" type="password" required minLength={8} placeholder="Senha inicial" className="rounded-xl border border-border bg-background px-3 py-2" />
-          <select
-            name="panel_role"
-            className="rounded-xl border border-border bg-background px-3 py-2"
-            value={createRole}
-            onChange={(e) => {
-              const next = ROLES.includes(e.target.value as ClientAuthRole) ? (e.target.value as ClientAuthRole) : 'staff'
-              setCreateRole(next)
-              setCreateModules([])
-            }}
-          >
-            <option value="staff">Staff</option>
-            <option value="admin">Admin</option>
-            <option value="financeiro">Financeiro</option>
-            <option value="estoque">Estoque</option>
-            <option value="mkt">Marketing</option>
-          </select>
-          <select name="flow_role" className="rounded-xl border border-border bg-background px-3 py-2" defaultValue="solicitante">
-            <option value="solicitante">Solicitante</option>
-            <option value="master">Master RomFlow</option>
-            <option value="admin_financeiro">Admin financeiro</option>
-            <option value="admin_compras">Admin compras</option>
-            <option value="admin_rh">Admin RH</option>
-            <option value="admin_manutencao">Admin manutenção</option>
-          </select>
-          <ModuleChecks role={createRole} selected={createModules} onToggle={toggleCreate} />
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" name="can_publish" /> Pode publicar notícias (MKT)
-          </label>
-          {error && <p className="sm:col-span-2 text-sm text-danger">{error}</p>}
-          <button disabled={saving} className="rounded-full bg-[#1c1916] px-4 py-2 text-sm text-white sm:col-span-2">
-            {saving ? 'Salvando…' : 'Criar acesso'}
-          </button>
-        </form>
+        <SectionCard title="Novo colaborador">
+          <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
+            <input name="name" required placeholder="Nome" className="rounded-xl border border-border bg-background px-3 py-2" />
+            <input name="email" type="email" required placeholder="E-mail" className="rounded-xl border border-border bg-background px-3 py-2" />
+            <input
+              name="password"
+              type="password"
+              required
+              minLength={8}
+              placeholder="Senha inicial"
+              className="rounded-xl border border-border bg-background px-3 py-2"
+            />
+            <select
+              name="panel_role"
+              className="rounded-xl border border-border bg-background px-3 py-2"
+              value={createRole}
+              onChange={(e) => {
+                const next = ROLES.includes(e.target.value as ClientAuthRole) ? (e.target.value as ClientAuthRole) : 'staff'
+                setCreateRole(next)
+                setCreateModules([])
+              }}
+            >
+              <option value="staff">Staff</option>
+              <option value="admin">Admin</option>
+              <option value="financeiro">Financeiro</option>
+              <option value="estoque">Estoque</option>
+              <option value="mkt">Marketing</option>
+            </select>
+            <select name="flow_role" className="rounded-xl border border-border bg-background px-3 py-2" defaultValue="solicitante">
+              <option value="solicitante">Solicitante</option>
+              <option value="master">Master RomFlow</option>
+              <option value="admin_financeiro">Admin financeiro</option>
+              <option value="admin_compras">Admin compras</option>
+              <option value="admin_rh">Admin RH</option>
+              <option value="admin_manutencao">Admin manutenção</option>
+            </select>
+            <ModuleChecks role={createRole} selected={createModules} onToggle={toggleCreate} />
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" name="can_publish" /> Pode publicar notícias (MKT)
+            </label>
+            {error && <p className="sm:col-span-2 text-sm text-danger">{error}</p>}
+            <div className="sm:col-span-2">
+              <PanelButton type="submit" disabled={saving}>
+                {saving ? 'Salvando…' : 'Criar acesso'}
+              </PanelButton>
+            </div>
+          </form>
+        </SectionCard>
       )}
     </IntranetPage>
   )

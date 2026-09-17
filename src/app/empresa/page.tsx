@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
+import { PanelButton, SectionCard } from '../_components/ui'
 import { useClientSession } from '../_components/SessionProvider'
 import type { IntranetPostKind } from '@/lib/cms-kinds'
 
@@ -79,64 +80,66 @@ export default function EmpresaPage() {
   const policies = posts.filter((post) => post.kind === 'policy')
 
   return (
-    <IntranetPage kicker="Cultura" title="Notícias e eventos">
-      <p className="text-sm text-muted">
-        Notícias e eventos da unidade, mais o manual de políticas ROM Concept. Publicação pelo marketing.
-      </p>
-
-      <section id="noticias" className="mt-8 scroll-mt-24">
-        <h2 className="font-serif text-xl">Notícias</h2>
-        <ul className="mt-3 space-y-3">
-          {news.length === 0 && <li className="text-sm text-muted">O marketing ainda não publicou notícias.</li>}
-          {news.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </ul>
+    <IntranetPage
+      kicker="Cultura"
+      title="Notícias e eventos"
+      subtitle="Notícias e eventos da unidade, mais o manual de políticas ROM Concept. Publicação pelo marketing."
+    >
+      <section id="noticias" className="scroll-mt-24">
+        <SectionCard title="Notícias" badge={<span className="text-xs text-muted">{news.length}</span>}>
+          <ul className="space-y-3">
+            {news.length === 0 && <li className="text-sm text-muted">O marketing ainda não publicou notícias.</li>}
+            {news.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </ul>
+        </SectionCard>
       </section>
 
-      <section id="politicas" className="mt-8 scroll-mt-24">
-        <h2 className="font-serif text-xl">Manual de políticas ROM Concept</h2>
-        <p className="mt-1 text-sm text-muted">O marketing publica aqui as políticas da casa.</p>
-        <ul className="mt-3 space-y-3">
-          {policies.length === 0 && (
-            <li className="text-sm text-muted">O manual ainda não foi publicado.</li>
-          )}
-          {policies.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </ul>
+      <section id="politicas" className="scroll-mt-24">
+        <SectionCard title="Manual de políticas ROM Concept">
+          <p className="mb-3 text-sm text-muted">O marketing publica aqui as políticas da casa.</p>
+          <ul className="space-y-3">
+            {policies.length === 0 && <li className="text-sm text-muted">O manual ainda não foi publicado.</li>}
+            {policies.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </ul>
+        </SectionCard>
       </section>
 
-      <section id="eventos" className="mt-8 scroll-mt-24">
-        <h2 className="font-serif text-xl">Eventos</h2>
-        <p className="mt-1 text-sm text-muted">Agenda do que a ROM vai realizar.</p>
-        <ul className="mt-3 space-y-3">
-          {events.length === 0 && (
-            <li className="text-sm text-muted">Nenhum evento publicado ainda.</li>
-          )}
-          {events.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </ul>
+      <section id="eventos" className="scroll-mt-24">
+        <SectionCard title="Eventos" badge={<span className="text-xs text-muted">{events.length}</span>}>
+          <p className="mb-3 text-sm text-muted">Agenda do que a ROM vai realizar.</p>
+          <ul className="space-y-3">
+            {events.length === 0 && <li className="text-sm text-muted">Nenhum evento publicado ainda.</li>}
+            {events.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </ul>
+        </SectionCard>
       </section>
 
       {canPublish && (
-        <form onSubmit={onSubmit} className="mt-8 grid gap-3 rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-serif text-xl">Publicar (MKT)</h2>
-          <select name="kind" className="rounded-xl border border-border bg-background px-3 py-2" defaultValue="news">
-            <option value="news">Notícia</option>
-            <option value="event">Evento</option>
-            <option value="banner">Banner</option>
-            <option value="policy">Política</option>
-          </select>
-          <input name="title" required placeholder="Título" className="rounded-xl border border-border bg-background px-3 py-2" />
-          <input name="excerpt" placeholder="Linha de apoio" className="rounded-xl border border-border bg-background px-3 py-2" />
-          <textarea name="body" rows={4} placeholder="Texto" className="rounded-xl border border-border bg-background px-3 py-2" />
-          <input name="location" placeholder="Local (eventos)" className="rounded-xl border border-border bg-background px-3 py-2" />
-          <input name="starts_at" type="datetime-local" className="rounded-xl border border-border bg-background px-3 py-2" />
-          {error && <p className="text-sm text-danger">{error}</p>}
-          <button className="rounded-full bg-[#1c1916] px-4 py-2 text-sm text-white">Publicar</button>
-        </form>
+        <SectionCard title="Publicar (MKT)">
+          <form onSubmit={onSubmit} className="grid gap-3">
+            <select name="kind" className="rounded-xl border border-border bg-background px-3 py-2" defaultValue="news">
+              <option value="news">Notícia</option>
+              <option value="event">Evento</option>
+              <option value="banner">Banner</option>
+              <option value="policy">Política</option>
+            </select>
+            <input name="title" required placeholder="Título" className="rounded-xl border border-border bg-background px-3 py-2" />
+            <input name="excerpt" placeholder="Linha de apoio" className="rounded-xl border border-border bg-background px-3 py-2" />
+            <textarea name="body" rows={4} placeholder="Texto" className="rounded-xl border border-border bg-background px-3 py-2" />
+            <input name="location" placeholder="Local (eventos)" className="rounded-xl border border-border bg-background px-3 py-2" />
+            <input name="starts_at" type="datetime-local" className="rounded-xl border border-border bg-background px-3 py-2" />
+            {error && <p className="text-sm text-danger">{error}</p>}
+            <div>
+              <PanelButton type="submit">Publicar</PanelButton>
+            </div>
+          </form>
+        </SectionCard>
       )}
     </IntranetPage>
   )
@@ -144,9 +147,9 @@ export default function EmpresaPage() {
 
 function PostCard({ post }: { post: Post }) {
   return (
-    <li className="rounded-2xl border border-border bg-card p-4">
-      <p className="text-[0.65rem] uppercase tracking-wide text-muted">{kindLabel(post.kind)}</p>
-      <p className="font-medium">{post.title}</p>
+    <li className="rounded-xl border border-border bg-background px-4 py-3">
+      <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">{kindLabel(post.kind)}</p>
+      <p className="mt-1 text-sm font-medium">{post.title}</p>
       <p className="text-sm text-muted">{post.excerpt || post.body.slice(0, 160)}</p>
     </li>
   )
