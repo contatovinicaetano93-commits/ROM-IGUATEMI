@@ -3,12 +3,13 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, Menu, Search, X } from 'lucide-react'
+import { Menu, Search, X } from 'lucide-react'
 import { INTRANET_NAV } from './nav'
 import { useClientSession } from '../SessionProvider'
 import { getBrand } from '@/lib/brand'
 import { intranetSectionLabel } from '@/lib/intranet/section'
 import { LogoutButton } from '../LogoutButton'
+import { IntranetBell } from './IntranetBell'
 
 const SEARCH_TARGETS = [
   { href: '/', label: 'Início' },
@@ -26,6 +27,7 @@ const SEARCH_TARGETS = [
   { href: '/treinamentos', label: 'Treinamentos' },
   { href: '/onboarding', label: 'Onboarding' },
   { href: '/ajuda', label: 'Ajuda e suporte' },
+  { href: '/auditoria', label: 'Auditoria' },
 ]
 
 export function IntranetTopNav() {
@@ -50,8 +52,12 @@ export function IntranetTopNav() {
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (q.length < 2) return []
-    return SEARCH_TARGETS.filter((item) => item.label.toLowerCase().includes(q) || item.href.includes(q)).slice(0, 8)
-  }, [query])
+    return SEARCH_TARGETS.filter((item) => {
+      if (!(item.label.toLowerCase().includes(q) || item.href.includes(q))) return false
+      if (item.href === '/auditoria' && session?.auth_enabled && session.role !== 'admin') return false
+      return true
+    }).slice(0, 8)
+  }, [query, session])
 
   return (
     <>
@@ -105,13 +111,7 @@ export function IntranetTopNav() {
             >
               <Search size={18} />
             </button>
-            <Link
-              href="/"
-              className="relative flex h-10 w-10 items-center justify-center rounded-full text-foreground"
-              aria-label="Notificações"
-            >
-              <Bell size={18} />
-            </Link>
+            <IntranetBell />
             <div className="flex items-center gap-2 pl-1">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1c1916] text-xs font-semibold text-white">
                 {initial}

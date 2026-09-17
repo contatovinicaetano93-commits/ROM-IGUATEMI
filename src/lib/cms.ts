@@ -123,17 +123,20 @@ export async function createPost(input: {
   return mapPost(created)
 }
 
-export async function listUnreadNotifications(readerKey: string): Promise<
-  Array<{ id: string; title: string; body: string; href: string | null; created_at: string }>
-> {
+export async function listUnreadNotifications(
+  readerKey: string,
+  audienceKeys: readonly string[] = [],
+): Promise<Array<{ id: string; title: string; body: string; href: string | null; created_at: string }>> {
   try {
     const sql = getIntranetSql()
+    const keys = audienceKeys.length > 0 ? [...audienceKeys] : [readerKey]
     const rows = (await sql`
       select n.id, n.title, n.body, n.href, n.created_at
       from intranet_notifications n
       left join intranet_notification_reads r
         on r.notification_id = n.id and r.reader_key = ${readerKey}
       where r.reader_key is null
+        and (n.audience_key is null or n.audience_key = any(${keys}))
       order by n.created_at desc
       limit 20
     `) as Array<{ id: string; title: string; body: string; href: string | null; created_at: string }>
@@ -151,6 +154,20 @@ export async function markNotificationsRead(readerKey: string): Promise<void> {
       insert into intranet_notification_reads (notification_id, reader_key)
       select n.id, ${readerKey}
       from intranet_notifications n
+      on conflict do nothing
+    `
+  } catch (error) {
+    if (isMissingRelation(error)) return
+    throw error
+  }
+}
+
+export async function markNotificationRead(readerKey: string, notificationId: string): Promise<void> {
+  try {
+    const sql = getIntranetSql()
+    await sql`
+      insert into intranet_notification_reads (notification_id, reader_key)
+      values (${notificationId}::uuid, ${readerKey})
       on conflict do nothing
     `
   } catch (error) {

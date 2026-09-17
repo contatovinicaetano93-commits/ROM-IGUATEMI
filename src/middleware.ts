@@ -88,7 +88,10 @@ function isAdminOnlyPath(pathname: string) {
     pathname === '/api/lgpd/purge' ||
     isLgpdAnonymizePath(pathname) ||
     pathname === '/observability' ||
-    pathname.startsWith('/api/observability')
+    pathname.startsWith('/api/observability') ||
+    pathname === '/auditoria' ||
+    pathname.startsWith('/auditoria/') ||
+    pathname === '/api/intranet/audit'
   )
 }
 
@@ -129,7 +132,9 @@ function isProtectedPage(pathname: string) {
     pathname === '/operacao' ||
     pathname.startsWith('/operacao/') ||
     pathname === '/adm' ||
-    pathname.startsWith('/adm/')
+    pathname.startsWith('/adm/') ||
+    pathname === '/auditoria' ||
+    pathname.startsWith('/auditoria/')
   )
 }
 
@@ -294,6 +299,8 @@ export const config = {
     '/operacao/:path*',
     '/adm',
     '/adm/:path*',
+    '/auditoria',
+    '/auditoria/:path*',
     '/api/:path*',
   ],
 }

@@ -13,6 +13,7 @@ describe('intranet paths', () => {
     expect(isIntranetShellPath('/hoje')).toBe(false)
     expect(isIntranetPath('/api/flow')).toBe(true)
     expect(isIntranetShellPath('/sistemas')).toBe(true)
+    expect(isIntranetShellPath('/auditoria')).toBe(true)
   })
 })
 
@@ -39,6 +40,7 @@ describe('intranet section label', () => {
     expect(intranetSectionLabel('/flow/nova')).toBe('Rom Flow')
     expect(intranetSectionLabel('/')).toBe('Início')
     expect(intranetSectionLabel('/pessoas')).toBe('Pessoas')
+    expect(intranetSectionLabel('/auditoria')).toBe('Auditoria')
   })
 })
 

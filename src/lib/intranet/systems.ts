@@ -23,6 +23,7 @@ const INTRANET: IntranetSystem[] = [
   { href: '/empresa', label: 'MKT Notícias', description: 'Notícias, eventos e políticas.', group: 'intranet' },
   { href: '/onboarding', label: 'Onboarding', description: 'Vídeos e treinamento da casa.', group: 'intranet' },
   { href: '/ajuda', label: 'Ajuda', description: 'Suporte da equipe.', group: 'intranet' },
+  { href: '/auditoria', label: 'Auditoria', description: 'Quem publicou, aprovou ou mudou acesso.', group: 'intranet' },
 ]
 
 const OPERACAO: IntranetSystem[] = [
@@ -55,11 +56,19 @@ export function systemsForRole(role: AuthRole): IntranetSystem[] {
       return [...INTRANET, ...OPERACAO, ...GESTAO]
     case 'staff':
     case 'mkt':
-      return [...INTRANET, ...OPERACAO]
+      return [...INTRANET.filter((item) => item.href !== '/auditoria'), ...OPERACAO]
     case 'financeiro':
-      return [...INTRANET, ...pick(OPERACAO, ['/hoje']), ...pick(GESTAO, ['/financeiro', '/estoque', '/relatorios'])]
+      return [
+        ...INTRANET.filter((item) => item.href !== '/auditoria'),
+        ...pick(OPERACAO, ['/hoje']),
+        ...pick(GESTAO, ['/financeiro', '/estoque', '/relatorios']),
+      ]
     case 'estoque':
-      return [...INTRANET, ...pick(OPERACAO, ['/hoje']), ...pick(GESTAO, ['/estoque'])]
+      return [
+        ...INTRANET.filter((item) => item.href !== '/auditoria'),
+        ...pick(OPERACAO, ['/hoje']),
+        ...pick(GESTAO, ['/estoque']),
+      ]
     default: {
       const _never: never = role
       return _never

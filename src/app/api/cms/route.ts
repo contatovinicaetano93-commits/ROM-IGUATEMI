@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
 import { requirePublisher, requireSession } from '@/lib/auth'
-import { createPost, listAllPosts, listPublishedPosts } from '@/lib/cms'
+import { AuditLogger } from '@/lib/audit'
+import { createPost, listAllPosts, listPublishedPosts, notifyIntranet } from '@/lib/cms'
 import { parseIntranetPostKind } from '@/lib/cms-kinds'
 
 export async function GET(req: NextRequest) {
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
   const title = typeof body.title === 'string' ? body.title.trim() : ''
   if (body.kind !== kind || !title) return err('Tipo e título são obrigatórios', 400)
   try {
+    const published = body.publish !== false
     const post = await createPost({
       kind,
       title,
@@ -41,10 +43,21 @@ export async function POST(req: NextRequest) {
       location: typeof body.location === 'string' ? body.location : null,
       starts_at: typeof body.starts_at === 'string' ? body.starts_at : null,
       ends_at: typeof body.ends_at === 'string' ? body.ends_at : null,
-      publish: body.publish !== false,
+      publish: published,
       author_name: auth.session.displayName,
       author_id: auth.session.employeeId,
     })
+    if (published) {
+      await notifyIntranet({
+        title: post.title,
+        body: post.excerpt || `Nova publicação · ${kind}`,
+        href: '/empresa',
+      })
+      await AuditLogger.log(auth.session.user, auth.session.role, 'PUBLISH', `cms:${post.id}`, {
+        kind,
+        title: post.title,
+      })
+    }
     return ok({ post }, undefined, 201)
   } catch (error) {
     return err(error instanceof Error ? error.message : 'Falha ao publicar', 400)
