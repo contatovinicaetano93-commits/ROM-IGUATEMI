@@ -1,5 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { isDbPoolExhaustedError, peekResolvedIntranetDatabaseUrl, toTransactionPoolerUrl } from '@/lib/db'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Sql as PostgresSql } from 'postgres'
+import {
+  isDbPoolExhaustedError,
+  peekResolvedIntranetDatabaseUrl,
+  toTransactionPoolerUrl,
+  wrapSqlClient,
+} from '@/lib/db'
 
 describe('toTransactionPoolerUrl', () => {
   it('reescreve Supabase session pooler 5432 → transaction 6543', () => {
@@ -51,5 +57,28 @@ describe('peekResolvedIntranetDatabaseUrl', () => {
     delete process.env.INTRANET_DATABASE_URL
     process.env.DATABASE_URL = 'postgres://salon/db'
     expect(peekResolvedIntranetDatabaseUrl()).toBe('postgres://salon/db')
+  })
+})
+
+describe('wrapSqlClient', () => {
+  it('unsafe chama o unsafe original em vez de si mesmo', async () => {
+    const originalUnsafe = vi.fn(async (query: string, params: unknown[] = []) => [
+      { query, params },
+    ])
+    const originalBegin = vi.fn()
+    const fake = {
+      unsafe: originalUnsafe,
+      begin: originalBegin,
+    } as unknown as PostgresSql
+
+    const wrapped = wrapSqlClient(fake)
+    const first = await wrapped.unsafe('select 1', [1])
+    const second = await wrapped.unsafe('select 2')
+
+    expect(originalUnsafe).toHaveBeenCalledTimes(2)
+    expect(originalUnsafe).toHaveBeenNthCalledWith(1, 'select 1', [1])
+    expect(originalUnsafe).toHaveBeenNthCalledWith(2, 'select 2', [])
+    expect(first).toEqual([{ query: 'select 1', params: [1] }])
+    expect(second).toEqual([{ query: 'select 2', params: [] }])
   })
 })

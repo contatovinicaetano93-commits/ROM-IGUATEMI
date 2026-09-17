@@ -64,17 +64,25 @@ export function isDbPoolExhaustedError(e: unknown): boolean {
   )
 }
 
-function wrap(sql: PostgresSql): Sql {
-  // Reutiliza postgres.js (tagged template + helper sql(ids)).
+export function wrapSqlClient(sql: PostgresSql): Sql {
+  // `client` é o mesmo objeto postgres.js. Tem de capturar unsafe/begin
+  // originais antes de reatribuir — senão wrap.unsafe chama a si mesmo
+  // (RangeError no POST /api/admin/migrations).
+  const unsafe = sql.unsafe.bind(sql)
+  const begin = sql.begin.bind(sql)
   const client = sql as unknown as Sql
 
   client.begin = <T>(fn: (tx: Sql) => Promise<T>) =>
-    sql.begin(async (tx) => fn(wrap(tx as unknown as PostgresSql))) as Promise<T>
+    begin(async (tx) => fn(wrapSqlClient(tx as unknown as PostgresSql))) as Promise<T>
 
   client.unsafe = async (query: string, params: unknown[] = []) =>
-    sql.unsafe(query, params as never[]) as unknown as unknown[]
+    unsafe(query, params as never[]) as unknown as unknown[]
 
   return client
+}
+
+function wrap(sql: PostgresSql): Sql {
+  return wrapSqlClient(sql)
 }
 
 function readDeployOverlayUrl(): string | null {
