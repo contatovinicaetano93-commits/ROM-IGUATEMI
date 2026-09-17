@@ -5,6 +5,7 @@ import { resolveFlowUser } from '@/lib/flow/from-session'
 import { listFlowCategories, listFlowCompanies, listVisibleExpenses, createExpense } from '@/lib/flow/store'
 import { persistStoredFile } from '@/lib/flow/files'
 import { notifyIntranet } from '@/lib/cms'
+import { flowAudienceKey } from '@/lib/intranet/notifications'
 import { employeeToFlowUser, listEmployees } from '@/lib/employees'
 import { parseArea, parseExpenseType, canAccessArea, defaultPaymentDate } from '@/lib/flow/workflow'
 import type { PaymentMethod, StoredFile } from '@/lib/flow/types'
@@ -76,7 +77,8 @@ export async function POST(req: NextRequest) {
     await notifyIntranet({
       title: `Nova solicitação: ${expense.title}`,
       body: `${user.name} · ${expense.area}`,
-      href: `/flow`,
+      href: `/flow/${expense.id}`,
+      audience_key: flowAudienceKey(expense.area),
     })
     return ok({ expense }, undefined, 201)
   } catch (error) {

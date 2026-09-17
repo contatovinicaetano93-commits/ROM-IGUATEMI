@@ -12,6 +12,7 @@ describe('intranet paths', () => {
     expect(isIntranetShellPath('/flow/nova')).toBe(true)
     expect(isIntranetPath('/api/flow')).toBe(true)
     expect(isIntranetShellPath('/sistemas')).toBe(true)
+    expect(isIntranetShellPath('/auditoria')).toBe(true)
   })
 
   it('hoje e financeiro continuam módulos operacionais no grant, não rotas da intranet', () => {
@@ -47,6 +48,7 @@ describe('intranet section label', () => {
     expect(intranetSectionLabel('/flow/nova')).toBe('Rom Flow')
     expect(intranetSectionLabel('/')).toBe('Início')
     expect(intranetSectionLabel('/pessoas')).toBe('Pessoas')
+    expect(intranetSectionLabel('/auditoria')).toBe('Auditoria')
   })
 })
 

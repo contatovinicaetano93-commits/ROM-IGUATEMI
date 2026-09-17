@@ -41,4 +41,13 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/api/avec/sync', 'admin', [])).toBe(true)
     expect(canAccessProtectedPath('/financeiro', null, [])).toBe(false)
   })
+
+  it('auditoria fica só no admin, mesmo com extras', () => {
+    expect(canAccessProtectedPath('/auditoria', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/intranet/audit', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/auditoria', 'staff', [])).toBe(false)
+    expect(canAccessProtectedPath('/auditoria', 'staff', ['dashboard'])).toBe(false)
+    expect(canAccessProtectedPath('/api/intranet/audit', 'financeiro', [])).toBe(false)
+    expect(canAccessProtectedPath('/api/intranet/notifications', 'staff', [])).toBe(true)
+  })
 })

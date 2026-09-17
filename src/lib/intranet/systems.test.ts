@@ -25,6 +25,7 @@ describe('systemsForAccess', () => {
     expect(hrefs).toContain('/pipeline')
     expect(hrefs).toContain('/financeiro')
     expect(hrefs).toContain('/dashboard')
+    expect(hrefs).toContain('/auditoria')
   })
 
   it('staff e mkt veem operação, sem financeiro nem Rom Adm', () => {
@@ -34,6 +35,7 @@ describe('systemsForAccess', () => {
       expect(hrefs).toContain('/contatos')
       expect(hrefs).not.toContain('/financeiro')
       expect(hrefs).not.toContain('/dashboard')
+      expect(hrefs).not.toContain('/auditoria')
     }
   })
 

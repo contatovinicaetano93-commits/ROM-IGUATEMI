@@ -72,7 +72,10 @@ export function isAdminOpsPath(pathname: string) {
     pathname === '/api/lgpd/purge' ||
     isLgpdAnonymizePath(pathname) ||
     pathname === '/observability' ||
-    pathname.startsWith('/api/observability')
+    pathname.startsWith('/api/observability') ||
+    pathname === '/auditoria' ||
+    pathname.startsWith('/auditoria/') ||
+    pathname === '/api/intranet/audit'
   )
 }
 
