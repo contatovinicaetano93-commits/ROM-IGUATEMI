@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useClientSession } from '../SessionProvider'
+import { canSeeNavHref, parseGrantableModules } from '@/lib/intranet/modules'
 
 const TABS = [
   { href: '/dashboard', label: 'Visão' },
@@ -10,10 +12,21 @@ const TABS = [
 
 export function VisaoAnaliticaNav() {
   const pathname = usePathname()
+  const { session } = useClientSession()
+  const role = session?.role
+  const extras = parseGrantableModules(session?.modules)
+  const tabs = TABS.filter((tab) => {
+    if (!session) return false
+    if (!session.auth_enabled) return true
+    if (role == null) return false
+    return canSeeNavHref(tab.href, role, extras)
+  })
+
+  if (tabs.length === 0) return null
 
   return (
     <nav className="mt-3 flex flex-wrap gap-2" aria-label="Seções da visão analítica">
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const active =
           tab.href === '/dashboard'
             ? pathname === '/dashboard' || pathname === '/adm' || pathname.startsWith('/adm/')
