@@ -36,6 +36,18 @@ describe('intranet top bar', () => {
       'Visão analítica',
       'Contatos',
     ])
+    expect(INTRANET_NAV.map((item) => item.short)).toEqual([
+      'Home',
+      'Usuários',
+      'Notícias',
+      'Rom Flow',
+      'Financeiro',
+      'Estoque',
+      'Operação',
+      'Agenda',
+      'Visão',
+      'Contatos',
+    ])
     expect(INTRANET_NAV.find((item) => item.label === 'Agenda do dia')?.href).toBe('/pipeline')
     expect(INTRANET_NAV.find((item) => item.label === 'Visão analítica')?.href).toBe('/dashboard')
     expect(INTRANET_NAV.some((item) => item.href === '/onboarding')).toBe(false)
