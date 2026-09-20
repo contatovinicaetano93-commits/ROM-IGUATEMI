@@ -245,6 +245,21 @@ async function queryDailyTotals(from: string, to: string) {
   }
 }
 
+/** Soma operacional de salon_daily_metrics numa janela (MTD↔MTD / mês fechado). */
+export async function sumSalonDailyRange(from: string, to: string) {
+  return sumDailyTotals(from, to)
+}
+
+/** Despesas manuais ROM na janela (finance_expenses.expense_date). */
+export async function sumSalonExpensesRange(from: string, to: string): Promise<number> {
+  return sumExpenses(from, to)
+}
+
+/** CMV proxy (saídas de estoque) na janela. */
+export async function sumSalonCmvRange(from: string, to: string): Promise<number> {
+  return sumStockCogs(from, to)
+}
+
 async function sumDailyTotals(from: string, to: string) {
   try {
     const daily = await queryDailyTotals(from, to)

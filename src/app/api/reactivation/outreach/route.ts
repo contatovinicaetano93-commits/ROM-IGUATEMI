@@ -9,6 +9,7 @@ const schema = z.object({
   phone: z.string().min(8).optional(),
   name: z.string().optional(),
   surface: z.enum(['contact_detail', 'contact_list', 'director_0011', 'other']).default('other'),
+  listMode: z.enum(['reactivate', 'sem_servicos', 'novos']).optional(),
   lastDoneAtAtSend: z.string().nullable().optional(),
 })
 
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
       phone: body.phone,
       name: body.name,
       surface: body.surface,
+      listMode: body.listMode,
       lastDoneAtAtSend: body.lastDoneAtAtSend,
     })
     return ok(result)

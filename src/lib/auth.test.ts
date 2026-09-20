@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  buildAuthSession,
   canViewRevenue,
   createSessionToken,
-  getSessionSigningSecret,
+  createV3SessionToken,
   isAuthEnabled,
   isStaffAuthConfigured,
   validateCredentials,
@@ -14,7 +15,6 @@ const ENV_KEYS = [
   'ROM_ACCESS_TOKEN',
   'ROM_STAFF_USER',
   'ROM_STAFF_PASSWORD',
-  'ROM_SESSION_SECRET',
 ] as const
 
 const snapshot = new Map<string, string | undefined>()
@@ -96,30 +96,22 @@ describe('auth dual login', () => {
     expect(forged).not.toEqual(token)
   })
 
-  it('usa ROM_SESSION_SECRET para HMAC (não a senha do usuário)', async () => {
-    setEnv({
-      ROM_ADMIN_USER: 'admin',
-      ROM_ADMIN_PASSWORD: 'admin-pass',
-      ROM_SESSION_SECRET: 'dedicated-session-secret',
-      ROM_STAFF_USER: 'staff',
-      ROM_STAFF_PASSWORD: 'staff-pass',
-    })
+  it('emite token v3 com nome do colaborador', async () => {
+    setEnv({ ROM_ADMIN_USER: 'admin', ROM_ADMIN_PASSWORD: 'admin-pass' })
+    const session = buildAuthSession('ana@rom', 'staff', { displayName: 'Ana Souza', employeeId: 'emp-1' })
+    const token = await createV3SessionToken(session)
+    expect(token).toMatch(/^v3\.\d+\.[A-Za-z0-9_-]+\.[0-9a-f]{64}$/)
+  })
 
-    expect(getSessionSigningSecret()).toBe('dedicated-session-secret')
-
-    // exp fixo nos dois: a diferença tem que vir do secret, não do relógio.
-    const exp = Date.now() + 60_000
-    const withDedicated = await createSessionToken('admin', 'admin', exp)
-    setEnv({
-      ROM_ADMIN_USER: 'admin',
-      ROM_ADMIN_PASSWORD: 'admin-pass',
-      ROM_SESSION_SECRET: undefined,
-      ROM_STAFF_USER: 'staff',
-      ROM_STAFF_PASSWORD: 'staff-pass',
+  it('guarda extras de módulo no token v3', async () => {
+    setEnv({ ROM_ADMIN_USER: 'admin', ROM_ADMIN_PASSWORD: 'admin-pass' })
+    const session = buildAuthSession('ana@rom', 'staff', {
+      displayName: 'Ana',
+      employeeId: 'emp-1',
+      modules: ['financeiro'],
     })
-    const withFallback = await createSessionToken('admin', 'admin', exp)
-    expect(withDedicated).toMatch(/^v2\.\d+\.[0-9a-f]{64}$/)
-    expect(withFallback).toMatch(/^v2\.\d+\.[0-9a-f]{64}$/)
-    expect(withDedicated).not.toEqual(withFallback)
+    expect(session.modules).toEqual(['financeiro'])
+    const token = await createV3SessionToken(session)
+    expect(token).toMatch(/^v3\.\d+\.[A-Za-z0-9_-]+\.[0-9a-f]{64}$/)
   })
 })

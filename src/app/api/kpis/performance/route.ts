@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { okCached, err, handleError } from '@/lib/api-response'
-import { requireSession } from '@/lib/auth'
+import { requireDashboard } from '@/lib/auth'
 import { getLatestSalonP1Daily, getSalonP1DailyNear, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
 import {
   resolveMonthWindow,
@@ -22,7 +22,7 @@ interface ProfessionalWithDelta extends P1ProfessionalRow {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireSession(req)
+    const auth = await requireDashboard(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const url = new URL(req.url)

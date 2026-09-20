@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { SectionCard, CountBadge, CHANNEL_LABEL } from '../_components/ui'
 import { MonthYearField } from '../_components/MonthYearField'
-import { VisaoSection } from '../_components/VisaoSection'
+import { VisaoAnaliticaNav } from '../_components/intranet/VisaoAnaliticaNav'
 import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/lib/salon/format'
 import { momCompareLine } from '@/lib/salon/mom-delta'
 import { yearAgoMonthKey } from '@/lib/salon/month-window'
@@ -231,6 +231,7 @@ export default function DashboardPage() {
             passado (mesmo dia se o mês estiver aberto). Operação do dia em Hoje · dinheiro em
             Financeiro · fechamento em Relatórios.
           </p>
+          <VisaoAnaliticaNav />
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">

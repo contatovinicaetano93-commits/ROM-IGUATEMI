@@ -20,7 +20,7 @@ export default function Error({
       <p className="text-sm text-muted">A equipe foi notificada. Você pode tentar novamente.</p>
       <button
         onClick={reset}
-        className="rounded-2xl bg-gold-bright px-5 py-3 text-sm font-semibold text-background transition-transform active:scale-[0.99]"
+        className="rounded-2xl bg-foreground px-5 py-3 text-sm font-semibold text-background transition-transform active:scale-[0.99]"
       >
         Tentar novamente
       </button>

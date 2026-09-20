@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, okCached, err, handleError } from '@/lib/api-response'
-import { requireFinance } from '@/lib/auth'
+import { requireRelatorios } from '@/lib/auth'
 import { computeMonthOverview } from '@/lib/salon/month-overview'
 import { buildMonthOverviewCsv } from '@/lib/salon/month-overview-export'
 import { ttlGetOrSet } from '@/lib/ttl-cache'
@@ -12,7 +12,7 @@ export const maxDuration = 300
 /** Overview do mês — fechamento ROM (admin + financeiro). */
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireFinance(req)
+    const auth = await requireRelatorios(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const month = req.nextUrl.searchParams.get('month') ?? undefined

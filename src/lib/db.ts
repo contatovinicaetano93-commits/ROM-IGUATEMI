@@ -24,8 +24,9 @@ try {
  * não está disponível neste agente.
  */
 export type Sql = {
+  /** Tagged template + helper sql(ids) para IN (...). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (strings: TemplateStringsArray, ...values: any[]): Promise<any[]>
+  (first: TemplateStringsArray | readonly any[], ...rest: any[]): any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   begin: <T>(fn: (sql: Sql) => Promise<T>) => Promise<T>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,6 +34,7 @@ export type Sql = {
 }
 
 let cached: PostgresSql | null = null
+let cachedWrapped: Sql | null = null
 let cachedUrl: string | null = null
 
 /**
@@ -63,17 +65,25 @@ export function isDbPoolExhaustedError(e: unknown): boolean {
   )
 }
 
+export function wrapSqlClient(sql: PostgresSql): Sql {
+  // `client` é o mesmo objeto postgres.js. Tem de capturar unsafe/begin
+  // originais antes de reatribuir — senão wrap.unsafe chama a si mesmo
+  // (RangeError no POST /api/admin/migrations).
+  const unsafe = sql.unsafe.bind(sql)
+  const begin = sql.begin.bind(sql)
+  const client = sql as unknown as Sql
+
+  client.begin = <T>(fn: (tx: Sql) => Promise<T>) =>
+    begin(async (tx) => fn(wrapSqlClient(tx as unknown as PostgresSql))) as Promise<T>
+
+  client.unsafe = async (query: string, params: unknown[] = []) =>
+    unsafe(query, params as never[]) as unknown as unknown[]
+
+  return client
+}
+
 function wrap(sql: PostgresSql): Sql {
-  const tagged = ((strings: TemplateStringsArray, ...values: unknown[]) =>
-    sql(strings, ...(values as never[]))) as unknown as Sql
-
-  tagged.begin = <T>(fn: (tx: Sql) => Promise<T>) =>
-    sql.begin(async (tx) => fn(wrap(tx as unknown as PostgresSql))) as Promise<T>
-
-  tagged.unsafe = async (query: string, params: unknown[] = []) =>
-    sql.unsafe(query, params as never[]) as unknown as unknown[]
-
-  return tagged
+  return wrapSqlClient(sql)
 }
 
 function readDeployOverlayUrl(): string | null {
@@ -143,7 +153,7 @@ function resolveDatabaseUrl(): string {
 export function getSql(): Sql {
   const url = resolveDatabaseUrl()
 
-  if (!cached || cachedUrl !== url) {
+  if (!cached || !cachedWrapped || cachedUrl !== url) {
     cached?.end({ timeout: 1 }).catch(() => {})
     cached = postgres(url, {
       ssl: 'require',
@@ -156,6 +166,58 @@ export function getSql(): Sql {
       connect_timeout: 10,
     })
     cachedUrl = url
+    cachedWrapped = wrap(cached)
   }
-  return wrap(cached)
+  return cachedWrapped
+}
+
+function readIntranetOverlayUrl(): string | null {
+  const candidates = [
+    join(process.cwd(), 'secrets', 'intranet-database-url.txt'),
+    join(process.cwd(), '.secrets', 'intranet-database-url.txt'),
+  ]
+  for (const path of candidates) {
+    try {
+      if (!existsSync(path)) continue
+      const url = readFileSync(path, 'utf8').trim()
+      if (url.startsWith('postgres')) return url
+    } catch {
+      // ignore
+    }
+  }
+  return null
+}
+
+/** Intranet: INTRANET_DATABASE_URL → overlay → mesmo banco do salão. */
+export function peekResolvedIntranetDatabaseUrl(): string | null {
+  const env = process.env.INTRANET_DATABASE_URL?.trim()
+  if (env) return env
+  const overlay = readIntranetOverlayUrl()
+  if (overlay) return overlay
+  return peekResolvedDatabaseUrl()
+}
+
+let intranetCached: PostgresSql | null = null
+let intranetCachedWrapped: Sql | null = null
+let intranetCachedUrl: string | null = null
+
+export function getIntranetSql(): Sql {
+  const raw = peekResolvedIntranetDatabaseUrl()
+  if (!raw) throw new Error('DATABASE_URL não configurada')
+  const url = toTransactionPoolerUrl(raw)
+
+  if (!intranetCached || !intranetCachedWrapped || intranetCachedUrl !== url) {
+    intranetCached?.end({ timeout: 1 }).catch(() => {})
+    intranetCached = postgres(url, {
+      ssl: 'require',
+      max: 1,
+      prepare: false,
+      idle_timeout: 5,
+      max_lifetime: 60 * 2,
+      connect_timeout: 10,
+    })
+    intranetCachedUrl = url
+    intranetCachedWrapped = wrap(intranetCached)
+  }
+  return intranetCachedWrapped
 }

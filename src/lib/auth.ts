@@ -1,15 +1,39 @@
 import type { NextRequest } from 'next/server'
+import { secretsEqual } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
+import type { GrantableModuleKey } from '@/lib/intranet/modules'
+import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
 
 export const AUTH_COOKIE = 'rom_session'
 const DEFAULT_ADMIN_USER = 'admin'
 
-export type AuthRole = 'admin' | 'staff' | 'financeiro' | 'estoque'
+export type AuthRole = 'admin' | 'staff' | 'financeiro' | 'estoque' | 'mkt'
 
 export interface AuthSession {
   user: string
   role: AuthRole
   can_view_revenue: boolean
+  displayName: string
+  employeeId: string | null
+  canPublish: boolean
+  modules: GrantableModuleKey[]
+}
+
+export function canPublishContent(session: AuthSession | null | undefined) {
+  if (!session) return false
+  return session.canPublish || session.role === 'admin' || session.role === 'mkt'
+}
+
+function sessionFromRole(user: string, role: AuthRole, extra?: Partial<AuthSession>): AuthSession {
+  return {
+    user,
+    role,
+    can_view_revenue: canViewRevenue(role),
+    displayName: extra?.displayName ?? user,
+    employeeId: extra?.employeeId ?? null,
+    canPublish: extra?.canPublish ?? (role === 'admin' || role === 'mkt'),
+    modules: parseGrantableModules(extra?.modules ?? []),
+  }
 }
 
 interface AuthOptions {
@@ -182,6 +206,103 @@ function parseSessionToken(token: string): { exp: number } | null {
   return { exp }
 }
 
+type V3Claims = {
+  u: string
+  r: AuthRole
+  n: string
+  e: string | null
+  p: boolean
+  m?: GrantableModuleKey[]
+}
+
+function utf8ToB64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  let bin = ''
+  for (const byte of bytes) bin += String.fromCharCode(byte)
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function b64UrlToUtf8(value: string): string | null {
+  try {
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4)
+    const bin = atob(padded)
+    const bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  } catch {
+    return null
+  }
+}
+
+function parseAuthRole(value: unknown): AuthRole | null {
+  if (
+    value === 'admin' ||
+    value === 'staff' ||
+    value === 'financeiro' ||
+    value === 'estoque' ||
+    value === 'mkt'
+  ) {
+    return value
+  }
+  return null
+}
+
+export function buildAuthSession(
+  user: string,
+  role: AuthRole,
+  extra?: Partial<Pick<AuthSession, 'displayName' | 'employeeId' | 'canPublish' | 'modules'>>,
+): AuthSession {
+  return sessionFromRole(user, role, extra)
+}
+
+/** Token `v3.<exp>.<claimsB64>.<hmac>` — sessão de colaborador (tabela) ou env com nome. */
+export async function createV3SessionToken(session: AuthSession, expiresAtMs?: number) {
+  const secret = getSessionSigningSecret()
+  if (!secret) return ''
+  const exp = expiresAtMs ?? Date.now() + SESSION_TTL_MS
+  const claims: V3Claims = {
+    u: session.user,
+    r: session.role,
+    n: session.displayName,
+    e: session.employeeId,
+    p: session.canPublish,
+    m: session.modules,
+  }
+  const payload = utf8ToB64Url(JSON.stringify(claims))
+  const sig = await hmacHex(secret, `rom-session-v3:${exp}:${payload}`)
+  return `v3.${exp}.${payload}.${sig}`
+}
+
+async function parseV3SessionToken(
+  token: string,
+): Promise<{ session: AuthSession; exp: number } | null> {
+  const [version, expRaw, payload, sig] = token.split('.')
+  if (version !== 'v3' || !expRaw || !payload || !sig) return null
+  const exp = Number(expRaw)
+  if (!Number.isSafeInteger(exp) || exp <= Date.now()) return null
+  const secret = getSessionSigningSecret()
+  if (!secret) return null
+  const expected = await hmacHex(secret, `rom-session-v3:${exp}:${payload}`)
+  if (!timingSafeEqual(sig, expected)) return null
+  const raw = b64UrlToUtf8(payload)
+  if (!raw) return null
+  try {
+    const claims = JSON.parse(raw) as V3Claims
+    const role = parseAuthRole(claims.r)
+    if (!role || typeof claims.u !== 'string' || !claims.u) return null
+    return {
+      exp,
+      session: sessionFromRole(claims.u, role, {
+        displayName: typeof claims.n === 'string' && claims.n ? claims.n : claims.u,
+        employeeId: typeof claims.e === 'string' && claims.e ? claims.e : null,
+        canPublish: Boolean(claims.p) || role === 'admin' || role === 'mkt',
+        modules: parseGrantableModules(claims.m),
+      }),
+    }
+  } catch {
+    return null
+  }
+}
+
 export function validateCredentials(
   username: string,
   password: string
@@ -201,7 +322,7 @@ export async function getSession(req: NextRequest): Promise<AuthSession | null> 
   if (!isAuthEnabled()) {
     // Produção sem senha = fechado (nunca abrir o painel). Dev sem senha = aberto (conveniência local).
     if (isProduction()) return null
-    return { user: getAdminUser(), role: 'admin', can_view_revenue: true }
+    return sessionFromRole(getAdminUser(), 'admin', { displayName: getAdminUser(), canPublish: true })
   }
 
   const cookie = req.cookies.get(AUTH_COOKIE)?.value
@@ -211,17 +332,20 @@ export async function getSession(req: NextRequest): Promise<AuthSession | null> 
   if (cached && cached.expiresAt > Date.now()) return cached.session
 
   // Expiração vem do próprio token; adulterar o exp invalida a assinatura.
+  const v3 = await parseV3SessionToken(cookie)
+  if (v3) {
+    const cacheUntil = Math.min(Date.now() + SESSION_COOKIE_TTL_MS, v3.exp)
+    sessionByCookie.set(cookie, { session: v3.session, expiresAt: cacheUntil })
+    return v3.session
+  }
+
   const parsed = parseSessionToken(cookie)
   if (!parsed) return null
 
   for (const account of listAccounts()) {
     const expected = await createSessionToken(account.user, account.role, parsed.exp)
     if (expected && timingSafeEqual(cookie, expected)) {
-      const session: AuthSession = {
-        user: account.user,
-        role: account.role,
-        can_view_revenue: canViewRevenue(account.role),
-      }
+      const session = sessionFromRole(account.user, account.role)
       // O cache nunca pode estender a validade do token.
       const cacheUntil = Math.min(Date.now() + SESSION_COOKIE_TTL_MS, parsed.exp)
       sessionByCookie.set(cookie, { session, expiresAt: cacheUntil })
@@ -243,7 +367,11 @@ export async function isAuthorized(req: NextRequest, { allowHeaderTokens = true 
   // Automação: só CRON_SECRET (nunca a senha de login).
   const auth = req.headers.get('authorization')
   const cron = process.env.CRON_SECRET?.trim()
-  if (cron && (auth === `Bearer ${cron}` || req.headers.get('x-cron-secret') === cron)) return true
+  if (cron) {
+    if (auth?.startsWith('Bearer ') && secretsEqual(auth.slice('Bearer '.length), cron)) return true
+    const header = req.headers.get('x-cron-secret')
+    if (header && secretsEqual(header, cron)) return true
+  }
 
   return false
 }
@@ -259,7 +387,7 @@ export async function requireSession(req: NextRequest) {
   if (!isAuthEnabled() && !isProduction()) {
     return {
       ok: true as const,
-      session: { user: getAdminUser(), role: 'admin' as const, can_view_revenue: true },
+      session: sessionFromRole(getAdminUser(), 'admin', { canPublish: true }),
     }
   }
   const session = await getSession(req)
@@ -289,12 +417,47 @@ export async function requireAdmin(req: NextRequest) {
   return createRoleValidator(['admin'], 'Acesso restrito ao admin operacional')(req)
 }
 
-/** Painel Financeiro (Sprint 4) — admin ou financeiro. Staff nunca acessa. */
-export async function requireFinance(req: NextRequest) {
-  return createRoleValidator(['admin', 'financeiro'], 'Acesso restrito ao financeiro')(req)
+function requireModule(
+  req: NextRequest,
+  key: GrantableModuleKey,
+  restrictionMessage: string,
+) {
+  return (async () => {
+    const auth = await requireSession(req)
+    if (!auth.ok) return auth
+    if (!hasPanelModule(auth.session.role, auth.session.modules, key)) {
+      return { ok: false as const, status: 403 as const, message: restrictionMessage }
+    }
+    return auth
+  })()
 }
 
-/** Painel Estoque — admin, financeiro (acesso duplo) ou estoque. Staff nunca acessa. */
+/** Painel Financeiro — papel financeiro/admin ou extra do colaborador. */
+export async function requireFinance(req: NextRequest) {
+  return requireModule(req, 'financeiro', 'Acesso restrito ao financeiro')
+}
+
+/** Overview de Relatórios — pacote financeiro ou extra relatorios. */
+export async function requireRelatorios(req: NextRequest) {
+  return requireModule(req, 'relatorios', 'Acesso restrito aos relatórios')
+}
+
+/** Painel Estoque — papel estoque/financeiro/admin ou extra. */
 export async function requireStock(req: NextRequest) {
-  return createRoleValidator(['admin', 'financeiro', 'estoque'], 'Acesso restrito ao estoque')(req)
+  return requireModule(req, 'estoque', 'Acesso restrito ao estoque')
+}
+
+/** Visão analítica / KPIs — admin ou extra Rom Adm. */
+export async function requireDashboard(req: NextRequest) {
+  return requireModule(req, 'dashboard', 'Acesso restrito à visão analítica')
+}
+
+/** Publicação de notícias/eventos/banners — admin ou marketing. */
+export async function requirePublisher(req: NextRequest) {
+  const auth = await requireSession(req)
+  if (!auth.ok) return auth
+  if (!canPublishContent(auth.session)) {
+    return { ok: false as const, status: 403 as const, message: 'Acesso restrito à publicação da intranet' }
+  }
+  return auth
 }

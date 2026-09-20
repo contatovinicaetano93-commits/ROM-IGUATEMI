@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  computePanelSyncOk,
+  hardTimeoutHealthMessage,
+  isClassic300sHardTimeout,
   isEmptyKillAvecRun,
+  isHardPlatformTimeoutAvecRun,
   pickHojeAvecSyncRun,
   pickNewestUsableAvecRun,
 } from '@/lib/avec/sync-run-health'
@@ -21,6 +25,51 @@ describe('isEmptyKillAvecRun', () => {
     )
     expect(isEmptyKillAvecRun({ status: 'error', error: 'P3 falhou' })).toBe(false)
     expect(isEmptyKillAvecRun({ status: 'ok', error: null })).toBe(false)
+  })
+})
+
+describe('isHardPlatformTimeoutAvecRun', () => {
+  it('marca kill duro sem aborted', () => {
+    expect(
+      isHardPlatformTimeoutAvecRun({
+        status: 'error',
+        error: 'Sync interrompido (timeout/kill)',
+        stats: { platform_kill_age_s: 305 },
+      }),
+    ).toBe(true)
+  })
+
+  it('ignora abort limpo por orçamento', () => {
+    expect(
+      isHardPlatformTimeoutAvecRun({
+        status: 'partial',
+        error: 'orçamento esgotado',
+        stats: { aborted: true },
+      }),
+    ).toBe(false)
+  })
+
+  it('classic300 só na janela ~280-320s', () => {
+    expect(
+      isClassic300sHardTimeout({
+        status: 'error',
+        error: 'abandoned_partial_timeout',
+        stats: { platform_kill_age_s: 305 },
+      }),
+    ).toBe(true)
+    expect(
+      isClassic300sHardTimeout({
+        status: 'error',
+        error: 'abandoned_partial_timeout',
+        stats: { platform_kill_age_s: 720 },
+      }),
+    ).toBe(false)
+  })
+
+  it('mensagem de health aponta Fluid quando classic300', () => {
+    const msg = hardTimeoutHealthMessage({ count: 2, classic300: 1 })
+    expect(msg).toMatch(/Fluid Compute/)
+    expect(hardTimeoutHealthMessage({ count: 0, classic300: 0 })).toBeNull()
   })
 })
 
@@ -81,5 +130,45 @@ describe('pickHojeAvecSyncRun', () => {
       { status: 'ok', created_at: iso(40), error: null, kind: 'full' },
     )
     expect(picked?.kind).toBe('full')
+  })
+})
+
+describe('computePanelSyncOk', () => {
+  it('falha sem runs', () => {
+    expect(computePanelSyncOk(null, null, NOW).ok).toBe(false)
+  })
+
+  it('falha em erro real no fast', () => {
+    const r = computePanelSyncOk(
+      { status: 'error', created_at: iso(10), error: 'P3 falhou' },
+      { status: 'ok', created_at: iso(60), error: null },
+      NOW,
+    )
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/fast status=error/)
+  })
+
+  it('aceita partial com abort limpo e fast fresco', () => {
+    const r = computePanelSyncOk(
+      { status: 'ok', created_at: iso(20), error: null },
+      {
+        status: 'partial',
+        created_at: iso(120),
+        error: 'orçamento esgotado',
+        stats: { aborted: true },
+      },
+      NOW,
+    )
+    expect(r.ok).toBe(true)
+  })
+
+  it('falha quando fast está stale', () => {
+    const r = computePanelSyncOk(
+      { status: 'ok', created_at: iso(90), error: null },
+      { status: 'ok', created_at: iso(120), error: null },
+      NOW,
+    )
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/fast stale/)
   })
 })

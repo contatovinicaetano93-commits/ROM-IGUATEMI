@@ -667,7 +667,7 @@ export default function AdminPage() {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
-                    <p className="text-xs text-sky-300">{s.name}</p>
+                    <p className="text-xs text-sky-800">{s.name}</p>
                   </div>
                   <span className="shrink-0 text-xs text-muted">{fmtIso(s.scheduled_at)}</span>
                 </Link>
