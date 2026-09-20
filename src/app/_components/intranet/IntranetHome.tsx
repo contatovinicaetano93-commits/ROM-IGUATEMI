@@ -59,9 +59,9 @@ export function IntranetHome() {
   }, [])
 
   const name = data?.greetingName || session?.displayName || session?.user || ''
-  const news = (data?.posts ?? []).filter((p) => p.kind === 'news').slice(0, 3)
-  const events = (data?.posts ?? []).filter((p) => p.kind === 'event').slice(0, 3)
   const posts = data?.posts ?? []
+  const news = posts.filter((p) => p.kind === 'news').slice(0, 3)
+  const events = posts.filter((p) => p.kind === 'event').slice(0, 3)
   const banners = posts.filter((p) => p.kind === 'banner')
   const wellness = banners[0]
   const people = banners[1]
