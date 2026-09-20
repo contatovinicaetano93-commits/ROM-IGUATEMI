@@ -142,7 +142,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     id: 'recepcao',
     label: 'Recepção',
     alias: 'Recepção',
-    summary: 'Chegada do cliente: Operação do dia, Agenda e Contatos.',
+    summary: 'Balcão: agenda de hoje, playbook de contato e busca de cliente.',
     examples: 'Equipe recepção',
     panel_role: 'staff',
     flow_role: 'solicitante',

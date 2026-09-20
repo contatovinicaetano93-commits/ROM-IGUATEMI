@@ -13,6 +13,7 @@ describe('intranet paths', () => {
     expect(isIntranetPath('/api/flow')).toBe(true)
     expect(isIntranetShellPath('/sistemas')).toBe(true)
     expect(isIntranetShellPath('/auditoria')).toBe(true)
+    expect(isIntranetShellPath('/recepcao')).toBe(true)
   })
 
   it('hoje e financeiro continuam módulos operacionais no grant, não rotas da intranet', () => {
@@ -30,6 +31,7 @@ describe('intranet top bar', () => {
       'Notícias e eventos',
       'Rom Flow',
       'Meu faturamento',
+      'Recepção',
       'Financeiro',
       'Estoque',
       'Operação do dia',
@@ -43,6 +45,7 @@ describe('intranet top bar', () => {
       'Notícias',
       'Rom Flow',
       'Faturamento',
+      'Balcão',
       'Financeiro',
       'Estoque',
       'Operação',
@@ -53,6 +56,7 @@ describe('intranet top bar', () => {
     expect(INTRANET_NAV.find((item) => item.label === 'Agenda do dia')?.href).toBe('/pipeline')
     expect(INTRANET_NAV.find((item) => item.label === 'Visão analítica')?.href).toBe('/dashboard')
     expect(INTRANET_NAV.find((item) => item.label === 'Meu faturamento')?.href).toBe('/meu-faturamento')
+    expect(INTRANET_NAV.find((item) => item.label === 'Recepção')?.href).toBe('/recepcao')
     expect(INTRANET_NAV.some((item) => item.href === '/onboarding')).toBe(false)
     expect(INTRANET_NAV.some((item) => item.href === '/ajuda')).toBe(false)
   })
@@ -69,6 +73,7 @@ describe('intranet section label', () => {
     expect(intranetSectionLabel('/pipeline')).toBe('Agenda do dia')
     expect(intranetSectionLabel('/auditoria')).toBe('Auditoria')
     expect(intranetSectionLabel('/meu-faturamento')).toBe('Meu faturamento')
+    expect(intranetSectionLabel('/recepcao')).toBe('Recepção')
   })
 })
 

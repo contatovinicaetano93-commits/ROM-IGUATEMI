@@ -172,12 +172,17 @@ function whatsappHrefFor(c: Contact): string | null {
 const URL_CHANNELS = new Set(['whatsapp', 'telegram', 'instagram', 'manual', 'avec'])
 const URL_STATUSES = new Set(['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido'])
 
+function initialQueryFromSearch(searchParams: URLSearchParams): string {
+  return searchParams.get('q')?.trim() ?? ''
+}
+
 function initialModeFromSearch(searchParams: URLSearchParams): ListMode {
   if (searchParams.get('queue') === 'novos') return 'novos'
   if (searchParams.get('queue') === 'ativados') return 'ativados'
   const ch = searchParams.get('channel')?.trim().toLowerCase() ?? ''
   const st = searchParams.get('status')?.trim().toLowerCase() ?? ''
   if (URL_CHANNELS.has(ch) || URL_STATUSES.has(st)) return 'search'
+  if (initialQueryFromSearch(searchParams)) return 'search'
   return 'reactivate'
 }
 
@@ -216,8 +221,8 @@ function ContatosPageContent() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [query, setQuery] = useState(() => initialQueryFromSearch(searchParams))
+  const [debouncedQuery, setDebouncedQuery] = useState(() => initialQueryFromSearch(searchParams))
 
   const dayParam = searchParams.get('day')
   const novosDay =
