@@ -12,6 +12,7 @@ export const INTRANET_PAGE_PREFIXES = [
   '/auditoria',
   '/meu-faturamento',
   '/recepcao',
+  '/pos-venda',
 ] as const
 
 export function isIntranetShellPath(pathname: string): boolean {

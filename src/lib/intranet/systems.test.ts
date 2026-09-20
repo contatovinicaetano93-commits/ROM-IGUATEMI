@@ -35,6 +35,7 @@ describe('systemsForAccess', () => {
       expect(hrefs).toContain('/contatos')
       expect(hrefs).toContain('/meu-faturamento')
       expect(hrefs).toContain('/recepcao')
+      expect(hrefs).toContain('/pos-venda')
       expect(hrefs).not.toContain('/financeiro')
       expect(hrefs).not.toContain('/dashboard')
       expect(hrefs).not.toContain('/auditoria')
