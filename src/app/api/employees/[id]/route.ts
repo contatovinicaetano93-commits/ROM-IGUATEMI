@@ -19,6 +19,11 @@ export async function PATCH(
       auth.session.role,
       id,
       parseGrantableModules(body.modules),
+      body.professional_name === undefined
+        ? undefined
+        : typeof body.professional_name === 'string'
+          ? body.professional_name
+          : null,
     )
     return ok({ employee })
   } catch (error) {

@@ -26,6 +26,7 @@ type Employee = {
   panel_role: ClientAuthRole
   flow_role: string
   status: string
+  professional_name?: string | null
   modules?: GrantableModuleKey[]
   areaIds?: RequestArea[]
 }
@@ -76,6 +77,7 @@ export default function PessoasPage() {
   const [createModules, setCreateModules] = useState<GrantableModuleKey[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editModules, setEditModules] = useState<GrantableModuleKey[]>([])
+  const [editProfessionalName, setEditProfessionalName] = useState('')
   const canManage = session != null && (!session.auth_enabled || session.role === 'admin')
 
   const pack = useMemo(() => cargoPackageById(cargoId), [cargoId])
@@ -115,6 +117,7 @@ export default function PessoasPage() {
         name: form.get('name'),
         email: form.get('email'),
         password: form.get('password'),
+        professional_name: String(form.get('professional_name') ?? '').trim() || null,
         panel_role: pack.panel_role,
         flow_role: pack.flow_role,
         can_publish: pack.can_publish,
@@ -141,7 +144,10 @@ export default function PessoasPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ modules: editModules }),
+      body: JSON.stringify({
+        modules: editModules,
+        professional_name: editProfessionalName.trim() || null,
+      }),
     })
     const json = await res.json()
     setSaving(false)
@@ -180,6 +186,9 @@ export default function PessoasPage() {
                   <div>
                     <p className="text-sm font-medium">{person.name}</p>
                     <p className="text-xs text-muted">{person.email}</p>
+                    {person.professional_name ? (
+                      <p className="mt-0.5 text-xs text-muted">Avec: {person.professional_name}</p>
+                    ) : null}
                     <p className="mt-1 text-[0.65rem] uppercase tracking-wide text-gold-strong">
                       {matched?.alias ?? person.panel_role}
                       {extras.length > 0 ? ` · extra ${extras.join(' · ')}` : ''}
@@ -187,13 +196,14 @@ export default function PessoasPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs uppercase tracking-wide text-muted">{person.flow_role}</span>
-                    {canManage && person.panel_role !== 'admin' && (
+                    {canManage && (
                       <button
                         type="button"
                         className="text-xs font-medium text-gold-strong"
                         onClick={() => {
                           setEditingId(person.id)
                           setEditModules(extras)
+                          setEditProfessionalName(person.professional_name ?? '')
                         }}
                       >
                         Ajustar
@@ -203,7 +213,19 @@ export default function PessoasPage() {
                 </div>
                 {editingId === person.id && (
                   <div className="mt-3 rounded-xl border border-border bg-background p-3">
-                    <ModuleChecks role={person.panel_role} selected={editModules} onToggle={toggleEdit} />
+                    <label className="mb-3 block text-sm">
+                      <span className="mb-1 block text-xs uppercase tracking-wide text-muted">Nome no Avec (0021)</span>
+                      <input
+                        type="text"
+                        value={editProfessionalName}
+                        onChange={(e) => setEditProfessionalName(e.target.value)}
+                        placeholder="Igual ao relatório de profissionais"
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                      />
+                    </label>
+                    {person.panel_role !== 'admin' ? (
+                      <ModuleChecks role={person.panel_role} selected={editModules} onToggle={toggleEdit} />
+                    ) : null}
                     <div className="mt-3 flex gap-2">
                       <PanelButton
                         type="button"
@@ -277,6 +299,11 @@ export default function PessoasPage() {
           <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
             <input name="name" required placeholder="Nome" className="rounded-xl border border-border bg-background px-3 py-2" />
             <input name="email" type="email" required placeholder="E-mail" className="rounded-xl border border-border bg-background px-3 py-2" />
+            <input
+              name="professional_name"
+              placeholder="Nome no Avec (0021) — opcional"
+              className="rounded-xl border border-border bg-background px-3 py-2 sm:col-span-2"
+            />
             <input
               name="password"
               type="password"

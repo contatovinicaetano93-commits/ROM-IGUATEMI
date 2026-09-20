@@ -29,6 +29,7 @@ describe('intranet top bar', () => {
       'Gestão de usuário',
       'Notícias e eventos',
       'Rom Flow',
+      'Meu faturamento',
       'Financeiro',
       'Estoque',
       'Operação do dia',
@@ -41,6 +42,7 @@ describe('intranet top bar', () => {
       'Usuários',
       'Notícias',
       'Rom Flow',
+      'Faturamento',
       'Financeiro',
       'Estoque',
       'Operação',
@@ -50,6 +52,7 @@ describe('intranet top bar', () => {
     ])
     expect(INTRANET_NAV.find((item) => item.label === 'Agenda do dia')?.href).toBe('/pipeline')
     expect(INTRANET_NAV.find((item) => item.label === 'Visão analítica')?.href).toBe('/dashboard')
+    expect(INTRANET_NAV.find((item) => item.label === 'Meu faturamento')?.href).toBe('/meu-faturamento')
     expect(INTRANET_NAV.some((item) => item.href === '/onboarding')).toBe(false)
     expect(INTRANET_NAV.some((item) => item.href === '/ajuda')).toBe(false)
   })
@@ -65,6 +68,7 @@ describe('intranet section label', () => {
     expect(intranetSectionLabel('/relatorios')).toBe('Visão analítica')
     expect(intranetSectionLabel('/pipeline')).toBe('Agenda do dia')
     expect(intranetSectionLabel('/auditoria')).toBe('Auditoria')
+    expect(intranetSectionLabel('/meu-faturamento')).toBe('Meu faturamento')
   })
 })
 

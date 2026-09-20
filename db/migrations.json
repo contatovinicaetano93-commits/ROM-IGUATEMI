@@ -271,8 +271,13 @@
       ]
     },
     {
+<<<<<<< HEAD
       "id": "035_estoque_rom_points",
       "file": "delta-estoque-rom-points.sql",
+=======
+      "id": "034_intranet_pro_link",
+      "file": "delta-intranet-pro-link.sql",
+>>>>>>> origin/main
       "panels": [
         "brasil",
         "iguatemi"

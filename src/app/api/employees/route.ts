@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
       panel_role: isPanelAdmin ? requestedPanelRole : 'staff',
       flow_role: parseRole(body.flow_role ?? 'solicitante'),
       can_publish: isPanelAdmin ? Boolean(body.can_publish) : false,
+      professional_name:
+        isPanelAdmin && typeof body.professional_name === 'string' ? body.professional_name : null,
       companyIds: Array.isArray(body.companyIds) ? body.companyIds.map(String) : undefined,
       areaIds: parseAreas(body.areaIds),
       modules: isPanelAdmin ? parseGrantableModules(body.modules) : [],
