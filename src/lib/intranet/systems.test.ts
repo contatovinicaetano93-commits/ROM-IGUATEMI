@@ -39,6 +39,7 @@ describe('systemsForAccess', () => {
       expect(hrefs).not.toContain('/financeiro')
       expect(hrefs).not.toContain('/dashboard')
       expect(hrefs).not.toContain('/auditoria')
+      expect(hrefs).not.toContain('/pessoas')
     }
   })
 
