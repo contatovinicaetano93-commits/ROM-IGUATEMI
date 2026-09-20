@@ -9,6 +9,8 @@ import { getSql } from '@/lib/db'
 export const SYNC_LOCK_KEYS = {
   avecFast: 'avec_sync_fast',
   avecFull: 'avec_sync_full',
+  /** Director visits/0021 — separado do full para não matar ops/agenda nem o fast. */
+  avecDirector: 'avec_sync_director',
   stock: 'stock_sync',
   omie: 'omie_sync',
 } as const

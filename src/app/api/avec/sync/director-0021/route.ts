@@ -26,7 +26,7 @@ import {
  * Sync Avec 0021 → salon_director_0021_months (faturamento por profissional, mês calendário).
  * Separado do full/agenda para backfill e cron dedicados.
  *
- * Lock: usa `avecFull` (Option A) — evita corrida com full/agenda sem nested lock.
+ * Lock: `avecDirector` — não disputa fatias full (antes usava avecFull).
  *
  * Query: `?status=1` só cobertura · `?month=2025-01` ou `?months=2025-01,2025-02` · `?force=1`.
  */
@@ -147,7 +147,7 @@ async function runSync(req: NextRequest) {
 
   try {
     return await withSyncLock(
-      SYNC_LOCK_KEYS.avecFull,
+      SYNC_LOCK_KEYS.avecDirector,
       async () => {
         await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {})
 
@@ -178,7 +178,7 @@ async function runSync(req: NextRequest) {
         reason: 'sync_em_andamento',
         holder: e.holder,
         expires_at: e.expiresAt,
-        note: 'Lock avecFull — full/agenda ou outro director-0021 em andamento.',
+        note: 'Lock avecDirector — outro director-visits/0021 em andamento.',
       })
     }
     throw e

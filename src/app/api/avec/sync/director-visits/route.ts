@@ -24,8 +24,7 @@ import {
  * Sync só das visitas 0002 → salon_client_visits (Relatório gerência offline).
  * Separado do full/agenda para não depender do min-gap nem do budget das outras etapas.
  *
- * Lock: usa `avecFull` (Option A) — evita corrida com full/agenda sem nested lock
- * (withSyncLock não é reentrante).
+ * Lock: `avecDirector` — não disputa fatias full/ops|agenda|catalog (antes usava avecFull).
  *
  * Query: `?status=1` só cobertura · `?quarter=2026-Q2` um trimestre · `?force=1` refaz.
  */
@@ -159,7 +158,7 @@ async function runSync(req: NextRequest) {
 
   try {
     return await withSyncLock(
-      SYNC_LOCK_KEYS.avecFull,
+      SYNC_LOCK_KEYS.avecDirector,
       async () => {
         await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {})
 
@@ -190,7 +189,7 @@ async function runSync(req: NextRequest) {
         reason: 'sync_em_andamento',
         holder: e.holder,
         expires_at: e.expiresAt,
-        note: 'Lock avecFull — full/agenda ou outro director-visits em andamento.',
+        note: 'Lock avecDirector — outro director-visits/0021 em andamento.',
       })
     }
     throw e
