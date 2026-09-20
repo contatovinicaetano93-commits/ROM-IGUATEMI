@@ -4,8 +4,12 @@ import { requireSession } from '@/lib/auth'
 import { createEmployee, listEmployees } from '@/lib/employees'
 import { ensureFlowCatalog } from '@/lib/flow/store'
 import { requireFlowMaster } from '@/lib/flow/require-master'
+import { announceEmployeeCreated } from '@/lib/intranet/employee-created'
 import { parseGrantableModules } from '@/lib/intranet/modules'
 import { parseAreas, parseRole } from '@/lib/flow/workflow'
+import { Logger } from '@/lib/logger'
+
+const logger = new Logger('api/employees')
 
 export async function GET(req: NextRequest) {
   const auth = await requireSession(req)
@@ -52,6 +56,15 @@ export async function POST(req: NextRequest) {
       companyIds: Array.isArray(body.companyIds) ? body.companyIds.map(String) : undefined,
       areaIds: parseAreas(body.areaIds),
       modules: isPanelAdmin ? parseGrantableModules(body.modules) : [],
+    })
+    await announceEmployeeCreated({
+      actor: { email: auth.session.user, role: auth.session.role },
+      employee,
+    }).catch((error) => {
+      logger.error('Falha ao anunciar CREATE_USER após cadastro', {
+        employeeId: employee.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
     })
     return ok({ employee }, undefined, 201)
   } catch (error) {

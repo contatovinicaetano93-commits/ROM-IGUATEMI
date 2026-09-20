@@ -75,6 +75,8 @@ function mapAuditAction(action: string): AuditAction {
       return 'UPDATE_EXPENSE'
     case 'DELETE_EXPENSE':
       return 'DELETE_EXPENSE'
+    case 'CREATE_USER':
+      return 'CREATE_USER'
     case 'UPDATE_USER':
       return 'UPDATE_USER'
     case 'REVOKE_USER':
