@@ -65,7 +65,7 @@ export function IntranetTopNav() {
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur">
         {/* Faixa 1: marca + utilitários — sem título de seção (já existe no chrome da página) */}
-        <div className="mx-auto flex max-w-[1600px] items-center gap-2 px-4 py-3 sm:gap-3 sm:px-5 lg:px-8">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-2 py-3 pl-4 pr-5 sm:gap-3 sm:px-5 lg:px-8">
           <button
             type="button"
             className="flex h-10 w-10 shrink-0 items-center justify-center text-foreground lg:hidden"
@@ -103,7 +103,8 @@ export function IntranetTopNav() {
                 {initial}
               </span>
               <span className="hidden max-w-[7rem] truncate text-sm text-foreground lg:inline">{name.split(' ')[0]}</span>
-              {/* Mobile: Sair só no drawer (evita apertar o canto direito). Desktop: pill no header. */}
+              {/* Mobile: só o ícone — libera espaço no canto. Desktop: pill com texto. */}
+              <LogoutButton compact className="inline-flex lg:hidden" label="Sair" />
               <LogoutButton className="hidden lg:inline-flex" label="Sair" />
             </div>
           </div>
