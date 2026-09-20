@@ -52,7 +52,9 @@ function isProtectedPage(pathname: string) {
     pathname === '/auditoria' ||
     pathname.startsWith('/auditoria/') ||
     pathname === '/meu-faturamento' ||
-    pathname.startsWith('/meu-faturamento/')
+    pathname.startsWith('/meu-faturamento/') ||
+    pathname === '/recepcao' ||
+    pathname.startsWith('/recepcao/')
   )
 }
 
@@ -156,6 +158,8 @@ export const config = {
     '/auditoria/:path*',
     '/meu-faturamento',
     '/meu-faturamento/:path*',
+    '/recepcao',
+    '/recepcao/:path*',
     '/api/:path*',
   ],
 }

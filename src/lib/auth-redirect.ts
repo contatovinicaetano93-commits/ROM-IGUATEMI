@@ -22,6 +22,8 @@ const ALLOWED_RETURN_PREFIXES = [
   '/flow',
   '/operacao',
   '/adm',
+  '/meu-faturamento',
+  '/recepcao',
 ] as const
 
 export function sanitizeRedirectPath(next: string | null | undefined, fallback = '/') {
@@ -50,6 +52,7 @@ export function sanitizeContactReturnTo(
 export function contactReturnLabel(returnTo: string): string {
   const bare = returnTo.split('?')[0]?.split('#')[0] ?? returnTo
   if (bare === '/hoje' || bare.startsWith('/hoje/')) return 'Hoje'
+  if (bare === '/recepcao' || bare.startsWith('/recepcao/')) return 'Recepção'
   if (bare === '/pipeline' || bare.startsWith('/pipeline/')) return 'Pipeline'
   if (bare === '/dashboard' || bare.startsWith('/dashboard/')) return 'Visão analítica'
   if (bare === '/financeiro' || bare.startsWith('/financeiro/')) return 'Financeiro'

@@ -19,6 +19,7 @@ const EXACT: Record<string, string> = {
   '/sistemas': 'Meus sistemas',
   '/auditoria': 'Auditoria',
   '/meu-faturamento': 'Meu faturamento',
+  '/recepcao': 'Recepção',
 }
 
 const PREFIXES: Array<{ prefix: string; label: string }> = [
@@ -41,6 +42,7 @@ const PREFIXES: Array<{ prefix: string; label: string }> = [
   { prefix: '/sistemas', label: 'Meus sistemas' },
   { prefix: '/auditoria', label: 'Auditoria' },
   { prefix: '/meu-faturamento', label: 'Meu faturamento' },
+  { prefix: '/recepcao', label: 'Recepção' },
 ]
 
 export function intranetSectionLabel(pathname: string): string {
