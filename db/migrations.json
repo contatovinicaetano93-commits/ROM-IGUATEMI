@@ -269,6 +269,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "035_estoque_rom_points",
+      "file": "delta-estoque-rom-points.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }
