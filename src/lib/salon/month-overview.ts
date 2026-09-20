@@ -437,6 +437,9 @@ async function overviewFromCachedRows(args: {
           prevDaily.ticket_avg,
         ),
         occupancy_avg: baseAnalytics.previous.occupancy_avg,
+        packages_revenue: baseAnalytics.previous.packages_revenue ?? null,
+        new_clients_period: baseAnalytics.previous.new_clients_period ?? null,
+        return_rate: baseAnalytics.previous.return_rate ?? null,
       },
     }
     return buildOverview({
@@ -692,7 +695,7 @@ export async function computeMonthOverview(opts?: {
 
     if (cached) {
       return overlayLiveWindowTotals(
-        overviewFromCachedRows({ brand, month, cached, cachedPrev }),
+        await overviewFromCachedRows({ brand, month, cached, cachedPrev }),
         month,
         opts?.compareMonth,
       )
