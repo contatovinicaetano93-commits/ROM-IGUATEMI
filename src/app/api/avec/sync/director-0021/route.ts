@@ -8,6 +8,7 @@ import {
 } from '@/lib/avec/sync-director-0021'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
+import { isSyncBudgetExhausted, setActiveSyncDeadlineAt } from '@/lib/avec/sync-budget'
 import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
@@ -32,6 +33,9 @@ import {
  */
 export const maxDuration = 800
 warnIfLongMaxDuration('/api/avec/sync/director-0021', maxDuration)
+
+/** Margem vs maxDuration=800 — abort limpo em vez de kill 504. */
+const DIRECTOR_0021_BUDGET_MS = 720_000
 
 function emptyStats(): AvecSyncStats {
   const deployment = getDeploymentContext()
@@ -152,16 +156,31 @@ async function runSync(req: NextRequest) {
         await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {})
 
         const stats = emptyStats()
-        await syncDirector0021(stats, undefined, { months, force })
+        setActiveSyncDeadlineAt(Date.now() + DIRECTOR_0021_BUDGET_MS)
+        try {
+          await syncDirector0021(stats, undefined, {
+            months,
+            force,
+            shouldAbort: isSyncBudgetExhausted,
+          })
+        } finally {
+          setActiveSyncDeadlineAt(null)
+        }
         const status = await list0021MonthCoverage()
 
         const okRun = stats.errors.length === 0
         return ok({
           ran: true,
-          status: okRun ? (stats.warnings.some((w) => /truncado/i.test(w)) ? 'partial' : 'ok') : 'error',
+          status: okRun
+            ? stats.aborted || stats.warnings.some((w) => /truncado|orçamento/i.test(w))
+              ? 'partial'
+              : 'ok'
+            : 'error',
           director_0021_months_upserted: stats.director_0021_months_upserted ?? 0,
           months: months ?? null,
           force,
+          aborted: Boolean(stats.aborted),
+          budget_ms: DIRECTOR_0021_BUDGET_MS,
           warnings: stats.warnings,
           errors: stats.errors,
           coverage: status.coverage,
