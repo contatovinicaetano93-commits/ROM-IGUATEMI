@@ -8,13 +8,23 @@ export type HomeCarouselSlide = {
 /** Slides estáticos da home — marketing pode sobrescrever com posts `banner` + image_url. */
 export const DEFAULT_HOME_CAROUSEL: readonly HomeCarouselSlide[] = [
   {
+    src: '/intranet/carousel/salon-wide.jpg',
+    alt: 'ROM Club — estações de atendimento',
+    objectPosition: 'center',
+  },
+  {
+    src: '/intranet/carousel/lounge-wide.jpg',
+    alt: 'ROM Club — lounge',
+    objectPosition: 'center 35%',
+  },
+  {
     src: '/intranet/carousel/rom-concept-tray-wide.jpg',
     alt: 'ROM Concept — bandeja de serviço',
     objectPosition: 'center 40%',
   },
   {
-    src: '/intranet/hero.jpg',
-    alt: 'ROM Club',
+    src: '/intranet/carousel/cafe-wide.jpg',
+    alt: 'ROM Concept — café e detalhes',
     objectPosition: 'center',
   },
 ]

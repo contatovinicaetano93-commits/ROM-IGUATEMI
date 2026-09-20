@@ -160,7 +160,7 @@ export function IntranetHome() {
             title={wellness?.title || 'Sua saúde, mais bem-estar'}
             body={wellness?.excerpt || wellness?.body || 'O marketing publica os banners da casa por aqui.'}
             href={wellness?.href}
-            imageUrl={wellness?.image_url || '/intranet/carousel/rom-concept-tray-wide.jpg'}
+            imageUrl={wellness?.image_url || '/intranet/carousel/lounge-wide.jpg'}
           />
 
           <BannerPromoCard
@@ -169,7 +169,7 @@ export function IntranetHome() {
             title={people?.title || 'Pessoas que transformam'}
             body={people?.excerpt || people?.body || 'Histórias da equipe, quando o marketing publicar.'}
             href={people?.href}
-            imageUrl={people?.image_url || '/intranet/carousel/rom-concept-tray.jpg'}
+            imageUrl={people?.image_url || '/intranet/carousel/salon.jpg'}
           />
         </div>
       </section>
