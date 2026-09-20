@@ -27,6 +27,8 @@ import {
   isAvecConfigured,
   isAvecMock,
   periodRange,
+  AVEC_REPORT_LABELS,
+  type AvecReportFetchResult,
 } from '@/lib/avec/client'
 import {
   formatAvecErrorList,
@@ -127,6 +129,18 @@ export function parseAvecSyncStage(value: string | null | undefined): AvecSyncSt
   return 'all'
 }
 
+export interface AvecReportPagination {
+  reportId: string
+  label: string
+  startPage: number
+  endPage: number
+  nextPage: number | null
+  hasMore: boolean
+  rowsThisBatch: number
+  maxPages: number
+  limit: number
+}
+
 export interface AvecSyncStats {
   panel: RomPanelId
   deployment_host: string | null
@@ -154,6 +168,8 @@ export interface AvecSyncStats {
   running?: boolean
   /** Abort limpo por orçamento de tempo (deadlineAt) — status partial. */
   aborted?: boolean
+  /** Checkpoint de paginação (Continuar sync) — paridade estoque. */
+  pagination?: Record<string, AvecReportPagination>
 }
 
 export interface AvecSyncRun {
@@ -369,6 +385,9 @@ export async function getRecentHardPlatformTimeoutFullRuns(
 /** Margem vs route maxDuration=800s — abort limpo em vez de kill mid-row. */
 const AVEC_SYNC_BUDGET_MS = 720_000
 
+/** Página inicial por relatório no decorrer de um sync (Continuar sync). */
+let syncStartPages: Record<string, number> | null = null
+
 async function fetchSyncReport(
   reportId: string,
   params: Parameters<typeof fetchAllAvecReport>[1] = {},
@@ -376,7 +395,76 @@ async function fetchSyncReport(
 ) {
   return fetchAllAvecReport(reportId, params, maxPages, {
     deadlineAt: getActiveSyncDeadlineAt(),
+    startPage: syncStartPages?.[reportId],
   })
+}
+
+function recordReportPagination(
+  stats: AvecSyncStats,
+  reportId: string,
+  result: AvecReportFetchResult,
+) {
+  if (!stats.pagination) stats.pagination = {}
+  stats.pagination[reportId] = {
+    reportId,
+    label: AVEC_REPORT_LABELS[reportId] ?? reportId,
+    startPage: result.startPage,
+    endPage: result.endPage,
+    nextPage: result.nextPage,
+    hasMore: result.hasMore,
+    rowsThisBatch: result.rows.length,
+    maxPages: result.maxPages,
+    limit: result.limit,
+  }
+}
+
+function warnIfTruncated(
+  stats: AvecSyncStats,
+  reportId: string,
+  result: Awaited<ReturnType<typeof fetchAllAvecReport>>,
+) {
+  recordReportPagination(stats, reportId, result)
+  if (result.truncated) stats.warnings.push(formatTruncationWarning(reportId, result))
+}
+
+export type SalonPaginationPlanItem = AvecReportPagination & { batchLabel: string }
+
+export function salonPaginationPlan(lastRun: AvecSyncRun | null): SalonPaginationPlanItem[] {
+  if (!lastRun?.stats?.pagination) return []
+  return Object.values(lastRun.stats.pagination).map((entry) => ({
+    ...entry,
+    batchLabel:
+      entry.hasMore && entry.nextPage != null
+        ? `Próximas ${entry.nextPage}–${entry.nextPage + entry.maxPages - 1}`
+        : `Páginas ${entry.startPage}–${entry.endPage} sincronizadas`,
+  }))
+}
+
+async function resolveSalonContinueStartPages(
+  continueFrom: Record<string, number> | 'auto' | undefined,
+  stage: AvecSyncStage,
+): Promise<Record<string, number>> {
+  if (!continueFrom) return {}
+  if (continueFrom !== 'auto') return continueFrom
+
+  const candidates: Array<AvecSyncRun | null> = []
+  if (stage !== 'all') {
+    candidates.push(await getLastAvecSync('full', { finishedOnly: true, stage }))
+  }
+  candidates.push(await getLastAvecSync('full', { finishedOnly: true }))
+  candidates.push(await getLastAvecSync('fast', { finishedOnly: true }))
+
+  for (const run of candidates) {
+    if (!run?.stats?.pagination) continue
+    const pages: Record<string, number> = {}
+    for (const entry of Object.values(run.stats.pagination)) {
+      if (entry.hasMore && entry.nextPage != null) {
+        pages[entry.reportId] = entry.nextPage
+      }
+    }
+    if (Object.keys(pages).length > 0) return pages
+  }
+  return {}
 }
 
 /** Catálogo 0004 é pesado (~50k upserts) — no máximo 1×/dia no cron. */
@@ -461,10 +549,6 @@ async function snapshotReport(
   } catch (e) {
     stats.warnings.push(`snapshot ${reportId}: ${e instanceof Error ? e.message : String(e)}`)
   }
-}
-
-function warnIfTruncated(stats: AvecSyncStats, reportId: string, result: Awaited<ReturnType<typeof fetchAllAvecReport>>) {
-  if (result.truncated) stats.warnings.push(formatTruncationWarning(reportId, result))
 }
 
 /**
@@ -1397,29 +1481,43 @@ async function syncDurationFrom0223(stats: AvecSyncStats, syncRunId?: string) {
 
 export async function runAvecSync(
   mode: AvecSyncMode = 'full',
-  opts?: { stage?: AvecSyncStage; scope?: AvecSyncScope },
+  opts?: {
+    stage?: AvecSyncStage
+    scope?: AvecSyncScope
+    continueFrom?: Record<string, number> | 'auto'
+  },
 ): Promise<AvecSyncRun> {
-  const stage: AvecSyncStage = mode === 'full' ? (opts?.stage ?? 'all') : 'all'
-  const scope: AvecSyncScope = mode === 'fast' ? (opts?.scope ?? 'all') : 'all'
-  // Locks separados: full/ops às 10:35 não deve matar o fast de :50 (Hoje).
+  const isContinue = opts?.continueFrom !== undefined
+  const stage: AvecSyncStage = mode === 'full' || isContinue ? (opts?.stage ?? 'all') : 'all'
+  const scope: AvecSyncScope = mode === 'fast' && !isContinue ? (opts?.scope ?? 'all') : 'all'
+  const effectiveMode: AvecSyncMode = isContinue ? 'full' : mode
+  // Locks separados: full/ops às 10:20 não deve matar o fast de :25 (Hoje).
   // Estágios full ainda compartilham avecFull (evita duas fatias no mesmo DB).
-  const lockKey = mode === 'fast' ? SYNC_LOCK_KEYS.avecFast : SYNC_LOCK_KEYS.avecFull
-  return withSyncLock(lockKey, () => runAvecSyncUnlocked(mode, stage, scope), {
-    // maxDuration route = 800s — lease precisa sobreviver a lambda ainda viva.
-    ttlMs: 15 * 60 * 1000,
-    owner:
-      mode === 'fast' && scope === 'kpi'
-        ? 'avec-fast-kpi'
-        : stage === 'all'
-          ? `avec-${mode}`
-          : `avec-${mode}-${stage}`,
-  })
+  const lockKey =
+    effectiveMode === 'fast' ? SYNC_LOCK_KEYS.avecFast : SYNC_LOCK_KEYS.avecFull
+  return withSyncLock(
+    lockKey,
+    () => runAvecSyncUnlocked(effectiveMode, stage, scope, opts?.continueFrom),
+    {
+      // maxDuration route = 800s — lease precisa sobreviver a lambda ainda viva.
+      ttlMs: 15 * 60 * 1000,
+      owner:
+        effectiveMode === 'fast' && scope === 'kpi'
+          ? 'avec-fast-kpi'
+          : isContinue
+            ? `avec-full-continue-${stage}`
+            : stage === 'all'
+              ? `avec-${effectiveMode}`
+              : `avec-${effectiveMode}-${stage}`,
+    },
+  )
 }
 
 async function runAvecSyncUnlocked(
   mode: AvecSyncMode,
   stage: AvecSyncStage,
   scope: AvecSyncScope,
+  continueFrom?: Record<string, number> | 'auto',
 ): Promise<AvecSyncRun> {
   if (!isAvecConfigured()) {
     throw new Error('Avec não configurado — defina AVEC_API_TOKEN')
@@ -1429,6 +1527,21 @@ async function runAvecSyncUnlocked(
   await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {
     // sync continua — fetchAvecReport ainda tenta force-refresh no 401
   })
+
+  const startPages = await resolveSalonContinueStartPages(continueFrom, stage)
+  syncStartPages = Object.keys(startPages).length > 0 ? startPages : null
+  try {
+    return await runAvecSyncBody(mode, stage, scope)
+  } finally {
+    syncStartPages = null
+  }
+}
+
+async function runAvecSyncBody(
+  mode: AvecSyncMode,
+  stage: AvecSyncStage,
+  scope: AvecSyncScope,
+): Promise<AvecSyncRun> {
 
   const debug = process.env.AVEC_SYNC_DEBUG === '1' || process.env.AVEC_SYNC_DEBUG === 'true'
   const step = (label: string) => {

@@ -5,6 +5,7 @@ import {
   runAvecSync,
   getLastAvecSync,
   parseAvecSyncScope,
+  salonPaginationPlan,
   type AvecSyncMode,
   type AvecSyncScope,
   type AvecSyncStage,
@@ -79,10 +80,13 @@ export async function executeAvecSync(
   },
 ) {
   const mode = opts?.forceMode ?? parseAvecSyncMode(req, opts?.defaultMode ?? 'fast')
+  const continueSync = req.nextUrl.searchParams.get('continue') === '1'
+  const reportParam = req.nextUrl.searchParams.get('report')?.trim()
+  const startPageParam = req.nextUrl.searchParams.get('startPage')
   const stage: AvecSyncStage =
-    mode === 'full' ? (opts?.forceStage ?? 'all') : 'all'
+    mode === 'full' || continueSync ? (opts?.forceStage ?? 'all') : 'all'
   const scope: AvecSyncScope =
-    mode === 'fast'
+    mode === 'fast' && !continueSync
       ? (opts?.forceScope ??
         (opts?.webhook ? 'kpi' : parseAvecSyncScope(req.nextUrl.searchParams.get('scope'))))
       : 'all'
@@ -101,7 +105,11 @@ export async function executeAvecSync(
     return err('Avec não configurado (AVEC_API_TOKEN)', 503)
   }
 
-  const effectiveMode: AvecSyncMode = opts?.webhook && mode === 'full' ? 'fast' : mode
+  const effectiveMode: AvecSyncMode = continueSync
+    ? 'full'
+    : opts?.webhook && mode === 'full'
+      ? 'fast'
+      : mode
   const effectiveStage: AvecSyncStage =
     effectiveMode === 'full' ? stage : 'all'
   const effectiveScope: AvecSyncScope =
@@ -111,7 +119,14 @@ export async function executeAvecSync(
         : scope
       : 'all'
 
-  if (!opts?.force) {
+  const continueFrom =
+    continueSync
+      ? reportParam && startPageParam
+        ? { [reportParam]: Number(startPageParam) }
+        : ('auto' as const)
+      : undefined
+
+  if (!opts?.force && !continueSync) {
     const last = await getLastAvecSync(effectiveMode, {
       finishedOnly: true,
       ...(effectiveMode === 'full' ? { stage: effectiveStage } : {}),
@@ -150,7 +165,7 @@ export async function executeAvecSync(
   try {
     // Purge só em admin force — cron full já tem /api/avec/purge-snapshots.
     // Rodar purge+full no mesmo lambda estourava maxDuration (abandoned_partial_timeout).
-    if (opts?.force && !opts?.cron && !opts?.webhook) {
+    if (opts?.force && !opts?.cron && !opts?.webhook && !continueSync) {
       try {
         await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
       } catch (purgeErr) {
@@ -163,7 +178,7 @@ export async function executeAvecSync(
 
     // Repair jsonb só em admin force — no cron full competia com o pooler e
     // atrasava o beginAvecSyncRun (request “viva” sem row em avec_sync_runs).
-    if (effectiveMode === 'full' && opts?.force && !opts?.cron) {
+    if (effectiveMode === 'full' && opts?.force && !opts?.cron && !continueSync) {
       try {
         await Promise.all([
           repairSalonP1JsonbEncoding(),
@@ -178,6 +193,7 @@ export async function executeAvecSync(
     const run = await runAvecSync(effectiveMode, {
       stage: effectiveStage,
       scope: effectiveScope,
+      continueFrom,
     })
     return ok({
       ...run,
@@ -185,13 +201,17 @@ export async function executeAvecSync(
       mode: effectiveMode,
       stage: effectiveStage,
       scope: effectiveScope,
+      continued: Boolean(continueSync),
+      pagination: salonPaginationPlan(run),
       schedule: effectiveMode === 'fast' ? 'intraday' : 'full',
       note:
-        effectiveMode === 'fast'
-          ? effectiveScope === 'kpi'
-            ? 'Sync fast/kpi — caixa/cancel/noshow (agenda via webhook/cron)'
-            : 'Sync fast — agenda/caixa do dia (sem P1–P3)'
-          : fullStageNote(effectiveStage),
+        continueSync
+          ? 'Continuar sync — retoma páginas truncadas do último lote'
+          : effectiveMode === 'fast'
+            ? effectiveScope === 'kpi'
+              ? 'Sync fast/kpi — caixa/cancel/noshow (agenda via webhook/cron)'
+              : 'Sync fast — agenda/caixa do dia (sem P1–P3)'
+            : fullStageNote(effectiveStage),
     })
   } catch (e) {
     if (isSyncLockBusyError(e)) {
