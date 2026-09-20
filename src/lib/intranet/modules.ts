@@ -100,6 +100,8 @@ export function canSeeNavHref(
   if (!role) return false
   const path = href.split('?')[0] || '/'
   if (path === '/auditoria' || path.startsWith('/auditoria/')) return role === 'admin'
+  // Cadastro/edição de acessos é só admin master — não poluir o menu dos demais cargos.
+  if (path === '/pessoas' || path.startsWith('/pessoas/')) return role === 'admin'
   const key = moduleKeyFromHref(href)
   if (!key) return true
   return hasPanelModule(role, extras, key)
