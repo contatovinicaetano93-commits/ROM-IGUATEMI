@@ -192,8 +192,8 @@ function BannerPromoCard({
   tone: 'warm' | 'dark'
   className?: string
 }) {
-  const base = tone === 'warm' ? 'bg-[#5b3d3a]' : 'bg-[#1c1916]'
-  const textMuted = tone === 'warm' ? 'text-white/80' : 'text-white/60'
+  const base = tone === 'warm' ? 'bg-[#5b3d3a]' : 'bg-[#141210]'
+  const textMuted = tone === 'warm' ? 'text-white/95' : 'text-white/90'
   const titleColor = tone === 'warm' ? 'text-white' : 'text-[#e8d7b8]'
   return (
     <article className={`relative isolate overflow-hidden rounded-2xl ${base} ${className ?? ''}`}>
@@ -201,7 +201,7 @@ function BannerPromoCard({
       <img
         src={imageUrl}
         alt=""
-        className="absolute inset-0 h-full w-full object-cover opacity-35"
+        className="absolute inset-0 h-full w-full object-cover opacity-45"
         style={{ objectPosition: 'center' }}
       />
       <div className={`relative p-5 ${titleColor}`}>

@@ -324,7 +324,7 @@ export default function HojePage() {
 
         {scheduleOpen && (
           <>
-            <p className="text-[0.65rem] text-muted/70">
+            <p className="text-[0.65rem] text-muted">
               Badge = pessoas · lista ={' '}
               {loading ? '…' : data?.schedule_services ?? data?.scheduleToday.length ?? 0} linha(s) de
               serviço · ordem cronológica
@@ -393,7 +393,7 @@ export default function HojePage() {
         {playbookOpen && (
           <>
             {!loading && data?.playbook_focus && (
-              <p className="text-[0.65rem] text-muted/70">{data.playbook_focus}</p>
+              <p className="text-[0.65rem] text-muted">{data.playbook_focus}</p>
             )}
 
             {!loading && (data?.playbook.length ?? 0) > 0 && (
@@ -528,9 +528,9 @@ function KpiCard({
         <>
           <p className={`text-lg font-semibold tabular-nums ${warn ? 'text-warning' : ''}`}>{value}</p>
           {source ? (
-            <p className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted/70">{source}</p>
+            <p className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted">{source}</p>
           ) : null}
-          {hint ? <p className="mt-0.5 text-[0.58rem] leading-snug text-muted/60">{hint}</p> : null}
+          {hint ? <p className="mt-0.5 text-[0.58rem] leading-snug text-muted/85">{hint}</p> : null}
         </>
       )}
     </div>

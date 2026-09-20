@@ -1,22 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  /* Identidade única da intranet — creme/cobre em todo o Rom Club. */
-  --background: #f4f1ec;
+  /* Identidade intranet — contraste reforçado sobre creme/cobre. */
+  --background: #efeae2;
   --surface: #ffffff;
   --card: #ffffff;
-  --card-elevated: #fbf8f3;
-  --foreground: #1c1916;
-  --border: #e4ddd3;
-  --muted: #7a7268;
+  --card-elevated: #f7f3ec;
+  --foreground: #141210;
+  --border: #cfc5b8;
+  --muted: #4f4840;
 
-  --gold: #b08b57;
-  --gold-strong: #9a7344;
-  --gold-bright: #c4a574;
+  --gold: #8f6a38;
+  --gold-strong: #744f28;
+  --gold-bright: #a67c48;
 
-  --success: #3ecf8e;
-  --danger: #ef5f6b;
-  --warning: #f0a641;
+  --success: #2f9e6a;
+  --danger: #d94856;
+  --warning: #d4891a;
 }
 
 @theme inline {
@@ -96,16 +96,16 @@ body {
 }
 
 .intranet-shell {
-  --background: #f4f1ec;
+  --background: #efeae2;
   --surface: #ffffff;
   --card: #ffffff;
-  --card-elevated: #fbf8f3;
-  --foreground: #1c1916;
-  --border: #e4ddd3;
-  --muted: #7a7268;
-  --gold: #b08b57;
-  --gold-strong: #9a7344;
-  --gold-bright: #c4a574;
+  --card-elevated: #f7f3ec;
+  --foreground: #141210;
+  --border: #cfc5b8;
+  --muted: #4f4840;
+  --gold: #8f6a38;
+  --gold-strong: #744f28;
+  --gold-bright: #a67c48;
   background: var(--background);
   color: var(--foreground);
   min-height: 100dvh;

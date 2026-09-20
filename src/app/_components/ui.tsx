@@ -193,7 +193,7 @@ export function InfoBanner({ title, text }: { title: string; text: string }) {
         <p className="text-sm font-medium text-gold-strong">{title}</p>
         <p className="mt-0.5 text-xs leading-relaxed text-muted">{text}</p>
       </div>
-      <button type="button" onClick={() => setOpen(false)} aria-label="Fechar aviso" className="shrink-0 text-gold/70 active:text-gold">
+      <button type="button" onClick={() => setOpen(false)} aria-label="Fechar aviso" className="shrink-0 text-gold active:text-gold">
         <X size={18} />
       </button>
     </div>

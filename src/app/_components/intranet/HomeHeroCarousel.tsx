@@ -51,22 +51,37 @@ export function HomeHeroCarousel({
           style={{ objectPosition: slide.objectPosition ?? 'center' }}
         />
       ))}
-      <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/25" />
+      {/* Overlay mais denso — fotos claras lavavam o texto branco */}
+      <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/65 to-black/40" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/20" />
       <div
         className="relative mx-auto flex min-h-[280px] max-w-[1400px] flex-col justify-end px-5 py-8 lg:min-h-[360px] lg:px-8 lg:py-12"
         style={{ animation: 'rom-hero-in 0.7s ease-out both' }}
       >
         <div className="max-w-xl text-white">
-          <h1 className="font-serif text-3xl leading-tight lg:text-5xl">{headline}</h1>
-          <p className="mt-2 text-sm text-white/80 lg:text-base">{tagline}</p>
+          <h1
+            className="font-serif text-3xl font-semibold leading-tight tracking-tight text-white lg:text-5xl"
+            style={{ textShadow: '0 2px 16px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.8)' }}
+          >
+            {headline}
+          </h1>
+          <p
+            className="mt-2 text-sm font-medium text-white lg:text-base"
+            style={{ textShadow: '0 1px 10px rgba(0,0,0,0.5)' }}
+          >
+            {tagline}
+          </p>
           <Link
             href={active.href?.trim() || '/empresa#noticias'}
-            className="mt-5 inline-flex rounded-full border border-white/40 px-4 py-2 text-sm text-white hover:bg-white/10"
+            className="mt-5 inline-flex rounded-full border border-white/80 bg-black/35 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-black/50"
           >
             Ver novidade
           </Link>
         </div>
-        <p className="absolute bottom-8 right-8 hidden max-w-xs text-right font-serif text-lg text-white/80 lg:block">
+        <p
+          className="absolute bottom-8 right-8 hidden max-w-xs text-right font-serif text-lg font-medium text-white lg:block"
+          style={{ textShadow: '0 1px 12px rgba(0,0,0,0.55)' }}
+        >
           “{quote}”
         </p>
         {safeSlides.length > 1 ? (
@@ -77,8 +92,8 @@ export function HomeHeroCarousel({
                 type="button"
                 aria-label={`Slide ${i + 1}`}
                 aria-current={i === index}
-                className={`h-2 w-2 rounded-full transition ${
-                  i === index ? 'bg-white' : 'bg-white/40 hover:bg-white/70'
+                className={`h-2.5 w-2.5 rounded-full border border-black/30 transition ${
+                  i === index ? 'bg-white shadow' : 'bg-white/55 hover:bg-white/85'
                 }`}
                 onClick={() => setIndex(i)}
               />

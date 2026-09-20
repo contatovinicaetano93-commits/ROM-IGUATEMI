@@ -845,7 +845,7 @@ function ContactDetailPageContent() {
                     <span className="shrink-0 text-[0.65rem] text-muted">{relTime(e.created_at)}</span>
                   </div>
                   {meta.detail && <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted">{meta.detail}</p>}
-                  <span className="mt-1 inline-block text-[0.6rem] uppercase tracking-wide text-muted/70">
+                  <span className="mt-1 inline-block text-[0.6rem] uppercase tracking-wide text-muted">
                     {HANDLED_BY_LABEL[e.handled_by] ?? e.handled_by}
                   </span>
                 </li>
