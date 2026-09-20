@@ -19,6 +19,8 @@ export type EmployeeRecord = {
   flow_role: FlowRole
   status: 'active' | 'inactive'
   can_publish: boolean
+  /** Nome como aparece no Avec 0021 — usado em Meu faturamento. */
+  professional_name: string | null
   companyIds: string[]
   areaIds: RequestArea[]
   modules: GrantableModuleKey[]
@@ -93,6 +95,7 @@ export async function createEmployee(input: {
   panel_role: AuthRole
   flow_role: FlowRole
   can_publish?: boolean
+  professional_name?: string | null
   companyIds?: string[]
   areaIds?: RequestArea[]
   modules?: GrantableModuleKey[]
@@ -109,15 +112,20 @@ export async function createEmployee(input: {
   const sql = getIntranetSql()
   const passwordHash = await hashPassword(input.password)
   const canPublish = Boolean(input.can_publish) || input.panel_role === 'admin' || input.panel_role === 'mkt'
+  const professionalName =
+    typeof input.professional_name === 'string' && input.professional_name.trim()
+      ? input.professional_name.trim()
+      : null
   const rows = (await sql`
-    insert into intranet_employees (email, name, password_hash, panel_role, flow_role, can_publish)
+    insert into intranet_employees (email, name, password_hash, panel_role, flow_role, can_publish, professional_name)
     values (
       ${input.email.trim().toLowerCase()},
       ${input.name.trim()},
       ${passwordHash},
       ${input.panel_role},
       ${flowRole},
-      ${canPublish}
+      ${canPublish},
+      ${professionalName}
     )
     returning *
   `) as Array<Record<string, unknown>>
@@ -281,14 +289,26 @@ export async function updateEmployeeModules(
   actorRole: AuthRole,
   userId: string,
   selected: readonly GrantableModuleKey[],
+  professionalName?: string | null,
 ): Promise<Omit<EmployeeRecord, 'password_hash'>> {
   const current = await findEmployeeById(userId)
   if (!current) throw new Error('Usuário não encontrado.')
   const extras = extrasBeyondRole(current.panel_role, parseGrantableModules(selected))
   await replaceEmployeeModules(userId, extras)
+  if (professionalName !== undefined) {
+    const sql = getIntranetSql()
+    const nextName =
+      typeof professionalName === 'string' && professionalName.trim() ? professionalName.trim() : null
+    await sql`
+      update intranet_employees
+      set professional_name = ${nextName}, updated_at = now()
+      where id = ${userId}::uuid
+    `
+  }
   await AuditLogger.log(actorEmail, actorRole, 'UPDATE_USER', `intranet:modules:${userId}`, {
     from: current.modules,
     to: extras,
+    professional_name: professionalName === undefined ? undefined : professionalName,
   })
   const updated = await findEmployeeById(userId)
   if (!updated) throw new Error('Usuário não encontrado.')
@@ -360,6 +380,10 @@ function mapEmployee(row: Record<string, unknown>): EmployeeRecord {
     flow_role: parseRole(row.flow_role),
     status: row.status === 'inactive' ? 'inactive' : 'active',
     can_publish: Boolean(row.can_publish),
+    professional_name:
+      typeof row.professional_name === 'string' && row.professional_name.trim()
+        ? row.professional_name.trim()
+        : null,
     companyIds,
     areaIds,
     modules: parseGrantableModules(row.module_keys),

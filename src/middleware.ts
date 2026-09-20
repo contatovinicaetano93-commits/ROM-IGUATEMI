@@ -50,7 +50,9 @@ function isProtectedPage(pathname: string) {
     pathname === '/adm' ||
     pathname.startsWith('/adm/') ||
     pathname === '/auditoria' ||
-    pathname.startsWith('/auditoria/')
+    pathname.startsWith('/auditoria/') ||
+    pathname === '/meu-faturamento' ||
+    pathname.startsWith('/meu-faturamento/')
   )
 }
 
