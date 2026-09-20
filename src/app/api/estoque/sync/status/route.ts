@@ -10,7 +10,8 @@ export async function GET(req: NextRequest) {
     const auth = await requireStock(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
-    const [fast, full] = await Promise.all([getLastStockSync('stock_fast'), getLastStockSync('stock_full')])
+    const fast = await getLastStockSync('stock_fast')
+    const full = await getLastStockSync('stock_full')
     const pagination = pickStockPaginationPlan(full, fast)
     return ok({
       configured: isAvecConfigured(),
