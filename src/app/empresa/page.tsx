@@ -62,6 +62,8 @@ export default function EmpresaPage() {
         title: form.get('title'),
         excerpt: form.get('excerpt'),
         body: form.get('body'),
+        image_url: form.get('image_url') || null,
+        href: form.get('href') || null,
         location: form.get('location'),
         starts_at: form.get('starts_at') || null,
       }),
@@ -132,6 +134,12 @@ export default function EmpresaPage() {
             <input name="title" required placeholder="Título" className="rounded-xl border border-border bg-background px-3 py-2" />
             <input name="excerpt" placeholder="Linha de apoio" className="rounded-xl border border-border bg-background px-3 py-2" />
             <textarea name="body" rows={4} placeholder="Texto" className="rounded-xl border border-border bg-background px-3 py-2" />
+            <input
+              name="image_url"
+              placeholder="URL da imagem (banner/carrossel) — ex. /intranet/carousel/rom-concept-tray-wide.jpg"
+              className="rounded-xl border border-border bg-background px-3 py-2"
+            />
+            <input name="href" placeholder="Link do banner (opcional)" className="rounded-xl border border-border bg-background px-3 py-2" />
             <input name="location" placeholder="Local (eventos)" className="rounded-xl border border-border bg-background px-3 py-2" />
             <input name="starts_at" type="datetime-local" className="rounded-xl border border-border bg-background px-3 py-2" />
             {error && <p className="text-sm text-danger">{error}</p>}
