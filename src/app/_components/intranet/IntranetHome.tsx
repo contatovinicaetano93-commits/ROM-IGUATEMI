@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { BookOpen, GraduationCap, Headphones, LayoutGrid } from 'lucide-react'
 import { useClientSession } from '../SessionProvider'
+import { HomeHeroCarousel } from './HomeHeroCarousel'
 import { HOME_QUOTE, HOME_TAGLINE, homeHeadline } from '@/lib/intranet/greeting'
+import { resolveHomeCarouselSlides } from '@/lib/intranet/home-carousel'
 import { HOME_SHORTCUTS } from '@/lib/intranet/systems'
 
 type HomePayload = {
@@ -15,6 +17,7 @@ type HomePayload = {
     title: string
     excerpt: string
     body: string
+    image_url?: string | null
     location: string | null
     starts_at: string | null
     href: string | null
@@ -58,40 +61,21 @@ export function IntranetHome() {
   const name = data?.greetingName || session?.displayName || session?.user || ''
   const news = (data?.posts ?? []).filter((p) => p.kind === 'news').slice(0, 3)
   const events = (data?.posts ?? []).filter((p) => p.kind === 'event').slice(0, 3)
-  const banners = (data?.posts ?? []).filter((p) => p.kind === 'banner')
+  const posts = data?.posts ?? []
+  const banners = posts.filter((p) => p.kind === 'banner')
   const wellness = banners[0]
   const people = banners[1]
   const tasks = data?.tasks ?? []
+  const carouselSlides = useMemo(() => resolveHomeCarouselSlides(banners), [posts])
 
   return (
     <main>
-      <section className="relative isolate min-h-[280px] overflow-hidden lg:min-h-[360px]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/intranet/hero.jpg"
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/25" />
-        <div
-          className="relative mx-auto flex min-h-[280px] max-w-[1400px] flex-col justify-end px-5 py-8 lg:min-h-[360px] lg:px-8 lg:py-12"
-          style={{ animation: 'rom-hero-in 0.7s ease-out both' }}
-        >
-          <div className="max-w-xl text-white">
-            <h1 className="font-serif text-3xl leading-tight lg:text-5xl">{homeHeadline(name)}</h1>
-            <p className="mt-2 text-sm text-white/80 lg:text-base">{HOME_TAGLINE}</p>
-            <Link
-              href="/empresa#noticias"
-              className="mt-5 inline-flex rounded-full border border-white/40 px-4 py-2 text-sm text-white hover:bg-white/10"
-            >
-              Ver novidade
-            </Link>
-          </div>
-          <p className="absolute bottom-8 right-8 hidden max-w-xs text-right font-serif text-lg text-white/80 lg:block">
-            “{HOME_QUOTE}”
-          </p>
-        </div>
-      </section>
+      <HomeHeroCarousel
+        slides={carouselSlides}
+        headline={homeHeadline(name)}
+        tagline={HOME_TAGLINE}
+        quote={HOME_QUOTE}
+      />
 
       <section className="mx-auto max-w-[1400px] px-4 py-6 lg:px-8">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -170,31 +154,65 @@ export function IntranetHome() {
             )}
           </article>
 
-          {wellness ? (
-            <article className="overflow-hidden rounded-2xl bg-[#5b3d3a] p-5 text-white lg:col-span-6">
-              <p className="font-serif text-2xl leading-tight">{wellness.title}</p>
-              <p className="mt-2 text-sm text-white/80">{wellness.excerpt || wellness.body}</p>
-              {wellness.href && (
-                <Link href={wellness.href} className="mt-4 inline-block text-sm underline">
-                  Continuar
-                </Link>
-              )}
-            </article>
-          ) : (
-            <article className="rounded-2xl bg-[#5b3d3a] p-5 text-white lg:col-span-6">
-              <p className="font-serif text-2xl leading-tight">Sua saúde, mais bem-estar</p>
-              <p className="mt-2 text-sm text-white/80">O marketing publica os banners da casa por aqui.</p>
-            </article>
-          )}
+          <BannerPromoCard
+            className="lg:col-span-6"
+            tone="warm"
+            title={wellness?.title || 'Sua saúde, mais bem-estar'}
+            body={wellness?.excerpt || wellness?.body || 'O marketing publica os banners da casa por aqui.'}
+            href={wellness?.href}
+            imageUrl={wellness?.image_url || '/intranet/carousel/rom-concept-tray-wide.jpg'}
+          />
 
-          <article className="flex items-end rounded-2xl bg-[#1c1916] p-5 text-[#e8d7b8] lg:col-span-6">
-            <div>
-              <p className="font-serif text-2xl leading-tight">{people?.title || 'Pessoas que transformam'}</p>
-              <p className="mt-2 text-sm text-white/60">{people?.excerpt || 'Histórias da equipe, quando o marketing publicar.'}</p>
-            </div>
-          </article>
+          <BannerPromoCard
+            className="lg:col-span-6"
+            tone="dark"
+            title={people?.title || 'Pessoas que transformam'}
+            body={people?.excerpt || people?.body || 'Histórias da equipe, quando o marketing publicar.'}
+            href={people?.href}
+            imageUrl={people?.image_url || '/intranet/carousel/rom-concept-tray.jpg'}
+          />
         </div>
       </section>
     </main>
+  )
+}
+
+function BannerPromoCard({
+  title,
+  body,
+  href,
+  imageUrl,
+  tone,
+  className,
+}: {
+  title: string
+  body: string
+  href?: string | null
+  imageUrl: string
+  tone: 'warm' | 'dark'
+  className?: string
+}) {
+  const base = tone === 'warm' ? 'bg-[#5b3d3a]' : 'bg-[#1c1916]'
+  const textMuted = tone === 'warm' ? 'text-white/80' : 'text-white/60'
+  const titleColor = tone === 'warm' ? 'text-white' : 'text-[#e8d7b8]'
+  return (
+    <article className={`relative isolate overflow-hidden rounded-2xl ${base} ${className ?? ''}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={imageUrl}
+        alt=""
+        className="absolute inset-0 h-full w-full object-cover opacity-35"
+        style={{ objectPosition: 'center' }}
+      />
+      <div className={`relative p-5 ${titleColor}`}>
+        <p className="font-serif text-2xl leading-tight">{title}</p>
+        <p className={`mt-2 text-sm ${textMuted}`}>{body}</p>
+        {href ? (
+          <Link href={href} className="mt-4 inline-block text-sm underline">
+            Continuar
+          </Link>
+        ) : null}
+      </div>
+    </article>
   )
 }
