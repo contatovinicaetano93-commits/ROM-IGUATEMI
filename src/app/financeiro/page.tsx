@@ -148,7 +148,7 @@ function FinanceKpiCard({
         <>
           <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
           {source ? (
-            <p className="mt-0.5 text-[0.6rem] uppercase tracking-wide text-muted/70">{source}</p>
+            <p className="mt-0.5 text-[0.6rem] uppercase tracking-wide text-muted">{source}</p>
           ) : null}
           {delta && (
             <p

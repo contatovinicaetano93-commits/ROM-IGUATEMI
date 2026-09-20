@@ -90,7 +90,7 @@ export function ListPagination({
           return (
             <span key={token} className="inline-flex items-center">
               {idx > 0 && tokens[idx - 1] !== 'ellipsis' && (
-                <span className="px-0.5 text-muted/50" aria-hidden>
+                <span className="px-0.5 text-muted/70" aria-hidden>
                   -
                 </span>
               )}

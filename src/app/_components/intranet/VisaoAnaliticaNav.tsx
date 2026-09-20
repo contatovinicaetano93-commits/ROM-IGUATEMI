@@ -37,7 +37,7 @@ export function VisaoAnaliticaNav() {
             href={tab.href}
             className={
               active
-                ? 'rounded-full bg-[#1c1916] px-3 py-1.5 text-xs font-medium text-white'
+                ? 'rounded-full bg-[#141210] px-3 py-1.5 text-xs font-medium text-white'
                 : 'rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted hover:text-foreground'
             }
           >

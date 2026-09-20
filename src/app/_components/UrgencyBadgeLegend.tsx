@@ -14,7 +14,7 @@ export function UrgencyBadgeLegend({
     <p
       role="note"
       aria-label="Legenda dos alertas de serviço"
-      className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.65rem] leading-tight text-muted/70 ${className}`}
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.65rem] leading-tight text-muted ${className}`}
     >
       <span className="inline-flex items-center gap-1">
         <span className="inline-flex items-center justify-center rounded-full bg-danger/15 px-1 py-0.5 text-danger">
