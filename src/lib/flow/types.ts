@@ -62,6 +62,7 @@ export type AuditAction =
   | 'REJECT_EXPENSE'
   | 'UPDATE_EXPENSE'
   | 'DELETE_EXPENSE'
+  | 'CREATE_USER'
   | 'UPDATE_USER'
   | 'REVOKE_USER'
   | 'ATTACH_PROOF'

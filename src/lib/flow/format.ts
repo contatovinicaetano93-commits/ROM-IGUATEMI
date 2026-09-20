@@ -158,6 +158,7 @@ export const AUDIT_LABEL: Record<AuditAction, string> = {
   REJECT_EXPENSE: "Recusou solicitação",
   UPDATE_EXPENSE: "Atualizou solicitação",
   DELETE_EXPENSE: "Excluiu solicitação",
+  CREATE_USER: "Criou acesso de usuário",
   UPDATE_USER: "Atualizou acesso de usuário",
   REVOKE_USER: "Excluiu acesso de usuário",
   ATTACH_PROOF: "Anexou recibo de pagamento",

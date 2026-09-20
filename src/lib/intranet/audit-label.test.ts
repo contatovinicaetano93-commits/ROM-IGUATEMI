@@ -6,6 +6,7 @@ describe('intranetAuditLabel', () => {
     expect(intranetAuditLabel('CREATE_EXPENSE', 'flow:abc')).toBe('Criou solicitação')
     expect(intranetAuditLabel('PUBLISH', 'cms:1')).toBe('Publicou na intranet')
     expect(intranetAuditLabel('UPDATE_USER', 'flow:user:x')).toBe('Atualizou acesso de usuário')
+    expect(intranetAuditLabel('CREATE_USER', 'flow:user:x')).toBe('Criou acesso de usuário')
   })
 
   it('traduz aliases que o Flow grava com action.toUpperCase()', () => {
