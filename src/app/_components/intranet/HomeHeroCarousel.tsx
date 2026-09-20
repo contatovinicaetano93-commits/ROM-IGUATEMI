@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { HomeCarouselSlide } from '@/lib/intranet/home-carousel'
 
-const INTERVAL_MS = 6_000
+const INTERVAL_MS = 2_000
 
 export function HomeHeroCarousel({
   slides,
