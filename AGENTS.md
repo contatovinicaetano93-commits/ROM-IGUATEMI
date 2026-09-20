@@ -10,7 +10,7 @@ Leia isto antes de começar qualquer tarefa nestes repos.
 
 ## O sistema
 
-Três apps Next.js na Vercel: **ROM Brasil** e **ROM Iguatemi** (painéis das unidades, ~60 rotas cada, mantidos em paridade) e o **Cérebro** (consolida as duas). Os bancos são **Supabase**, um projeto por unidade — as variáveis ainda se chamam `NEON_*` por herança, ignore o nome. Os dados chegam pelo sync da Avec (cron na Vercel) e caem em `salon_*_daily`, `contacts`, `client_services`, `avec_sync_runs`.
+Três apps Next.js na Vercel: **ROM Brasil** e **ROM Iguatemi** (painéis das unidades, ~60 rotas cada, mantidos em paridade) e o **Cérebro** (consolida as duas). Os bancos são **Neon** (Postgres), um projeto por unidade — envs `NEON_*_DATABASE_URL` (e aliases `UNIT_*` onde existirem). Os dados chegam pelo sync da Avec (cron na Vercel) e caem em `salon_*_daily`, `contacts`, `client_services`, `avec_sync_runs`.
 
 Todo PR passa por CI (teste + build bloqueiam, lint é informativo).
 
@@ -37,7 +37,7 @@ Hoje existem grupos inteiros de PRs que são a mesma tarefa refeita do zero — 
 Se a sua tarefa exige quebrar uma destas, tudo bem, mas **escreva no PR que está quebrando e por quê**. Mudar em silêncio é o problema.
 
 - **KPI ausente é `null`, não `0`.** A interface mostra "—" para null. Um `0` falso é pior que um buraco, porque parece medição real. Nunca `coalesce(métrica, 0)`, nunca `Number(x) || 0`, nunca `NOT NULL DEFAULT 0` em coluna de KPI.
-- **Brasil e Iguatemi são Supabase.** Não Neon, apesar dos nomes das variáveis.
+- **Brasil e Iguatemi são Neon (Postgres).** Use as connection strings `NEON_*`; não assumir Supabase.
 - **As duas unidades ficam em paridade.** Mudou numa, ou muda na outra, ou diz no PR que criou drift de propósito.
 - **A equipe usa WhatsApp, não Telegram.**
 - **Concorrência de sync é lock distribuído em Postgres.** Contador em memória não funciona em serverless — cada invocação é um processo novo.
