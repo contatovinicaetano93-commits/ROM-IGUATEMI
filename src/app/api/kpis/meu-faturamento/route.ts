@@ -3,9 +3,8 @@ import { err, ok, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { findEmployeeById } from '@/lib/employees'
 import { resolveMeuFaturamento } from '@/lib/intranet/meu-faturamento'
-import { getLatestSalonP1Daily, getSalonP1DailyNear, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
+import { getLatestSalonP1Daily, getSalonP1DailyNear } from '@/lib/salon/p1-metrics'
 import { monthToDateRange } from '@/lib/salon/period-analytics'
-import { asJsonArray } from '@/lib/sql-json'
 
 export async function GET(req: NextRequest) {
   try {
@@ -25,7 +24,8 @@ export async function GET(req: NextRequest) {
       ? await getSalonP1DailyNear(monthToDateRange(month).to, { maxSkewDays: 14 })
       : await getLatestSalonP1Daily()
 
-    const professionals = snapshot ? asJsonArray<P1ProfessionalRow>(snapshot.professionals) : []
+    // IG: p1-metrics já normaliza professionals via asJsonArray
+    const professionals = snapshot?.professionals ?? []
     const metrics = resolveMeuFaturamento(professionals, linkName)
 
     return ok({
