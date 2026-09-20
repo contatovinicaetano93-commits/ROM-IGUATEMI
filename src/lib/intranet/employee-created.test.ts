@@ -4,84 +4,88 @@ import {
   type CreateUserAuditPerson,
 } from '@/lib/intranet/employee-created'
 
-function person(partial: Partial<CreateUserAuditPerson> & Pick<CreateUserAuditPerson, 'id' | 'email'>): CreateUserAuditPerson {
+function person(
+  partial: Partial<CreateUserAuditPerson> & Pick<CreateUserAuditPerson, 'id'>,
+): CreateUserAuditPerson {
   return {
-    name: partial.name ?? partial.email,
-    panel_role: partial.panel_role ?? 'staff',
-    flow_role: partial.flow_role ?? 'solicitante',
-    status: partial.status ?? 'active',
-    areaIds: partial.areaIds ?? [],
+    email: `${partial.id}@rom.test`,
+    name: partial.id,
+    status: 'active',
+    panel_role: 'staff',
+    flow_role: 'solicitante',
+    areaIds: [],
     ...partial,
   }
 }
 
 describe('selectCreateUserAuditRecipients', () => {
   const created = person({
-    id: 'new-1',
-    email: 'novo@rom.local',
+    id: 'new',
+    email: 'novo@rom.test',
     name: 'Novo',
-    areaIds: ['compras', 'rh'],
+    areaIds: ['financeiro', 'compras'],
   })
 
-  it('inclui quem tem área em comum', () => {
-    const overlap = person({ id: 'a1', email: 'compras@rom.local', areaIds: ['compras'] })
-    const other = person({ id: 'a2', email: 'fin@rom.local', areaIds: ['financeiro'] })
-    expect(selectCreateUserAuditRecipients(created, [overlap, other]).map((p) => p.id)).toEqual(['a1'])
+  it('inclui quem tem sobreposição de áreas', () => {
+    const overlap = person({ id: 'overlap', areaIds: ['compras', 'rh'] })
+    const other = person({ id: 'other', areaIds: ['rh'] })
+    const selected = selectCreateUserAuditRecipients(created, [created, overlap, other])
+    expect(selected.map((p) => p.id)).toEqual(['overlap'])
   })
 
   it('inclui panel_role admin mesmo sem área em comum', () => {
     const admin = person({
-      id: 'adm',
-      email: 'admin@rom.local',
+      id: 'admin',
       panel_role: 'admin',
-      areaIds: ['financeiro'],
+      areaIds: ['rh'],
     })
-    expect(selectCreateUserAuditRecipients(created, [admin]).map((p) => p.id)).toEqual(['adm'])
+    const selected = selectCreateUserAuditRecipients(created, [created, admin])
+    expect(selected.map((p) => p.id)).toEqual(['admin'])
   })
 
   it('inclui flow_role master mesmo sem área em comum', () => {
     const master = person({
-      id: 'm1',
-      email: 'master@rom.local',
+      id: 'master',
       flow_role: 'master',
       areaIds: [],
     })
-    expect(selectCreateUserAuditRecipients(created, [master]).map((p) => p.id)).toEqual(['m1'])
+    const selected = selectCreateUserAuditRecipients(created, [created, master])
+    expect(selected.map((p) => p.id)).toEqual(['master'])
   })
 
-  it('exclui o próprio colaborador criado', () => {
-    const self = person({ ...created })
-    const other = person({ id: 'a1', email: 'compras@rom.local', areaIds: ['compras'] })
-    expect(selectCreateUserAuditRecipients(created, [self, other]).map((p) => p.id)).toEqual(['a1'])
+  it('exclui o próprio colaborador recém-criado', () => {
+    const selected = selectCreateUserAuditRecipients(created, [
+      created,
+      person({ id: 'same-email-diff-id', email: created.email, areaIds: ['financeiro'] }),
+    ])
+    expect(selected.map((p) => p.id)).toEqual(['same-email-diff-id'])
+    expect(selected.some((p) => p.id === created.id)).toBe(false)
   })
 
-  it('exclui inativos mesmo com área em comum ou admin/master', () => {
+  it('exclui inativos mesmo com área em comum ou admin', () => {
     const inactiveOverlap = person({
-      id: 'i1',
-      email: 'old@rom.local',
+      id: 'inactive-overlap',
       status: 'inactive',
-      areaIds: ['rh'],
+      areaIds: ['financeiro'],
     })
     const inactiveAdmin = person({
-      id: 'i2',
-      email: 'old-admin@rom.local',
+      id: 'inactive-admin',
       status: 'inactive',
       panel_role: 'admin',
+      areaIds: [],
     })
     const inactiveMaster = person({
-      id: 'i3',
-      email: 'old-master@rom.local',
+      id: 'inactive-master',
       status: 'inactive',
       flow_role: 'master',
+      areaIds: [],
     })
-    const active = person({ id: 'a1', email: 'ok@rom.local', areaIds: ['compras'] })
-    expect(
-      selectCreateUserAuditRecipients(created, [
-        inactiveOverlap,
-        inactiveAdmin,
-        inactiveMaster,
-        active,
-      ]).map((p) => p.id),
-    ).toEqual(['a1'])
+    const selected = selectCreateUserAuditRecipients(created, [
+      created,
+      inactiveOverlap,
+      inactiveAdmin,
+      inactiveMaster,
+    ])
+    expect(selected).toEqual([])
   })
 })

@@ -9,7 +9,7 @@ import { parseGrantableModules } from '@/lib/intranet/modules'
 import { parseAreas, parseRole } from '@/lib/flow/workflow'
 import { Logger } from '@/lib/logger'
 
-const logger = new Logger('api/employees')
+const logger = new Logger('EmployeesApi')
 
 export async function GET(req: NextRequest) {
   const auth = await requireSession(req)
@@ -57,15 +57,17 @@ export async function POST(req: NextRequest) {
       areaIds: parseAreas(body.areaIds),
       modules: isPanelAdmin ? parseGrantableModules(body.modules) : [],
     })
-    await announceEmployeeCreated({
-      actor: { email: auth.session.user, role: auth.session.role },
-      employee,
-    }).catch((error) => {
-      logger.error('Falha ao anunciar CREATE_USER após cadastro', {
-        employeeId: employee.id,
-        error: error instanceof Error ? error.message : String(error),
+    try {
+      await announceEmployeeCreated({
+        actor: { email: auth.session.user, role: auth.session.role },
+        employee,
       })
-    })
+    } catch (announceError) {
+      logger.warn('Falha ao anunciar criação de colaborador', {
+        employeeId: employee.id,
+        error: announceError instanceof Error ? announceError.message : String(announceError),
+      })
+    }
     return ok({ employee }, undefined, 201)
   } catch (error) {
     return err(error instanceof Error ? error.message : 'Falha ao criar colaborador', 400)
