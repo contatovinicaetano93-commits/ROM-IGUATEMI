@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getSql } from '@/lib/db'
+import { getSql, type Sql } from '@/lib/db'
 import {
   ROM_POINT_SEED,
   almoxQtyFromAvec,
@@ -17,13 +17,14 @@ export type RomLocation = {
   rom_kind: RomPointKind
 }
 
+let romPointsPromise: Promise<RomLocation[]> | null = null
+
 function isMissingRelation(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error)
   return /stock_point_balances|stock_locations|rom_code|does not exist|relation/i.test(msg)
 }
 
-/** Garante as 4 linhas ROM (idempotente). */
-export async function ensureRomPoints(): Promise<RomLocation[]> {
+async function seedRomPoints(): Promise<RomLocation[]> {
   const sql = getSql()
   for (const seed of ROM_POINT_SEED) {
     const existing = (await sql`
@@ -57,6 +58,17 @@ export async function ensureRomPoints(): Promise<RomLocation[]> {
   return rows
 }
 
+/** Garante as 4 linhas ROM (idempotente). Cacheia o seed no isolate. */
+export async function ensureRomPoints(): Promise<RomLocation[]> {
+  if (!romPointsPromise) {
+    romPointsPromise = seedRomPoints().catch((error) => {
+      romPointsPromise = null
+      throw error
+    })
+  }
+  return romPointsPromise
+}
+
 export async function listRomLocations(): Promise<RomLocation[]> {
   try {
     return await ensureRomPoints()
@@ -66,19 +78,14 @@ export async function listRomLocations(): Promise<RomLocation[]> {
   }
 }
 
-async function getBalance(productId: string, locationId: string): Promise<number> {
-  const sql = getSql()
-  const rows = (await sql`
-    select qty from stock_point_balances
-    where product_id = ${productId}::uuid and location_id = ${locationId}::uuid
-    limit 1
-  `) as { qty: number }[]
-  return Number(rows[0]?.qty ?? 0)
-}
-
-async function setBalance(productId: string, locationId: string, qty: number): Promise<void> {
-  const sql = getSql()
-  const next = Math.max(0, Math.round(qty * 1000) / 1000)
+async function setBalance(
+  productId: string,
+  locationId: string,
+  qty: number,
+  sql: Sql = getSql(),
+): Promise<void> {
+  if (!(qty >= 0)) throw new Error('Saldo de ponto não pode ser negativo')
+  const next = Math.round(qty * 1000) / 1000
   await sql`
     insert into stock_point_balances (product_id, location_id, qty, updated_at)
     values (${productId}::uuid, ${locationId}::uuid, ${next}, now())
@@ -87,15 +94,30 @@ async function setBalance(productId: string, locationId: string, qty: number): P
   `
 }
 
-export async function listBalancesForProduct(productId: string): Promise<PointBalanceRow[]> {
+/** Trava o par origem/destino em ordem estável (evita deadlock). */
+async function lockBalance(txn: Sql, productId: string, locationId: string): Promise<number> {
+  const rows = (await txn`
+    insert into stock_point_balances (product_id, location_id, qty, updated_at)
+    values (${productId}::uuid, ${locationId}::uuid, 0, now())
+    on conflict (product_id, location_id) do update
+      set qty = stock_point_balances.qty
+    returning qty
+  `) as { qty: number }[]
+  return Number(rows[0]?.qty ?? 0)
+}
+
+export async function listBalancesForProduct(
+  productId: string,
+  locations?: RomLocation[],
+): Promise<PointBalanceRow[]> {
   const sql = getSql()
-  const locations = await ensureRomPoints()
+  const locs = locations ?? (await ensureRomPoints())
   const rows = (await sql`
     select location_id, qty from stock_point_balances
     where product_id = ${productId}::uuid
   `) as { location_id: string; qty: number }[]
   const byId = new Map(rows.map((r) => [r.location_id, Number(r.qty)]))
-  return locations.map((loc) => ({
+  return locs.map((loc) => ({
     location_id: loc.id,
     rom_code: loc.rom_code,
     rom_kind: loc.rom_kind,
@@ -115,7 +137,7 @@ export async function reconcileAlmoxAfterAvecQty(
   const locations = await ensureRomPoints()
   const almox = locations.find((l) => l.rom_code === 'almox')
   if (!almox) return { almox: 0, drift: 0 }
-  const balances = await listBalancesForProduct(productId)
+  const balances = await listBalancesForProduct(productId, locations)
   const floorsSum = sumPointQtys(balances.filter((b) => b.rom_kind === 'piso'))
   const next = almoxQtyFromAvec(avecQty, floorsSum)
   await setBalance(productId, almox.id, next.almox)
@@ -125,21 +147,40 @@ export async function reconcileAlmoxAfterAvecQty(
 /** Inventário inicial / reset: tudo no Almox (= Avec). Pisos zeram. */
 export async function allocateAllToAlmox(productId: string, avecQty: number): Promise<void> {
   const locations = await ensureRomPoints()
-  for (const loc of locations) {
-    const qty = loc.rom_code === 'almox' ? Math.max(0, avecQty) : 0
-    await setBalance(productId, loc.id, qty)
-  }
+  const sql = getSql()
+  await sql.begin(async (txn) => {
+    for (const loc of locations) {
+      const qty = loc.rom_code === 'almox' ? Math.max(0, avecQty) : 0
+      await setBalance(productId, loc.id, qty, txn)
+    }
+  })
 }
 
 export async function allocateAllProductsToAlmox(): Promise<{ updated: number }> {
+  const locations = await ensureRomPoints()
+  if (!locations.some((l) => l.rom_code === 'almox')) return { updated: 0 }
+
   const sql = getSql()
-  const products = (await sql`
-    select id, current_qty from stock_products
-  `) as { id: string; current_qty: number }[]
-  for (const p of products) {
-    await allocateAllToAlmox(p.id, Number(p.current_qty) || 0)
-  }
-  return { updated: products.length }
+  return await sql.begin(async (txn) => {
+    const inserted = (await txn`
+      insert into stock_point_balances (product_id, location_id, qty, updated_at)
+      select
+        p.id,
+        loc.id,
+        case
+          when loc.rom_code = 'almox' then greatest(coalesce(p.current_qty, 0), 0)
+          else 0
+        end,
+        now()
+      from stock_products p
+      cross join stock_locations loc
+      where loc.rom_code is not null
+      on conflict (product_id, location_id) do update
+        set qty = excluded.qty, updated_at = now()
+      returning product_id
+    `) as { product_id: string }[]
+    return { updated: new Set(inserted.map((r) => r.product_id)).size }
+  })
 }
 
 export async function transferBetweenPoints(input: {
@@ -156,35 +197,53 @@ export async function transferBetweenPoints(input: {
   if (!from || !to) throw new Error('Local ROM inválido')
   if (from.id === to.id) throw new Error('Origem e destino iguais')
 
-  const fromQty = await getBalance(input.productId, from.id)
-  const err = assertTransferOk({
-    fromKind: from.rom_kind,
-    toKind: to.rom_kind,
-    fromQty,
-    quantity: input.quantity,
-  })
-  if (err) throw new Error(err)
-
-  const toQty = await getBalance(input.productId, to.id)
-  const nextFrom = fromQty - input.quantity
-  const nextTo = toQty + input.quantity
-  await setBalance(input.productId, from.id, nextFrom)
-  await setBalance(input.productId, to.id, nextTo)
-
   const sql = getSql()
-  await sql`
-    insert into stock_point_transfers (
-      product_id, from_location_id, to_location_id, quantity, note, created_by
-    ) values (
-      ${input.productId}::uuid,
-      ${from.id}::uuid,
-      ${to.id}::uuid,
-      ${input.quantity},
-      ${input.note?.trim() || null},
-      ${input.createdBy?.trim() || null}
-    )
-  `
-  return { fromQty: nextFrom, toQty: nextTo }
+  return await sql.begin(async (txn) => {
+    const [firstId, secondId] = [from.id, to.id].sort()
+    const firstQty = await lockBalance(txn, input.productId, firstId)
+    const secondQty = await lockBalance(txn, input.productId, secondId)
+    const fromQty = firstId === from.id ? firstQty : secondQty
+    const err = assertTransferOk({
+      fromKind: from.rom_kind,
+      toKind: to.rom_kind,
+      fromQty,
+      quantity: input.quantity,
+    })
+    if (err) throw new Error(err)
+
+    const origin = (await txn`
+      update stock_point_balances
+      set qty = qty - ${input.quantity}, updated_at = now()
+      where product_id = ${input.productId}::uuid
+        and location_id = ${from.id}::uuid
+        and qty >= ${input.quantity}
+      returning qty
+    `) as { qty: number }[]
+    if (!origin[0]) throw new Error('Saldo insuficiente na origem')
+
+    const dest = (await txn`
+      update stock_point_balances
+      set qty = qty + ${input.quantity}, updated_at = now()
+      where product_id = ${input.productId}::uuid
+        and location_id = ${to.id}::uuid
+      returning qty
+    `) as { qty: number }[]
+    if (!dest[0]) throw new Error('Local ROM inválido')
+
+    await txn`
+      insert into stock_point_transfers (
+        product_id, from_location_id, to_location_id, quantity, note, created_by
+      ) values (
+        ${input.productId}::uuid,
+        ${from.id}::uuid,
+        ${to.id}::uuid,
+        ${input.quantity},
+        ${input.note?.trim() || null},
+        ${input.createdBy?.trim() || null}
+      )
+    `
+    return { fromQty: Number(origin[0].qty), toQty: Number(dest[0].qty) }
+  })
 }
 
 export async function listPointBoard(locationId?: string): Promise<
@@ -199,10 +258,35 @@ export async function listPointBoard(locationId?: string): Promise<
   }>
 > {
   const sql = getSql()
-  await ensureRomPoints()
-  const products = (await sql`
-    select id, name, sku, current_qty from stock_products order by lower(name)
-  `) as { id: string; name: string; sku: string | null; current_qty: number }[]
+  const locations = await ensureRomPoints()
+  const locationIds = locations.map((l) => l.id)
+  if (locationIds.length === 0) return []
+
+  const rows = (await sql`
+    select
+      p.id as product_id,
+      p.name as product_name,
+      p.sku,
+      coalesce(p.current_qty, 0)::float as avec_qty,
+      coalesce(sum(b.qty), 0)::float as rom_sum,
+      coalesce(
+        sum(b.qty) filter (where b.location_id = ${locationId ?? null}::uuid),
+        0
+      )::float as filtered_qty
+    from stock_products p
+    left join stock_point_balances b
+      on b.product_id = p.id
+      and b.location_id in ${sql(locationIds)}
+    group by p.id, p.name, p.sku, p.current_qty
+    order by lower(p.name)
+  `) as {
+    product_id: string
+    product_name: string
+    sku: string | null
+    avec_qty: number
+    rom_sum: number
+    filtered_qty: number
+  }[]
 
   const out: Array<{
     product_id: string
@@ -214,18 +298,15 @@ export async function listPointBoard(locationId?: string): Promise<
     drift: number
   }> = []
 
-  for (const p of products) {
-    const balances = await listBalancesForProduct(p.id)
-    const romSum = sumPointQtys(balances)
-    const avec = Number(p.current_qty) || 0
-    const pointQty = locationId
-      ? balances.find((b) => b.location_id === locationId)?.qty ?? 0
-      : romSum
+  for (const row of rows) {
+    const avec = Number(row.avec_qty) || 0
+    const romSum = Number(row.rom_sum) || 0
+    const pointQty = locationId ? Number(row.filtered_qty) || 0 : romSum
     if (locationId && pointQty === 0 && avec === 0) continue
     out.push({
-      product_id: p.id,
-      product_name: p.name,
-      sku: p.sku,
+      product_id: row.product_id,
+      product_name: row.product_name,
+      sku: row.sku,
       avec_qty: avec,
       point_qty: pointQty,
       rom_sum: romSum,
