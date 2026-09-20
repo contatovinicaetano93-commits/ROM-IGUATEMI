@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { SectionCard, CountBadge, CHANNEL_LABEL } from '../_components/ui'
 import { MonthYearField } from '../_components/MonthYearField'
+import { VisaoSection } from '../_components/VisaoSection'
 import { VisaoAnaliticaNav } from '../_components/intranet/VisaoAnaliticaNav'
 import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/lib/salon/format'
 import { momCompareLine } from '@/lib/salon/mom-delta'
