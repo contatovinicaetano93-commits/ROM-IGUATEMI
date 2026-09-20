@@ -4,7 +4,7 @@ import { labelMonth, labelQuarter, quarterOfMonth, monthsInQuarter } from '@/lib
 import type { MonthKey, QuarterKey } from '@/lib/director-report/types'
 import {
   resolveMonthWindow,
-  resolvePreviousComparableWindow,
+  resolveComparableWindow,
 } from '@/lib/salon/month-window'
 
 export interface TmBucket {
@@ -19,11 +19,9 @@ export interface TmComparison {
   quarter: { current: TmBucket; previous: TmBucket }
 }
 
-function previousQuarterKey(quarter: QuarterKey): QuarterKey {
+function yearAgoQuarterKey(quarter: QuarterKey): QuarterKey {
   const [yStr, qStr] = quarter.split('-Q')
-  const y = Number(yStr)
-  const q = Number(qStr)
-  return q === 1 ? (`${y - 1}-Q4` as QuarterKey) : (`${y}-Q${q - 1}` as QuarterKey)
+  return `${Number(yStr) - 1}-Q${qStr}` as QuarterKey
 }
 
 function calendarMonthRange(month: MonthKey): { start: string; end: string } {
@@ -55,8 +53,7 @@ function daysInclusive(from: string, to: string): number {
 }
 
 /**
- * Trimestre atual até referenceDay; anterior com o mesmo nº de dias a partir do início.
- * Evita Q aberto vs Q cheio (mesma distorção do MoM).
+ * Trimestre atual até referenceDay; mesmo trimestre do ano passado com o mesmo nº de dias.
  */
 export function tmQuarterWindows(referenceDay: string): {
   current: { key: QuarterKey; label: string; start: string; end: string }
@@ -64,7 +61,7 @@ export function tmQuarterWindows(referenceDay: string): {
 } {
   const month = referenceDay.slice(0, 7) as MonthKey
   const currentKey = quarterOfMonth(month)
-  const previousKey = previousQuarterKey(currentKey)
+  const previousKey = yearAgoQuarterKey(currentKey)
   const curBounds = quarterBounds(currentKey)
   const prevBounds = quarterBounds(previousKey)
   const curEnd =
@@ -90,14 +87,17 @@ export function tmQuarterWindows(referenceDay: string): {
   }
 }
 
-/** Janelas mensais TM — MTD↔MTD via resolvePreviousComparableWindow. */
-export function tmMonthWindows(referenceDay: string): {
+/** Janelas mensais TM — YoY (ou mês escolhido), MTD↔mesmo dia. */
+export function tmMonthWindows(
+  referenceDay: string,
+  compareMonth?: string | null,
+): {
   current: { key: MonthKey; label: string; start: string; end: string; mtd: boolean }
   previous: { key: string; label: string; start: string; end: string; mtd_aligned: boolean }
 } {
   const currentMonth = referenceDay.slice(0, 7) as MonthKey
   const current = resolveMonthWindow(currentMonth, referenceDay)
-  const previous = resolvePreviousComparableWindow(current)
+  const previous = resolveComparableWindow(current, compareMonth)
   return {
     current: {
       key: currentMonth,
@@ -118,6 +118,27 @@ export function tmMonthWindows(referenceDay: string): {
 
 async function sumDuration(start: string, end: string): Promise<{ avgMinutes: number | null; sampleCount: number }> {
   const sql = getSql()
+  try {
+    const spanRows = (await sql`
+      select
+        coalesce(sum(duration_minutes), 0) as sum_minutes,
+        count(*)::int as sample_count
+      from salon_comanda_spans
+      where day >= ${start}::date and day <= ${end}::date
+        and duration_minutes is not null
+    `) as { sum_minutes: string | number; sample_count: string | number }[]
+    const spanCount = Number(spanRows[0]?.sample_count ?? 0) || 0
+    if (spanCount > 0) {
+      const sumMinutes = Number(spanRows[0]?.sum_minutes ?? 0) || 0
+      return {
+        sampleCount: spanCount,
+        avgMinutes: Math.round((sumMinutes / spanCount) * 10) / 10,
+      }
+    }
+  } catch {
+    // Tabela ainda não existe neste isolate — cai no acumulado diário.
+  }
+
   const rows = (await sql`
     select
       coalesce(sum(service_duration_sum_minutes), 0) as sum_minutes,
@@ -136,11 +157,14 @@ async function sumDuration(start: string, end: string): Promise<{ avgMinutes: nu
 }
 
 /**
- * TM — mês atual vs anterior (MTD alinhado) e trimestre vs trimestre
- * (mesmo nº de dias a partir do início do trimestre).
+ * TM — mês vs mesmo mês ano passado (ou mês escolhido) e trimestre vs mesmo tri YoY.
+ * Fonte: salon_comanda_spans (1ª vista aberta → 1ª vista só Pago).
  */
-export async function fetchTmComparison(referenceDay = todayIso()): Promise<TmComparison> {
-  const months = tmMonthWindows(referenceDay)
+export async function fetchTmComparison(
+  referenceDay = todayIso(),
+  compareMonth?: string | null,
+): Promise<TmComparison> {
+  const months = tmMonthWindows(referenceDay, compareMonth)
   const quarters = tmQuarterWindows(referenceDay)
 
   const [curMonth, prevMonthData, curQuarter, prevQuarterData] = await Promise.all([

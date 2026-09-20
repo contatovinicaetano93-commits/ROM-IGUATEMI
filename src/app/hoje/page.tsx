@@ -174,6 +174,7 @@ export default function HojePage() {
             }
             loading={loading}
             source={avecSource}
+            hint="Quanto entrou no caixa hoje (comandas pagas)."
           />
         )}
         <KpiCard
@@ -182,7 +183,7 @@ export default function HojePage() {
           value={loading ? '—' : String(salon?.appointments ?? 0)}
           loading={loading}
           source={formatKpiSources('rom', 'avec', ...(syncSource ? [syncSource] : []))}
-          hint="Pessoas com agenda/comanda no dia (aberto ou pago) — conta cabeça"
+          hint="Quantas pessoas têm horário ou comanda no dia (conta cabeça)."
         />
         <KpiCard
           icon={<TrendingUp size={16} />}
@@ -190,19 +191,20 @@ export default function HojePage() {
           value={loading ? '—' : salon?.attended == null ? '—' : String(salon.attended)}
           loading={loading}
           source={avecSource}
-          hint="Visitas/comandas fechadas no caixa Avec"
+          hint="Quantas visitas já foram pagas/fechadas no caixa hoje."
         />
         <KpiCard
           icon={<AlertTriangle size={16} />}
-          label="No-shows"
+          label="Faltas"
           value={loading ? '—' : salon?.no_shows == null ? '—' : String(salon.no_shows)}
           loading={loading}
           warn={(salon?.no_shows ?? 0) > 0 && salon?.no_shows != null}
           source={avecSource}
+          hint="Clientes com horário que não vieram (no-show)."
         />
         <KpiCard
           icon={<Clock size={16} />}
-          label="TM atendimento"
+          label="Tempo no salão"
           value={
             loading
               ? '—'
@@ -216,12 +218,13 @@ export default function HojePage() {
               ? formatKpiSources('avec', 'incomplete')
               : avecSource
           }
+          hint="Média de minutos da entrada no salão até o pagamento."
         />
       </div>
 
       {!loading && data && data.tm_today.avg_minutes == null && (
         <p className="-mt-2 text-[0.7rem] text-muted">
-          TM aguardando duração real na Avec (início/fim no relatório 0002).
+          Tempo médio aparece quando o sync vê a pessoa no salão e depois o pagamento fechado.
         </p>
       )}
 
@@ -405,7 +408,7 @@ export default function HojePage() {
             {!loading && data?.playbook.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
                 <p className="font-medium text-foreground/90">Tudo em dia 🎉</p>
-                <p className="mt-1 text-xs">Sem ações urgentes. Confira os contatos novos ou a visão analítica.</p>
+                <p className="mt-1 text-xs">Sem ações urgentes. Confira Sem vínculo Avec ou a visão analítica.</p>
               </div>
             )}
 
@@ -478,8 +481,10 @@ export default function HojePage() {
           <div className="flex items-center gap-3">
             <Users size={18} className="text-gold" />
             <div>
-              <p className="text-sm font-medium">{data!.leads.novos} contato(s) novo(s)</p>
-              <p className="text-xs text-muted">Contatos · últimos 30 dias (exceto Importado Avec)</p>
+              <p className="text-sm font-medium">
+                {data!.leads.novos} sem vínculo Avec
+              </p>
+              <p className="text-xs text-muted">Contatos · últimos 30 dias · cadastro solto</p>
             </div>
           </div>
           <ChevronRight size={16} className="text-muted" />

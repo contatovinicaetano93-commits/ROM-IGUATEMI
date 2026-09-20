@@ -13,6 +13,23 @@ export function isComandaOrigin(service: {
   return false
 }
 
+/**
+ * Serviço marcado como cortesia na agenda Avec (nome tipicamente "CORTESIA"
+ * ou "PROFISSIONAL - CORTESIA").
+ */
+export function isCortesiaService(service: {
+  name?: string | null
+  notes?: string | null
+  category?: string | null
+  product?: string | null
+}): boolean {
+  const hay = [service.name, service.notes, service.category, service.product]
+    .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+    .join('\n')
+    .toLowerCase()
+  return hay.includes('cortesia')
+}
+
 /** Mantém notas do usuário e liga/desliga o marcador de origem. */
 export function notesWithScheduleOrigin(
   notes: string | null | undefined,

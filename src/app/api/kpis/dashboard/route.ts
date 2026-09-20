@@ -14,7 +14,7 @@ import {
 } from '@/lib/salon/p1-metrics'
 import {
   resolveMonthWindow,
-  resolvePreviousComparableWindow,
+  resolveComparableWindow,
 } from '@/lib/salon/month-window'
 import { compareByNamePtBr } from '@/lib/salon/sort'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
@@ -42,8 +42,10 @@ export async function GET(req: NextRequest) {
 
     const monthRaw = req.nextUrl.searchParams.get('month')?.trim()
     const month = monthRaw && /^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : null
+    const compareRaw = req.nextUrl.searchParams.get('compare')?.trim()
+    const compareMonth = compareRaw && /^\d{4}-\d{2}$/.test(compareRaw) ? compareRaw : null
     const canViewRevenue = auth.session.can_view_revenue
-    const cacheKey = `kpis:dashboard:v3:${month ?? 'latest'}:rev=${canViewRevenue ? 1 : 0}`
+    const cacheKey = `kpis:dashboard:v4:${month ?? 'latest'}:cmp=${compareMonth ?? 'yoy'}:rev=${canViewRevenue ? 1 : 0}`
 
     const data = await ttlGetOrSet(cacheKey, 45_000, async () => {
       // 1) Contact KPIs
@@ -64,8 +66,8 @@ export async function GET(req: NextRequest) {
       // 2) TM
       const referenceDay = month ? monthToDateRange(month).to : todayIso()
       const tm = {
-        ...(await fetchTmComparison(referenceDay)),
-        note: 'Média da duração real do atendimento (início/fim no 0002) — catálogo 0223 não entra no KPI.',
+        ...(await fetchTmComparison(referenceDay, compareMonth)),
+        note: 'TM = 1ª vista no salão (ou após hora marcada) até o 0051 só mostrar Pago. Não fecha se ainda houver linha aberta no mesmo dia. Catálogo 0223 não entra.',
       }
 
       // 3) Ranking profissionais (mesma lógica de /api/kpis/performance)
@@ -109,9 +111,9 @@ export async function GET(req: NextRequest) {
             can_view_revenue: canViewRevenue,
           }
         } else {
-          // MTD → mesmo dia do mês anterior; mês fechado → mês anterior cheio.
+          // YoY (ou mês escolhido) — mesmo dia se MTD.
           const window = resolveMonthWindow(month ?? refMonth, reference.day)
-          const prevWindow = resolvePreviousComparableWindow(window)
+          const prevWindow = resolveComparableWindow(window, compareMonth)
           const compare = await getSalonP1DailyNear(prevWindow.to, { maxSkewDays: 3 })
           const compareByName = new Map((compare?.professionals ?? []).map((p) => [p.name, p]))
 
@@ -153,7 +155,10 @@ export async function GET(req: NextRequest) {
       }
 
       // 4) Período + sync-meta (igual BR)
-      const periodBase = await computePeriodAnalytics({ month: month ?? undefined })
+      const periodBase = await computePeriodAnalytics({
+        month: month ?? undefined,
+        compareMonth,
+      })
       const sync = await loadAvecSyncMeta()
 
       const period = canViewRevenue

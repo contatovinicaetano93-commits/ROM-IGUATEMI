@@ -3,6 +3,7 @@ import {
   COMANDA_ORIGIN_TAG,
   COMANDA_SERVICE_NAME,
   isComandaOrigin,
+  isCortesiaService,
   notesWithScheduleOrigin,
 } from '@/lib/salon/schedule-origin'
 
@@ -17,5 +18,13 @@ describe('schedule-origin', () => {
     expect(isComandaOrigin({ notes: COMANDA_ORIGIN_TAG })).toBe(true)
     expect(isComandaOrigin({ name: COMANDA_SERVICE_NAME })).toBe(true)
     expect(isComandaOrigin({ name: 'Corte', notes: null })).toBe(false)
+  })
+
+  it('detecta cortesia pelo nome da agenda Avec', () => {
+    expect(isCortesiaService({ name: 'CORTESIA' })).toBe(true)
+    expect(isCortesiaService({ name: 'JOÃO BATISTA - CORTESIA' })).toBe(true)
+    expect(isCortesiaService({ name: 'cortesia leiane' })).toBe(true)
+    expect(isCortesiaService({ name: 'Corte masculino', category: 'corte' })).toBe(false)
+    expect(isCortesiaService({ name: 'Escova', notes: 'cliente VIP cortesia da casa' })).toBe(true)
   })
 })

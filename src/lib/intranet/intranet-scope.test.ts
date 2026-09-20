@@ -61,8 +61,9 @@ describe('intranet top bar', () => {
     expect(INTRANET_NAV.find((item) => item.label === 'Meu faturamento')?.href).toBe('/meu-faturamento')
     expect(INTRANET_NAV.find((item) => item.label === 'Recepção')?.href).toBe('/recepcao')
     expect(INTRANET_NAV.find((item) => item.label === 'Pós-venda')?.href).toBe('/pos-venda')
-    expect(INTRANET_NAV.some((item) => item.href === '/onboarding')).toBe(false)
-    expect(INTRANET_NAV.some((item) => item.href === '/ajuda')).toBe(false)
+    const navHrefs = INTRANET_NAV.map((item) => item.href as string)
+    expect(navHrefs).not.toContain('/onboarding')
+    expect(navHrefs).not.toContain('/ajuda')
   })
 })
 

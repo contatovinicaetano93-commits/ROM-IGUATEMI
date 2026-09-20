@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isAvecInSalonOpenStatus,
   isAvecOpenStatus,
   isAvecPaidStatus,
   isAvecUnpaidStatus,
@@ -26,5 +27,15 @@ describe('isAvecPaidStatus', () => {
     expect(isAvecOpenStatus('em atendimento')).toBe(true)
     expect(isAvecPaidStatus('em atendimento')).toBe(false)
     expect(isAvecPaidStatus('a realizar')).toBe(false)
+  })
+})
+
+describe('isAvecInSalonOpenStatus', () => {
+  it('reconhece no salão e ignora só Agendado', () => {
+    expect(isAvecInSalonOpenStatus('Em Atendimento')).toBe(true)
+    expect(isAvecInSalonOpenStatus('Aguardando')).toBe(true)
+    expect(isAvecInSalonOpenStatus('comanda aberta')).toBe(true)
+    expect(isAvecInSalonOpenStatus('Agendado')).toBe(false)
+    expect(isAvecInSalonOpenStatus('Pago')).toBe(false)
   })
 })

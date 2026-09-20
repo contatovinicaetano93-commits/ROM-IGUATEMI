@@ -1,5 +1,6 @@
 import { getSql } from '@/lib/db'
 import { asJsonArray } from '@/lib/jsonb'
+import { coalesceProfessionalsOccupancy } from '@/lib/director-report/match-pro'
 
 export interface P1ProfessionalRow {
   name: string
@@ -94,9 +95,12 @@ export async function upsertSalonP1Daily(
 
 function mapSalonP1Row(row: SalonP1Daily | undefined): SalonP1Daily | null {
   if (!row) return null
+  const professionals = coalesceProfessionalsOccupancy(
+    asJsonArray<P1ProfessionalRow>(row.professionals),
+  )
   return {
     ...row,
-    professionals: asJsonArray<P1ProfessionalRow>(row.professionals),
+    professionals,
     services: asJsonArray<P1ServiceRow>(row.services),
     acquisition: asJsonArray<P1AcquisitionRow>(row.acquisition),
   }

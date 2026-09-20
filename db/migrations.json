@@ -285,6 +285,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "036_comanda_spans",
+      "file": "delta-comanda-spans.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

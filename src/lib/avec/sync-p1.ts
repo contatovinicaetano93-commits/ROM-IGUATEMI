@@ -22,6 +22,7 @@ import { saveReportSnapshot } from '@/lib/avec/snapshots'
 import {
   findNearProInMap,
   occupancyMergeKey,
+  coalesceProfessionalsOccupancy,
 } from '@/lib/director-report/match-pro'
 import { upsertSalonP1Daily, type P1ProfessionalRow } from '@/lib/salon/p1-metrics'
 
@@ -222,13 +223,16 @@ export async function syncP1Kpis(stats: SyncStatsLike, syncRunId?: string, opts?
 
   // Elenco completo no snapshot — ocupação média pondera todos com 0126.
   // O painel corta top N na UI / ranking.
-  const professionals = Array.from(byPro.values())
-    .sort((a, b) => b.revenue - a.revenue)
-    .map((p) => ({
-      ...p,
-      revenue: Math.round(p.revenue),
-      ticket_avg: Math.round(p.ticket_avg),
-    }))
+  // coalesce: funde apelidos 0126 órfãos nas linhas de faturamento 0021.
+  const professionals = coalesceProfessionalsOccupancy(
+    Array.from(byPro.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .map((p) => ({
+        ...p,
+        revenue: Math.round(p.revenue),
+        ticket_avg: Math.round(p.ticket_avg),
+      })),
+  )
 
   const services: { name: string; quantity: number; revenue: number }[] = []
   let servicesOk = false

@@ -9,6 +9,9 @@ create table if not exists salon_p3_daily (
   new_clients_period int not null default 0,
   -- [{ day, revenue }] — curva diária (0088; override AVEC_REPORT_REVENUE_CURVE)
   revenue_curve jsonb not null default '[]',
+  -- false = 0% / 0 novos ainda não sincronizados (não interpretar como medição)
+  has_return_rate boolean not null default false,
+  has_new_clients boolean not null default false,
   updated_at timestamptz not null default now()
 );
 
