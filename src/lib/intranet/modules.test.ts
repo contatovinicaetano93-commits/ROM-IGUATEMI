@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   extrasBeyondRole,
   effectiveModules,
+  canSeeNavHref,
   hasPanelModule,
   parseGrantableModules,
   roleModulePack,
@@ -46,5 +47,19 @@ describe('extrasBeyondRole', () => {
   it('não persiste o que já vem do papel', () => {
     expect(extrasBeyondRole('staff', ['pipeline', 'financeiro'])).toEqual(['financeiro'])
     expect(extrasBeyondRole('admin', ['financeiro', 'dashboard'])).toEqual([])
+  })
+})
+
+describe('canSeeNavHref', () => {
+  it('Gestão de usuário e auditoria só para admin', () => {
+    expect(canSeeNavHref('/pessoas', 'admin', [])).toBe(true)
+    expect(canSeeNavHref('/pessoas', 'staff', [])).toBe(false)
+    expect(canSeeNavHref('/auditoria', 'financeiro', [])).toBe(false)
+  })
+
+  it('módulos grantable respeitam o pacote + extras', () => {
+    expect(canSeeNavHref('/financeiro', 'staff', [])).toBe(false)
+    expect(canSeeNavHref('/financeiro', 'staff', ['financeiro'])).toBe(true)
+    expect(canSeeNavHref('/contatos', 'financeiro', [])).toBe(false)
   })
 })

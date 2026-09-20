@@ -1,28 +1,46 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Bell,
   Boxes,
+  CalendarDays,
   ClipboardList,
   Home,
+  LayoutDashboard,
   MoreHorizontal,
+  Newspaper,
   Sun,
   Users,
   Wallet,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { useClientSession } from './SessionProvider'
-import { canSeeNavHref, hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
+import { parseGrantableModules } from '@/lib/intranet/modules'
+import { resolveBottomNav } from '@/lib/intranet/bottom-nav'
 
-const CORE = [
-  { href: '/', shortLabel: 'Home', icon: Home },
-  { href: '/hoje', shortLabel: 'Operação', icon: Sun },
-  { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
-  { href: '/contatos', shortLabel: 'Contatos', icon: Users },
-]
+const ICONS: Record<string, LucideIcon> = {
+  '/': Home,
+  '/financeiro': Wallet,
+  '/estoque': Boxes,
+  '/flow': ClipboardList,
+  '/hoje': Sun,
+  '/contatos': Users,
+  '/pipeline': CalendarDays,
+  '/dashboard': LayoutDashboard,
+  '/relatorios': LayoutDashboard,
+  '/empresa': Newspaper,
+  '/meu-faturamento': Wallet,
+  '/recepcao': Users,
+  '/pos-venda': Users,
+}
+
+function iconFor(href: string): LucideIcon {
+  return ICONS[href] ?? Home
+}
 
 export function BottomNav({ light: _light = false }: { light?: boolean }) {
   const pathname = usePathname()
@@ -30,49 +48,21 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
   const role = session?.role ?? null
   const extras = parseGrantableModules(session?.modules)
   const openAuth = Boolean(session && !session.auth_enabled)
-  const canFinance = openAuth || (role != null && hasPanelModule(role, extras, 'financeiro'))
-  const canStock = openAuth || (role != null && hasPanelModule(role, extras, 'estoque'))
-  const canDashboard = openAuth || (role != null && hasPanelModule(role, extras, 'dashboard'))
-  const canRelatorios = openAuth || (role != null && hasPanelModule(role, extras, 'relatorios'))
   const [more, setMore] = useState(false)
 
-  const items =
-    canStock && !canFinance
-      ? [
-          { href: '/', shortLabel: 'Home', icon: Home },
-          { href: '/estoque', shortLabel: 'Estoque', icon: Boxes },
-          { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
-          { href: '/hoje', shortLabel: 'Operação', icon: Sun },
-        ]
-      : canFinance
-        ? [
-            { href: '/', shortLabel: 'Home', icon: Home },
-            { href: '/financeiro', shortLabel: 'Financeiro', icon: Wallet },
-            { href: '/flow', shortLabel: 'Tarefas', icon: ClipboardList },
-            { href: '/hoje', shortLabel: 'Operação', icon: Sun },
-          ]
-        : CORE
+  const { dock: items, more: extrasMenu } = useMemo(
+    () => resolveBottomNav(role, extras, { openAuth }),
+    [extras, openAuth, role],
+  )
 
-  const extrasMenu = [
-    { href: '/pipeline', label: 'Agenda do dia' },
-    { href: '/contatos', label: 'Contatos' },
-    { href: '/pessoas', label: 'Gestão de usuário' },
-    { href: '/empresa', label: 'Notícias e eventos' },
-    { href: '/rh', label: 'RH' },
-    { href: '/treinamentos', label: 'Treinamentos' },
-    { href: '/onboarding', label: 'Onboarding' },
-    { href: '/ajuda', label: 'Suporte' },
-    ...(canDashboard ? [{ href: '/dashboard', label: 'Visão analítica' }] : []),
-    ...(canRelatorios ? [{ href: '/relatorios', label: 'Relatórios' }] : []),
-    ...(canFinance ? [{ href: '/financeiro', label: 'Financeiro' }] : []),
-    ...(canStock ? [{ href: '/estoque', label: 'Estoque' }] : []),
-  ].filter((item) => openAuth || canSeeNavHref(item.href, role, extras))
+  if (items.length === 0) return null
 
   return (
     <>
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 backdrop-blur pb-[env(safe-area-inset-bottom)] lg:hidden">
         <div className="mx-auto flex w-full max-w-lg">
-          {items.map(({ href, shortLabel, icon: Icon }) => {
+          {items.map(({ href, shortLabel }) => {
+            const Icon = iconFor(href)
             const active = href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`)
             return (
               <Link
@@ -87,14 +77,16 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
               </Link>
             )
           })}
-          <button
-            type="button"
-            onClick={() => setMore(true)}
-            className="relative flex flex-1 flex-col items-center gap-1 py-3 text-xs text-muted"
-          >
-            <MoreHorizontal size={22} />
-            <span>Mais</span>
-          </button>
+          {extrasMenu.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setMore(true)}
+              className="relative flex flex-1 flex-col items-center gap-1 py-3 text-xs text-muted"
+            >
+              <MoreHorizontal size={22} />
+              <span>Mais</span>
+            </button>
+          ) : null}
         </div>
       </nav>
 
