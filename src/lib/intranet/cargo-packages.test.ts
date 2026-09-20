@@ -12,6 +12,7 @@ describe('cargo packages', () => {
     expect(CARGO_PACKAGES.map((item) => item.id)).toEqual([
       'master',
       'ops_financeiro',
+      'func_financeiro',
       'solicitante_amplo',
       'gestor_unidade',
       'gestor_baru',
@@ -48,7 +49,18 @@ describe('cargo packages', () => {
     expect(extrasBeyondRole(pack.panel_role, pack.extras)).toEqual(['pipeline', 'contatos', 'dashboard'])
   })
 
-  it('reconhecimento na lista: Rodrigo e profissional', () => {
+  it('func financeiro: KPIs e dia a dia sem adminar Flow', () => {
+    const pack = cargoPackageById('func_financeiro')
+    expect(pack).not.toBeNull()
+    if (!pack) return
+    expect(pack.panel_role).toBe('financeiro')
+    expect(pack.flow_role).toBe('solicitante')
+    expect(pack.areaIds).toEqual(['financeiro', 'compras'])
+    expect(modulesForCargo(pack)).toEqual(['pipeline', 'financeiro', 'estoque', 'relatorios'])
+    expect(extrasBeyondRole(pack.panel_role, pack.extras)).toEqual(['pipeline'])
+  })
+
+  it('reconhecimento na lista: Rodrigo, func fin e profissional', () => {
     expect(
       matchCargoPackage({
         panel_role: 'financeiro',
@@ -57,6 +69,15 @@ describe('cargo packages', () => {
         areaIds: ['financeiro', 'manutencao', 'compras', 'rh'],
       })?.id,
     ).toBe('ops_financeiro')
+
+    expect(
+      matchCargoPackage({
+        panel_role: 'financeiro',
+        flow_role: 'solicitante',
+        modules: ['pipeline'],
+        areaIds: ['financeiro', 'compras'],
+      })?.id,
+    ).toBe('func_financeiro')
 
     expect(
       matchCargoPackage({
