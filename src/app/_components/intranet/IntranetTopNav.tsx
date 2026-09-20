@@ -65,10 +65,10 @@ export function IntranetTopNav() {
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur">
         {/* Faixa 1: marca + utilitários — sem título de seção (já existe no chrome da página) */}
-        <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-5 py-3 lg:px-8">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-2 px-4 py-3 sm:gap-3 sm:px-5 lg:px-8">
           <button
             type="button"
-            className="flex h-10 w-10 items-center justify-center text-foreground lg:hidden"
+            className="flex h-10 w-10 shrink-0 items-center justify-center text-foreground lg:hidden"
             aria-label="Abrir menu"
             onClick={() => setMenuOpen(true)}
           >
@@ -76,11 +76,11 @@ export function IntranetTopNav() {
           </button>
           <Link
             href="/"
-            className="shrink-0 font-serif text-lg tracking-[0.08em] text-foreground sm:text-xl lg:text-2xl"
+            className="min-w-0 truncate font-serif text-lg tracking-[0.08em] text-foreground sm:text-xl lg:shrink-0 lg:text-2xl"
           >
             {brand.displayName}
           </Link>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               className="hidden h-9 items-center gap-2 rounded-full border border-border bg-background px-3 text-sm text-muted xl:flex"
@@ -98,11 +98,12 @@ export function IntranetTopNav() {
               <Search size={18} />
             </button>
             <IntranetBell />
-            <div className="flex items-center gap-2 pl-1">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-xs font-semibold text-background">
+            <div className="flex items-center gap-1.5 pl-0.5 sm:gap-2 sm:pl-1">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-semibold text-background">
                 {initial}
               </span>
-              <span className="hidden max-w-[7rem] truncate text-sm text-foreground sm:inline">{name.split(' ')[0]}</span>
+              <span className="hidden max-w-[7rem] truncate text-sm text-foreground lg:inline">{name.split(' ')[0]}</span>
+              <LogoutButton compact className="inline-flex lg:hidden" label="Sair" />
               <LogoutButton className="hidden lg:inline-flex" label="Sair" />
             </div>
           </div>
@@ -161,7 +162,7 @@ export function IntranetTopNav() {
               ))}
             </nav>
             <div className="mt-auto px-5 pb-8">
-              <LogoutButton className="w-full" label="Sair" />
+              <LogoutButton className="inline-flex w-full" label="Sair" />
             </div>
           </aside>
         </div>

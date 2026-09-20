@@ -10,7 +10,7 @@ type Props = {
   compact?: boolean
 }
 
-export function LogoutButton({ className = '', label = 'Sair', compact = false }: Props) {
+export function LogoutButton({ className = 'inline-flex', label = 'Sair', compact = false }: Props) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
 
@@ -30,9 +30,13 @@ export function LogoutButton({ className = '', label = 'Sair', compact = false }
       type="button"
       onClick={logout}
       disabled={loading}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-60 ${className}`}
+      aria-label={loading ? 'Saindo…' : label}
+      title={label}
+      className={`items-center justify-center rounded-xl border border-border bg-surface text-sm font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-60 ${
+        compact ? 'h-9 w-9 shrink-0 gap-0 p-0' : 'gap-2 px-3 py-2'
+      } ${className}`}
     >
-      <LogOut size={16} />
+      <LogOut size={compact ? 18 : 16} aria-hidden />
       {!compact && (loading ? 'Saindo…' : label)}
     </button>
   )
