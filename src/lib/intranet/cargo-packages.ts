@@ -15,6 +15,7 @@ import {
 export type CargoPackageId =
   | 'master'
   | 'ops_financeiro'
+  | 'func_financeiro'
   | 'solicitante_amplo'
   | 'gestor_unidade'
   | 'gestor_baru'
@@ -59,13 +60,26 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     id: 'ops_financeiro',
     label: 'Ops financeiro',
     alias: 'Ops Fin',
-    summary: 'Admina Flow, Financeiro, Estoque, Agenda, Operação e Visão nas duas unidades.',
+    summary: 'Admin do financeiro: Flow, Financeiro, Estoque, Agenda, Operação e Visão nas duas unidades.',
     examples: 'Rodrigo',
     panel_role: 'financeiro',
     flow_role: 'master',
     can_publish: false,
     extras: ['pipeline', 'contatos', 'dashboard'],
     areaIds: [...REQUEST_AREAS],
+  },
+  {
+    id: 'func_financeiro',
+    label: 'Funcionário financeiro',
+    alias: 'Func Fin',
+    summary:
+      'Time do Rodrigo: pede no Flow, opera Financeiro e Estoque no dia a dia, vê KPIs — sem adminar o painel.',
+    examples: 'Equipe financeira sob Rodrigo',
+    panel_role: 'financeiro',
+    flow_role: 'solicitante',
+    can_publish: false,
+    extras: ['pipeline'],
+    areaIds: ['financeiro', 'compras'],
   },
   {
     id: 'solicitante_amplo',
