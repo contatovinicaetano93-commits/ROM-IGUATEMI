@@ -66,4 +66,33 @@ describe('cargo packages', () => {
       })?.id,
     ).toBe('profissional')
   })
+
+  it('não rotula overlap fraco de extras ou áreas', () => {
+    expect(
+      matchCargoPackage({
+        panel_role: 'staff',
+        flow_role: 'solicitante',
+        modules: ['dashboard'],
+        areaIds: ['compras'],
+      }),
+    ).toBeNull()
+
+    expect(
+      matchCargoPackage({
+        panel_role: 'staff',
+        flow_role: 'solicitante',
+        modules: ['dashboard'],
+        areaIds: ['manutencao'],
+      }),
+    ).toBeNull()
+
+    expect(
+      matchCargoPackage({
+        panel_role: 'staff',
+        flow_role: 'solicitante',
+        modules: [],
+        areaIds: [],
+      }),
+    ).toBeNull()
+  })
 })

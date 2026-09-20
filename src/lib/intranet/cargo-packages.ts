@@ -215,7 +215,7 @@ export function matchCargoPackage(input: {
     const personExtras = [...extras].sort().join(',')
     let score = 0
     if (packExtras === personExtras) score += 3
-    else if (pack.extras.every((key) => extras.includes(key))) score += 1
+    else if (pack.extras.length > 0 && pack.extras.every((key) => extras.includes(key))) score += 1
     const packAreas = [...pack.areaIds].sort().join(',')
     const personAreas = areas.join(',')
     if (packAreas === personAreas) score += 2
@@ -225,5 +225,6 @@ export function matchCargoPackage(input: {
       best = pack
     }
   }
-  return bestScore >= 3 ? best : bestScore >= 1 ? best : null
+  // Só rotula com extras e áreas exatos (+3 e +2). Overlap fraco de extras não conta.
+  return bestScore >= 5 ? best : null
 }
