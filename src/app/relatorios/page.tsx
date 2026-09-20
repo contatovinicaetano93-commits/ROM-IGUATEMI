@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { AlertTriangle, Download, FileText, RefreshCw } from 'lucide-react'
 import { MonthYearField } from '../_components/MonthYearField'
 import { SectionCard } from '../_components/ui'
+import { VisaoAnaliticaNav } from '../_components/intranet/VisaoAnaliticaNav'
 import { apiFetch } from '@/lib/api-client'
 import { useClientLoader } from '@/lib/use-client-loader'
 import { getBrand } from '@/lib/brand'
@@ -99,12 +100,13 @@ export default function RelatoriosOverviewPage() {
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Relatórios</p>
-          <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Overview do mês</h1>
+          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">Visão analítica</p>
+          <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Relatórios · overview do mês</h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
             Fechamento oficial {brand.displayName} — receita bruta é o acumulado de caixa pago do
             mês (1º até hoje se estiver aberto; mês cheio se já fechou).
           </p>
+          <VisaoAnaliticaNav />
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
@@ -163,13 +165,13 @@ export default function RelatoriosOverviewPage() {
       </div>
 
       {error && (
-        <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-800">
           {error}
         </p>
       )}
 
       {data?.sync && (isRelatoriosStale(data.sync) || data.sync.status === 'partial' || data.sync.status === 'error') && (
-        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800">
           {isRelatoriosStale(data.sync)
             ? relatoriosSyncStaleMessage(data.sync)
             : data.sync.status === 'partial'
@@ -192,10 +194,10 @@ export default function RelatoriosOverviewPage() {
           <div
             className={`flex flex-wrap items-start gap-3 rounded-xl border px-4 py-3 text-sm ${
               incomplete
-                ? 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+                ? 'border-amber-500/40 bg-amber-500/10 text-amber-800'
                 : inProgress
                   ? 'border-border bg-card text-muted'
-                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800'
             }`}
           >
             {incomplete && <AlertTriangle size={18} className="mt-0.5 shrink-0" />}

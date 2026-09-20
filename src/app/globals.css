@@ -1,17 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0908;
-  --surface: #100e0c;
-  --card: #16130f;
-  --card-elevated: #1d1913;
-  --foreground: #f3efe8;
-  --border: #2a2621;
-  --muted: #928b7e;
+  /* Identidade única da intranet — creme/cobre em todo o Rom Club. */
+  --background: #f4f1ec;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --card-elevated: #fbf8f3;
+  --foreground: #1c1916;
+  --border: #e4ddd3;
+  --muted: #7a7268;
 
-  --gold: #d4a94e;
-  --gold-strong: #e6bd5c;
-  --gold-bright: #f0b429;
+  --gold: #b08b57;
+  --gold-strong: #9a7344;
+  --gold-bright: #c4a574;
 
   --success: #3ecf8e;
   --danger: #ef5f6b;
@@ -37,6 +38,7 @@
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-playfair), Georgia, serif;
 
   --radius-xl: 1rem;
   --radius-2xl: 1.25rem;
@@ -87,3 +89,37 @@ body {
 .animate-slide-in-left { animation: rom-slide-in-left 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .animate-slide-up { animation: rom-slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .animate-rise { animation: rom-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes rom-hero-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.intranet-shell {
+  --background: #f4f1ec;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --card-elevated: #fbf8f3;
+  --foreground: #1c1916;
+  --border: #e4ddd3;
+  --muted: #7a7268;
+  --gold: #b08b57;
+  --gold-strong: #9a7344;
+  --gold-bright: #c4a574;
+  background: var(--background);
+  color: var(--foreground);
+  min-height: 100dvh;
+}
+
+.intranet-shell .font-serif {
+  font-family: var(--font-serif), Georgia, serif;
+}
+
+.intranet-shortcut {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.intranet-shortcut:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(28, 25, 22, 0.06);
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--border));
+}

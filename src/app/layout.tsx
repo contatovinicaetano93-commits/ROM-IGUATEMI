@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Geist, Geist_Mono, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { AppShell } from './_components/AppShell'
 import { getBrand } from '@/lib/brand'
@@ -14,15 +14,20 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+const playfair = Playfair_Display({
+  variable: '--font-playfair',
+  subsets: ['latin'],
+})
+
 const brand = getBrand()
 
 export const metadata: Metadata = {
-  title: `${brand.displayName} · Painel`,
-  description: `Frente de caixa do ${brand.displayName}: playbook do dia, contatos e KPIs do salão.`,
+  title: `${brand.displayName} · Intranet`,
+  description: `Intranet ${brand.displayName}: pessoas, operação, financeiro e solicitações da unidade.`,
   applicationName: brand.shortMonogram,
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
     title: brand.shortMonogram,
   },
   formatDetection: { telephone: false },
@@ -32,7 +37,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#0a0908',
+  themeColor: '#f4f1ec',
 }
 
 export default function RootLayout({
@@ -43,7 +48,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background">
         <AppShell>{children}</AppShell>

@@ -3,89 +3,12 @@ import type { NextRequest } from 'next/server'
 import { isAuthorized, isAuthEnabled, getSession } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
+import { canAccessProtectedPath } from '@/lib/intranet/access'
 
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/webhooks']
 
 function isPublicApi(pathname: string) {
   return PUBLIC_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
-}
-
-function isFinanceAllowedAdminApi(pathname: string) {
-  // Handlers usam requireFinance (admin + financeiro).
-  return (
-    pathname === '/api/admin/revenue-backfill' ||
-    pathname === '/api/admin/analytics-backfill'
-  )
-}
-
-function isFinancePath(pathname: string) {
-  return (
-    pathname === '/financeiro' ||
-    pathname.startsWith('/financeiro/') ||
-    pathname.startsWith('/api/financeiro/') ||
-    isFinanceAllowedAdminApi(pathname)
-  )
-}
-
-function isLgpdAnonymizePath(pathname: string) {
-  return /^\/api\/contacts\/[^/]+\/anonymize$/.test(pathname)
-}
-
-function isRelatoriosPath(pathname: string) {
-  return (
-    pathname === '/relatorios' ||
-    pathname.startsWith('/relatorios/') ||
-    pathname.startsWith('/api/relatorios/')
-  )
-}
-
-function isStockPath(pathname: string) {
-  return pathname === '/estoque' || pathname.startsWith('/estoque/') || pathname.startsWith('/api/estoque/')
-}
-
-function isOnboardingPath(pathname: string) {
-  return pathname === '/onboarding' || pathname.startsWith('/onboarding/') || pathname.startsWith('/api/onboarding/')
-}
-
-/** Staff: operação do dia (sem receita comercial / admin). */
-function isStaffPath(pathname: string) {
-  return (
-    pathname === '/' ||
-    pathname === '/hoje' ||
-    pathname.startsWith('/api/hoje') ||
-    pathname === '/pipeline' ||
-    pathname.startsWith('/api/pipeline') ||
-    pathname === '/contatos' ||
-    pathname.startsWith('/contatos/') ||
-    pathname.startsWith('/api/contacts') ||
-    pathname.startsWith('/api/services') ||
-    pathname.startsWith('/api/schedule') ||
-    pathname.startsWith('/api/recommendations') ||
-    pathname.startsWith('/api/reactivation') ||
-    isOnboardingPath(pathname) ||
-    pathname === '/api/auth/session' ||
-    pathname === '/api/auth/logout'
-  )
-}
-
-function isAdminOnlyPath(pathname: string) {
-  return (
-    pathname === '/admin' ||
-    pathname.startsWith('/admin/') ||
-    pathname === '/dashboard' ||
-    pathname.startsWith('/api/kpis') ||
-    pathname === '/api/avec/sync' ||
-    pathname.startsWith('/api/avec/sync/') ||
-    pathname === '/api/avec/purge-snapshots' ||
-    pathname === '/api/avec/refresh-token' ||
-    pathname === '/api/avec/probe-0011' ||
-    pathname === '/api/seed' ||
-    (pathname.startsWith('/api/admin/') && !isFinanceAllowedAdminApi(pathname)) ||
-    pathname === '/api/lgpd/purge' ||
-    isLgpdAnonymizePath(pathname) ||
-    pathname === '/observability' ||
-    pathname.startsWith('/api/observability')
-  )
 }
 
 function isProtectedPage(pathname: string) {
@@ -107,7 +30,33 @@ function isProtectedPage(pathname: string) {
     pathname === '/onboarding' ||
     pathname.startsWith('/onboarding/') ||
     pathname === '/observability' ||
-    pathname.startsWith('/observability/')
+    pathname.startsWith('/observability/') ||
+    pathname === '/pessoas' ||
+    pathname.startsWith('/pessoas/') ||
+    pathname === '/empresa' ||
+    pathname.startsWith('/empresa/') ||
+    pathname === '/rh' ||
+    pathname.startsWith('/rh/') ||
+    pathname === '/treinamentos' ||
+    pathname.startsWith('/treinamentos/') ||
+    pathname === '/sistemas' ||
+    pathname.startsWith('/sistemas/') ||
+    pathname === '/ajuda' ||
+    pathname.startsWith('/ajuda/') ||
+    pathname === '/flow' ||
+    pathname.startsWith('/flow/') ||
+    pathname === '/operacao' ||
+    pathname.startsWith('/operacao/') ||
+    pathname === '/adm' ||
+    pathname.startsWith('/adm/') ||
+    pathname === '/auditoria' ||
+    pathname.startsWith('/auditoria/') ||
+    pathname === '/meu-faturamento' ||
+    pathname.startsWith('/meu-faturamento/') ||
+    pathname === '/recepcao' ||
+    pathname.startsWith('/recepcao/') ||
+    pathname === '/pos-venda' ||
+    pathname.startsWith('/pos-venda/')
   )
 }
 
@@ -138,7 +87,6 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/api/avec/sync/') ||
     pathname === '/api/avec/purge-snapshots' ||
     pathname === '/api/avec/refresh-token' ||
-    pathname === '/api/avec/probe-0011' ||
     pathname === '/api/estoque/sync' ||
     pathname === '/api/financeiro/omie/sync' ||
     pathname === '/api/director-report' ||
@@ -153,72 +101,18 @@ export async function middleware(req: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
     }
     const login = new URL('/login', req.url)
-    login.searchParams.set('next', pathname === '/' ? '/hoje' : pathname)
+    login.searchParams.set('next', pathname)
     return NextResponse.redirect(login)
   }
 
   if (isCronAuthorized(req)) return NextResponse.next()
 
   const session = await getSession(req)
-  const role = session?.role
-  const financePath = isFinancePath(pathname)
-  const stockPath = isStockPath(pathname)
-  const onboardingPath = isOnboardingPath(pathname)
-  const relatoriosPath = isRelatoriosPath(pathname)
-
-  // Staff: só operação (hoje/pipeline/contatos/onboarding) — sem Visão/Financeiro/Admin.
-  if (role === 'staff' && (isProtectedPage(pathname) || isProtectedApi(pathname)) && !isStaffPath(pathname)) {
+  if (!canAccessProtectedPath(pathname, session?.role, session?.modules ?? [])) {
     if (isProtectedApi(pathname)) {
-      return NextResponse.json({ error: 'Acesso restrito — use a conta admin para analytics/admin' }, { status: 403 })
+      return NextResponse.json({ error: 'Acesso restrito a este sistema' }, { status: 403 })
     }
-    return NextResponse.redirect(new URL('/hoje', req.url))
-  }
-
-  // Admin-only: diagnóstico, sync manual, visão analítica, observability.
-  if (isAdminOnlyPath(pathname) && role !== 'admin') {
-    // Financeiro pode ver Relatório gerência? Não — admin only. Visão analítica = admin.
-    if (isProtectedApi(pathname)) {
-      return NextResponse.json({ error: 'Acesso restrito ao admin' }, { status: 403 })
-    }
-    return NextResponse.redirect(new URL(role === 'financeiro' ? '/financeiro' : '/hoje', req.url))
-  }
-
-  if (
-    role === 'financeiro' &&
-    (isProtectedPage(pathname) || isProtectedApi(pathname)) &&
-    !financePath &&
-    !stockPath &&
-    !onboardingPath &&
-    !relatoriosPath
-  ) {
-    if (isProtectedApi(pathname)) {
-      return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
-    }
-    return NextResponse.redirect(new URL('/financeiro', req.url))
-  }
-
-  if (
-    role === 'estoque' &&
-    (isProtectedPage(pathname) || isProtectedApi(pathname)) &&
-    !stockPath &&
-    !onboardingPath
-  ) {
-    if (isProtectedApi(pathname)) {
-      return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
-    }
-    return NextResponse.redirect(new URL('/estoque', req.url))
-  }
-  if ((financePath || relatoriosPath) && role !== 'admin' && role !== 'financeiro') {
-    if (isProtectedApi(pathname)) {
-      return NextResponse.json({ error: 'Acesso restrito ao financeiro' }, { status: 403 })
-    }
-    return NextResponse.redirect(new URL('/hoje', req.url))
-  }
-  if (stockPath && role !== 'admin' && role !== 'financeiro' && role !== 'estoque') {
-    if (isProtectedApi(pathname)) {
-      return NextResponse.json({ error: 'Acesso restrito ao estoque' }, { status: 403 })
-    }
-    return NextResponse.redirect(new URL('/hoje', req.url))
+    return NextResponse.redirect(new URL('/', req.url))
   }
 
   return NextResponse.next()
@@ -244,6 +138,32 @@ export const config = {
     '/onboarding/:path*',
     '/observability',
     '/observability/:path*',
+    '/pessoas',
+    '/pessoas/:path*',
+    '/empresa',
+    '/empresa/:path*',
+    '/rh',
+    '/rh/:path*',
+    '/treinamentos',
+    '/treinamentos/:path*',
+    '/sistemas',
+    '/sistemas/:path*',
+    '/ajuda',
+    '/ajuda/:path*',
+    '/flow',
+    '/flow/:path*',
+    '/operacao',
+    '/operacao/:path*',
+    '/adm',
+    '/adm/:path*',
+    '/auditoria',
+    '/auditoria/:path*',
+    '/meu-faturamento',
+    '/meu-faturamento/:path*',
+    '/recepcao',
+    '/recepcao/:path*',
+    '/pos-venda',
+    '/pos-venda/:path*',
     '/api/:path*',
   ],
 }

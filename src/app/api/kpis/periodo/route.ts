@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { okCached, err, handleError } from '@/lib/api-response'
-import { requireSession } from '@/lib/auth'
+import { requireDashboard } from '@/lib/auth'
 import { computePeriodAnalytics } from '@/lib/salon/period-analytics'
 import { ttlGetOrSet } from '@/lib/ttl-cache'
 
@@ -9,7 +9,7 @@ export const maxDuration = 20
 /** KPIs comerciais/operacionais do período — Visão analítica (não Financeiro). */
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireSession(req)
+    const auth = await requireDashboard(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const url = new URL(req.url)

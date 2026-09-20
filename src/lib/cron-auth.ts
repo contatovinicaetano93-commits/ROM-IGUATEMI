@@ -5,7 +5,7 @@ import type { NextRequest } from 'next/server'
  * Se os comprimentos diferem, ainda varre o buffer maior para não vazar o tamanho
  * do secret via tempo de early-return óbvio no path igual.
  */
-function secretsEqual(a: string, b: string): boolean {
+export function secretsEqual(a: string, b: string): boolean {
   const enc = new TextEncoder()
   const left = enc.encode(a)
   const right = enc.encode(b)

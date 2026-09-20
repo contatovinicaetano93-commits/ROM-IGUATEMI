@@ -304,7 +304,7 @@ export default function HojePage() {
           className="flex w-full items-center justify-between gap-3 rounded-xl py-0.5 text-left active:opacity-90"
         >
           <h2 className="flex items-center gap-1.5 text-sm font-medium">
-            <Calendar size={15} className="text-sky-300" /> Pessoas com agenda aberta
+            <Calendar size={15} className="text-sky-800" /> Pessoas com agenda aberta
           </h2>
           <span className="flex items-center gap-2">
             <CountBadge
@@ -351,7 +351,7 @@ export default function HojePage() {
                     className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-sky-500/5 p-3.5 active:bg-surface sm:p-4"
                   >
                     <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-sky-500/10 px-1.5 py-2 text-center">
-                      <span className="text-sm font-semibold tabular-nums leading-none text-sky-200">
+                      <span className="text-sm font-semibold tabular-nums leading-none text-sky-800">
                         {when.time}
                       </span>
                       <span className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted">
@@ -360,7 +360,7 @@ export default function HojePage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{s.contact_name ?? 'Cliente'}</p>
-                      <p className="mt-0.5 truncate text-xs text-sky-300/90">{s.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-sky-800/90">{s.name}</p>
                     </div>
                     <ChevronRight size={16} className="shrink-0 text-muted" />
                   </Link>

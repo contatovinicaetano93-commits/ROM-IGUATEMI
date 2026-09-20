@@ -62,6 +62,6 @@ Qualquer `--force`, `DROP`, `TRUNCATE` ou push direto para `main` precisa de jus
 
 Se for pegar tarefa nova, estes são reais e estão sem dono:
 
-- **`maxDuration = 800` em `/api/avec/sync` exige Fluid Compute na Vercel.** Não foi confirmado se está ligado. Se não estiver, todo sync full morre em 300s.
-- **~30 ocorrências de `react-hooks/set-state-in-effect`** entre Brasil e Iguatemi. É correção de verdade (loop de render, estado velho), não estilo. É o que impede o lint de virar gate bloqueante.
-- **O Iguatemi não tem `reminders/financeiro`** (lembrete WhatsApp semanal de despesas que o Brasil tem). É o único gap funcional entre os painéis — mas portar significa começar a mandar mensagem para a equipe do Iguatemi, então precisa de decisão humana antes.
+- **`maxDuration = 800` em `/api/avec/sync` exige Fluid Compute na Vercel.** Rotas logam `warnIfLongMaxDuration` no cold start. Se Fluid não estiver ligado, todo sync full morre em 300s.
+- **Lint ainda não é gate bloqueante** (passivo atual: `no-explicit-any` + `react-hooks/refs`).
+- **O Iguatemi não tem `reminders/financeiro`** (lembrete WhatsApp semanal de despesas que o Brasil tem). Allowlist morta no middleware foi removida. Portar a rota exige decisão humana (passa a poder mandar mensagem para a equipe do Iguatemi).

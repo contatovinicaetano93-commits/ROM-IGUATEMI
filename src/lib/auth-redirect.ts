@@ -2,6 +2,7 @@
 
 /** Destinos internos permitidos ao voltar de um contato. */
 const ALLOWED_RETURN_PREFIXES = [
+  '/',
   '/hoje',
   '/contatos',
   '/pipeline',
@@ -12,9 +13,21 @@ const ALLOWED_RETURN_PREFIXES = [
   '/relatorios',
   '/admin',
   '/observability',
+  '/pessoas',
+  '/empresa',
+  '/rh',
+  '/treinamentos',
+  '/sistemas',
+  '/ajuda',
+  '/flow',
+  '/operacao',
+  '/adm',
+  '/meu-faturamento',
+  '/recepcao',
+  '/pos-venda',
 ] as const
 
-export function sanitizeRedirectPath(next: string | null | undefined, fallback = '/hoje') {
+export function sanitizeRedirectPath(next: string | null | undefined, fallback = '/') {
   if (!next || !next.startsWith('/') || next.startsWith('//')) return fallback
   if (next.includes('://') || next.includes('\\')) return fallback
   return next
@@ -40,6 +53,8 @@ export function sanitizeContactReturnTo(
 export function contactReturnLabel(returnTo: string): string {
   const bare = returnTo.split('?')[0]?.split('#')[0] ?? returnTo
   if (bare === '/hoje' || bare.startsWith('/hoje/')) return 'Hoje'
+  if (bare === '/recepcao' || bare.startsWith('/recepcao/')) return 'Recepção'
+  if (bare === '/pos-venda' || bare.startsWith('/pos-venda/')) return 'Pós-venda'
   if (bare === '/pipeline' || bare.startsWith('/pipeline/')) return 'Pipeline'
   if (bare === '/dashboard' || bare.startsWith('/dashboard/')) return 'Visão analítica'
   if (bare === '/financeiro' || bare.startsWith('/financeiro/')) return 'Financeiro'

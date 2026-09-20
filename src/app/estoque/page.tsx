@@ -442,6 +442,10 @@ export default function EstoquePage() {
           <h1 className="mt-1 text-xl font-semibold lg:text-2xl">Visão geral</h1>
           <p className="mt-1 text-xs text-muted">
             O que temos, o que falta e o que moveu. Caixa/CMV fica no Financeiro.
+            {' · '}
+            <a href="/estoque/pontos" className="text-gold-strong hover:underline">
+              Pontos (Almox / Pisos)
+            </a>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">

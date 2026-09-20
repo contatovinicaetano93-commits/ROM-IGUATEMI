@@ -333,6 +333,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       doneAt: payload.completed_at ?? payload.scheduled_at ?? undefined,
       professionalName: payload.professional_name,
       lastPrice: payload.price,
+      source: 'webhook',
     })
     await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
     await updateContact(contact.id, { status: 'convertido' })
@@ -384,6 +385,7 @@ export async function ingestAvecWebhook(rawBody: unknown) {
       doneAt: payload.completed_at,
       professionalName: payload.professional_name,
       lastPrice: payload.price,
+      source: 'webhook',
     })
     await applyPreferredPro(contact.id, payload.service_name, payload.professional_name)
     await updateContact(contact.id, { status: 'convertido' })

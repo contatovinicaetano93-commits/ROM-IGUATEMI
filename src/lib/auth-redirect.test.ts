@@ -9,7 +9,7 @@ describe('sanitizeContactReturnTo', () => {
   it('aceita paths internos conhecidos', () => {
     expect(sanitizeContactReturnTo('/hoje')).toBe('/hoje')
     expect(sanitizeContactReturnTo('/pipeline')).toBe('/pipeline')
-    expect(sanitizeContactReturnTo('/contatos')).toBe('/contatos')
+    expect(sanitizeContactReturnTo('/flow')).toBe('/flow')
   })
 
   it('rejeita open redirect e paths estranhos', () => {
