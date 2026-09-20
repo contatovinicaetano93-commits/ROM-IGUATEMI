@@ -4,7 +4,7 @@ import { ArrowUpRight, CheckCircle2, ClipboardCheck, LayoutDashboard, Plus, Spar
 import { useState } from "react";
 import { CATEGORY_COLOR, KINDNESS_PHRASES, money } from "@/lib/flow/format";
 import type { Category, Company, Expense, Role, Screen, User } from "@/lib/flow/types";
-import { newRequestScreen } from "@/lib/flow/workflow";
+import { NewRequestPicker, resolveNewRequestAction } from "./new-request-picker";
 import { StatusBadge } from "./status-badge";
 
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -52,8 +52,8 @@ export function Dashboard({
   onOpenExpense: (expense: Expense) => void;
 }) {
   const [now] = useState(() => Date.now());
+  const [pickerOpen, setPickerOpen] = useState(false);
   const isEmpty = expenses.length === 0;
-  const createScreen = newRequestScreen(user);
   const paid = expenses.filter((item) => Boolean(item.payment_proof) || item.status === "finalizada");
   const pending = expenses.filter(
     (item) =>
@@ -69,12 +69,17 @@ export function Dashboard({
     (item) => item.expense_type === "reembolso_colaborador" || item.expense_type === "reembolso_cliente",
   );
   const greeting = KINDNESS_PHRASES[new Date(now).getDate() % KINDNESS_PHRASES.length];
+  function openNova() {
+    resolveNewRequestAction(user, onNavigate, () => setPickerOpen(true));
+  }
   const categoryStats = (categories.length
-    ? categories.map((item) => ({ category: item.name, color: item.color }))
-    : Object.entries(CATEGORY_COLOR).map(([category, color]) => ({ category, color }))
+    ? categories.map((item) => ({ id: item.id, category: item.name, color: item.color }))
+    : Object.entries(CATEGORY_COLOR).map(([category, color]) => ({ id: category, category, color }))
   ).map((item) => ({
     ...item,
-    value: expenses.filter((expense) => expense.category === item.category).reduce((sum, expense) => sum + expense.amount, 0),
+    value: expenses
+      .filter((expense) => expense.category === item.id || expense.category === item.category)
+      .reduce((sum, expense) => sum + expense.amount, 0),
   }));
   const maxCategory = Math.max(...categoryStats.map((item) => item.value), 1);
 
@@ -181,7 +186,7 @@ export function Dashboard({
           <p>Acompanhe o que pede sua atenção nesta empresa.</p>
         </div>
         {role === "solicitante" ? (
-          <button className="primary-button" onClick={() => onNavigate(createScreen)}>
+          <button className="primary-button" onClick={openNova}>
             <Plus size={18} /> Nova solicitação
           </button>
         ) : (
@@ -189,12 +194,18 @@ export function Dashboard({
             <button className="secondary-button" onClick={() => onNavigate("approvals")}>
               <ClipboardCheck size={17} /> Fila de aprovação
             </button>
-            <button className="primary-button" onClick={() => onNavigate(createScreen)}>
+            <button className="primary-button" onClick={openNova}>
               <Plus size={18} /> Nova solicitação
             </button>
           </div>
         )}
       </section>
+      <NewRequestPicker
+        user={user}
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={onNavigate}
+      />
       <section className="kpi-grid">
         {kpis.map((kpi) => {
           const Icon = kpi.icon;

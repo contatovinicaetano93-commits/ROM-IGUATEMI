@@ -4,8 +4,9 @@ import { Filter, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AREA_LABEL, money, shortId } from "@/lib/flow/format";
 import type { Expense, ExpenseStatus, FinanceAction, RequestArea, Screen, User } from "@/lib/flow/types";
-import { allowedActions, newRequestScreen } from "@/lib/flow/workflow";
+import { allowedActions } from "@/lib/flow/workflow";
 import { MaintenanceStatusActions } from "./maintenance-status-actions";
+import { NewRequestPicker, resolveNewRequestAction } from "./new-request-picker";
 import { StatusBadge } from "./status-badge";
 
 const STATUS_FILTERS: Array<{ value: "todos" | ExpenseStatus; label: string }> = [
@@ -50,6 +51,7 @@ export function ExpenseList({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const filtered = useMemo(
     () =>
@@ -94,10 +96,19 @@ export function ExpenseList({
           <h2>{title}</h2>
           <p>{subtitle}</p>
         </div>
-        <button className="primary-button" onClick={() => onNavigate(newRequestScreen(user))}>
+        <button
+          className="primary-button"
+          onClick={() => resolveNewRequestAction(user, onNavigate, () => setPickerOpen(true))}
+        >
           <Plus size={18} /> Nova Solicitação
         </button>
       </section>
+      <NewRequestPicker
+        user={user}
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={onNavigate}
+      />
       {actionError ? <div className="form-error">{actionError}</div> : null}
       <section className="list-summary">
         <div>

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 import {
   ArrowLeft,
   BarChart3,
@@ -9,6 +10,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   FileText,
+  Home,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -130,6 +132,7 @@ function bottomNavItems(user: User): NavItem[] {
     const mine = all.find((item) => item.screen === "expenses");
     return [...create.slice(0, 3), ...(mine ? [mine] : [])].slice(0, 4);
   }
+  // Master/admin: atalhos de operação; tipos de nova solicitação ficam no Menu + picker.
   const preferred: Screen[] = ["dashboard", "approvals", "payments", "my-expenses"];
   const picked: NavItem[] = [];
   for (const screen of preferred) {
@@ -257,6 +260,16 @@ export function AppShell({
           <ChevronDown size={15} />
         </button>
         <nav className="side-nav" aria-label="Navegação principal">
+          <Link
+            href="/"
+            className="nav-item flow-intranet-link"
+            onClick={() => {
+              if (menuOpen) onToggleMenu()
+            }}
+          >
+            <Home size={16} />
+            Voltar à intranet
+          </Link>
           <small>AÇÕES</small>
           {items.map((item) => {
             const Icon = item.icon;
