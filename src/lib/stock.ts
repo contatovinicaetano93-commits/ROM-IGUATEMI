@@ -791,70 +791,68 @@ export interface StockKpis {
 
 export async function computeStockKpis(): Promise<StockKpis> {
   const sql = getSql()
+  // Sequencial no pooler (max:1). Promise.all de 7 queries fazia /api/estoque/kpis
+  // esperar conexão até estourar 300s (504) — página abria sem dados.
+  const totals = (await sql`
+    select
+      count(*)::int as total_products,
+      count(*) filter (where current_qty <= 0)::int as zero_products,
+      coalesce(sum(greatest(current_qty, 0) * coalesce(unit_cost, 0)), 0)::float as total_value,
+      max(last_synced_at) as last_synced_at
+    from stock_products
+  `) as {
+    total_products: number
+    zero_products: number
+    total_value: number
+    last_synced_at: string | null
+  }[]
+
+  const alerts = (await sql`
+    select count(*)::int as active_alerts from stock_alerts where status = 'ativo'
+  `) as { active_alerts: number }[]
+
   // Janela SP em timestamptz — usa índice em occurred_at (evita full scan com AT TIME ZONE).
-  const [totals, alerts, movementBuckets, byCategory, byBrand, officialTotalBuckets, byCategoryPeriod] =
-    await Promise.all([
-      sql`
-        select
-          count(*)::int as total_products,
-          count(*) filter (where current_qty <= 0)::int as zero_products,
-          coalesce(sum(greatest(current_qty, 0) * coalesce(unit_cost, 0)), 0)::float as total_value,
-          max(last_synced_at) as last_synced_at
-        from stock_products
-      ` as Promise<
-        {
-          total_products: number
-          zero_products: number
-          total_value: number
-          last_synced_at: string | null
-        }[]
-      >,
-      sql`
-        select count(*)::int as active_alerts from stock_alerts where status = 'ativo'
-      ` as Promise<{ active_alerts: number }[]>,
-      sql`
-        select
-          coalesce(sum(quantity) filter (
-            where type = 'entrada'
-              and occurred_at >= (date_trunc('day', now() at time zone 'America/Sao_Paulo')
-                at time zone 'America/Sao_Paulo')
-              and occurred_at < (date_trunc('day', now() at time zone 'America/Sao_Paulo')
-                at time zone 'America/Sao_Paulo') + interval '1 day'
-          ), 0)::float as today_in,
-          coalesce(sum(quantity) filter (
-            where type = 'saida'
-              and occurred_at >= (date_trunc('day', now() at time zone 'America/Sao_Paulo')
-                at time zone 'America/Sao_Paulo')
-              and occurred_at < (date_trunc('day', now() at time zone 'America/Sao_Paulo')
-                at time zone 'America/Sao_Paulo') + interval '1 day'
-          ), 0)::float as today_out,
-          coalesce(sum(quantity) filter (
-            where type = 'entrada'
-              and occurred_at >= (date_trunc('day', now() at time zone 'America/Sao_Paulo')
-                at time zone 'America/Sao_Paulo') - interval '6 days'
-          ), 0)::float as week_in,
-          coalesce(sum(quantity) filter (
-            where type = 'saida'
-              and occurred_at >= (date_trunc('day', now() at time zone 'America/Sao_Paulo')
-                at time zone 'America/Sao_Paulo') - interval '6 days'
-          ), 0)::float as week_out
-        from stock_movements
-        where source = 'avec_0044'
+  const movementBuckets = (await sql`
+    select
+      coalesce(sum(quantity) filter (
+        where type = 'entrada'
+          and occurred_at >= (date_trunc('day', now() at time zone 'America/Sao_Paulo')
+            at time zone 'America/Sao_Paulo')
+          and occurred_at < (date_trunc('day', now() at time zone 'America/Sao_Paulo')
+            at time zone 'America/Sao_Paulo') + interval '1 day'
+      ), 0)::float as today_in,
+      coalesce(sum(quantity) filter (
+        where type = 'saida'
+          and occurred_at >= (date_trunc('day', now() at time zone 'America/Sao_Paulo')
+            at time zone 'America/Sao_Paulo')
+          and occurred_at < (date_trunc('day', now() at time zone 'America/Sao_Paulo')
+            at time zone 'America/Sao_Paulo') + interval '1 day'
+      ), 0)::float as today_out,
+      coalesce(sum(quantity) filter (
+        where type = 'entrada'
           and occurred_at >= (date_trunc('day', now() at time zone 'America/Sao_Paulo')
             at time zone 'America/Sao_Paulo') - interval '6 days'
-      ` as Promise<
-        {
-          today_in: number
-          today_out: number
-          week_in: number
-          week_out: number
-        }[]
-      >,
-      getStockValuationSnapshot('0243'),
-      getStockValuationSnapshot('0242'),
-      getStockValuationSnapshot('0045'),
-      getStockValuationSnapshot('0142'),
-    ])
+      ), 0)::float as week_in,
+      coalesce(sum(quantity) filter (
+        where type = 'saida'
+          and occurred_at >= (date_trunc('day', now() at time zone 'America/Sao_Paulo')
+            at time zone 'America/Sao_Paulo') - interval '6 days'
+      ), 0)::float as week_out
+    from stock_movements
+    where source = 'avec_0044'
+      and occurred_at >= (date_trunc('day', now() at time zone 'America/Sao_Paulo')
+        at time zone 'America/Sao_Paulo') - interval '6 days'
+  `) as {
+    today_in: number
+    today_out: number
+    week_in: number
+    week_out: number
+  }[]
+
+  const byCategory = await getStockValuationSnapshot('0243')
+  const byBrand = await getStockValuationSnapshot('0242')
+  const officialTotalBuckets = await getStockValuationSnapshot('0045')
+  const byCategoryPeriod = await getStockValuationSnapshot('0142')
 
   const officialTotal = officialTotalBuckets.length > 0
     ? officialTotalBuckets.reduce((sum, b) => sum + b.totalCost, 0)
