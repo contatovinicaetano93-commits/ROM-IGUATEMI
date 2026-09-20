@@ -8,9 +8,14 @@ import {
 } from '@/lib/avec/sync-director-visits'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
+import { isSyncBudgetExhausted, setActiveSyncDeadlineAt } from '@/lib/avec/sync-budget'
 import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 import { getDeploymentContext } from '@/lib/deployment'
-import { isVisitCoverageReady, listVisitCoverage, probe0011FromDb } from '@/lib/director-report/from-db'
+import {
+  isVisitCoverageReady,
+  listVisitCoverage,
+  probe0011FromDb,
+} from '@/lib/director-report/from-db'
 import { previousQuarterKey } from '@/lib/director-report/local-0011'
 import { currentQuarterKeySp } from '@/lib/director-report/period'
 import type { QuarterKey } from '@/lib/director-report/types'
@@ -22,6 +27,7 @@ import {
 
 /**
  * Sync só das visitas 0002 → salon_client_visits (Relatório gerência offline).
+ * Este é proxy de última visita 0002 para o 0011, não 0011 event-level da Avec.
  * Separado do full/agenda para não depender do min-gap nem do budget das outras etapas.
  *
  * Lock: `avecDirector` — não disputa fatias full/ops|agenda|catalog (antes usava avecFull).
@@ -30,6 +36,9 @@ import {
  */
 export const maxDuration = 800
 warnIfLongMaxDuration('/api/avec/sync/director-visits', maxDuration)
+
+/** Margem vs maxDuration=800 — abort limpo em vez de kill 504. */
+const DIRECTOR_VISITS_BUDGET_MS = 720_000
 
 function emptyStats(): AvecSyncStats {
   const deployment = getDeploymentContext()
@@ -117,8 +126,8 @@ export async function GET(req: NextRequest) {
         ready: status.coverage.some((c) => !c.truncated && c.row_count > 0),
         report_probe,
         note: probe
-          ? 'Cobertura + probe 0011 do warehouse (Na lista / taxas).'
-          : 'Cobertura do warehouse 0011. POST ou GET sem status=1 para sincronizar. Use probe_0011=1 para totais.',
+          ? 'Cobertura + probe do proxy última visita 0002 (Na lista / taxas).'
+          : 'Cobertura do proxy última visita 0002 para Relatório gerência. POST ou GET sem status=1 para sincronizar. Use probe_0011=1 para totais.',
       })
     }
 
@@ -163,21 +172,36 @@ async function runSync(req: NextRequest) {
         await ensureFreshAvecApiToken({ minHoursLeft: 1 }).catch(() => {})
 
         const stats = emptyStats()
-        await syncDirectorVisits(stats, undefined, { quarters, force })
+        setActiveSyncDeadlineAt(Date.now() + DIRECTOR_VISITS_BUDGET_MS)
+        try {
+          await syncDirectorVisits(stats, undefined, {
+            quarters,
+            force,
+            shouldAbort: isSyncBudgetExhausted,
+          })
+        } finally {
+          setActiveSyncDeadlineAt(null)
+        }
         const status = await listVisitCoverage()
 
         const okRun = stats.errors.length === 0
         return ok({
           ran: true,
-          status: okRun ? (stats.warnings.some((w) => /truncado/i.test(w)) ? 'partial' : 'ok') : 'error',
+          status: okRun
+            ? stats.aborted || stats.warnings.some((w) => /truncado|orçamento/i.test(w))
+              ? 'partial'
+              : 'ok'
+            : 'error',
           director_visits_upserted: stats.director_visits_upserted ?? 0,
           quarters: quarters ?? null,
           force,
+          aborted: Boolean(stats.aborted),
+          budget_ms: DIRECTOR_VISITS_BUDGET_MS,
           warnings: stats.warnings,
           errors: stats.errors,
           coverage: status.coverage,
           visit_rows: status.visit_rows,
-          note: 'Relatório gerência usa este warehouse quando a cobertura dos 4 trimestres (selecionado/comparativo + priors) não está truncada.',
+          note: 'Relatório gerência usa este warehouse como proxy última visita 0002 quando a cobertura dos trimestres necessários não está truncada.',
         })
       },
       { ttlMs: 15 * 60 * 1000, owner: 'avec-director-visits' },

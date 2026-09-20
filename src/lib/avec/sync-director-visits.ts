@@ -1,10 +1,12 @@
 /**
  * Sync 0002 → salon_client_visits (histórico cliente×pro×dia).
- * Sem essa tabela o Relatório gerência 0011 só existia via Avec ao vivo.
+ * Relatório gerência usa isso como proxy de última visita 0002 para 0011;
+ * não é 0011 event-level da Avec.
  */
 
 import { extractRows, fetchAvecReport, fmtAvecDate } from '@/lib/avec/client'
 import { normalizeAttendanceRow } from '@/lib/avec/normalize'
+import { noteSyncBudgetExhausted } from '@/lib/avec/sync-budget'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
 import {
@@ -84,9 +86,9 @@ async function upsertVisitCoverage(
 }
 
 /**
- * Em falha/abort: se já havia cobertura boa e esta execução não gravou visitas,
- * preserva o ready check. Se gravou páginas parciais, marca truncado — o warehouse
- * já misturou upserts incompletos e 0011 não pode tratar como cobertura pronta.
+ * Em falha/abort: se já havia cobertura boa e não gravamos visitas nesta
+ * tentativa, não envenena o ready check. Se já upsertamos rows, marca
+ * truncado — senão o relatório leria cobertura "pronta" com dados parciais.
  * Sem cobertura pronta, grava stub truncado.
  */
 async function preserveOrStubCoverage(
@@ -106,6 +108,11 @@ async function preserveOrStubCoverage(
     return 'preserved'
   }
   await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, true)
+  if (isVisitCoverageReady(prior) && rowCount > 0) {
+    stats.warnings.push(
+      `director-visits ${quarter}: ${reason}; visitas parciais gravadas — cobertura marcada truncada (prior ${prior!.row_count} rows)`,
+    )
+  }
   return 'stubbed'
 }
 
@@ -234,7 +241,7 @@ async function syncOneQuarter(
       if (opts?.shouldAbort?.()) {
         aborted = true
         truncated = true
-        stats.aborted = true
+        noteSyncBudgetExhausted(stats, `director-visits ${quarter}`)
         break
       }
 
@@ -335,16 +342,14 @@ async function syncOneQuarter(
       prior &&
       (rowCount === 0 || (prior.row_count > 100 && rowCount < prior.row_count * 0.5))
     ) {
-      if (rowCount === 0) {
-        stats.warnings.push(
-          `director-visits ${quarter}: resultado incompleto (${rowCount} vs prior ${prior.row_count}); cobertura anterior preservada`,
-        )
-        return
-      }
-      // Já houve upserts — não manter ready sobre warehouse parcial.
-      await upsertVisitCoverage(quarter, periodStart, periodEnd, pagesFetched, rowCount, true)
-      stats.warnings.push(
-        `director-visits ${quarter}: resultado incompleto (${rowCount} vs prior ${prior.row_count}); cobertura marcada truncada`,
+      await preserveOrStubCoverage(
+        quarter,
+        periodStart,
+        periodEnd,
+        pagesFetched,
+        rowCount,
+        stats,
+        `resultado incompleto (${rowCount} vs prior ${prior.row_count})`,
       )
       return
     }
@@ -366,7 +371,7 @@ export type SyncDirectorVisitsOpts = {
   quarters?: QuarterKey[]
   /** Re-sincroniza mesmo com cobertura fresca (<12h). */
   force?: boolean
-  /** Budget do sync full/agenda: aborta entre páginas/trimestres e grava cobertura truncada. */
+  /** Abort limpo entre páginas/trimestres para respeitar o orçamento do sync full. */
   shouldAbort?: () => boolean
 }
 
@@ -382,8 +387,8 @@ export async function syncDirectorVisits(
   const quarters = opts?.quarters?.length ? opts.quarters : quartersToSync()
   for (const q of quarters) {
     if (opts?.shouldAbort?.()) {
-      stats.aborted = true
-      stats.warnings.push(`director-visits: abortado antes de ${q} (orçamento do sync)`)
+      noteSyncBudgetExhausted(stats, 'director-visits')
+      stats.warnings.push(`director-visits: abortado por orçamento antes de ${q}`)
       break
     }
     try {

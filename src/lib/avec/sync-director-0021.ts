@@ -6,6 +6,7 @@
 import { extractRows, fetchAvecReport, fmtAvecDate } from '@/lib/avec/client'
 import { normalizeP1ProfessionalRevenueRow } from '@/lib/avec/normalize'
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
+import { noteSyncBudgetExhausted } from '@/lib/avec/sync-budget'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
 import {
@@ -173,7 +174,7 @@ async function syncOneMonth(
       if (opts?.shouldAbort?.()) {
         aborted = true
         truncated = true
-        stats.aborted = true
+        noteSyncBudgetExhausted(stats, `director-0021 ${month}`)
         break
       }
 
@@ -278,7 +279,7 @@ export async function syncDirector0021(
   const months = opts?.months?.length ? opts.months : monthsToSync()
   for (const month of months) {
     if (opts?.shouldAbort?.()) {
-      stats.aborted = true
+      noteSyncBudgetExhausted(stats, 'director-0021')
       stats.warnings.push(`director-0021: abortado por orçamento antes de ${month}`)
       break
     }
