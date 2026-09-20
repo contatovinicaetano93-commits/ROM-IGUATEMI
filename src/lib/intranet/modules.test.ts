@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   extrasBeyondRole,
+  effectiveModules,
   hasPanelModule,
   parseGrantableModules,
+  roleModulePack,
 } from '@/lib/intranet/modules'
 
 describe('parseGrantableModules', () => {
@@ -30,6 +32,13 @@ describe('hasPanelModule', () => {
     expect(hasPanelModule('financeiro', [], 'pipeline')).toBe(false)
     expect(hasPanelModule('financeiro', ['pipeline'], 'pipeline')).toBe(true)
     expect(hasPanelModule('financeiro', [], 'relatorios')).toBe(true)
+  })
+})
+
+describe('roleModulePack / effectiveModules', () => {
+  it('exporta o pacote fixo do papel', () => {
+    expect(roleModulePack('estoque')).toEqual(['estoque'])
+    expect(effectiveModules('staff', ['dashboard'])).toEqual(['pipeline', 'contatos', 'dashboard'])
   })
 })
 

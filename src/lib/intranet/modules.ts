@@ -33,6 +33,22 @@ const ROLE_MODULES: Record<AuthRole, readonly GrantableModuleKey[]> = {
   estoque: ['estoque'],
 }
 
+/** Pacote fixo do papel (sem extras). */
+export function roleModulePack(role: AuthRole): readonly GrantableModuleKey[] {
+  return ROLE_MODULES[role]
+}
+
+/** Sistemas efetivos = pacote do papel + extras. */
+export function effectiveModules(
+  role: AuthRole,
+  extras: readonly GrantableModuleKey[] = [],
+): GrantableModuleKey[] {
+  if (role === 'admin') return [...ALL_KEYS]
+  const seen = new Set<GrantableModuleKey>(ROLE_MODULES[role])
+  for (const key of extrasBeyondRole(role, extras)) seen.add(key)
+  return ALL_KEYS.filter((key) => seen.has(key))
+}
+
 function isGrantableModuleKey(value: string): value is GrantableModuleKey {
   return (ALL_KEYS as readonly string[]).includes(value)
 }

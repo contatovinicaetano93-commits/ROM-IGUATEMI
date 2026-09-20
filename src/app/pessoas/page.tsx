@@ -1,10 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { PanelButton, SectionCard } from '../_components/ui'
 import { useClientSession, type ClientAuthRole } from '../_components/SessionProvider'
-import { GRANTABLE_MODULES, hasPanelModule, parseGrantableModules, type GrantableModuleKey } from '@/lib/intranet/modules'
+import {
+  CARGO_PACKAGES,
+  cargoPackageById,
+  matchCargoPackage,
+  modulesForCargo,
+  type CargoPackageId,
+} from '@/lib/intranet/cargo-packages'
+import {
+  GRANTABLE_MODULES,
+  hasPanelModule,
+  parseGrantableModules,
+  type GrantableModuleKey,
+} from '@/lib/intranet/modules'
+import type { RequestArea } from '@/lib/flow/types'
 
 type Employee = {
   id: string
@@ -14,22 +27,23 @@ type Employee = {
   flow_role: string
   status: string
   modules?: GrantableModuleKey[]
+  areaIds?: RequestArea[]
 }
-
-const ROLES: ClientAuthRole[] = ['staff', 'admin', 'financeiro', 'estoque', 'mkt']
 
 function ModuleChecks({
   role,
   selected,
   onToggle,
+  readOnly,
 }: {
   role: ClientAuthRole
   selected: GrantableModuleKey[]
   onToggle: (key: GrantableModuleKey) => void
+  readOnly?: boolean
 }) {
   return (
-    <div className="sm:col-span-2 grid gap-2 sm:grid-cols-2">
-      <p className="sm:col-span-2 text-xs uppercase tracking-wide text-muted">Sistemas desta pessoa</p>
+    <div className="grid gap-2 sm:grid-cols-2">
+      <p className="sm:col-span-2 text-xs uppercase tracking-wide text-muted">Sistemas liberados</p>
       {GRANTABLE_MODULES.map((item) => {
         const fromRole = hasPanelModule(role, [], item.key)
         const checked = fromRole || selected.includes(item.key)
@@ -38,12 +52,12 @@ function ModuleChecks({
             <input
               type="checkbox"
               checked={checked}
-              disabled={fromRole || role === 'admin'}
+              disabled={readOnly || fromRole || role === 'admin'}
               onChange={() => onToggle(item.key)}
             />
             <span>
               {item.label}
-              {fromRole ? <span className="text-muted"> · vem do papel</span> : null}
+              {fromRole ? <span className="text-muted"> · do cargo</span> : null}
             </span>
           </label>
         )
@@ -57,11 +71,14 @@ export default function PessoasPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [createRole, setCreateRole] = useState<ClientAuthRole>('staff')
+  const [cargoId, setCargoId] = useState<CargoPackageId>('profissional')
+  const [fineTune, setFineTune] = useState(false)
   const [createModules, setCreateModules] = useState<GrantableModuleKey[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editModules, setEditModules] = useState<GrantableModuleKey[]>([])
   const canManage = session != null && (!session.auth_enabled || session.role === 'admin')
+
+  const pack = useMemo(() => cargoPackageById(cargoId), [cargoId])
 
   useEffect(() => {
     fetch('/api/employees', { credentials: 'include' })
@@ -69,6 +86,12 @@ export default function PessoasPage() {
       .then((json) => setEmployees(json.data?.employees ?? []))
       .catch(() => setEmployees([]))
   }, [])
+
+  useEffect(() => {
+    if (!pack) return
+    setCreateModules([...pack.extras])
+    setFineTune(false)
+  }, [pack])
 
   function toggleCreate(key: GrantableModuleKey) {
     setCreateModules((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))
@@ -80,6 +103,7 @@ export default function PessoasPage() {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!pack) return
     setSaving(true)
     setError(null)
     const form = new FormData(e.currentTarget)
@@ -91,10 +115,11 @@ export default function PessoasPage() {
         name: form.get('name'),
         email: form.get('email'),
         password: form.get('password'),
-        panel_role: createRole,
-        flow_role: form.get('flow_role'),
-        can_publish: form.get('can_publish') === 'on',
-        modules: createModules,
+        panel_role: pack.panel_role,
+        flow_role: pack.flow_role,
+        can_publish: pack.can_publish,
+        modules: fineTune ? createModules : pack.extras,
+        areaIds: [...pack.areaIds],
       }),
     })
     const json = await res.json()
@@ -104,9 +129,9 @@ export default function PessoasPage() {
       return
     }
     setEmployees((prev) => [...prev, json.data.employee])
-    setCreateModules([])
-    setCreateRole('staff')
     e.currentTarget.reset()
+    setCreateModules([...pack.extras])
+    setFineTune(false)
   }
 
   async function saveModules(person: Employee) {
@@ -128,33 +153,40 @@ export default function PessoasPage() {
     setEditingId(null)
   }
 
+  const previewModules = pack ? modulesForCargo({ ...pack, extras: fineTune ? createModules : pack.extras }) : []
+
   return (
     <IntranetPage
       kicker="Diretório"
       title="Gestão de usuário"
-      subtitle="Colaboradores desta unidade. O papel define o pacote; os extras liberam um sistema sem mudar o cargo."
+      subtitle="Escolha o cargo (pacote), preencha nome e senha. O acesso do painel e do Rom Flow já vem montado."
     >
       <SectionCard title="Colaboradores" badge={<span className="text-xs text-muted">{employees.length}</span>}>
         <ul className="divide-y divide-border">
           {employees.length === 0 && (
-            <li className="py-4 text-sm text-muted">Ninguém cadastrado ainda. O admin cria o primeiro acesso.</li>
+            <li className="py-4 text-sm text-muted">Ninguém cadastrado ainda. Escolha um cargo abaixo e crie o primeiro acesso.</li>
           )}
           {employees.map((person) => {
             const extras = parseGrantableModules(person.modules)
+            const matched = matchCargoPackage({
+              panel_role: person.panel_role,
+              flow_role: person.flow_role,
+              modules: extras,
+              areaIds: person.areaIds,
+            })
             return (
               <li key={person.id} className="py-3 first:pt-0 last:pb-0">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium">{person.name}</p>
                     <p className="text-xs text-muted">{person.email}</p>
-                    {extras.length > 0 && (
-                      <p className="mt-1 text-[0.65rem] uppercase tracking-wide text-gold-strong">
-                        extra: {extras.join(' · ')}
-                      </p>
-                    )}
+                    <p className="mt-1 text-[0.65rem] uppercase tracking-wide text-gold-strong">
+                      {matched?.alias ?? person.panel_role}
+                      {extras.length > 0 ? ` · extra ${extras.join(' · ')}` : ''}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs uppercase tracking-wide text-muted">{person.panel_role}</span>
+                    <span className="text-xs uppercase tracking-wide text-muted">{person.flow_role}</span>
                     {canManage && person.panel_role !== 'admin' && (
                       <button
                         type="button"
@@ -164,7 +196,7 @@ export default function PessoasPage() {
                           setEditModules(extras)
                         }}
                       >
-                        Sistemas
+                        Ajustar
                       </button>
                     )}
                   </div>
@@ -179,7 +211,7 @@ export default function PessoasPage() {
                         onClick={() => void saveModules(person)}
                         className="px-3 py-1.5 text-xs"
                       >
-                        {saving ? 'Salvando…' : 'Salvar sistemas'}
+                        {saving ? 'Salvando…' : 'Salvar'}
                       </PanelButton>
                       <PanelButton type="button" variant="outline" className="px-3 py-1.5 text-xs" onClick={() => setEditingId(null)}>
                         Cancelar
@@ -193,8 +225,55 @@ export default function PessoasPage() {
         </ul>
       </SectionCard>
 
-      {canManage && (
+      {canManage && pack && (
         <SectionCard title="Novo colaborador">
+          <p className="mb-3 text-sm text-muted">1 · Escolha o cargo (alias vazio). 2 · Preencha os dados. 3 · Criar acesso.</p>
+          <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {CARGO_PACKAGES.map((item) => {
+              const active = item.id === cargoId
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setCargoId(item.id)}
+                  className={
+                    active
+                      ? 'rounded-2xl border border-foreground bg-foreground px-3 py-3 text-left text-background'
+                      : 'rounded-2xl border border-border bg-background px-3 py-3 text-left hover:border-foreground/40'
+                  }
+                >
+                  <p className="text-sm font-medium">{item.alias}</p>
+                  <p className={`mt-1 text-xs ${active ? 'text-background/80' : 'text-muted'}`}>{item.summary}</p>
+                  <p className={`mt-2 text-[0.65rem] uppercase tracking-wide ${active ? 'text-background/70' : 'text-gold-strong'}`}>
+                    {item.examples}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mb-4 rounded-2xl border border-border bg-background px-4 py-3 text-sm">
+            <p className="font-medium">{pack.label}</p>
+            <p className="mt-1 text-muted">{pack.summary}</p>
+            <p className="mt-2 text-xs text-muted">
+              Painel: <span className="text-foreground">{pack.panel_role}</span>
+              {' · '}
+              Flow: <span className="text-foreground">{pack.flow_role}</span>
+              {pack.areaIds.length > 0 ? (
+                <>
+                  {' · '}
+                  Áreas: <span className="text-foreground">{pack.areaIds.join(', ')}</span>
+                </>
+              ) : (
+                <> · Sem áreas Flow</>
+              )}
+              {pack.can_publish ? ' · Pode publicar MKT' : ''}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Sistemas: {previewModules.map((key) => GRANTABLE_MODULES.find((m) => m.key === key)?.label ?? key).join(' · ') || '—'}
+            </p>
+          </div>
+
           <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
             <input name="name" required placeholder="Nome" className="rounded-xl border border-border bg-background px-3 py-2" />
             <input name="email" type="email" required placeholder="E-mail" className="rounded-xl border border-border bg-background px-3 py-2" />
@@ -203,41 +282,22 @@ export default function PessoasPage() {
               type="password"
               required
               minLength={8}
-              placeholder="Senha inicial"
-              className="rounded-xl border border-border bg-background px-3 py-2"
+              placeholder="Senha inicial (mín. 8)"
+              className="rounded-xl border border-border bg-background px-3 py-2 sm:col-span-2"
             />
-            <select
-              name="panel_role"
-              className="rounded-xl border border-border bg-background px-3 py-2"
-              value={createRole}
-              onChange={(e) => {
-                const next = ROLES.includes(e.target.value as ClientAuthRole) ? (e.target.value as ClientAuthRole) : 'staff'
-                setCreateRole(next)
-                setCreateModules([])
-              }}
-            >
-              <option value="staff">Staff</option>
-              <option value="admin">Admin</option>
-              <option value="financeiro">Financeiro</option>
-              <option value="estoque">Estoque</option>
-              <option value="mkt">Marketing</option>
-            </select>
-            <select name="flow_role" className="rounded-xl border border-border bg-background px-3 py-2" defaultValue="solicitante">
-              <option value="solicitante">Solicitante</option>
-              <option value="master">Master RomFlow</option>
-              <option value="admin_financeiro">Admin financeiro</option>
-              <option value="admin_compras">Admin compras</option>
-              <option value="admin_rh">Admin RH</option>
-              <option value="admin_manutencao">Admin manutenção</option>
-            </select>
-            <ModuleChecks role={createRole} selected={createModules} onToggle={toggleCreate} />
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" name="can_publish" /> Pode publicar notícias (MKT)
+              <input type="checkbox" checked={fineTune} onChange={(e) => setFineTune(e.target.checked)} />
+              Ajuste fino dos sistemas (avançado)
             </label>
+            {fineTune && (
+              <div className="sm:col-span-2">
+                <ModuleChecks role={pack.panel_role} selected={createModules} onToggle={toggleCreate} />
+              </div>
+            )}
             {error && <p className="sm:col-span-2 text-sm text-danger">{error}</p>}
             <div className="sm:col-span-2">
               <PanelButton type="submit" disabled={saving}>
-                {saving ? 'Salvando…' : 'Criar acesso'}
+                {saving ? 'Salvando…' : `Criar acesso · ${pack.alias}`}
               </PanelButton>
             </div>
           </form>
