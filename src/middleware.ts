@@ -154,6 +154,8 @@ export const config = {
     '/adm/:path*',
     '/auditoria',
     '/auditoria/:path*',
+    '/meu-faturamento',
+    '/meu-faturamento/:path*',
     '/api/:path*',
   ],
 }

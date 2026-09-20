@@ -70,7 +70,7 @@ export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_ha
   try {
     const sql = getIntranetSql()
     const rows = (await sql`
-      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.created_at,
+      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.professional_name, e.created_at,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
         coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids,
         coalesce((select array_agg(module_key) from intranet_employee_modules m where m.employee_id = e.id), '{}') as module_keys
