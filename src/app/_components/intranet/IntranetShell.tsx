@@ -10,7 +10,14 @@ export function IntranetShell({ children }: { children: ReactNode }) {
   const inFlow = pathname === '/flow' || pathname.startsWith('/flow/')
   return (
     <div className="intranet-shell">
-      <IntranetTopNav />
+      {/* No Flow mobile o chrome da intranet compete com o do Flow — some abaixo de lg. */}
+      {inFlow ? (
+        <div className="hidden lg:block">
+          <IntranetTopNav />
+        </div>
+      ) : (
+        <IntranetTopNav />
+      )}
       <div className={inFlow ? '' : 'pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0'}>{children}</div>
       {inFlow ? null : <BottomNav light />}
     </div>
