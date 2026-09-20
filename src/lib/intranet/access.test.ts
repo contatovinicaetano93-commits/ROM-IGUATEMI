@@ -50,4 +50,13 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/api/intranet/audit', 'financeiro', [])).toBe(false)
     expect(canAccessProtectedPath('/api/intranet/notifications', 'staff', [])).toBe(true)
   })
+
+  it('meu faturamento é self-serve — qualquer papel autenticado, sem grant de dashboard', () => {
+    expect(canAccessProtectedPath('/meu-faturamento', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/kpis/meu-faturamento', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/kpis/meu-faturamento', 'estoque', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/kpis/meu-faturamento', 'financeiro', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/kpis', 'staff', [])).toBe(false)
+    expect(canAccessProtectedPath('/dashboard', 'staff', [])).toBe(false)
+  })
 })

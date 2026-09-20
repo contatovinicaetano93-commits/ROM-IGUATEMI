@@ -52,7 +52,19 @@ export function isContatosPath(pathname: string) {
 }
 
 export function isDashboardPath(pathname: string) {
+  if (pathname === '/api/kpis/meu-faturamento' || pathname.startsWith('/api/kpis/meu-faturamento/')) {
+    return false
+  }
   return pathname === '/dashboard' || pathname.startsWith('/api/kpis')
+}
+
+export function isMeuFaturamentoPath(pathname: string) {
+  return (
+    pathname === '/meu-faturamento' ||
+    pathname.startsWith('/meu-faturamento/') ||
+    pathname === '/api/kpis/meu-faturamento' ||
+    pathname.startsWith('/api/kpis/meu-faturamento/')
+  )
 }
 
 function isLgpdAnonymizePath(pathname: string) {
@@ -95,6 +107,7 @@ export function canAccessProtectedPath(
   if (isIntranetPath(pathname) || pathname === '/' || isOnboardingPath(pathname) || isHojePath(pathname)) {
     return true
   }
+  if (isMeuFaturamentoPath(pathname)) return true
   if (isPipelinePath(pathname)) return hasPanelModule(role, extras, 'pipeline')
   if (isContatosPath(pathname)) return hasPanelModule(role, extras, 'contatos')
   if (isFinancePath(pathname)) return hasPanelModule(role, extras, 'financeiro')
