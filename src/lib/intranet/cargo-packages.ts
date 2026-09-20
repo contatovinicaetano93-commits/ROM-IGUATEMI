@@ -22,6 +22,7 @@ export type CargoPackageId =
   | 'rh'
   | 'mkt'
   | 'recepcao'
+  | 'pos_venda'
   | 'estoque_ops'
   | 'almoxarifado'
   | 'profissional'
@@ -144,6 +145,18 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     alias: 'Recepção',
     summary: 'Balcão: agenda de hoje, playbook de contato e busca de cliente.',
     examples: 'Equipe recepção',
+    panel_role: 'staff',
+    flow_role: 'solicitante',
+    can_publish: false,
+    extras: [],
+    areaIds: ['manutencao'],
+  },
+  {
+    id: 'pos_venda',
+    label: 'Pós-venda',
+    alias: 'Pós-venda',
+    summary: 'Filas de retorno, ativados e reativação via WhatsApp.',
+    examples: 'Equipe pós-venda / CRM',
     panel_role: 'staff',
     flow_role: 'solicitante',
     can_publish: false,

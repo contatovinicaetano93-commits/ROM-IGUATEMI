@@ -176,13 +176,20 @@ function initialQueryFromSearch(searchParams: URLSearchParams): string {
   return searchParams.get('q')?.trim() ?? ''
 }
 
+function initialReactivateQueueFromSearch(searchParams: URLSearchParams): ReactivateQueue {
+  const queue = searchParams.get('queue')
+  if (queue === 'due_soon' || queue === 'scheduled' || queue === 'overdue') return queue
+  return 'overdue'
+}
+
 function initialModeFromSearch(searchParams: URLSearchParams): ListMode {
+  if (initialQueryFromSearch(searchParams)) return 'search'
   if (searchParams.get('queue') === 'novos') return 'novos'
   if (searchParams.get('queue') === 'ativados') return 'ativados'
+  if (searchParams.get('queue') === 'sem_servicos') return 'sem_servicos'
   const ch = searchParams.get('channel')?.trim().toLowerCase() ?? ''
   const st = searchParams.get('status')?.trim().toLowerCase() ?? ''
   if (URL_CHANNELS.has(ch) || URL_STATUSES.has(st)) return 'search'
-  if (initialQueryFromSearch(searchParams)) return 'search'
   return 'reactivate'
 }
 
@@ -206,7 +213,7 @@ function ContatosPageContent() {
   const searchParams = useSearchParams()
   const [ignoreUrlFilters, setIgnoreUrlFilters] = useState(false)
   const [mode, setMode] = useState<ListMode>(() => initialModeFromSearch(searchParams))
-  const [queue, setQueue] = useState<ReactivateQueue>('overdue')
+  const [queue, setQueue] = useState<ReactivateQueue>(() => initialReactivateQueueFromSearch(searchParams))
   const [contacts, setContacts] = useState<Contact[]>([])
   const [queueCounts, setQueueCounts] = useState<{
     overdue: number
@@ -479,7 +486,7 @@ function ContatosPageContent() {
 
       {mode === 'ativados' && (
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
-          Entra aqui ao clicar Reativar (fila Reativar, Sem serviço ou ficha). Sai
+          Entra aqui ao clicar Reativar (fila Reativar ou ficha) ou Chamar em Sem serviço. Sai
           automaticamente quando o sync Avec registrar agenda ou visita — ou após 30 dias sem
           retorno.
         </p>
@@ -713,7 +720,7 @@ function ContatosPageContent() {
                       rel="noopener noreferrer"
                       onClick={() => logOutreach(c.id, outreachListMode)}
                       aria-label={
-                        mode === 'novos'
+                        mode === 'novos' || mode === 'sem_servicos'
                           ? `Chamar ${c.name || 'contato'} no WhatsApp`
                           : `Reativar ${c.name || 'contato'} no WhatsApp`
                       }
@@ -721,7 +728,7 @@ function ContatosPageContent() {
                     >
                       <MessageSquare size={14} />
                       <span className="hidden sm:inline">
-                        {mode === 'novos' ? 'Chamar' : 'Reativar'}
+                        {mode === 'novos' || mode === 'sem_servicos' ? 'Chamar' : 'Reativar'}
                       </span>
                     </a>
                   ) : (

@@ -24,6 +24,7 @@ const ALLOWED_RETURN_PREFIXES = [
   '/adm',
   '/meu-faturamento',
   '/recepcao',
+  '/pos-venda',
 ] as const
 
 export function sanitizeRedirectPath(next: string | null | undefined, fallback = '/') {
@@ -53,6 +54,7 @@ export function contactReturnLabel(returnTo: string): string {
   const bare = returnTo.split('?')[0]?.split('#')[0] ?? returnTo
   if (bare === '/hoje' || bare.startsWith('/hoje/')) return 'Hoje'
   if (bare === '/recepcao' || bare.startsWith('/recepcao/')) return 'Recepção'
+  if (bare === '/pos-venda' || bare.startsWith('/pos-venda/')) return 'Pós-venda'
   if (bare === '/pipeline' || bare.startsWith('/pipeline/')) return 'Pipeline'
   if (bare === '/dashboard' || bare.startsWith('/dashboard/')) return 'Visão analítica'
   if (bare === '/financeiro' || bare.startsWith('/financeiro/')) return 'Financeiro'

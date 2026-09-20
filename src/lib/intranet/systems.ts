@@ -29,6 +29,7 @@ const INTRANET: IntranetSystem[] = [
 
 const OPERACAO: IntranetSystem[] = [
   { href: '/recepcao', label: 'Recepção', description: 'Balcão: agenda de hoje e fila de contato.', group: 'operacao' },
+  { href: '/pos-venda', label: 'Pós-venda', description: 'Filas de retorno e KPI de reativação WA.', group: 'operacao' },
   { href: '/hoje', label: 'Operação do dia', description: 'Frente de caixa do dia.', group: 'operacao' },
   { href: '/pipeline', label: 'Agenda do dia', description: 'Funil e agenda do salão.', group: 'operacao' },
   { href: '/meu-faturamento', label: 'Meu faturamento', description: 'Seu mês no salão (só você).', group: 'operacao' },

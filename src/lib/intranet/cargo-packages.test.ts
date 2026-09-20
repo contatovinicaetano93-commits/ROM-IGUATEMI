@@ -19,6 +19,7 @@ describe('cargo packages', () => {
       'rh',
       'mkt',
       'recepcao',
+      'pos_venda',
       'estoque_ops',
       'almoxarifado',
       'profissional',
