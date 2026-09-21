@@ -10,7 +10,7 @@ import { listEmployees } from '@/lib/employees'
  * Marca quem já tem `professional_name` ligado a um colaborador.
  */
 export async function GET(_req: NextRequest) {
-  const auth = await requireSession(req)
+  const auth = await requireSession(_req)
   if (!auth.ok) return err(auth.message, auth.status)
   if (auth.session.role !== 'admin') return err('Apenas admin', 403)
 
