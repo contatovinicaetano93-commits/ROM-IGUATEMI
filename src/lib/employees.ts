@@ -7,6 +7,7 @@ import { defaultAreasForRole, parseAreas, parseRole } from '@/lib/flow/workflow'
 import { AuditLogger } from '@/lib/audit'
 import { hashPassword, MIN_EMPLOYEE_PASSWORD } from '@/lib/intranet/password'
 import { companiesForPanel } from '@/lib/intranet/companies'
+import { ensureIntranetProLinkColumn } from '@/lib/intranet/ensure-schema'
 import { extrasBeyondRole, parseGrantableModules, type GrantableModuleKey } from '@/lib/intranet/modules'
 import { getRomPanelId } from '@/lib/brand'
 
@@ -68,6 +69,7 @@ export async function findEmployeeByEmail(email: string): Promise<EmployeeRecord
 
 export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_hash'>[]> {
   try {
+    await ensureIntranetProLinkColumn()
     const sql = getIntranetSql()
     const rows = (await sql`
       select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.professional_name, e.created_at,
@@ -109,6 +111,7 @@ export async function createEmployee(input: {
   if (companyIds.length === 0) throw new Error('Selecione ao menos uma empresa da unidade.')
   const areaIds = parseAreas(input.areaIds ?? [])
   const flowRole = parseRole(input.flow_role)
+  await ensureIntranetProLinkColumn()
   const sql = getIntranetSql()
   const passwordHash = await hashPassword(input.password)
   const canPublish = Boolean(input.can_publish) || input.panel_role === 'admin' || input.panel_role === 'mkt'
@@ -296,6 +299,7 @@ export async function updateEmployeeModules(
   const extras = extrasBeyondRole(current.panel_role, parseGrantableModules(selected))
   await replaceEmployeeModules(userId, extras)
   if (professionalName !== undefined) {
+    await ensureIntranetProLinkColumn()
     const sql = getIntranetSql()
     const nextName =
       typeof professionalName === 'string' && professionalName.trim() ? professionalName.trim() : null

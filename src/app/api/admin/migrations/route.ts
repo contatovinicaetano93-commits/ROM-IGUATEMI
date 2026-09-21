@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
+import { peekResolvedDatabaseUrl, peekResolvedIntranetDatabaseUrl } from '@/lib/db'
+import { ensureIntranetProLinkColumn } from '@/lib/intranet/ensure-schema'
 import { getMigrationStatus, runPendingMigrations } from '@/lib/migrations'
 import { MissingMigrationFileError } from '@/lib/schema-migrations/registry'
 
@@ -12,6 +14,12 @@ async function authorize(req: NextRequest) {
   return { ok: true as const }
 }
 
+function dbHost(url: string | null | undefined): string | null {
+  if (!url) return null
+  const match = url.match(/@([^/:?]+)/)
+  return match?.[1] ?? null
+}
+
 /** GET — status das migrations (admin ou cron). */
 export async function GET(req: NextRequest) {
   try {
@@ -19,7 +27,18 @@ export async function GET(req: NextRequest) {
     if (!auth.ok) return err(auth.message, auth.status)
 
     const status = await getMigrationStatus()
-    return ok(status)
+    const salonUrl = peekResolvedDatabaseUrl()
+    const intranetUrl = peekResolvedIntranetDatabaseUrl()
+    return ok({
+      ...status,
+      hosts: {
+        salon: dbHost(salonUrl),
+        intranet: dbHost(intranetUrl),
+        intranetSeparate: Boolean(
+          salonUrl && intranetUrl && salonUrl.trim() !== intranetUrl.trim(),
+        ),
+      },
+    })
   } catch (e) {
     if (e instanceof MissingMigrationFileError) {
       return err(e.message, 500)
@@ -34,6 +53,9 @@ export async function POST(req: NextRequest) {
     const auth = await authorize(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
+    // Intranet pode divergir do DATABASE_URL do salão — garante coluna do vínculo Avec.
+    await ensureIntranetProLinkColumn()
+
     const summary = await runPendingMigrations()
     if (summary.lockBusy) {
       return err(summary.failed?.error ?? 'Migration em andamento', 409)
@@ -44,7 +66,14 @@ export async function POST(req: NextRequest) {
         500,
       )
     }
-    return ok(summary)
+    return ok({
+      ...summary,
+      intranetProLinkEnsured: true,
+      hosts: {
+        salon: dbHost(peekResolvedDatabaseUrl()),
+        intranet: dbHost(peekResolvedIntranetDatabaseUrl()),
+      },
+    })
   } catch (e) {
     if (e instanceof MissingMigrationFileError) {
       return err(e.message, 500)
