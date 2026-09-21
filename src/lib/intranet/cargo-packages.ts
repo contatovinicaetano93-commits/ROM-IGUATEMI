@@ -205,7 +205,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     id: 'profissional',
     label: 'Profissional / cabeleireiro',
     alias: 'Profissional',
-    summary: 'Home, cultura, agenda do dia; meu faturamento entra na próxima fase.',
+    summary: 'Home, agenda do dia, contatos e meu faturamento — só os dele.',
     examples: 'Cabeleireiros da unidade',
     panel_role: 'staff',
     flow_role: 'solicitante',

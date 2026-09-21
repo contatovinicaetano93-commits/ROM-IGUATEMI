@@ -5,6 +5,7 @@ import {
   countBaseAtiva,
   countContactQueues,
   listActivatedContacts,
+  listContactsOwnedByIds,
   listContactsWithSummary,
   listContactsWithoutServices,
   listNewContactsNotInAvec,
@@ -13,8 +14,12 @@ import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
 import { addService } from '@/lib/services'
 import { SERVICE_CATEGORIES } from '@/lib/services'
 import { compareByOverdueThenName } from '@/lib/salon/urgency'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireSession } from '@/lib/auth'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
+import {
+  listContactIdsOwnedByProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 import { z } from 'zod'
 
 export const maxDuration = 25
@@ -48,7 +53,7 @@ function parseUrgencyQueue(raw: string | null): UrgencyQueue | null {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireAuth(req)
+    const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { searchParams } = new URL(req.url)
@@ -80,6 +85,75 @@ export async function GET(req: NextRequest) {
       agenda_created_at: syncMeta.agenda_created_at,
       fast_stale: syncMeta.fast_stale,
       never_synced: syncMeta.never_synced,
+    }
+
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const ownedIds = await listContactIdsOwnedByProfessional(proScope)
+      const ownedSet = new Set(ownedIds)
+
+      if (countsOnly) {
+        const listed = await listContactsOwnedByIds(ownedIds, {
+          limit: 2000,
+          pendingOnly: true,
+          orderBy: 'urgency',
+        })
+        const queues = {
+          overdue: listed.items.filter((c) => c.overdue > 0).length,
+          due_soon: listed.items.filter((c) => c.overdue === 0 && c.due_soon > 0).length,
+          scheduled: listed.items.filter((c) => c.scheduled_soon > 0).length,
+          novos: 0,
+          sem_servicos: 0,
+          ativados: 0,
+          base_ativa: ownedIds.length,
+        }
+        return okCached(null, 15, { queues, sync: syncPayload, professional_scope: proScope })
+      }
+
+      if (newNotAvec || withoutServices || activatedQueue) {
+        return okCached([], 15, {
+          total: 0,
+          limit,
+          status: status ?? 'all',
+          channel: channel ?? 'all',
+          pending: false,
+          queue: newNotAvec ? 'novos' : withoutServices ? 'sem_servicos' : 'ativados',
+          queues: {
+            overdue: 0,
+            due_soon: 0,
+            scheduled: 0,
+            novos: 0,
+            sem_servicos: 0,
+            ativados: 0,
+            base_ativa: ownedIds.length,
+          },
+          sync: syncPayload,
+          professional_scope: proScope,
+        })
+      }
+
+      const listed = await listContactsOwnedByIds(ownedIds, {
+        limit,
+        query,
+        pendingOnly,
+        orderBy: sort === 'name' ? 'name' : 'urgency',
+        urgencyQueue,
+      })
+      let items = listed.items
+      if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
+        items = [...items].sort(compareByOverdueThenName)
+      }
+      return okCached(items, query ? 15 : 30, {
+        total: listed.total,
+        limit,
+        status: status ?? 'all',
+        channel: channel ?? 'all',
+        pending: pendingOnly,
+        queue: urgencyQueue ?? 'all',
+        sync: syncPayload,
+        professional_scope: proScope,
+        owned_total: ownedSet.size,
+      })
     }
 
     if (countsOnly) {

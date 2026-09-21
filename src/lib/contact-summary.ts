@@ -777,3 +777,63 @@ export async function listActivatedContacts(opts?: {
   const total = await countPendingActivatedContacts(ACTIVATED_QUEUE_WINDOW_DAYS)
   return { items, total }
 }
+
+export async function listContactsOwnedByIds(
+  ownedContactIds: readonly string[],
+  opts?: {
+    limit?: number
+    query?: string | null
+    orderBy?: 'urgency' | 'name'
+    pendingOnly?: boolean
+    urgencyQueue?: 'overdue' | 'due_soon' | 'scheduled' | null
+  },
+): Promise<ContactListResult> {
+  if (ownedContactIds.length === 0) return { items: [], total: 0 }
+  const limit = Math.min(Math.max(1, opts?.limit ?? 100), 500)
+  const rawQuery = (opts?.query ?? '').trim()
+  const q = rawQuery.toLowerCase()
+  const qDigits = rawQuery.replace(/\D/g, '')
+  const nameTokens = q
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2)
+    .slice(0, 5)
+
+  let contacts = await fetchContactsByIds([...ownedContactIds])
+  if (nameTokens.length > 0 || qDigits.length >= 3) {
+    contacts = contacts.filter((c) => {
+      const name = (c.name ?? '').toLowerCase()
+      const phone = (c.phone ?? '').replace(/\D/g, '')
+      const nameOk =
+        nameTokens.length > 0 ? nameTokens.every((token) => name.includes(token)) : false
+      const phoneOk = qDigits.length >= 3 && phone.includes(qDigits)
+      return nameOk || phoneOk
+    })
+  }
+
+  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+  let items = withUrgency(contacts, byContact)
+
+  if (opts?.pendingOnly) {
+    items = items.filter((c) => c.pending_actions > 0)
+  }
+  const queue = opts?.urgencyQueue ?? null
+  if (queue === 'overdue') items = items.filter((c) => c.overdue > 0)
+  else if (queue === 'due_soon') items = items.filter((c) => c.overdue === 0 && c.due_soon > 0)
+  else if (queue === 'scheduled') items = items.filter((c) => c.scheduled_soon > 0)
+
+  if (opts?.orderBy === 'name' && !opts?.pendingOnly && !queue) {
+    items = [...items].sort((a, b) =>
+      (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' }),
+    )
+  } else if (opts?.orderBy === 'urgency' || opts?.pendingOnly || queue) {
+    items = [...items].sort(compareByOverdueThenName)
+  } else {
+    items = [...items].sort((a, b) =>
+      (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' }),
+    )
+  }
+
+  const total = items.length
+  return { items: items.slice(0, limit), total }
+}
