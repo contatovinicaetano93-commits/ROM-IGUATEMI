@@ -58,17 +58,19 @@ export async function POST(req: NextRequest) {
       modules: isPanelAdmin ? parseGrantableModules(body.modules) : [],
     })
     try {
-      await announceEmployeeCreated({
+      const announced = await announceEmployeeCreated({
         actor: { email: auth.session.user, role: auth.session.role },
         employee,
+        initialPassword: password,
       })
+      return ok({ employee, welcomeEmailSent: announced.welcomeEmailSent }, undefined, 201)
     } catch (announceError) {
       logger.warn('Falha ao anunciar criação de colaborador', {
         employeeId: employee.id,
         error: announceError instanceof Error ? announceError.message : String(announceError),
       })
     }
-    return ok({ employee }, undefined, 201)
+    return ok({ employee, welcomeEmailSent: false }, undefined, 201)
   } catch (error) {
     return err(error instanceof Error ? error.message : 'Falha ao criar colaborador', 400)
   }

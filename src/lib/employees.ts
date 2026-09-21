@@ -363,6 +363,40 @@ export async function revokeEmployeeAccess(actor: User, userId: string): Promise
   })
 }
 
+/** Remove o cadastro de vez (cascade em módulos/empresas/áreas). Uso da Gestão de usuário. */
+export async function deleteEmployee(
+  actorEmail: string,
+  actorRole: AuthRole,
+  userId: string,
+): Promise<void> {
+  await ensureIntranetSchema()
+  const current = await findEmployeeById(userId)
+  if (!current) throw new Error('Usuário não encontrado.')
+  if (current.email.trim().toLowerCase() === actorEmail.trim().toLowerCase()) {
+    throw new Error('Você não pode excluir o próprio acesso.')
+  }
+  if (current.panel_role === 'admin' && current.status === 'active') {
+    const others = (await listEmployees()).filter(
+      (person) => person.id !== userId && person.panel_role === 'admin' && person.status === 'active',
+    )
+    if (others.length === 0) throw new Error('É preciso manter ao menos um admin ativo.')
+  }
+  if (current.flow_role === 'master' && current.status === 'active') {
+    const others = (await listEmployees()).filter(
+      (person) => person.id !== userId && person.flow_role === 'master' && person.status === 'active',
+    )
+    if (others.length === 0) throw new Error('É preciso manter ao menos um master ativo.')
+  }
+  const sql = getIntranetSql()
+  await sql`delete from intranet_employees where id = ${userId}::uuid`
+  await AuditLogger.log(actorEmail, actorRole, 'DELETE_USER', `flow:user:${userId}`, {
+    email: current.email,
+    name: current.name,
+    panel_role: current.panel_role,
+    flow_role: current.flow_role,
+  })
+}
+
 function mapEmployee(row: Record<string, unknown>): EmployeeRecord {
   const companyIds = Array.isArray(row.company_ids)
     ? row.company_ids.map(String)

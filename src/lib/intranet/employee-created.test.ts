@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  createWelcomeEmailContent,
   selectCreateUserAuditRecipients,
   type CreateUserAuditPerson,
 } from '@/lib/intranet/employee-created'
@@ -87,5 +88,33 @@ describe('selectCreateUserAuditRecipients', () => {
       inactiveMaster,
     ])
     expect(selected).toEqual([])
+  })
+})
+
+describe('createWelcomeEmailContent', () => {
+  it('inclui login, e-mail e senha inicial', () => {
+    const content = createWelcomeEmailContent({
+      employee: {
+        id: 'e1',
+        email: 'pro@rom.test',
+        name: 'Romeu',
+        panel_role: 'staff',
+        flow_role: 'solicitante',
+        status: 'active',
+        can_publish: false,
+        professional_name: 'Romeu Felipe',
+        companyIds: [],
+        areaIds: [],
+        modules: [],
+        created_at: '',
+      },
+      initialPassword: 'senha-teste-12',
+      loginUrl: 'https://rom-club.vercel.app/login',
+    })
+    expect(content.subject).toMatch(/intranet/i)
+    expect(content.text).toContain('pro@rom.test')
+    expect(content.text).toContain('senha-teste-12')
+    expect(content.text).toContain('https://rom-club.vercel.app/login')
+    expect(content.html).toContain('senha-teste-12')
   })
 })

@@ -3,6 +3,7 @@ import 'server-only'
 import { AuditLogger } from '@/lib/audit'
 import { getBrand } from '@/lib/brand'
 import { notifyIntranet } from '@/lib/cms'
+import { defaultProductionHost } from '@/lib/deployment'
 import { listEmployees, type EmployeeRecord } from '@/lib/employees'
 import { AREA_LABEL } from '@/lib/flow/format'
 import type { RequestArea } from '@/lib/flow/types'
@@ -57,6 +58,13 @@ function resendFrom(): string {
   )
 }
 
+/** URL pública do login da unidade (produção). */
+export function intranetLoginUrl(): string {
+  const fromEnv = process.env.VERCEL_PROJECT_PRODUCTION_URL?.replace(/^https?:\/\//, '').trim()
+  const host = fromEnv || defaultProductionHost()
+  return `https://${host}/login`
+}
+
 function createUserNotifyBody(employee: Omit<EmployeeRecord, 'password_hash'>): string {
   return `${employee.name} (${employee.email}) · áreas: ${formatAreas(employee.areaIds)}`
 }
@@ -96,6 +104,38 @@ function createUserEmailContent(input: {
   return { subject, text, html }
 }
 
+/** E-mail de boas-vindas para o próprio colaborador (com senha inicial). */
+export function createWelcomeEmailContent(input: {
+  employee: Omit<EmployeeRecord, 'password_hash'>
+  initialPassword: string
+  loginUrl?: string
+}): { subject: string; text: string; html: string } {
+  const brand = getBrand().displayName
+  const loginUrl = input.loginUrl ?? intranetLoginUrl()
+  const subject = `Seu acesso à intranet ${brand}`
+  const text = [
+    `Olá, ${input.employee.name}.`,
+    ``,
+    `Seu acesso à intranet ${brand} foi criado.`,
+    ``,
+    `Entrar: ${loginUrl}`,
+    `E-mail: ${input.employee.email}`,
+    `Senha inicial: ${input.initialPassword}`,
+    ``,
+    `Guarde este e-mail. Se precisar trocar a senha, peça ao admin da unidade.`,
+  ].join('\n')
+  const html = `<!doctype html><html><body style="font-family:Georgia,serif;color:#1a1a1a;line-height:1.45">
+  <h1 style="font-size:18px;margin:0 0 12px">Bem-vindo(a) à intranet</h1>
+  <p style="margin:0 0 8px">Olá, <b>${escapeHtml(input.employee.name)}</b>.</p>
+  <p style="margin:0 0 12px">Seu acesso à <b>${escapeHtml(brand)}</b> foi criado.</p>
+  <p style="margin:0 0 8px"><b>Entrar:</b> <a href="${escapeHtml(loginUrl)}">${escapeHtml(loginUrl)}</a></p>
+  <p style="margin:0 0 8px"><b>E-mail:</b> ${escapeHtml(input.employee.email)}</p>
+  <p style="margin:0 0 16px"><b>Senha inicial:</b> ${escapeHtml(input.initialPassword)}</p>
+  <p style="font-size:13px;color:#666">Guarde este e-mail. Se precisar trocar a senha, peça ao admin da unidade.</p>
+</body></html>`
+  return { subject, text, html }
+}
+
 async function sendCreateUserEmail(input: {
   to: string
   subject: string
@@ -129,11 +169,14 @@ async function sendCreateUserEmail(input: {
 export async function announceEmployeeCreated(input: {
   actor: CreateUserAuditActor
   employee: Omit<EmployeeRecord, 'password_hash'>
-}): Promise<void> {
+  /** Senha digitada no cadastro — só vai no e-mail do próprio colaborador. */
+  initialPassword?: string
+}): Promise<{ welcomeEmailSent: boolean }> {
   const { actor, employee } = input
   const title = 'Novo acesso criado'
   const body = createUserNotifyBody(employee)
   const href = '/auditoria'
+  let welcomeEmailSent = false
 
   await AuditLogger.log(actor.email, actor.role, 'CREATE_USER', `flow:user:${employee.id}`, {
     name: employee.name,
@@ -161,7 +204,22 @@ export async function announceEmployeeCreated(input: {
   })
 
   try {
-    if (!process.env.RESEND_API_KEY?.trim()) return
+    if (!process.env.RESEND_API_KEY?.trim()) return { welcomeEmailSent: false }
+
+    const password = typeof input.initialPassword === 'string' ? input.initialPassword : ''
+    if (password && employee.email.trim()) {
+      try {
+        const welcome = createWelcomeEmailContent({ employee, initialPassword: password })
+        await sendCreateUserEmail({ to: employee.email.trim(), ...welcome })
+        welcomeEmailSent = true
+      } catch (error) {
+        logger.warn('Falha ao enviar e-mail de boas-vindas ao colaborador', {
+          to: employee.email,
+          employeeId: employee.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
 
     const people = await listEmployees()
     const recipients = selectCreateUserAuditRecipients(employee, people)
@@ -186,4 +244,6 @@ export async function announceEmployeeCreated(input: {
       error: error instanceof Error ? error.message : String(error),
     })
   }
+
+  return { welcomeEmailSent }
 }
