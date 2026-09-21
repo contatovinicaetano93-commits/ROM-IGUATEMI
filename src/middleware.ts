@@ -94,6 +94,7 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/reminders/financeiro' ||
     pathname === '/api/reminders/aftercare' ||
     pathname === '/api/admin/migrations' ||
+    pathname === '/api/admin/intranet-ensure' ||
     pathname === '/api/admin/revenue-backfill' ||
     pathname === '/api/admin/analytics-backfill'
   if (!(await isAuthorized(req, { allowHeaderTokens }))) {

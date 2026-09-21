@@ -3,7 +3,7 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { peekResolvedDatabaseUrl, peekResolvedIntranetDatabaseUrl } from '@/lib/db'
-import { ensureIntranetProLinkColumn } from '@/lib/intranet/ensure-schema'
+import { ensureIntranetSchema } from '@/lib/intranet/ensure-schema'
 import { getMigrationStatus, runPendingMigrations } from '@/lib/migrations'
 import { MissingMigrationFileError } from '@/lib/schema-migrations/registry'
 
@@ -53,8 +53,8 @@ export async function POST(req: NextRequest) {
     const auth = await authorize(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
-    // Intranet pode divergir do DATABASE_URL do salão — garante coluna do vínculo Avec.
-    await ensureIntranetProLinkColumn()
+    // Intranet pode divergir do DATABASE_URL do salão — garante schema intranet.
+    await ensureIntranetSchema()
 
     const summary = await runPendingMigrations()
     if (summary.lockBusy) {
