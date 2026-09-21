@@ -112,3 +112,20 @@ export function filterByProfessionalName<T extends { professional_name?: string 
 ): T[] {
   return rows.filter((row) => professionalNamesMatch(row.professional_name, professionalName))
 }
+
+/** Filtra playbook / filas para só contatos do profissional. */
+export function filterByOwnedContactIds<T extends { contact_id: string }>(
+  rows: readonly T[],
+  ownedIds: readonly string[],
+): T[] {
+  if (ownedIds.length === 0) return []
+  const owned = new Set(ownedIds)
+  return rows.filter((row) => owned.has(row.contact_id))
+}
+
+/** Chave de cache estável (acentos/case) para escopo por profissional. */
+export function professionalScopeCacheKey(professionalName: string | null): string {
+  if (!professionalName) return 'all'
+  const key = occupancyMergeKey(professionalName)
+  return key || 'all'
+}
