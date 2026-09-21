@@ -8,9 +8,12 @@ import {
   CARGO_PACKAGES,
   cargoPackageById,
   matchCargoPackage,
-  modulesForCargo,
   type CargoPackageId,
 } from '@/lib/intranet/cargo-packages'
+import {
+  cargoAccessPreviewLabels,
+  includedShellLabelsForRole,
+} from '@/lib/intranet/cargo-access-preview'
 import {
   GRANTABLE_MODULES,
   hasPanelModule,
@@ -46,14 +49,14 @@ function ModuleChecks({
   selected,
   onToggle,
   readOnly,
-  showMeuFaturamento,
+  includedShellLabels = [],
 }: {
   role: ClientAuthRole
   selected: GrantableModuleKey[]
   onToggle: (key: GrantableModuleKey) => void
   readOnly?: boolean
-  /** Self-serve: não é módulo grantable, mas entra no menu do profissional. */
-  showMeuFaturamento?: boolean
+  /** Shells self-serve (não grantable) que o papel realmente vê. */
+  includedShellLabels?: readonly string[]
 }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2">
@@ -76,15 +79,15 @@ function ModuleChecks({
           </label>
         )
       })}
-      {showMeuFaturamento ? (
-        <label className="flex items-center gap-2 text-sm">
+      {includedShellLabels.map((label) => (
+        <label key={label} className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked disabled />
           <span>
-            Meu faturamento
-            <span className="text-muted"> · do cargo (só o dele)</span>
+            {label}
+            <span className="text-muted"> · incluso</span>
           </span>
         </label>
-      ) : null}
+      ))}
     </div>
   )
 }
@@ -239,11 +242,8 @@ export default function PessoasPage() {
       .catch(() => null)
   }
 
-  const previewModules = pack ? modulesForCargo({ ...pack, extras: fineTune ? createModules : pack.extras }) : []
-  const previewSystemLabels = [
-    ...previewModules.map((key) => GRANTABLE_MODULES.find((m) => m.key === key)?.label ?? key),
-    ...(isProfissionalCargo ? ['Meu faturamento'] : []),
-  ]
+  const previewSystemLabels = pack ? cargoAccessPreviewLabels(pack) : []
+  const createShellLabels = pack ? includedShellLabelsForRole(pack.panel_role, fineTune ? createModules : pack.extras) : []
 
   return (
     <IntranetPage
@@ -337,7 +337,7 @@ export default function PessoasPage() {
                         role={person.panel_role}
                         selected={editModules}
                         onToggle={toggleEdit}
-                        showMeuFaturamento={Boolean(person.professional_name) || matched?.id === 'profissional'}
+                        includedShellLabels={includedShellLabelsForRole(person.panel_role, editModules)}
                       />
                     ) : null}
                     <div className="mt-3 flex gap-2">
@@ -520,13 +520,13 @@ export default function PessoasPage() {
                   role={pack.panel_role}
                   selected={createModules}
                   onToggle={toggleCreate}
-                  showMeuFaturamento={isProfissionalCargo}
+                  includedShellLabels={createShellLabels}
                 />
               </div>
             )}
-            {isProfissionalCargo && !fineTune ? (
+            {!fineTune && createShellLabels.length > 0 ? (
               <p className="sm:col-span-2 text-xs text-muted">
-                Inclui também <span className="text-foreground">Meu faturamento</span> (só a linha dele no salão).
+                Também incluso: {createShellLabels.join(' · ')}.
               </p>
             ) : null}
             {error && <p className="sm:col-span-2 text-sm text-danger">{error}</p>}
