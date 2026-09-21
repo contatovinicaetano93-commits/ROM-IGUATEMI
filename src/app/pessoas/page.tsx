@@ -97,7 +97,9 @@ export default function PessoasPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [professionals, setProfessionals] = useState<UnitProfessional[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [cargoId, setCargoId] = useState<CargoPackageId>('profissional')
   const [fineTune, setFineTune] = useState(false)
   const [createModules, setCreateModules] = useState<GrantableModuleKey[]>([])
@@ -177,7 +179,9 @@ export default function PessoasPage() {
     }
     setSaving(true)
     setError(null)
+    setNotice(null)
     const form = new FormData(e.currentTarget)
+    const emailValue = String(form.get('email') ?? '').trim()
     const res = await fetch('/api/employees', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -203,6 +207,13 @@ export default function PessoasPage() {
       return
     }
     setEmployees((prev) => [...prev, json.data.employee])
+    if (json.data?.welcomeEmailSent) {
+      setNotice(`Acesso criado. E-mail de boas-vindas enviado para ${emailValue}.`)
+    } else {
+      setNotice(
+        `Acesso criado. Não foi possível enviar o e-mail para ${emailValue} — passe a senha inicial manualmente.`,
+      )
+    }
     e.currentTarget.reset()
     setCreateName('')
     setCreateProfessionalName('')
@@ -210,6 +221,33 @@ export default function PessoasPage() {
     setCreateModules([...pack.extras])
     setFineTune(false)
     // Recarrega roster para marcar "já tem acesso"
+    fetch('/api/employees/professionals', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((body) => setProfessionals(body.data?.professionals ?? []))
+      .catch(() => null)
+  }
+
+  async function deletePerson(person: Employee) {
+    const okConfirm = window.confirm(
+      `Excluir o cadastro de ${person.name} (${person.email})?\nEssa ação não tem volta.`,
+    )
+    if (!okConfirm) return
+    setDeletingId(person.id)
+    setError(null)
+    setNotice(null)
+    const res = await fetch(`/api/employees/${person.id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+    const json = await res.json().catch(() => ({}))
+    setDeletingId(null)
+    if (!res.ok) {
+      setError(json.error ?? 'Não foi possível excluir')
+      return
+    }
+    setEmployees((prev) => prev.filter((item) => item.id !== person.id))
+    if (editingId === person.id) setEditingId(null)
+    setNotice(`Cadastro de ${person.name} excluído.`)
     fetch('/api/employees/professionals', { credentials: 'include' })
       .then((r) => r.json())
       .then((body) => setProfessionals(body.data?.professionals ?? []))
@@ -252,6 +290,8 @@ export default function PessoasPage() {
       subtitle="Escolha o cargo (pacote), preencha nome e senha. O acesso do painel e do Rom Flow já vem montado."
     >
       <SectionCard title="Colaboradores" badge={<span className="text-xs text-muted">{employees.length}</span>}>
+        {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
+        {notice ? <p className="mb-3 text-sm text-success">{notice}</p> : null}
         <ul className="divide-y divide-border">
           {employees.length === 0 && (
             <li className="py-4 text-sm text-muted">Ninguém cadastrado ainda. Escolha um cargo abaixo e crie o primeiro acesso.</li>
@@ -281,17 +321,27 @@ export default function PessoasPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs uppercase tracking-wide text-muted">{person.flow_role}</span>
                     {canManage && (
-                      <button
-                        type="button"
-                        className="text-xs font-medium text-gold-strong"
-                        onClick={() => {
-                          setEditingId(person.id)
-                          setEditModules(extras)
-                          setEditProfessionalName(person.professional_name ?? '')
-                        }}
-                      >
-                        Ajustar
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-gold-strong"
+                          onClick={() => {
+                            setEditingId(person.id)
+                            setEditModules(extras)
+                            setEditProfessionalName(person.professional_name ?? '')
+                          }}
+                        >
+                          Ajustar
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-danger"
+                          disabled={deletingId === person.id}
+                          onClick={() => void deletePerson(person)}
+                        >
+                          {deletingId === person.id ? 'Excluindo…' : 'Excluir'}
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -530,6 +580,7 @@ export default function PessoasPage() {
               </p>
             ) : null}
             {error && <p className="sm:col-span-2 text-sm text-danger">{error}</p>}
+            {notice && <p className="sm:col-span-2 text-sm text-success">{notice}</p>}
             <div className="sm:col-span-2">
               <PanelButton type="submit" disabled={saving}>
                 {saving ? 'Salvando…' : `Criar acesso · ${pack.alias}`}
