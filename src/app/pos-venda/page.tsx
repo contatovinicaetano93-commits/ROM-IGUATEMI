@@ -31,8 +31,8 @@ type HojeSlice = {
   leads?: { novos: number }
 }
 
-function fmtCount(n: number | null | undefined, loading: boolean): string {
-  if (loading) return '…'
+function fmtCount(n: number | null | undefined, loading: boolean, hasData: boolean): string {
+  if (loading && !hasData) return '…'
   if (n == null) return '—'
   return String(n)
 }
@@ -49,12 +49,12 @@ export default function PosVendaPage() {
     let cancelled = false
     setLoading(true)
     Promise.all([
-      apiFetch('/api/contacts?counts=1', { cache: 'no-store', clientCache: false }).then(async (res) => {
+      apiFetch('/api/contacts?counts=1', { cache: 'no-store' }).then(async (res) => {
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? 'Falha ao carregar filas')
         return json.meta?.queues as Partial<QueueCounts> | undefined
       }),
-      apiFetch('/api/hoje', { cache: 'no-store', clientCache: false }).then(async (res) => {
+      apiFetch('/api/hoje', { cache: 'no-store' }).then(async (res) => {
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? 'Falha ao carregar KPI')
         return json.data as HojeSlice
@@ -125,7 +125,7 @@ export default function PosVendaPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <SectionCard title="Contatados">
           <p className="text-2xl font-semibold tabular-nums">
-            {fmtCount(reactivation?.contacted, loading)}
+            {fmtCount(reactivation?.contacted, loading, Boolean(hoje))}
           </p>
           <p className="mt-1 text-xs text-muted">
             {reactivation?.window_days != null
@@ -135,7 +135,7 @@ export default function PosVendaPage() {
         </SectionCard>
         <SectionCard title="Reativados">
           <p className="text-2xl font-semibold tabular-nums">
-            {fmtCount(reactivation?.reactivated, loading)}
+            {fmtCount(reactivation?.reactivated, loading, Boolean(hoje))}
           </p>
           <p className="mt-1 text-xs text-muted">
             {reactivation?.rate != null ? `${reactivation.rate}% da janela` : 'voltaram na janela'}
@@ -143,7 +143,7 @@ export default function PosVendaPage() {
         </SectionCard>
         <SectionCard title="Atrasados hoje">
           <p className="text-2xl font-semibold tabular-nums">
-            {fmtCount(hoje?.overdue_contacts, loading)}
+            {fmtCount(hoje?.overdue_contacts, loading, Boolean(hoje))}
           </p>
           <p className="mt-1 text-xs text-muted">
             {hoje?.overdue_total != null ? `${hoje.overdue_total} serviço(s)` : 'no playbook'}
@@ -192,7 +192,7 @@ export default function PosVendaPage() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="text-sm font-semibold tabular-nums">
-                    {fmtCount(item.count, loading)}
+                    {fmtCount(item.count, loading, Boolean(queues))}
                   </span>
                   <ChevronRight size={16} className="text-muted" />
                 </div>
