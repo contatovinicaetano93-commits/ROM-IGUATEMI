@@ -46,11 +46,14 @@ function ModuleChecks({
   selected,
   onToggle,
   readOnly,
+  showMeuFaturamento,
 }: {
   role: ClientAuthRole
   selected: GrantableModuleKey[]
   onToggle: (key: GrantableModuleKey) => void
   readOnly?: boolean
+  /** Self-serve: não é módulo grantable, mas entra no menu do profissional. */
+  showMeuFaturamento?: boolean
 }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2">
@@ -73,6 +76,15 @@ function ModuleChecks({
           </label>
         )
       })}
+      {showMeuFaturamento ? (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked disabled />
+          <span>
+            Meu faturamento
+            <span className="text-muted"> · do cargo (só o dele)</span>
+          </span>
+        </label>
+      ) : null}
     </div>
   )
 }
@@ -228,6 +240,10 @@ export default function PessoasPage() {
   }
 
   const previewModules = pack ? modulesForCargo({ ...pack, extras: fineTune ? createModules : pack.extras }) : []
+  const previewSystemLabels = [
+    ...previewModules.map((key) => GRANTABLE_MODULES.find((m) => m.key === key)?.label ?? key),
+    ...(isProfissionalCargo ? ['Meu faturamento'] : []),
+  ]
 
   return (
     <IntranetPage
@@ -317,7 +333,12 @@ export default function PessoasPage() {
                       )}
                     </label>
                     {person.panel_role !== 'admin' ? (
-                      <ModuleChecks role={person.panel_role} selected={editModules} onToggle={toggleEdit} />
+                      <ModuleChecks
+                        role={person.panel_role}
+                        selected={editModules}
+                        onToggle={toggleEdit}
+                        showMeuFaturamento={Boolean(person.professional_name) || matched?.id === 'profissional'}
+                      />
                     ) : null}
                     <div className="mt-3 flex gap-2">
                       <PanelButton
@@ -385,7 +406,7 @@ export default function PessoasPage() {
               {pack.can_publish ? ' · Pode publicar MKT' : ''}
             </p>
             <p className="mt-1 text-xs text-muted">
-              Sistemas: {previewModules.map((key) => GRANTABLE_MODULES.find((m) => m.key === key)?.label ?? key).join(' · ') || '—'}
+              Sistemas: {previewSystemLabels.length > 0 ? previewSystemLabels.join(' · ') : '—'}
             </p>
           </div>
 
@@ -495,9 +516,19 @@ export default function PessoasPage() {
             </label>
             {fineTune && (
               <div className="sm:col-span-2">
-                <ModuleChecks role={pack.panel_role} selected={createModules} onToggle={toggleCreate} />
+                <ModuleChecks
+                  role={pack.panel_role}
+                  selected={createModules}
+                  onToggle={toggleCreate}
+                  showMeuFaturamento={isProfissionalCargo}
+                />
               </div>
             )}
+            {isProfissionalCargo && !fineTune ? (
+              <p className="sm:col-span-2 text-xs text-muted">
+                Inclui também <span className="text-foreground">Meu faturamento</span> (só a linha dele no salão).
+              </p>
+            ) : null}
             {error && <p className="sm:col-span-2 text-sm text-danger">{error}</p>}
             <div className="sm:col-span-2">
               <PanelButton type="submit" disabled={saving}>
