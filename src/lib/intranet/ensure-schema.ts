@@ -14,7 +14,7 @@ export async function ensureIntranetProLinkColumn(): Promise<void> {
   if (!proLinkOnce) {
     proLinkOnce = (async () => {
       const sql = getIntranetSql()
-      await sql.query(`
+      await sql.unsafe(`
         alter table intranet_employees
           add column if not exists professional_name text
       `)
