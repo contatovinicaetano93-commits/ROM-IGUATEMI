@@ -31,6 +31,16 @@ type Employee = {
   areaIds?: RequestArea[]
 }
 
+type UnitProfessional = {
+  id: string
+  name: string
+  avec_pro_id: string | null
+  role: 'hairstylist' | 'makeup' | 'other'
+  linked_employee_id: string | null
+  linked_email: string | null
+  linked_name: string | null
+}
+
 function ModuleChecks({
   role,
   selected,
@@ -70,6 +80,7 @@ function ModuleChecks({
 export default function PessoasPage() {
   const { session } = useClientSession()
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [professionals, setProfessionals] = useState<UnitProfessional[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [cargoId, setCargoId] = useState<CargoPackageId>('profissional')
@@ -78,9 +89,17 @@ export default function PessoasPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editModules, setEditModules] = useState<GrantableModuleKey[]>([])
   const [editProfessionalName, setEditProfessionalName] = useState('')
+  const [selectedProId, setSelectedProId] = useState('')
+  const [createName, setCreateName] = useState('')
+  const [createProfessionalName, setCreateProfessionalName] = useState('')
   const canManage = session != null && (!session.auth_enabled || session.role === 'admin')
+  const isProfissionalCargo = cargoId === 'profissional'
 
   const pack = useMemo(() => cargoPackageById(cargoId), [cargoId])
+  const selectedPro = useMemo(
+    () => professionals.find((item) => item.id === selectedProId) ?? null,
+    [professionals, selectedProId],
+  )
 
   useEffect(() => {
     fetch('/api/employees', { credentials: 'include' })
@@ -90,9 +109,21 @@ export default function PessoasPage() {
   }, [])
 
   useEffect(() => {
+    if (!canManage) return
+    fetch('/api/employees/professionals', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((json) => setProfessionals(json.data?.professionals ?? []))
+      .catch(() => setProfessionals([]))
+  }, [canManage])
+
+  useEffect(() => {
     if (!pack) return
     setCreateModules([...pack.extras])
     setFineTune(false)
+    if (pack.id !== 'profissional') {
+      setSelectedProId('')
+      setCreateProfessionalName('')
+    }
   }, [pack])
 
   function toggleCreate(key: GrantableModuleKey) {
@@ -103,9 +134,24 @@ export default function PessoasPage() {
     setEditModules((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))
   }
 
+  function onSelectProfessional(proId: string) {
+    setSelectedProId(proId)
+    const pro = professionals.find((item) => item.id === proId)
+    if (!pro) {
+      setCreateProfessionalName('')
+      return
+    }
+    setCreateName(pro.name)
+    setCreateProfessionalName(pro.name)
+  }
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!pack) return
+    if (isProfissionalCargo && !createProfessionalName.trim()) {
+      setError('Escolha o profissional da unidade para vincular o acesso')
+      return
+    }
     setSaving(true)
     setError(null)
     const form = new FormData(e.currentTarget)
@@ -114,10 +160,12 @@ export default function PessoasPage() {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
-        name: form.get('name'),
+        name: createName.trim() || form.get('name'),
         email: form.get('email'),
         password: form.get('password'),
-        professional_name: String(form.get('professional_name') ?? '').trim() || null,
+        professional_name: isProfissionalCargo
+          ? createProfessionalName.trim()
+          : String(form.get('professional_name') ?? '').trim() || null,
         panel_role: pack.panel_role,
         flow_role: pack.flow_role,
         can_publish: pack.can_publish,
@@ -133,8 +181,16 @@ export default function PessoasPage() {
     }
     setEmployees((prev) => [...prev, json.data.employee])
     e.currentTarget.reset()
+    setCreateName('')
+    setCreateProfessionalName('')
+    setSelectedProId('')
     setCreateModules([...pack.extras])
     setFineTune(false)
+    // Recarrega roster para marcar "já tem acesso"
+    fetch('/api/employees/professionals', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((body) => setProfessionals(body.data?.professionals ?? []))
+      .catch(() => null)
   }
 
   async function saveModules(person: Employee) {
@@ -157,6 +213,10 @@ export default function PessoasPage() {
     }
     setEmployees((prev) => prev.map((item) => (item.id === person.id ? json.data.employee : item)))
     setEditingId(null)
+    fetch('/api/employees/professionals', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((body) => setProfessionals(body.data?.professionals ?? []))
+      .catch(() => null)
   }
 
   const previewModules = pack ? modulesForCargo({ ...pack, extras: fineTune ? createModules : pack.extras }) : []
@@ -214,14 +274,39 @@ export default function PessoasPage() {
                 {editingId === person.id && (
                   <div className="mt-3 rounded-xl border border-border bg-background p-3">
                     <label className="mb-3 block text-sm">
-                      <span className="mb-1 block text-xs uppercase tracking-wide text-muted">Nome no Avec (0021)</span>
-                      <input
-                        type="text"
-                        value={editProfessionalName}
-                        onChange={(e) => setEditProfessionalName(e.target.value)}
-                        placeholder="Igual ao relatório de profissionais"
-                        className="w-full rounded-xl border border-border bg-background px-3 py-2"
-                      />
+                      <span className="mb-1 block text-xs uppercase tracking-wide text-muted">
+                        Profissional da unidade (Avec)
+                      </span>
+                      {professionals.length > 0 ? (
+                        <select
+                          value={
+                            professionals.find((pro) => pro.name === editProfessionalName)?.id ?? ''
+                          }
+                          onChange={(e) => {
+                            const pro = professionals.find((item) => item.id === e.target.value)
+                            setEditProfessionalName(pro?.name ?? '')
+                          }}
+                          className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                        >
+                          <option value="">Sem vínculo Avec</option>
+                          {professionals.map((pro) => (
+                            <option key={pro.id} value={pro.id}>
+                              {pro.name}
+                              {pro.linked_employee_id && pro.linked_employee_id !== person.id
+                                ? ` · já: ${pro.linked_email}`
+                                : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={editProfessionalName}
+                          onChange={(e) => setEditProfessionalName(e.target.value)}
+                          placeholder="Igual ao relatório de profissionais"
+                          className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                        />
+                      )}
                     </label>
                     {person.panel_role !== 'admin' ? (
                       <ModuleChecks role={person.panel_role} selected={editModules} onToggle={toggleEdit} />
@@ -297,13 +382,64 @@ export default function PessoasPage() {
           </div>
 
           <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
-            <input name="name" required placeholder="Nome" className="rounded-xl border border-border bg-background px-3 py-2" />
-            <input name="email" type="email" required placeholder="E-mail" className="rounded-xl border border-border bg-background px-3 py-2" />
-            <input
-              name="professional_name"
-              placeholder="Nome no Avec (0021) — opcional"
-              className="rounded-xl border border-border bg-background px-3 py-2 sm:col-span-2"
-            />
+            {isProfissionalCargo ? (
+              <>
+                <label className="sm:col-span-2 block text-sm">
+                  <span className="mb-1 block text-xs uppercase tracking-wide text-muted">
+                    Profissional da unidade ({professionals.length})
+                  </span>
+                  <select
+                    required
+                    value={selectedProId}
+                    onChange={(e) => onSelectProfessional(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                  >
+                    <option value="">Selecione o cabeleireiro / maquiagem…</option>
+                    {professionals.map((pro) => (
+                      <option key={pro.id} value={pro.id} disabled={Boolean(pro.linked_employee_id)}>
+                        {pro.name}
+                        {pro.role === 'makeup' ? ' · maquiagem' : ''}
+                        {pro.linked_employee_id ? ` · já tem acesso (${pro.linked_email})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selectedPro ? (
+                  <p className="sm:col-span-2 text-xs text-muted">
+                    Vínculo Avec: <span className="text-foreground">{selectedPro.name}</span>
+                    {selectedPro.avec_pro_id ? ` · id ${selectedPro.avec_pro_id}` : ''}
+                    . Ele verá só o próprio faturamento e os próprios clientes.
+                  </p>
+                ) : null}
+                <input
+                  name="name"
+                  required
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  placeholder="Nome de exibição"
+                  className="rounded-xl border border-border bg-background px-3 py-2"
+                />
+                <input name="email" type="email" required placeholder="E-mail que ele te passou" className="rounded-xl border border-border bg-background px-3 py-2" />
+                <input type="hidden" name="professional_name" value={createProfessionalName} />
+              </>
+            ) : (
+              <>
+                <input
+                  name="name"
+                  required
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  placeholder="Nome"
+                  className="rounded-xl border border-border bg-background px-3 py-2"
+                />
+                <input name="email" type="email" required placeholder="E-mail" className="rounded-xl border border-border bg-background px-3 py-2" />
+                <input
+                  name="professional_name"
+                  placeholder="Nome no Avec (0021) — opcional"
+                  className="rounded-xl border border-border bg-background px-3 py-2 sm:col-span-2"
+                />
+              </>
+            )}
             <input
               name="password"
               type="password"

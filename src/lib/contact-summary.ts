@@ -50,19 +50,19 @@ export interface UrgencyQueueCounts {
   scheduled: number
 }
 
-/** Filas da tela Contatos — urgência + novos da janela + sem serviço + ativados. */
+/** Filas da tela Contatos — urgência + Sem vínculo + sem serviço + ativados + entrada no mês. */
 export interface ContactQueueCounts extends UrgencyQueueCounts {
   /** Contatos criados na janela Novos (SP) ainda sem avec_client_id. */
   novos: number
   /** Passou da janela Novos e segue sem next_due — fora do funil de cadência. */
   sem_servicos: number
-  /**
-   * Entrada no mês (funil CRM / Visão): first_contact/created no mês corrente,
-   * status ≠ importado e fora de dumps Avec. Não é fila — só referência + link.
-   */
-  base_ativa: number
   /** Reativados pelo painel aguardando agenda/visita Avec (30d). */
   ativados: number
+  /**
+   * Entrada no mês (funil CRM / Visão): first_contact/created no mês corrente,
+   * status ≠ importado. Não é fila de trabalho — só referência + link.
+   */
+  base_ativa: number
 }
 
 export interface ContactListResult {
@@ -730,13 +730,9 @@ export async function countBaseAtiva(): Promise<number> {
   const sql = getSql()
   const { from, to } = resolveMonthWindow(todayIso().slice(0, 7))
   const rows = (await sql`
-    select count(*)::int as n
+    select count(*) filter (where status <> 'importado')::int as n
     from contacts
     where anonymized_at is null
-      and status <> 'importado'
-      and coalesce(source, '') not like 'avec_sync_clients%'
-      and coalesce(source, '') not like 'avec_backfill%'
-      and coalesce(source, '') not like 'avec_lake%'
       and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
         >= ${from}::date
       and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
@@ -776,4 +772,68 @@ export async function listActivatedContacts(opts?: {
   }))
   const total = await countPendingActivatedContacts(ACTIVATED_QUEUE_WINDOW_DAYS)
   return { items, total }
+}
+
+/**
+ * Lista só os contatos do profissional (ids já resolvidos pelo ownership).
+ * Usado quando o colaborador tem `professional_name` — não vê a base da unidade.
+ */
+export async function listContactsOwnedByIds(
+  ownedContactIds: readonly string[],
+  opts?: {
+    limit?: number
+    query?: string | null
+    orderBy?: 'urgency' | 'name'
+    pendingOnly?: boolean
+    urgencyQueue?: 'overdue' | 'due_soon' | 'scheduled' | null
+  },
+): Promise<ContactListResult> {
+  if (ownedContactIds.length === 0) return { items: [], total: 0 }
+  const limit = Math.min(Math.max(1, opts?.limit ?? 100), 500)
+  const rawQuery = (opts?.query ?? '').trim()
+  const q = rawQuery.toLowerCase()
+  const qDigits = rawQuery.replace(/\D/g, '')
+  const nameTokens = q
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2)
+    .slice(0, 5)
+
+  let contacts = await fetchContactsByIds([...ownedContactIds])
+  if (nameTokens.length > 0 || qDigits.length >= 3) {
+    contacts = contacts.filter((c) => {
+      const name = (c.name ?? '').toLowerCase()
+      const phone = (c.phone ?? '').replace(/\D/g, '')
+      const nameOk =
+        nameTokens.length > 0 ? nameTokens.every((token) => name.includes(token)) : false
+      const phoneOk = qDigits.length >= 3 && phone.includes(qDigits)
+      return nameOk || phoneOk
+    })
+  }
+
+  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+  let items = withUrgency(contacts, byContact)
+
+  if (opts?.pendingOnly) {
+    items = items.filter((c) => c.pending_actions > 0)
+  }
+  const queue = opts?.urgencyQueue ?? null
+  if (queue === 'overdue') items = items.filter((c) => c.overdue > 0)
+  else if (queue === 'due_soon') items = items.filter((c) => c.overdue === 0 && c.due_soon > 0)
+  else if (queue === 'scheduled') items = items.filter((c) => c.scheduled_soon > 0)
+
+  if (opts?.orderBy === 'name' && !opts?.pendingOnly && !queue) {
+    items = [...items].sort((a, b) =>
+      (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' }),
+    )
+  } else if (opts?.orderBy === 'urgency' || opts?.pendingOnly || queue) {
+    items = [...items].sort(compareByOverdueThenName)
+  } else {
+    items = [...items].sort((a, b) =>
+      (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' }),
+    )
+  }
+
+  const total = items.length
+  return { items: items.slice(0, limit), total }
 }

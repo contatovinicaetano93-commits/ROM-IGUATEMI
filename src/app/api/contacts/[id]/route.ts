@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireAuth, requireSession } from '@/lib/auth'
+import { requireSession } from '@/lib/auth'
 import {
   getContactById,
   updateContact,
@@ -14,6 +14,10 @@ import {
 import { listServices, autoCompleteServicesOnConversion, pickLastVisit, computeClientStats, listServiceVisits, getServiceVisitStats, SERVICE_VISIT_PAGE_SIZE } from '@/lib/services'
 import { enrichServices, computeRecommendations } from '@/lib/recommendations'
 import { isNailService, isHairService } from '@/lib/avec/normalize'
+import {
+  contactBelongsToProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -52,6 +56,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     let contact = await getContactById(id)
     if (!contact) return err('Contato não encontrado', 404)
     if (contact.anonymized_at) return err('Contato anonimizado', 410)
+
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const allowed = await contactBelongsToProfessional(id, proScope)
+      if (!allowed) return err('Contato não encontrado', 404)
+    }
 
     const rawServices = await listServices(id)
 
@@ -136,7 +146,7 @@ const patchSchema = z.object({
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   try {
-    const auth = await requireAuth(req)
+    const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { id } = await ctx.params
@@ -145,6 +155,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const before = await getContactById(id)
     if (!before) return err('Contato não encontrado', 404)
     if (before.anonymized_at) return err('Contato anonimizado', 410)
+
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const allowed = await contactBelongsToProfessional(id, proScope)
+      if (!allowed) return err('Contato não encontrado', 404)
+    }
 
     const patch = {
       name: body.name,

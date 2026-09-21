@@ -5,6 +5,10 @@ import { cachedFetch } from '@/lib/cache'
 import { listTodayPipeline } from '@/lib/services'
 import { countDistinctContactIds } from '@/lib/salon/headcount'
 import { todayIso } from '@/lib/salon/format'
+import {
+  filterByProfessionalName,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 export const maxDuration = 20
 
@@ -15,10 +19,23 @@ export async function GET(req: NextRequest) {
 
     const dayParam = req.nextUrl.searchParams.get('day')
     const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : todayIso()
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    const cacheKey = proScope
+      ? `pipeline:v7:${day}:pro:${proScope.toLowerCase()}`
+      : `pipeline:v6:${day}`
     const payload = await cachedFetch(
-      `pipeline:v6:${day}`,
+      cacheKey,
       async () => {
-        const { scheduled, courtesy, completed } = await listTodayPipeline(day)
+        const full = await listTodayPipeline(day)
+        const scheduled = proScope
+          ? filterByProfessionalName(full.scheduled, proScope)
+          : full.scheduled
+        const courtesy = proScope
+          ? filterByProfessionalName(full.courtesy, proScope)
+          : full.courtesy
+        const completed = proScope
+          ? filterByProfessionalName(full.completed, proScope)
+          : full.completed
         const scheduledHeads = countDistinctContactIds(scheduled)
         const courtesyHeads = countDistinctContactIds(courtesy)
         const completedHeads = countDistinctContactIds(completed)
@@ -29,6 +46,7 @@ export async function GET(req: NextRequest) {
           scheduled,
           courtesy,
           completed,
+          professional_scope: proScope,
           counts: {
             scheduled: scheduledHeads,
             courtesy: courtesyHeads,

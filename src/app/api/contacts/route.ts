@@ -2,9 +2,9 @@ import { NextRequest } from 'next/server'
 import { ok, okCached, handleError, err } from '@/lib/api-response'
 import { cachedFetch, MemoryCache } from '@/lib/cache'
 import {
-  countBaseAtiva,
   countContactQueues,
   listActivatedContacts,
+  listContactsOwnedByIds,
   listContactsWithSummary,
   listContactsWithoutServices,
   listNewContactsNotInAvec,
@@ -13,8 +13,12 @@ import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
 import { addService } from '@/lib/services'
 import { SERVICE_CATEGORIES } from '@/lib/services'
 import { compareByOverdueThenName } from '@/lib/salon/urgency'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireSession } from '@/lib/auth'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
+import {
+  listContactIdsOwnedByProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 import { z } from 'zod'
 
 export const maxDuration = 25
@@ -48,7 +52,7 @@ function parseUrgencyQueue(raw: string | null): UrgencyQueue | null {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireAuth(req)
+    const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { searchParams } = new URL(req.url)
@@ -82,6 +86,75 @@ export async function GET(req: NextRequest) {
       never_synced: syncMeta.never_synced,
     }
 
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const ownedIds = await listContactIdsOwnedByProfessional(proScope)
+      const ownedSet = new Set(ownedIds)
+
+      if (countsOnly) {
+        const listed = await listContactsOwnedByIds(ownedIds, {
+          limit: 2000,
+          pendingOnly: true,
+          orderBy: 'urgency',
+        })
+        const queues = {
+          overdue: listed.items.filter((c) => c.overdue > 0).length,
+          due_soon: listed.items.filter((c) => c.overdue === 0 && c.due_soon > 0).length,
+          scheduled: listed.items.filter((c) => c.scheduled_soon > 0).length,
+          novos: 0,
+          sem_servicos: 0,
+          ativados: 0,
+          base_ativa: ownedIds.length,
+        }
+        return okCached(null, 15, { queues, sync: syncPayload, professional_scope: proScope })
+      }
+
+      if (newNotAvec || withoutServices || activatedQueue) {
+        return okCached([], 15, {
+          total: 0,
+          limit,
+          status: status ?? 'all',
+          channel: channel ?? 'all',
+          pending: false,
+          queue: newNotAvec ? 'novos' : withoutServices ? 'sem_servicos' : 'ativados',
+          queues: {
+            overdue: 0,
+            due_soon: 0,
+            scheduled: 0,
+            novos: 0,
+            sem_servicos: 0,
+            ativados: 0,
+            base_ativa: ownedIds.length,
+          },
+          sync: syncPayload,
+          professional_scope: proScope,
+        })
+      }
+
+      const listed = await listContactsOwnedByIds(ownedIds, {
+        limit,
+        query,
+        pendingOnly,
+        orderBy: sort === 'name' ? 'name' : 'urgency',
+        urgencyQueue,
+      })
+      let items = listed.items
+      if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
+        items = [...items].sort(compareByOverdueThenName)
+      }
+      return okCached(items, query ? 15 : 30, {
+        total: listed.total,
+        limit,
+        status: status ?? 'all',
+        channel: channel ?? 'all',
+        pending: pendingOnly,
+        queue: urgencyQueue ?? 'all',
+        sync: syncPayload,
+        professional_scope: proScope,
+        owned_total: ownedSet.size,
+      })
+    }
+
     if (countsOnly) {
       const cacheKey = `contacts:queue-counts:v6:ch=${channel ?? ''}:day=${day ?? 'today'}`
       const queues = await cachedFetch(
@@ -93,20 +166,16 @@ export async function GET(req: NextRequest) {
     }
 
     if (newNotAvec) {
-      // v5: list-only (no countContactQueues / urgency scan); UI keeps prev overdue
-      // counts. base_ativa is a cheap COUNT so deep-links still show Funil CRM.
-      const cacheKey = `contacts:novos:v5:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      // v4: list-only (no countContactQueues / urgency scan); UI keeps prev overdue counts
+      const cacheKey = `contacts:novos:v4:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
       const result = await cachedFetch(
         cacheKey,
         async () => {
-          const [listed, base_ativa] = await Promise.all([
-            listNewContactsNotInAvec({ day, limit }),
-            countBaseAtiva(),
-          ])
+          const listed = await listNewContactsNotInAvec({ day, limit })
           return {
             items: listed.items,
             total: listed.total,
-            queues: { novos: listed.total, base_ativa },
+            queues: { novos: listed.total },
           }
         },
         30,
@@ -171,7 +240,7 @@ export async function GET(req: NextRequest) {
     }
 
     const cacheKey = [
-      'contacts:list:v10',
+      'contacts:list:v9',
       `lim=${limit}`,
       `sort=${sort}`,
       `pend=${pendingOnly ? 1 : 0}`,
@@ -184,7 +253,6 @@ export async function GET(req: NextRequest) {
     const result = await cachedFetch(
       cacheKey,
       async () => {
-        const baseAtivaPromise = pendingOnly ? null : countBaseAtiva()
         const { items: rawItems, total } = await listContactsWithSummary({
           limit,
           query,
@@ -201,15 +269,10 @@ export async function GET(req: NextRequest) {
         }
 
         let queueTotal = total
-        let queues: Awaited<ReturnType<typeof countContactQueues>> | { base_ativa: number } | null =
-          null
+        let queues: Awaited<ReturnType<typeof countContactQueues>> | null = null
         if (pendingOnly) {
-          const fullQueues = await countContactQueues({ channel, day })
-          queues = fullQueues
-          if (urgencyQueue) queueTotal = fullQueues[urgencyQueue]
-        } else if (baseAtivaPromise) {
-          // Filtered search (Hoje CTAs) has no urgency scan; still expose base ativa.
-          queues = { base_ativa: await baseAtivaPromise }
+          queues = await countContactQueues({ channel, day })
+          if (urgencyQueue) queueTotal = queues[urgencyQueue]
         }
 
         return { items, total: queueTotal, queues }
