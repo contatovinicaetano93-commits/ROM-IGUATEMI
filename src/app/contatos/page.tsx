@@ -91,7 +91,7 @@ function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos' |
   if (queue === 'novos') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] font-semibold text-gold">
-        <UserPlus size={10} /> Sem vínculo
+        <UserPlus size={10} /> Novo
       </span>
     )
   }
@@ -372,7 +372,7 @@ function ContatosPageContent() {
           }`
         : 'busque na base'
       : mode === 'novos'
-        ? `${visible.length} sem vínculo em ${NOVOS_WINDOW_DAYS} dias${
+        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} · ${NOVOS_WINDOW_DAYS} dias${
             totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
         : mode === 'sem_servicos'
@@ -461,10 +461,10 @@ function ContatosPageContent() {
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <UserPlus size={16} className="text-gold" />
-            Sem vínculo Avec
+            Novos
           </p>
           <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
-            Últimos {NOVOS_WINDOW_DAYS} dias, cadastro ROM ainda sem cliente no banco Avec
+            Últimos {NOVOS_WINDOW_DAYS} dias — ainda sem vínculo no banco Avec
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-gold/15 px-3 py-1 text-sm font-semibold tabular-nums text-gold">
@@ -481,7 +481,7 @@ function ContatosPageContent() {
           [
             { id: 'reactivate' as const, label: 'Reativar' },
             { id: 'ativados' as const, label: 'Ativados', count: queueCounts.ativados },
-            { id: 'novos' as const, label: 'Sem vínculo' },
+            { id: 'novos' as const, label: 'Novos' },
             { id: 'sem_servicos' as const, label: 'Sem serviço' },
             { id: 'search' as const, label: 'Buscar' },
           ] as const

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   filterByOwnedContactIds,
   filterByProfessionalName,
+  professionalNameOwns,
   professionalNamesMatch,
   professionalScopeCacheKey,
 } from '@/lib/intranet/professional-scope'
@@ -18,14 +19,32 @@ describe('professionalNamesMatch', () => {
   })
 })
 
+describe('professionalNameOwns', () => {
+  it('casa Romeu com Romeu Felipe (variantes Avec)', () => {
+    expect(professionalNameOwns('Romeu', 'Romeu Felipe')).toBe(true)
+    expect(professionalNameOwns('Romeu Felipe', 'Romeu Felipe')).toBe(true)
+    expect(professionalNameOwns('romeu felipe', 'Romeu Felipe')).toBe(true)
+  })
+
+  it('não casa profissional errado', () => {
+    expect(professionalNameOwns('Aline Jabur', 'Romeu Felipe')).toBe(false)
+    expect(professionalNameOwns(null, 'Romeu Felipe')).toBe(false)
+  })
+})
+
 describe('filterByProfessionalName', () => {
-  it('mantém só a agenda do profissional', () => {
+  it('mantém só a agenda do profissional (inclui variante frouxa)', () => {
     const rows = [
       { id: '1', professional_name: 'Alison Alvarez' },
       { id: '2', professional_name: 'Aline Jabur' },
       { id: '3', professional_name: 'alison alvarez' },
+      { id: '4', professional_name: 'Alison' },
     ]
-    expect(filterByProfessionalName(rows, 'Alison Alvarez').map((r) => r.id)).toEqual(['1', '3'])
+    expect(filterByProfessionalName(rows, 'Alison Alvarez').map((r) => r.id)).toEqual([
+      '1',
+      '3',
+      '4',
+    ])
   })
 })
 

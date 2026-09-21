@@ -1,6 +1,9 @@
 import type { AuthSession } from '@/lib/auth'
 import { getSql } from '@/lib/db'
-import { occupancyMergeKey } from '@/lib/director-report/match-pro'
+import {
+  namesLooselyMatch,
+  occupancyMergeKey,
+} from '@/lib/director-report/match-pro'
 import { findEmployeeById } from '@/lib/employees'
 
 /**
@@ -17,6 +20,19 @@ export async function resolveSessionProfessionalScope(
   return name || null
 }
 
+/**
+ * Dono/admin/financeiro com `professional_name` (ex.: Romeu) precisa do vínculo
+ * Avec p/ Meu faturamento e da carteira própria — mas as filas de lead
+ * (Novos / Sem serviço / Ativados) continuam da unidade.
+ * Staff profissional vê só a carteira; leads unitários ficam fora.
+ */
+export function professionalKeepsUnitLeadQueues(
+  session: AuthSession | null | undefined,
+): boolean {
+  if (!session) return false
+  return session.role === 'admin' || session.role === 'financeiro'
+}
+
 /** Compara nomes de profissional com a mesma chave do relatório (acentos/case). */
 export function professionalNamesMatch(
   a: string | null | undefined,
@@ -29,14 +45,62 @@ export function professionalNamesMatch(
 }
 
 /**
- * Contatos do profissional: preferência (cabelo/manicure) ou serviço/visita no nome.
- * Match por igualdade case-insensitive no texto gravado (vínculo vem do roster).
+ * Match amplo: chave canônica OU nomes frouxos (Romeu ↔ Romeu Felipe,
+ * apelido Avec ↔ nome completo do cadastro).
  */
-export async function listContactIdsOwnedByProfessional(
+export function professionalNameOwns(
+  candidateName: string | null | undefined,
+  sessionProfessionalName: string,
+): boolean {
+  const raw = candidateName?.trim()
+  if (!raw) return false
+  if (professionalNamesMatch(raw, sessionProfessionalName)) return true
+  return namesLooselyMatch(occupancyMergeKey(raw), occupancyMergeKey(sessionProfessionalName))
+}
+
+/** Nomes brutos na base que batem com o profissional da sessão. */
+export async function listMatchingProfessionalNameVariants(
   professionalName: string,
 ): Promise<string[]> {
   const name = professionalName.trim()
   if (!name) return []
+  const sql = getSql()
+  const rows = (await sql`
+    select distinct trim(n) as name from (
+      select professional_name as n from client_services
+      where professional_name is not null and trim(professional_name) <> ''
+      union
+      select professional_name as n from client_service_visits
+      where professional_name is not null and trim(professional_name) <> ''
+      union
+      select preferred_hairstylist as n from contacts
+      where preferred_hairstylist is not null and trim(preferred_hairstylist) <> ''
+      union
+      select preferred_manicurist as n from contacts
+      where preferred_manicurist is not null and trim(preferred_manicurist) <> ''
+    ) names
+    where trim(n) <> ''
+  `) as { name: string }[]
+
+  const matched = new Set<string>()
+  matched.add(name)
+  for (const row of rows) {
+    const candidate = row.name?.trim()
+    if (!candidate) continue
+    if (professionalNameOwns(candidate, name)) matched.add(candidate)
+  }
+  return [...matched]
+}
+
+/**
+ * Contatos do profissional: preferência (cabelo/manicure) ou serviço/visita
+ * em qualquer variante de nome Avec que case com o vínculo do colaborador.
+ */
+export async function listContactIdsOwnedByProfessional(
+  professionalName: string,
+): Promise<string[]> {
+  const variants = await listMatchingProfessionalNameVariants(professionalName)
+  if (variants.length === 0) return []
   const sql = getSql()
   const rows = (await sql`
     select distinct id from (
@@ -44,8 +108,8 @@ export async function listContactIdsOwnedByProfessional(
       from contacts c
       where c.anonymized_at is null
         and (
-          lower(trim(coalesce(c.preferred_hairstylist, ''))) = lower(trim(${name}))
-          or lower(trim(coalesce(c.preferred_manicurist, ''))) = lower(trim(${name}))
+          trim(coalesce(c.preferred_hairstylist, '')) in ${sql(variants)}
+          or trim(coalesce(c.preferred_manicurist, '')) in ${sql(variants)}
         )
       union
       select cs.contact_id as id
@@ -53,14 +117,14 @@ export async function listContactIdsOwnedByProfessional(
       join contacts c on c.id = cs.contact_id
       where c.anonymized_at is null
         and cs.professional_name is not null
-        and lower(trim(cs.professional_name)) = lower(trim(${name}))
+        and trim(cs.professional_name) in ${sql(variants)}
       union
       select csv.contact_id as id
       from client_service_visits csv
       join contacts c on c.id = csv.contact_id
       where c.anonymized_at is null
         and csv.professional_name is not null
-        and lower(trim(csv.professional_name)) = lower(trim(${name}))
+        and trim(csv.professional_name) in ${sql(variants)}
     ) owned
   `) as { id: string }[]
   return rows.map((row) => row.id)
@@ -70,8 +134,8 @@ export async function contactBelongsToProfessional(
   contactId: string,
   professionalName: string,
 ): Promise<boolean> {
-  const name = professionalName.trim()
-  if (!name) return false
+  const variants = await listMatchingProfessionalNameVariants(professionalName)
+  if (variants.length === 0) return false
   const sql = getSql()
   const rows = (await sql`
     select 1 as ok
@@ -80,8 +144,8 @@ export async function contactBelongsToProfessional(
       where c.id = ${contactId}::uuid
         and c.anonymized_at is null
         and (
-          lower(trim(coalesce(c.preferred_hairstylist, ''))) = lower(trim(${name}))
-          or lower(trim(coalesce(c.preferred_manicurist, ''))) = lower(trim(${name}))
+          trim(coalesce(c.preferred_hairstylist, '')) in ${sql(variants)}
+          or trim(coalesce(c.preferred_manicurist, '')) in ${sql(variants)}
         )
     )
     or exists (
@@ -90,7 +154,7 @@ export async function contactBelongsToProfessional(
       where cs.contact_id = ${contactId}::uuid
         and c.anonymized_at is null
         and cs.professional_name is not null
-        and lower(trim(cs.professional_name)) = lower(trim(${name}))
+        and trim(cs.professional_name) in ${sql(variants)}
     )
     or exists (
       select 1 from client_service_visits csv
@@ -98,7 +162,7 @@ export async function contactBelongsToProfessional(
       where csv.contact_id = ${contactId}::uuid
         and c.anonymized_at is null
         and csv.professional_name is not null
-        and lower(trim(csv.professional_name)) = lower(trim(${name}))
+        and trim(csv.professional_name) in ${sql(variants)}
     )
     limit 1
   `) as { ok: number }[]
@@ -110,7 +174,7 @@ export function filterByProfessionalName<T extends { professional_name?: string 
   rows: readonly T[],
   professionalName: string,
 ): T[] {
-  return rows.filter((row) => professionalNamesMatch(row.professional_name, professionalName))
+  return rows.filter((row) => professionalNameOwns(row.professional_name, professionalName))
 }
 
 /** Filtra playbook / filas para só contatos do profissional. */
