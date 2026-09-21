@@ -52,7 +52,7 @@ export default function RecepcaoPage() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    apiFetch('/api/hoje', { cache: 'no-store', clientCache: false })
+    apiFetch('/api/hoje', { cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? 'Falha ao carregar')
@@ -112,18 +112,20 @@ export default function RecepcaoPage() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <SectionCard title="Na agenda">
-          <p className="text-2xl font-semibold tabular-nums">{loading ? '…' : (heads ?? '—')}</p>
+          <p className="text-2xl font-semibold tabular-nums">
+            {loading && !data ? '…' : (heads ?? '—')}
+          </p>
           <p className="mt-1 text-xs text-muted">pessoas hoje</p>
         </SectionCard>
         <SectionCard title="Fila playbook">
           <p className="text-2xl font-semibold tabular-nums">
-            {loading ? '…' : (data?.playbook.length ?? '—')}
+            {loading && !data ? '…' : (data?.playbook.length ?? '—')}
           </p>
           <p className="mt-1 text-xs text-muted">{data?.playbook_focus ?? 'reagendar / confirmar'}</p>
         </SectionCard>
         <SectionCard title="Atrasados">
           <p className="text-2xl font-semibold tabular-nums">
-            {loading ? '…' : (data?.overdue_contacts ?? '—')}
+            {loading && !data ? '…' : (data?.overdue_contacts ?? '—')}
           </p>
           <p className="mt-1 text-xs text-muted">
             {data?.overdue_total != null ? `${data.overdue_total} serviço(s)` : 'no playbook'}
@@ -135,11 +137,13 @@ export default function RecepcaoPage() {
         title="Agenda de hoje"
         badge={
           <span className="text-xs text-muted">
-            {loading ? '…' : `${data?.schedule_services ?? data?.scheduleToday.length ?? 0} linha(s)`}
+            {loading && !data
+              ? '…'
+              : `${data?.schedule_services ?? data?.scheduleToday.length ?? 0} linha(s)`}
           </span>
         }
       >
-        {loading && <p className="text-sm text-muted">Carregando…</p>}
+        {loading && !data && <p className="text-sm text-muted">Carregando…</p>}
         {!loading && (data?.scheduleToday.length ?? 0) === 0 && (
           <p className="text-sm text-muted">Nenhum horário na agenda de hoje.</p>
         )}
