@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { ok, okCached, handleError, err } from '@/lib/api-response'
 import { cachedFetch, MemoryCache } from '@/lib/cache'
 import {
+  countBaseAtiva,
   countContactQueues,
   listActivatedContacts,
   listContactsOwnedByIds,
@@ -166,16 +167,20 @@ export async function GET(req: NextRequest) {
     }
 
     if (newNotAvec) {
-      // v4: list-only (no countContactQueues / urgency scan); UI keeps prev overdue counts
-      const cacheKey = `contacts:novos:v4:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      // v5: list-only (no countContactQueues / urgency scan); UI keeps prev overdue
+      // counts. base_ativa is a cheap COUNT so deep-links still show Funil CRM.
+      const cacheKey = `contacts:novos:v5:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
       const result = await cachedFetch(
         cacheKey,
         async () => {
-          const listed = await listNewContactsNotInAvec({ day, limit })
+          const [listed, base_ativa] = await Promise.all([
+            listNewContactsNotInAvec({ day, limit }),
+            countBaseAtiva(),
+          ])
           return {
             items: listed.items,
             total: listed.total,
-            queues: { novos: listed.total },
+            queues: { novos: listed.total, base_ativa },
           }
         },
         30,
@@ -240,7 +245,7 @@ export async function GET(req: NextRequest) {
     }
 
     const cacheKey = [
-      'contacts:list:v9',
+      'contacts:list:v10',
       `lim=${limit}`,
       `sort=${sort}`,
       `pend=${pendingOnly ? 1 : 0}`,
@@ -253,6 +258,7 @@ export async function GET(req: NextRequest) {
     const result = await cachedFetch(
       cacheKey,
       async () => {
+        const baseAtivaPromise = pendingOnly ? null : countBaseAtiva()
         const { items: rawItems, total } = await listContactsWithSummary({
           limit,
           query,
@@ -269,10 +275,15 @@ export async function GET(req: NextRequest) {
         }
 
         let queueTotal = total
-        let queues: Awaited<ReturnType<typeof countContactQueues>> | null = null
+        let queues: Awaited<ReturnType<typeof countContactQueues>> | { base_ativa: number } | null =
+          null
         if (pendingOnly) {
-          queues = await countContactQueues({ channel, day })
-          if (urgencyQueue) queueTotal = queues[urgencyQueue]
+          const fullQueues = await countContactQueues({ channel, day })
+          queues = fullQueues
+          if (urgencyQueue) queueTotal = fullQueues[urgencyQueue]
+        } else if (baseAtivaPromise) {
+          // Filtered search (Hoje CTAs) has no urgency scan; still expose base ativa.
+          queues = { base_ativa: await baseAtivaPromise }
         }
 
         return { items, total: queueTotal, queues }
