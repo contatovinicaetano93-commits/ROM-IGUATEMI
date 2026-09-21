@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAdmin } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
-import { peekIntranetDatabaseUrl } from '@/lib/db'
+import { peekResolvedDatabaseUrl, peekResolvedIntranetDatabaseUrl } from '@/lib/db'
 import { ensureIntranetProLinkColumn } from '@/lib/intranet/ensure-schema'
 import { getMigrationStatus, runPendingMigrations } from '@/lib/migrations'
 import { MissingMigrationFileError } from '@/lib/schema-migrations/registry'
@@ -27,8 +27,8 @@ export async function GET(req: NextRequest) {
     if (!auth.ok) return err(auth.message, auth.status)
 
     const status = await getMigrationStatus()
-    const salonUrl = process.env.DATABASE_URL?.trim() || null
-    const intranetUrl = peekIntranetDatabaseUrl()
+    const salonUrl = peekResolvedDatabaseUrl()
+    const intranetUrl = peekResolvedIntranetDatabaseUrl()
     return ok({
       ...status,
       hosts: {
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     const auth = await authorize(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
-    // Intranet (Neon) pode divergir do DATABASE_URL do salão — garante coluna do vínculo Avec.
+    // Intranet pode divergir do DATABASE_URL do salão — garante coluna do vínculo Avec.
     await ensureIntranetProLinkColumn()
 
     const summary = await runPendingMigrations()
@@ -70,8 +70,8 @@ export async function POST(req: NextRequest) {
       ...summary,
       intranetProLinkEnsured: true,
       hosts: {
-        salon: dbHost(process.env.DATABASE_URL),
-        intranet: dbHost(peekIntranetDatabaseUrl()),
+        salon: dbHost(peekResolvedDatabaseUrl()),
+        intranet: dbHost(peekResolvedIntranetDatabaseUrl()),
       },
     })
   } catch (e) {

@@ -1,16 +1,16 @@
 import 'server-only'
 
-import { getIntranetSql, peekIntranetDatabaseUrl } from '@/lib/db'
+import { getIntranetSql, peekResolvedIntranetDatabaseUrl } from '@/lib/db'
 
 /**
  * Schema da intranet (colaboradores) pode viver em INTRANET_DATABASE_URL
- * (Neon) enquanto as migrations admin rodam no DATABASE_URL (salão).
+ * enquanto as migrations admin rodam no DATABASE_URL do salão.
  * Garante colunas críticas sem depender do runner único.
  */
 let proLinkOnce: Promise<void> | null = null
 
 export async function ensureIntranetProLinkColumn(): Promise<void> {
-  if (!peekIntranetDatabaseUrl()) return
+  if (!peekResolvedIntranetDatabaseUrl()) return
   if (!proLinkOnce) {
     proLinkOnce = (async () => {
       const sql = getIntranetSql()
