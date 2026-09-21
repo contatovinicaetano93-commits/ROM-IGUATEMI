@@ -92,6 +92,7 @@ export default function PessoasPage() {
   const [selectedProId, setSelectedProId] = useState('')
   const [createName, setCreateName] = useState('')
   const [createProfessionalName, setCreateProfessionalName] = useState('')
+  const [proSearch, setProSearch] = useState('')
   const canManage = session != null && (!session.auth_enabled || session.role === 'admin')
   const isProfissionalCargo = cargoId === 'profissional'
 
@@ -100,6 +101,12 @@ export default function PessoasPage() {
     () => professionals.find((item) => item.id === selectedProId) ?? null,
     [professionals, selectedProId],
   )
+  const filteredProfessionals = useMemo(() => {
+    const q = proSearch.trim().toLowerCase()
+    if (!q) return professionals
+    return professionals.filter((pro) => pro.name.toLowerCase().includes(q))
+  }, [professionals, proSearch])
+
 
   useEffect(() => {
     fetch('/api/employees', { credentials: 'include' })
@@ -123,6 +130,7 @@ export default function PessoasPage() {
     if (pack.id !== 'profissional') {
       setSelectedProId('')
       setCreateProfessionalName('')
+      setProSearch('')
     }
   }, [pack])
 
@@ -384,26 +392,59 @@ export default function PessoasPage() {
           <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
             {isProfissionalCargo ? (
               <>
-                <label className="sm:col-span-2 block text-sm">
-                  <span className="mb-1 block text-xs uppercase tracking-wide text-muted">
+                <div className="sm:col-span-2">
+                  <p className="mb-1 text-xs uppercase tracking-wide text-muted">
                     Profissional da unidade ({professionals.length})
-                  </span>
-                  <select
-                    required
-                    value={selectedProId}
-                    onChange={(e) => onSelectProfessional(e.target.value)}
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2"
-                  >
-                    <option value="">Selecione o cabeleireiro / maquiagem…</option>
-                    {professionals.map((pro) => (
-                      <option key={pro.id} value={pro.id} disabled={Boolean(pro.linked_employee_id)}>
-                        {pro.name}
-                        {pro.role === 'makeup' ? ' · maquiagem' : ''}
-                        {pro.linked_employee_id ? ` · já tem acesso (${pro.linked_email})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  </p>
+                  <input
+                    type="search"
+                    value={proSearch}
+                    onChange={(e) => setProSearch(e.target.value)}
+                    placeholder="Buscar pelo nome…"
+                    className="mb-2 w-full rounded-xl border border-border bg-background px-3 py-2"
+                  />
+                  <ul className="max-h-56 overflow-y-auto rounded-xl border border-border bg-background divide-y divide-border">
+                    {filteredProfessionals.length === 0 ? (
+                      <li className="px-3 py-3 text-sm text-muted">Nenhum profissional com esse nome.</li>
+                    ) : (
+                      filteredProfessionals.map((pro) => {
+                        const taken = Boolean(pro.linked_employee_id)
+                        const active = pro.id === selectedProId
+                        return (
+                          <li key={pro.id}>
+                            <button
+                              type="button"
+                              disabled={taken}
+                              onClick={() => onSelectProfessional(pro.id)}
+                              className={
+                                active
+                                  ? 'flex w-full items-start justify-between gap-2 bg-foreground px-3 py-2.5 text-left text-sm text-background'
+                                  : taken
+                                    ? 'flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-sm text-muted opacity-60'
+                                    : 'flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-foreground/5'
+                              }
+                            >
+                              <span>
+                                {pro.name}
+                                {pro.role === 'makeup' ? (
+                                  <span className={active ? 'text-background/70' : 'text-muted'}> · maquiagem</span>
+                                ) : null}
+                              </span>
+                              {taken ? (
+                                <span className="shrink-0 text-[0.65rem] uppercase tracking-wide">
+                                  já: {pro.linked_email}
+                                </span>
+                              ) : null}
+                            </button>
+                          </li>
+                        )
+                      })
+                    )}
+                  </ul>
+                  {!selectedProId ? (
+                    <p className="mt-2 text-xs text-danger">Escolha o profissional na lista para vincular o acesso.</p>
+                  ) : null}
+                </div>
                 {selectedPro ? (
                   <p className="sm:col-span-2 text-xs text-muted">
                     Vínculo Avec: <span className="text-foreground">{selectedPro.name}</span>
