@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import posthog from 'posthog-js'
 import { Avatar, PrimaryButton } from '../_components/ui'
+import { useClientSession } from '../_components/SessionProvider'
 import { apiFetch } from '@/lib/api-client'
 import { fmtSchedule, fmtScheduleParts, toSalonDateIso, whatsAppUrl } from '@/lib/salon/format'
 import {
@@ -91,7 +92,7 @@ function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos' |
   if (queue === 'novos') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] font-semibold text-gold">
-        <UserPlus size={10} /> Novo
+        <UserPlus size={10} /> Novo cliente
       </span>
     )
   }
@@ -211,6 +212,9 @@ export default function ContatosPage() {
 
 function ContatosPageContent() {
   const searchParams = useSearchParams()
+  const { session } = useClientSession()
+  const canOpenVisao =
+    session != null && (!session.auth_enabled || Boolean(session.can_view_revenue))
   const [ignoreUrlFilters, setIgnoreUrlFilters] = useState(false)
   const [mode, setMode] = useState<ListMode>(() => initialModeFromSearch(searchParams))
   const [queue, setQueue] = useState<ReactivateQueue>(() => initialReactivateQueueFromSearch(searchParams))
@@ -310,8 +314,17 @@ function ContatosPageContent() {
           if (urlStatus) params.set('status', urlStatus)
           if (hasUrlFilter) params.set('limit', '250')
         }
+        // Badges Atrasados/Vencendo/Agendados: lista filtrada sozinha não basta —
+        // puxa counts em paralelo (e a API também manda queues no meta).
+        const countsPromise =
+          mode === 'reactivate'
+            ? apiFetch('/api/contacts?counts=1', { cache: 'no-store' })
+                .then((r) => r.json())
+                .catch(() => null)
+            : Promise.resolve(null)
         const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
         const json = await res.json()
+        const countsJson = await countsPromise
         if (cancelled) return
         if (json.error) setError(json.error)
         else {
@@ -320,34 +333,33 @@ function ContatosPageContent() {
           setContacts(json.data ?? [])
           const total = json.meta?.total
           setTotalInBase(typeof total === 'number' ? total : null)
-          const q = json.meta?.queues
-          const baseAtiva = typeof q?.base_ativa === 'number' ? q.base_ativa : undefined
+          const q = (countsJson?.meta?.queues ?? json.meta?.queues) as
+            | Partial<{
+                overdue: number
+                due_soon: number
+                scheduled: number
+                novos: number
+                sem_servicos: number
+                ativados: number
+                base_ativa: number
+              }>
+            | undefined
           if (q && typeof q.overdue === 'number') {
             setQueueCounts({
               overdue: q.overdue,
-              due_soon: q.due_soon,
-              scheduled: q.scheduled,
+              due_soon: typeof q.due_soon === 'number' ? q.due_soon : 0,
+              scheduled: typeof q.scheduled === 'number' ? q.scheduled : 0,
               novos: typeof q.novos === 'number' ? q.novos : 0,
               sem_servicos: typeof q.sem_servicos === 'number' ? q.sem_servicos : 0,
               ativados: typeof q.ativados === 'number' ? q.ativados : 0,
-              base_ativa: baseAtiva ?? 0,
+              base_ativa: typeof q.base_ativa === 'number' ? q.base_ativa : 0,
             })
           } else if (mode === 'ativados' && typeof total === 'number') {
             setQueueCounts((prev) => ({ ...prev, ativados: total }))
           } else if (mode === 'novos' && typeof total === 'number') {
-            setQueueCounts((prev) => ({
-              ...prev,
-              novos: total,
-              ...(baseAtiva != null ? { base_ativa: baseAtiva } : {}),
-            }))
+            setQueueCounts((prev) => ({ ...prev, novos: total }))
           } else if (mode === 'sem_servicos' && typeof total === 'number') {
-            setQueueCounts((prev) => ({
-              ...prev,
-              sem_servicos: total,
-              ...(baseAtiva != null ? { base_ativa: baseAtiva } : {}),
-            }))
-          } else if (baseAtiva != null) {
-            setQueueCounts((prev) => ({ ...prev, base_ativa: baseAtiva }))
+            setQueueCounts((prev) => ({ ...prev, sem_servicos: total }))
           }
         }
       } catch (e) {
@@ -416,7 +428,7 @@ function ContatosPageContent() {
               : mode === 'ativados'
                 ? 'Chamados pelo painel — aguardando agenda ou visita na Avec (30 dias)'
                 : mode === 'novos'
-                ? `Lead dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda`
+                ? `Lead dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda (Novos clientes)`
                 : mode === 'sem_servicos'
                   ? 'Passou dos 30 dias e segue sem retorno previsto — triar ou marcar perdido'
                   : hasUrlFilter
@@ -430,13 +442,17 @@ function ContatosPageContent() {
           {queueCounts.base_ativa > 0 ? (
             <p className="mt-1 text-[0.7rem] text-muted">
               Entrada no mês: {queueCounts.base_ativa.toLocaleString('pt-BR')}
-              {' · '}
-              <Link
-                href="/dashboard"
-                className="text-gold/90 underline-offset-2 hover:underline"
-              >
-                ver Funil CRM
-              </Link>
+              {canOpenVisao ? (
+                <>
+                  {' · '}
+                  <Link
+                    href="/dashboard"
+                    className="text-gold/90 underline-offset-2 hover:underline"
+                  >
+                    ver Funil CRM
+                  </Link>
+                </>
+              ) : null}
             </p>
           ) : null}
         </div>
@@ -461,7 +477,7 @@ function ContatosPageContent() {
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <UserPlus size={16} className="text-gold" />
-            Novos
+            Novos clientes
           </p>
           <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
             Últimos {NOVOS_WINDOW_DAYS} dias — ainda sem vínculo no banco Avec
@@ -481,7 +497,7 @@ function ContatosPageContent() {
           [
             { id: 'reactivate' as const, label: 'Reativar' },
             { id: 'ativados' as const, label: 'Ativados', count: queueCounts.ativados },
-            { id: 'novos' as const, label: 'Novos' },
+            { id: 'novos' as const, label: 'Novos clientes' },
             { id: 'sem_servicos' as const, label: 'Sem serviço' },
             { id: 'search' as const, label: 'Buscar' },
           ] as const

@@ -239,17 +239,33 @@ export async function GET(req: NextRequest) {
 
     // Carteira do profissional (Reativar / busca / lista padrão).
     if (proScope && ownedIds) {
-      const listed = await listContactsOwnedByIds(ownedIds, {
-        limit,
-        query,
-        pendingOnly,
-        orderBy: sort === 'name' ? 'name' : 'urgency',
-        urgencyQueue,
-      })
+      const [listed, urgencyListed] = await Promise.all([
+        listContactsOwnedByIds(ownedIds, {
+          limit,
+          query,
+          pendingOnly,
+          orderBy: sort === 'name' ? 'name' : 'urgency',
+          urgencyQueue,
+        }),
+        // Contagens das 3 filas — independente do filtro ativo (senão o badge fica 0).
+        listContactsOwnedByIds(ownedIds, {
+          limit: 2000,
+          pendingOnly: true,
+          orderBy: 'urgency',
+        }),
+      ])
       let items = listed.items
       if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
         items = [...items].sort(compareByOverdueThenName)
       }
+      const urgency = {
+        overdue: urgencyListed.items.filter((c) => c.overdue > 0).length,
+        due_soon: urgencyListed.items.filter((c) => c.overdue === 0 && c.due_soon > 0).length,
+        scheduled: urgencyListed.items.filter((c) => c.scheduled_soon > 0).length,
+      }
+      const leadQueues = keepUnitLeads
+        ? await countContactQueues({ channel, day })
+        : { novos: 0, sem_servicos: 0, ativados: 0 }
       return okCached(items, query ? 15 : 30, {
         total: listed.total,
         limit,
@@ -257,6 +273,13 @@ export async function GET(req: NextRequest) {
         channel: channel ?? 'all',
         pending: pendingOnly,
         queue: urgencyQueue ?? 'all',
+        queues: {
+          ...urgency,
+          novos: leadQueues.novos,
+          sem_servicos: leadQueues.sem_servicos,
+          ativados: leadQueues.ativados,
+          base_ativa: ownedIds.length,
+        },
         sync: syncPayload,
         professional_scope: proScope,
         owned_total: ownedIds.length,
