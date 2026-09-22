@@ -53,8 +53,11 @@ const FLOW_AREAS: Record<RequestArea, { label: string; description: string }> = 
 export function systemsForAccess(
   role: AuthRole,
   extras: readonly GrantableModuleKey[] = [],
+  opts?: { professionalName?: string | null },
 ): IntranetSystem[] {
-  return [...INTRANET, ...OPERACAO, ...GESTAO].filter((item) => canSeeNavHref(item.href, role, extras))
+  return [...INTRANET, ...OPERACAO, ...GESTAO].filter((item) =>
+    canSeeNavHref(item.href, role, extras, opts),
+  )
 }
 
 export function flowAreaSystems(areaIds: RequestArea[]): IntranetSystem[] {

@@ -10,6 +10,7 @@ import {
   type AuthSession,
 } from '@/lib/auth'
 import { isProduction } from '@/lib/env'
+import { LoginRequestSchema } from '@/lib/schemas'
 import { checkLoginRateLimit } from '@/lib/rate-limiter'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { findEmployeeByEmail } from '@/lib/employees'
@@ -26,10 +27,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null)
-  const parsedUser =
-    typeof body?.user === 'string' ? body.user : typeof body?.username === 'string' ? body.username : ''
-  const password = typeof body?.password === 'string' ? body.password : ''
-  const legacyToken = typeof body?.token === 'string' ? body.token : ''
+
+  const validation = LoginRequestSchema.safeParse(body)
+  if (!validation.success) {
+    return err(validation.error.issues[0]?.message || 'Dados inválidos', 400)
+  }
+
+  const { user: parsedUser, password, token: legacyToken } = validation.data
 
   const user = parsedUser || getAdminUser()
   const pass = password || legacyToken || ''
@@ -46,6 +50,7 @@ export async function POST(req: NextRequest) {
             employeeId: employee.id,
             canPublish: employee.can_publish || employee.panel_role === 'admin' || employee.panel_role === 'mkt',
             modules: employee.modules,
+            professionalName: employee.professional_name,
           })
         }
       }
@@ -91,6 +96,7 @@ export async function POST(req: NextRequest) {
     employeeId: session.employeeId,
     canPublish: session.canPublish,
     modules: session.modules,
+    professionalName: session.professionalName,
   })
   for (const [k, v] of Object.entries(rate.responseHeaders)) res.headers.set(k, v)
   res.cookies.set(AUTH_COOKIE, await createV3SessionToken(session), {

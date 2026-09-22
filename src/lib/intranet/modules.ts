@@ -1,4 +1,8 @@
 import type { AuthRole } from '@/lib/auth'
+import {
+  isProfessionalHiddenPath,
+  isProfessionalStaff,
+} from '@/lib/intranet/professional-nav'
 
 export type GrantableModuleKey =
   | 'pipeline'
@@ -96,12 +100,17 @@ export function canSeeNavHref(
   href: string,
   role: AuthRole | null | undefined,
   extras: readonly GrantableModuleKey[] = [],
+  opts?: { professionalName?: string | null },
 ): boolean {
   if (!role) return false
   const path = href.split('?')[0] || '/'
   if (path === '/auditoria' || path.startsWith('/auditoria/')) return role === 'admin'
   // Cadastro/edição de acessos é só admin master — não poluir o menu dos demais cargos.
   if (path === '/pessoas' || path.startsWith('/pessoas/')) return role === 'admin'
+  // Profissional: sem Balcão / Pós-venda / Operação (Agenda + Contatos bastam).
+  if (isProfessionalStaff(role, opts?.professionalName) && isProfessionalHiddenPath(path)) {
+    return false
+  }
   const key = moduleKeyFromHref(href)
   if (!key) return true
   return hasPanelModule(role, extras, key)

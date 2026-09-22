@@ -6,16 +6,13 @@ import {
 import { cargoPackageById } from '@/lib/intranet/cargo-packages'
 
 describe('cargoAccessPreviewLabels', () => {
-  it('profissional lista agenda, contatos, balcão, pós-venda, operação e meu faturamento', () => {
+  it('profissional lista agenda, contatos e meu faturamento — sem Balcão/Pós-venda/Operação', () => {
     const pack = cargoPackageById('profissional')
     expect(pack).not.toBeNull()
     if (!pack) return
     expect(cargoAccessPreviewLabels(pack)).toEqual([
       'Agenda do dia',
       'Contatos',
-      'Recepção',
-      'Pós-venda',
-      'Operação do dia',
       'Meu faturamento',
     ])
   })
