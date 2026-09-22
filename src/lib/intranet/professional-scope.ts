@@ -8,8 +8,9 @@ import { findEmployeeById } from '@/lib/employees'
 
 /**
  * Nome Avec vinculado ao colaborador logado.
- * Só escopa quando há `professional_name` gravado (cargo Profissional).
- * Recepção/staff sem vínculo vê a base da unidade.
+ * Com `professional_name`, a carteira é só clientes ligados a esse nome
+ * (preferência / serviços / visitas) — inclusive Dono/financeiro com vínculo
+ * Avec (ex.: Romeu). Sem vínculo, Recepção/staff vê a base da unidade.
  */
 export async function resolveSessionProfessionalScope(
   session: AuthSession | null | undefined,
@@ -18,19 +19,6 @@ export async function resolveSessionProfessionalScope(
   const employee = await findEmployeeById(session.employeeId)
   const name = employee?.professional_name?.trim()
   return name || null
-}
-
-/**
- * Dono/admin/financeiro com `professional_name` (ex.: Romeu) precisa do vínculo
- * Avec p/ Meu faturamento e da carteira própria — mas as filas de lead
- * (Novos / Sem serviço / Ativados) continuam da unidade.
- * Staff profissional vê só a carteira; leads unitários ficam fora.
- */
-export function professionalKeepsUnitLeadQueues(
-  session: AuthSession | null | undefined,
-): boolean {
-  if (!session) return false
-  return session.role === 'admin' || session.role === 'financeiro'
 }
 
 /** Compara nomes de profissional com a mesma chave do relatório (acentos/case). */

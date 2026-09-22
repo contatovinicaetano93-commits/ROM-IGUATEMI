@@ -18,7 +18,6 @@ import { requireAuth, requireSession } from '@/lib/auth'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 import {
   listContactIdsOwnedByProfessional,
-  professionalKeepsUnitLeadQueues,
   resolveSessionProfessionalScope,
 } from '@/lib/intranet/professional-scope'
 import { z } from 'zod'
@@ -89,27 +88,11 @@ export async function GET(req: NextRequest) {
     }
 
     const proScope = await resolveSessionProfessionalScope(auth.session)
-    const keepUnitLeads = professionalKeepsUnitLeadQueues(auth.session)
     const ownedIds = proScope ? await listContactIdsOwnedByProfessional(proScope) : null
 
     if (countsOnly) {
       if (proScope && ownedIds) {
         const urgency = await countOwnedUrgencyQueues(ownedIds)
-        // Dono/financeiro: urgência da carteira + leads da unidade (Novos/Sem serviço).
-        if (keepUnitLeads) {
-          const unit = await countContactQueues({ channel, day })
-          return okCached(null, 15, {
-            queues: {
-              ...urgency,
-              novos: unit.novos,
-              sem_servicos: unit.sem_servicos,
-              ativados: unit.ativados,
-              base_ativa: ownedIds.length,
-            },
-            sync: syncPayload,
-            professional_scope: proScope,
-          })
-        }
         return okCached(null, 15, {
           queues: {
             ...urgency,
@@ -131,9 +114,8 @@ export async function GET(req: NextRequest) {
       return okCached(null, 30, { queues, sync: syncPayload })
     }
 
-    // Staff profissional: sem filas de lead da unidade (sigilo).
-    // Dono/financeiro com professional_name: cai no fluxo unitário abaixo.
-    if (proScope && !keepUnitLeads && (newNotAvec || withoutServices || activatedQueue)) {
+    // Com vínculo Avec: só carteira ligada — sem filas de lead da unidade.
+    if (proScope && (newNotAvec || withoutServices || activatedQueue)) {
       return okCached([], 15, {
         total: 0,
         limit,
@@ -232,7 +214,7 @@ export async function GET(req: NextRequest) {
     // Carteira do profissional (Reativar / busca / lista padrão).
     // Sempre devolve `queues` — a UI dos badges depende disso (sem queues = Atrasados 0).
     if (proScope && ownedIds) {
-      const [listed, urgency, leadQueues] = await Promise.all([
+      const [listed, urgency] = await Promise.all([
         listContactsOwnedByIds(ownedIds, {
           limit,
           query,
@@ -241,9 +223,6 @@ export async function GET(req: NextRequest) {
           urgencyQueue,
         }),
         countOwnedUrgencyQueues(ownedIds),
-        keepUnitLeads
-          ? countContactQueues({ channel, day })
-          : Promise.resolve({ novos: 0, sem_servicos: 0, ativados: 0 }),
       ])
       let items = listed.items
       if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
@@ -258,9 +237,9 @@ export async function GET(req: NextRequest) {
         queue: urgencyQueue ?? 'all',
         queues: {
           ...urgency,
-          novos: leadQueues.novos,
-          sem_servicos: leadQueues.sem_servicos,
-          ativados: leadQueues.ativados,
+          novos: 0,
+          sem_servicos: 0,
+          ativados: 0,
           base_ativa: ownedIds.length,
         },
         sync: syncPayload,
