@@ -1,8 +1,8 @@
 import type { AuthRole } from '@/lib/auth'
 
 /**
- * Seções de operação unitária que o cargo Profissional não usa —
- * Agenda + Contatos + Meu faturamento cobrem o dia a dia dele.
+ * Seções redundantes com Agenda + Contatos.
+ * Fora do menu de todo mundo — rotas podem existir por deep link antigo.
  */
 export const PROFESSIONAL_HIDDEN_HREFS = ['/hoje', '/recepcao', '/pos-venda'] as const
 
@@ -14,13 +14,23 @@ export function isProfessionalStaff(
   return role === 'staff' && Boolean(professionalName?.trim())
 }
 
-/** Path (página ou API) oculto/bloqueado para o cargo Profissional. */
+/**
+ * Balcão / Pós-venda / Operação fora do menu para qualquer papel.
+ * Agenda + Contatos cobrem recepção, pós-venda e gestão do dia.
+ */
+export function shouldHideOpsShellNav(
+  role: AuthRole | null | undefined,
+  _professionalName?: string | null,
+): boolean {
+  return Boolean(role)
+}
+
+/** Path das seções redundantes (página ou API /api/hoje). */
 export function isProfessionalHiddenPath(pathname: string): boolean {
   const path = (pathname.split('?')[0] || '/').replace(/\/$/, '') || '/'
   for (const href of PROFESSIONAL_HIDDEN_HREFS) {
     if (path === href || path.startsWith(`${href}/`)) return true
   }
-  // Operação/Balcão/Pós-venda leem /api/hoje.
   if (path === '/api/hoje' || path.startsWith('/api/hoje/')) return true
   return false
 }

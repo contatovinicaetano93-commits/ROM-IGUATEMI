@@ -25,18 +25,15 @@ describe('intranet paths', () => {
 })
 
 describe('intranet top bar', () => {
-  it('segue o mapa do painel admin: Home, gestão, notícias, agenda e visão', () => {
+  it('segue o mapa do painel: Home, gestão, notícias, agenda e visão (sem Balcão/Pós/Operação)', () => {
     expect(INTRANET_NAV.map((item) => item.label)).toEqual([
       'Home',
       'Gestão de usuário',
       'Notícias e eventos',
       'Rom Flow',
       'Meu faturamento',
-      'Recepção',
-      'Pós-venda',
       'Financeiro',
       'Estoque',
-      'Operação do dia',
       'Agenda do dia',
       'Visão analítica',
       'Contatos',
@@ -47,11 +44,8 @@ describe('intranet top bar', () => {
       'Notícias',
       'Rom Flow',
       'Faturamento',
-      'Balcão',
-      'Pós-venda',
       'Financeiro',
       'Estoque',
-      'Operação',
       'Agenda',
       'Visão',
       'Contatos',
@@ -59,9 +53,10 @@ describe('intranet top bar', () => {
     expect(INTRANET_NAV.find((item) => item.label === 'Agenda do dia')?.href).toBe('/pipeline')
     expect(INTRANET_NAV.find((item) => item.label === 'Visão analítica')?.href).toBe('/dashboard')
     expect(INTRANET_NAV.find((item) => item.label === 'Meu faturamento')?.href).toBe('/meu-faturamento')
-    expect(INTRANET_NAV.find((item) => item.label === 'Recepção')?.href).toBe('/recepcao')
-    expect(INTRANET_NAV.find((item) => item.label === 'Pós-venda')?.href).toBe('/pos-venda')
     const navHrefs = INTRANET_NAV.map((item) => item.href as string)
+    expect(navHrefs).not.toContain('/recepcao')
+    expect(navHrefs).not.toContain('/pos-venda')
+    expect(navHrefs).not.toContain('/hoje')
     expect(navHrefs).not.toContain('/onboarding')
     expect(navHrefs).not.toContain('/ajuda')
   })

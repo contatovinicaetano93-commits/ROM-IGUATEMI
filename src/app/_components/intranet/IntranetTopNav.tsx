@@ -17,7 +17,6 @@ const SEARCH_TARGETS = [
   { href: '/empresa', label: 'Notícias e eventos' },
   { href: '/rh', label: 'RH e benefícios' },
   { href: '/flow', label: 'Rom Flow · solicitações' },
-  { href: '/hoje', label: 'Operação do dia' },
   { href: '/pipeline', label: 'Agenda do dia' },
   { href: '/contatos', label: 'Contatos' },
   { href: '/dashboard', label: 'Visão analítica' },

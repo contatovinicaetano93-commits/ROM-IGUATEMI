@@ -1,7 +1,7 @@
 import type { AuthRole } from '@/lib/auth'
 import {
   isProfessionalHiddenPath,
-  isProfessionalStaff,
+  shouldHideOpsShellNav,
 } from '@/lib/intranet/professional-nav'
 
 export type GrantableModuleKey =
@@ -107,8 +107,8 @@ export function canSeeNavHref(
   if (path === '/auditoria' || path.startsWith('/auditoria/')) return role === 'admin'
   // Cadastro/edição de acessos é só admin master — não poluir o menu dos demais cargos.
   if (path === '/pessoas' || path.startsWith('/pessoas/')) return role === 'admin'
-  // Profissional: sem Balcão / Pós-venda / Operação (Agenda + Contatos bastam).
-  if (isProfessionalStaff(role, opts?.professionalName) && isProfessionalHiddenPath(path)) {
+  // Balcão / Pós-venda / Operação: fora do menu — Agenda + Contatos bastam.
+  if (shouldHideOpsShellNav(role, opts?.professionalName) && isProfessionalHiddenPath(path)) {
     return false
   }
   const key = moduleKeyFromHref(href)

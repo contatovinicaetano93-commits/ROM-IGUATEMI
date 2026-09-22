@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isProfessionalHiddenPath,
   isProfessionalStaff,
+  shouldHideOpsShellNav,
   PROFESSIONAL_HIDDEN_HREFS,
 } from '@/lib/intranet/professional-nav'
 
@@ -15,8 +16,20 @@ describe('isProfessionalStaff', () => {
   })
 })
 
+describe('shouldHideOpsShellNav', () => {
+  it('esconde Balcão/Pós/Operação de qualquer papel autenticado', () => {
+    expect(shouldHideOpsShellNav('admin', null)).toBe(true)
+    expect(shouldHideOpsShellNav('financeiro', null)).toBe(true)
+    expect(shouldHideOpsShellNav('estoque', null)).toBe(true)
+    expect(shouldHideOpsShellNav('mkt', null)).toBe(true)
+    expect(shouldHideOpsShellNav('staff', null)).toBe(true)
+    expect(shouldHideOpsShellNav('staff', 'Romeu Felipe')).toBe(true)
+    expect(shouldHideOpsShellNav(null, null)).toBe(false)
+  })
+})
+
 describe('isProfessionalHiddenPath', () => {
-  it('esconde Balcão, Pós-venda e Operação', () => {
+  it('marca Balcão, Pós-venda e Operação', () => {
     for (const href of PROFESSIONAL_HIDDEN_HREFS) {
       expect(isProfessionalHiddenPath(href)).toBe(true)
       expect(isProfessionalHiddenPath(`${href}/x`)).toBe(true)

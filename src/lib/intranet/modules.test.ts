@@ -63,14 +63,16 @@ describe('canSeeNavHref', () => {
     expect(canSeeNavHref('/contatos', 'financeiro', [])).toBe(false)
   })
 
-  it('staff com professional_name some Balcão/Pós-venda/Operação', () => {
-    expect(canSeeNavHref('/hoje', 'staff', [])).toBe(true)
-    expect(canSeeNavHref('/recepcao', 'staff', [])).toBe(true)
-    expect(canSeeNavHref('/pos-venda', 'staff', [])).toBe(true)
+  it('ninguém vê Balcão/Pós/Operação no menu; Agenda e Contatos ficam', () => {
+    for (const role of ['admin', 'staff', 'financeiro', 'estoque', 'mkt'] as const) {
+      expect(canSeeNavHref('/hoje', role, [])).toBe(false)
+      expect(canSeeNavHref('/recepcao', role, [])).toBe(false)
+      expect(canSeeNavHref('/pos-venda', role, [])).toBe(false)
+    }
     expect(canSeeNavHref('/hoje', 'staff', [], { professionalName: 'Alison' })).toBe(false)
-    expect(canSeeNavHref('/recepcao', 'staff', [], { professionalName: 'Alison' })).toBe(false)
-    expect(canSeeNavHref('/pos-venda', 'staff', [], { professionalName: 'Alison' })).toBe(false)
     expect(canSeeNavHref('/pipeline', 'staff', [], { professionalName: 'Alison' })).toBe(true)
     expect(canSeeNavHref('/contatos', 'staff', [], { professionalName: 'Alison' })).toBe(true)
+    expect(canSeeNavHref('/pipeline', 'admin', [])).toBe(true)
+    expect(canSeeNavHref('/contatos', 'admin', [])).toBe(true)
   })
 })
