@@ -59,4 +59,15 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/api/kpis', 'staff', [])).toBe(false)
     expect(canAccessProtectedPath('/dashboard', 'staff', [])).toBe(false)
   })
+
+  it('profissional (staff + professional_name) sem Balcão/Pós-venda/Operação', () => {
+    const opts = { professionalName: 'Alison Alvarez' }
+    expect(canAccessProtectedPath('/hoje', 'staff', [], opts)).toBe(false)
+    expect(canAccessProtectedPath('/recepcao', 'staff', [], opts)).toBe(false)
+    expect(canAccessProtectedPath('/pos-venda', 'staff', [], opts)).toBe(false)
+    expect(canAccessProtectedPath('/api/hoje', 'staff', [], opts)).toBe(false)
+    expect(canAccessProtectedPath('/pipeline', 'staff', [], opts)).toBe(true)
+    expect(canAccessProtectedPath('/contatos', 'staff', [], opts)).toBe(true)
+    expect(canAccessProtectedPath('/meu-faturamento', 'staff', [], opts)).toBe(true)
+  })
 })

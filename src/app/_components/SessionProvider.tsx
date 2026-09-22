@@ -14,6 +14,8 @@ export interface ClientSession {
   employeeId?: string | null
   canPublish?: boolean
   modules?: string[]
+  /** Nome Avec — cargo Profissional esconde Balcão/Pós-venda/Operação. */
+  professionalName?: string | null
   staff_login_configured?: boolean
 }
 

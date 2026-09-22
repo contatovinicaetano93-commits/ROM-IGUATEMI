@@ -1,5 +1,9 @@
 import { isIntranetPath } from '@/lib/intranet/paths'
 import { hasPanelModule, type GrantableModuleKey } from '@/lib/intranet/modules'
+import {
+  isProfessionalHiddenPath,
+  isProfessionalStaff,
+} from '@/lib/intranet/professional-nav'
 import type { AuthRole } from '@/lib/auth'
 
 function isFinanceAllowedAdminApi(pathname: string) {
@@ -99,11 +103,15 @@ export function canAccessProtectedPath(
   pathname: string,
   role: AuthRole | null | undefined,
   extras: readonly GrantableModuleKey[] = [],
+  opts?: { professionalName?: string | null },
 ): boolean {
   if (!role) return false
   if (isSessionApiPath(pathname)) return true
   if (role === 'admin') return true
   if (isAdminOpsPath(pathname)) return false
+  if (isProfessionalStaff(role, opts?.professionalName) && isProfessionalHiddenPath(pathname)) {
+    return false
+  }
   if (isIntranetPath(pathname) || pathname === '/' || isOnboardingPath(pathname) || isHojePath(pathname)) {
     return true
   }

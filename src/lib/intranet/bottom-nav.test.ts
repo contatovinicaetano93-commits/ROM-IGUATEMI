@@ -19,6 +19,15 @@ describe('resolveBottomNav', () => {
     expect(more.some((item) => item.href === '/recepcao')).toBe(true)
   })
 
+  it('profissional com professional_name: sem Balcão/Pós-venda/Operação no Mais', () => {
+    const { dock, more } = resolveBottomNav('staff', [], { professionalName: 'Alison' })
+    expect(dock.map((item) => item.href)).toEqual(['/', '/contatos', '/pipeline', '/flow'])
+    expect(more.some((item) => item.href === '/recepcao')).toBe(false)
+    expect(more.some((item) => item.href === '/pos-venda')).toBe(false)
+    expect(more.some((item) => item.href === '/hoje')).toBe(false)
+    expect(more.some((item) => item.href === '/meu-faturamento')).toBe(true)
+  })
+
   it('staff com financeiro extra promove o módulo permitido no Mais, não no dock cheio', () => {
     const { dock, more } = resolveBottomNav('staff', ['financeiro'])
     expect(dock.map((item) => item.href)).toEqual(['/', '/contatos', '/pipeline', '/flow'])

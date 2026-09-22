@@ -43,11 +43,13 @@ export function IntranetTopNav() {
   const initial = name.trim().charAt(0).toUpperCase() || 'R'
   const role = session?.role
   const extras = parseGrantableModules(session?.modules)
+  const professionalName = session?.professionalName ?? null
+  const navOpts = { professionalName }
   const links = INTRANET_NAV.filter((item) => {
     if (!session) return false
     if (!session.auth_enabled) return true
     if (role == null) return false
-    return canSeeNavHref(item.href, role, extras)
+    return canSeeNavHref(item.href, role, extras, navOpts)
   })
 
   const results = useMemo(() => {
@@ -57,9 +59,9 @@ export function IntranetTopNav() {
       if (!(item.label.toLowerCase().includes(q) || item.href.includes(q))) return false
       if (!session || !session.auth_enabled) return true
       if (role == null) return false
-      return canSeeNavHref(item.href, role, extras)
+      return canSeeNavHref(item.href, role, extras, navOpts)
     }).slice(0, 8)
-  }, [extras, query, role, session])
+  }, [extras, professionalName, query, role, session])
 
   return (
     <>

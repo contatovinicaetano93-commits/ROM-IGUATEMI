@@ -74,9 +74,10 @@ function allowedHref(
   role: AuthRole | null,
   extras: readonly GrantableModuleKey[],
   openAuth: boolean,
+  professionalName?: string | null,
 ): boolean {
   if (openAuth) return true
-  return canSeeNavHref(href, role, extras)
+  return canSeeNavHref(href, role, extras, { professionalName })
 }
 
 /**
@@ -86,9 +87,10 @@ function allowedHref(
 export function resolveBottomNav(
   role: AuthRole | null | undefined,
   extras: readonly GrantableModuleKey[] = [],
-  opts: { openAuth?: boolean } = {},
+  opts: { openAuth?: boolean; professionalName?: string | null } = {},
 ): { dock: BottomDockItem[]; more: BottomMoreItem[] } {
   const openAuth = Boolean(opts.openAuth)
+  const professionalName = opts.professionalName ?? null
   if (!role && !openAuth) return { dock: [], more: [] }
 
   const resolvedRole: AuthRole = role ?? 'staff'
@@ -99,7 +101,7 @@ export function resolveBottomNav(
   for (const href of priority) {
     const path = normalizePath(href)
     if (seen.has(path)) continue
-    if (!allowedHref(path, role ?? null, extras, openAuth)) continue
+    if (!allowedHref(path, role ?? null, extras, openAuth, professionalName)) continue
     seen.add(path)
     dock.push({ href: path, shortLabel: dockLabel(path) })
     if (dock.length >= DOCK_CAP) break
@@ -113,7 +115,7 @@ export function resolveBottomNav(
   const more = MORE_CATALOG.filter((item) => {
     const path = normalizePath(item.href)
     if (seen.has(path)) return false
-    return allowedHref(path, role ?? null, extras, openAuth)
+    return allowedHref(path, role ?? null, extras, openAuth, professionalName)
   })
 
   return { dock, more }

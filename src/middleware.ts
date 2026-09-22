@@ -109,7 +109,9 @@ export async function middleware(req: NextRequest) {
   if (isCronAuthorized(req)) return NextResponse.next()
 
   const session = await getSession(req)
-  if (!canAccessProtectedPath(pathname, session?.role, session?.modules ?? [])) {
+  if (!canAccessProtectedPath(pathname, session?.role, session?.modules ?? [], {
+    professionalName: session?.professionalName,
+  })) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito a este sistema' }, { status: 403 })
     }

@@ -4,6 +4,7 @@ import {
   type CargoPackage,
 } from '@/lib/intranet/cargo-packages'
 import { GRANTABLE_MODULES, type GrantableModuleKey } from '@/lib/intranet/modules'
+import { PROFESSIONAL_HIDDEN_HREFS } from '@/lib/intranet/professional-nav'
 import { systemsForAccess } from '@/lib/intranet/systems'
 
 /** Sistemas de operação/gestão que não são grantable (liberam por path/nav). */
@@ -27,6 +28,8 @@ const PREVIEW_ORDER = [
   '/relatorios',
 ] as const
 
+const PROFESSIONAL_HIDDEN = new Set<string>(PROFESSIONAL_HIDDEN_HREFS)
+
 /**
  * Rótulos honestos do que o cargo vê em operação/gestão (Meus Sistemas),
  * não só os módulos grantable — evita o buraco do “Meu faturamento” etc.
@@ -34,14 +37,17 @@ const PREVIEW_ORDER = [
 export function cargoAccessPreviewLabels(pack: CargoPackage): string[] {
   const extras = pack.extras
   const granted = new Set(modulesForCargo(pack))
+  // Preview do cargo Profissional: simula staff com professional_name.
+  const professionalName = pack.id === 'profissional' ? 'preview' : null
   const byHref = new Map(
-    systemsForAccess(pack.panel_role, extras)
+    systemsForAccess(pack.panel_role, extras, { professionalName })
       .filter((item) => item.group === 'operacao' || item.group === 'gestao')
       .map((item) => [item.href, item.label] as const),
   )
 
   const labels: string[] = []
   for (const href of PREVIEW_ORDER) {
+    if (pack.id === 'profissional' && PROFESSIONAL_HIDDEN.has(href)) continue
     const label = byHref.get(href)
     if (label) labels.push(label)
   }

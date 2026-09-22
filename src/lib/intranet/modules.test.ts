@@ -62,4 +62,15 @@ describe('canSeeNavHref', () => {
     expect(canSeeNavHref('/financeiro', 'staff', ['financeiro'])).toBe(true)
     expect(canSeeNavHref('/contatos', 'financeiro', [])).toBe(false)
   })
+
+  it('staff com professional_name some Balcão/Pós-venda/Operação', () => {
+    expect(canSeeNavHref('/hoje', 'staff', [])).toBe(true)
+    expect(canSeeNavHref('/recepcao', 'staff', [])).toBe(true)
+    expect(canSeeNavHref('/pos-venda', 'staff', [])).toBe(true)
+    expect(canSeeNavHref('/hoje', 'staff', [], { professionalName: 'Alison' })).toBe(false)
+    expect(canSeeNavHref('/recepcao', 'staff', [], { professionalName: 'Alison' })).toBe(false)
+    expect(canSeeNavHref('/pos-venda', 'staff', [], { professionalName: 'Alison' })).toBe(false)
+    expect(canSeeNavHref('/pipeline', 'staff', [], { professionalName: 'Alison' })).toBe(true)
+    expect(canSeeNavHref('/contatos', 'staff', [], { professionalName: 'Alison' })).toBe(true)
+  })
 })
