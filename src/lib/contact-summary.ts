@@ -778,6 +778,30 @@ export async function listActivatedContacts(opts?: {
   return { items, total }
 }
 
+/**
+ * Contagens Atrasados/Vencendo/Agendados da carteira do profissional.
+ * Sem teto de página — não usar `listContactsOwnedByIds` (limite 500) para badge.
+ */
+export async function countOwnedUrgencyQueues(
+  ownedContactIds: readonly string[],
+): Promise<UrgencyQueueCounts> {
+  if (ownedContactIds.length === 0) {
+    return { overdue: 0, due_soon: 0, scheduled: 0 }
+  }
+  const contacts = await fetchContactsByIds([...ownedContactIds])
+  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+  let overdue = 0
+  let due_soon = 0
+  let scheduled = 0
+  for (const c of contacts) {
+    const u = urgencyForServices(byContact.get(c.id) ?? [])
+    if (u.overdue > 0) overdue += 1
+    else if (u.due_soon > 0) due_soon += 1
+    if (u.scheduled_soon > 0) scheduled += 1
+  }
+  return { overdue, due_soon, scheduled }
+}
+
 export async function listContactsOwnedByIds(
   ownedContactIds: readonly string[],
   opts?: {

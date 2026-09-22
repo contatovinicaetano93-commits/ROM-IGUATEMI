@@ -408,7 +408,7 @@ export default function HojePage() {
             {!loading && data?.playbook.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card/50 p-4 text-sm text-muted">
                 <p className="font-medium text-foreground/90">Tudo em dia 🎉</p>
-                <p className="mt-1 text-xs">Sem ações urgentes. Confira Sem vínculo Avec ou a visão analítica.</p>
+                <p className="mt-1 text-xs">Sem ações urgentes. Confira Novos clientes ou a visão analítica.</p>
               </div>
             )}
 

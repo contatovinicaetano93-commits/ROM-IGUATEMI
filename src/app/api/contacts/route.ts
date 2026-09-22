@@ -3,6 +3,7 @@ import { ok, okCached, handleError, err } from '@/lib/api-response'
 import { cachedFetch, MemoryCache } from '@/lib/cache'
 import {
   countContactQueues,
+  countOwnedUrgencyQueues,
   listActivatedContacts,
   listContactsOwnedByIds,
   listContactsWithSummary,
@@ -93,16 +94,7 @@ export async function GET(req: NextRequest) {
 
     if (countsOnly) {
       if (proScope && ownedIds) {
-        const listed = await listContactsOwnedByIds(ownedIds, {
-          limit: 2000,
-          pendingOnly: true,
-          orderBy: 'urgency',
-        })
-        const urgency = {
-          overdue: listed.items.filter((c) => c.overdue > 0).length,
-          due_soon: listed.items.filter((c) => c.overdue === 0 && c.due_soon > 0).length,
-          scheduled: listed.items.filter((c) => c.scheduled_soon > 0).length,
-        }
+        const urgency = await countOwnedUrgencyQueues(ownedIds)
         // Dono/financeiro: urgência da carteira + leads da unidade (Novos/Sem serviço).
         if (keepUnitLeads) {
           const unit = await countContactQueues({ channel, day })
@@ -238,8 +230,9 @@ export async function GET(req: NextRequest) {
     }
 
     // Carteira do profissional (Reativar / busca / lista padrão).
+    // Sempre devolve `queues` — a UI dos badges depende disso (sem queues = Atrasados 0).
     if (proScope && ownedIds) {
-      const [listed, urgencyListed] = await Promise.all([
+      const [listed, urgency, leadQueues] = await Promise.all([
         listContactsOwnedByIds(ownedIds, {
           limit,
           query,
@@ -247,25 +240,15 @@ export async function GET(req: NextRequest) {
           orderBy: sort === 'name' ? 'name' : 'urgency',
           urgencyQueue,
         }),
-        // Contagens das 3 filas — independente do filtro ativo (senão o badge fica 0).
-        listContactsOwnedByIds(ownedIds, {
-          limit: 2000,
-          pendingOnly: true,
-          orderBy: 'urgency',
-        }),
+        countOwnedUrgencyQueues(ownedIds),
+        keepUnitLeads
+          ? countContactQueues({ channel, day })
+          : Promise.resolve({ novos: 0, sem_servicos: 0, ativados: 0 }),
       ])
       let items = listed.items
       if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
         items = [...items].sort(compareByOverdueThenName)
       }
-      const urgency = {
-        overdue: urgencyListed.items.filter((c) => c.overdue > 0).length,
-        due_soon: urgencyListed.items.filter((c) => c.overdue === 0 && c.due_soon > 0).length,
-        scheduled: urgencyListed.items.filter((c) => c.scheduled_soon > 0).length,
-      }
-      const leadQueues = keepUnitLeads
-        ? await countContactQueues({ channel, day })
-        : { novos: 0, sem_servicos: 0, ativados: 0 }
       return okCached(items, query ? 15 : 30, {
         total: listed.total,
         limit,
