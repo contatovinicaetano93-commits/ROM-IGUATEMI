@@ -8,8 +8,9 @@ import { findEmployeeById } from '@/lib/employees'
 
 /**
  * Nome Avec vinculado ao colaborador logado.
- * Só escopa quando há `professional_name` gravado (cargo Profissional).
- * Recepção/staff sem vínculo vê a base da unidade.
+ * Com `professional_name`, a carteira é só clientes ligados a esse nome
+ * (preferência / serviços / visitas) — inclusive Dono/financeiro com vínculo
+ * Avec (ex.: Romeu). Sem vínculo, Recepção/staff vê a base da unidade.
  */
 export async function resolveSessionProfessionalScope(
   session: AuthSession | null | undefined,
@@ -18,19 +19,6 @@ export async function resolveSessionProfessionalScope(
   const employee = await findEmployeeById(session.employeeId)
   const name = employee?.professional_name?.trim()
   return name || null
-}
-
-/**
- * Dono/admin/financeiro com `professional_name` (ex.: Romeu) precisa do vínculo
- * Avec p/ Meu faturamento e da carteira própria — mas as filas de lead
- * (Novos / Sem serviço / Ativados) continuam da unidade.
- * Staff profissional vê só a carteira; leads unitários ficam fora.
- */
-export function professionalKeepsUnitLeadQueues(
-  session: AuthSession | null | undefined,
-): boolean {
-  if (!session) return false
-  return session.role === 'admin' || session.role === 'financeiro'
 }
 
 /** Compara nomes de profissional com a mesma chave do relatório (acentos/case). */
@@ -47,6 +35,7 @@ export function professionalNamesMatch(
 /**
  * Match amplo: chave canônica OU nomes frouxos (Romeu ↔ Romeu Felipe,
  * apelido Avec ↔ nome completo do cadastro).
+ * Aceita também listas Avec com vários pros: "DORA,ROMEU FELIPE".
  */
 export function professionalNameOwns(
   candidateName: string | null | undefined,
@@ -54,8 +43,26 @@ export function professionalNameOwns(
 ): boolean {
   const raw = candidateName?.trim()
   if (!raw) return false
+  if (ownsSingleProfessionalName(raw, sessionProfessionalName)) return true
+  const parts = splitProfessionalNameList(raw)
+  if (parts.length <= 1) return false
+  return parts.some((part) => ownsSingleProfessionalName(part, sessionProfessionalName))
+}
+
+function ownsSingleProfessionalName(raw: string, sessionProfessionalName: string): boolean {
   if (professionalNamesMatch(raw, sessionProfessionalName)) return true
   return namesLooselyMatch(occupancyMergeKey(raw), occupancyMergeKey(sessionProfessionalName))
+}
+
+/**
+ * Avec às vezes grava vários profissionais numa única string
+ * (`"ALINE,ROMEU FELIPE"`). Quebra por vírgula / barra / ponto-e-vírgula.
+ */
+export function splitProfessionalNameList(raw: string): string[] {
+  return raw
+    .split(/[,;/|]+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
 }
 
 /** Nomes brutos na base que batem com o profissional da sessão. */
