@@ -15,11 +15,11 @@ const DOCK_CAP = 4
 
 /** Ordem de preferência do dock por papel (Home sempre entra primeiro). */
 const ROLE_DOCK_PRIORITY: Record<AuthRole, readonly string[]> = {
-  admin: ['/', '/financeiro', '/flow', '/hoje', '/dashboard', '/estoque', '/contatos', '/pipeline'],
-  financeiro: ['/', '/financeiro', '/dashboard', '/relatorios', '/estoque', '/flow', '/hoje'],
-  estoque: ['/', '/estoque', '/flow', '/hoje', '/financeiro'],
+  admin: ['/', '/financeiro', '/flow', '/dashboard', '/estoque', '/contatos', '/pipeline'],
+  financeiro: ['/', '/financeiro', '/dashboard', '/relatorios', '/estoque', '/flow'],
+  estoque: ['/', '/estoque', '/flow', '/financeiro'],
   staff: ['/', '/contatos', '/pipeline', '/flow', '/hoje', '/meu-faturamento', '/recepcao', '/pos-venda'],
-  mkt: ['/', '/empresa', '/contatos', '/pipeline', '/flow', '/hoje'],
+  mkt: ['/', '/empresa', '/contatos', '/pipeline', '/flow'],
 }
 
 const DOCK_LABELS: Record<string, string> = {

@@ -1,8 +1,10 @@
 import type { AuthRole } from '@/lib/auth'
 
 /**
- * Seções de operação unitária que o cargo Profissional não usa —
- * Agenda + Contatos + Meu faturamento cobrem o dia a dia dele.
+ * Seções de operação unitária redundantes com Agenda + Contatos.
+ * Ficam no menu só para staff operacional (recepção / pós-venda / gestora),
+ * sem `professional_name`. Admin, dono, finanças, estoque, mkt e
+ * cabeleireiros não as veem no top/bottom nav.
  */
 export const PROFESSIONAL_HIDDEN_HREFS = ['/hoje', '/recepcao', '/pos-venda'] as const
 
@@ -14,7 +16,20 @@ export function isProfessionalStaff(
   return role === 'staff' && Boolean(professionalName?.trim())
 }
 
-/** Path (página ou API) oculto/bloqueado para o cargo Profissional. */
+/**
+ * Quem não deve ver Balcão / Pós-venda / Operação no menu.
+ * Staff sem vínculo Avec (recepção, pós-venda, gestora) continua vendo.
+ */
+export function shouldHideOpsShellNav(
+  role: AuthRole | null | undefined,
+  professionalName: string | null | undefined,
+): boolean {
+  if (!role) return false
+  if (isProfessionalStaff(role, professionalName)) return true
+  return role !== 'staff'
+}
+
+/** Path (página ou API) oculto no menu / bloqueado para profissional. */
 export function isProfessionalHiddenPath(pathname: string): boolean {
   const path = (pathname.split('?')[0] || '/').replace(/\/$/, '') || '/'
   for (const href of PROFESSIONAL_HIDDEN_HREFS) {

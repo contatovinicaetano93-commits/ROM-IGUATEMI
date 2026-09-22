@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isProfessionalHiddenPath,
   isProfessionalStaff,
+  shouldHideOpsShellNav,
   PROFESSIONAL_HIDDEN_HREFS,
 } from '@/lib/intranet/professional-nav'
 
@@ -12,6 +13,18 @@ describe('isProfessionalStaff', () => {
     expect(isProfessionalStaff('staff', null)).toBe(false)
     expect(isProfessionalStaff('admin', 'Romeu Felipe')).toBe(false)
     expect(isProfessionalStaff('financeiro', 'Romeu Felipe')).toBe(false)
+  })
+})
+
+describe('shouldHideOpsShellNav', () => {
+  it('esconde de admin, dono e profissional; mantém staff operacional', () => {
+    expect(shouldHideOpsShellNav('admin', null)).toBe(true)
+    expect(shouldHideOpsShellNav('financeiro', null)).toBe(true)
+    expect(shouldHideOpsShellNav('estoque', null)).toBe(true)
+    expect(shouldHideOpsShellNav('mkt', null)).toBe(true)
+    expect(shouldHideOpsShellNav('staff', 'Romeu Felipe')).toBe(true)
+    expect(shouldHideOpsShellNav('staff', null)).toBe(false)
+    expect(shouldHideOpsShellNav('staff', '  ')).toBe(false)
   })
 })
 

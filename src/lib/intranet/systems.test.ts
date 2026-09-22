@@ -19,43 +19,60 @@ describe('home shortcuts', () => {
 })
 
 describe('systemsForAccess', () => {
-  it('libera operação e gestão para o admin', () => {
+  it('libera operação e gestão para o admin (sem Balcão/Pós/Operação no menu)', () => {
     const hrefs = systemsForAccess('admin').map((item) => item.href)
     expect(hrefs).toContain('/flow')
     expect(hrefs).toContain('/pipeline')
+    expect(hrefs).toContain('/contatos')
     expect(hrefs).toContain('/financeiro')
     expect(hrefs).toContain('/dashboard')
     expect(hrefs).toContain('/auditoria')
+    expect(hrefs).not.toContain('/hoje')
+    expect(hrefs).not.toContain('/recepcao')
+    expect(hrefs).not.toContain('/pos-venda')
   })
 
-  it('staff e mkt veem operação, sem financeiro nem Visão analítica', () => {
-    for (const role of ['staff', 'mkt'] as const) {
-      const hrefs = systemsForAccess(role).map((item) => item.href)
-      expect(hrefs).toContain('/pipeline')
-      expect(hrefs).toContain('/contatos')
-      expect(hrefs).toContain('/meu-faturamento')
-      expect(hrefs).toContain('/recepcao')
-      expect(hrefs).toContain('/pos-venda')
-      expect(hrefs).not.toContain('/financeiro')
-      expect(hrefs).not.toContain('/dashboard')
-      expect(hrefs).not.toContain('/auditoria')
-      expect(hrefs).not.toContain('/pessoas')
-    }
+  it('staff operacional vê Balcão/Pós; mkt não — sem financeiro nem Visão', () => {
+    const staff = systemsForAccess('staff').map((item) => item.href)
+    expect(staff).toContain('/pipeline')
+    expect(staff).toContain('/contatos')
+    expect(staff).toContain('/meu-faturamento')
+    expect(staff).toContain('/recepcao')
+    expect(staff).toContain('/pos-venda')
+    expect(staff).toContain('/hoje')
+    expect(staff).not.toContain('/financeiro')
+
+    const mkt = systemsForAccess('mkt').map((item) => item.href)
+    expect(mkt).toContain('/pipeline')
+    expect(mkt).toContain('/contatos')
+    expect(mkt).toContain('/meu-faturamento')
+    expect(mkt).not.toContain('/recepcao')
+    expect(mkt).not.toContain('/pos-venda')
+    expect(mkt).not.toContain('/hoje')
+    expect(mkt).not.toContain('/financeiro')
+    expect(mkt).not.toContain('/dashboard')
+    expect(mkt).not.toContain('/auditoria')
+    expect(mkt).not.toContain('/pessoas')
   })
 
-  it('financeiro vê hoje, omie e estoque, sem pipeline', () => {
+  it('financeiro vê omie e estoque, sem pipeline nem shells de balcão', () => {
     const hrefs = systemsForAccess('financeiro').map((item) => item.href)
-    expect(hrefs).toContain('/hoje')
     expect(hrefs).toContain('/financeiro')
     expect(hrefs).toContain('/estoque')
+    expect(hrefs).toContain('/meu-faturamento')
+    expect(hrefs).not.toContain('/hoje')
+    expect(hrefs).not.toContain('/recepcao')
+    expect(hrefs).not.toContain('/pos-venda')
     expect(hrefs).not.toContain('/pipeline')
     expect(hrefs).not.toContain('/dashboard')
   })
 
-  it('estoque vê só frente de caixa e estoque além da intranet', () => {
+  it('estoque vê estoque e faturamento, sem Operação/Balcão', () => {
     const hrefs = systemsForAccess('estoque').map((item) => item.href)
-    expect(hrefs).toContain('/hoje')
     expect(hrefs).toContain('/estoque')
+    expect(hrefs).toContain('/meu-faturamento')
+    expect(hrefs).not.toContain('/hoje')
+    expect(hrefs).not.toContain('/recepcao')
     expect(hrefs).not.toContain('/financeiro')
     expect(hrefs).not.toContain('/pipeline')
   })
