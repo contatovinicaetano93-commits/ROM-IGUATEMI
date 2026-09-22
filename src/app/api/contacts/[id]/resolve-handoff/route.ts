@@ -1,36 +1,35 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
-import { getContactById, logEvent, updateContact } from '@/lib/contacts'
+import { logEvent } from '@/lib/contacts'
+import {
+  contactBelongsToProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 type Ctx = { params: Promise<{ id: string }> }
 
-/** POST — equipe assume a conversa; libera a IA (handoff_resolved). */
+/** Atendente assume a conversa — libera o bot da IA para responder normal de novo. */
 export async function POST(req: NextRequest, ctx: Ctx) {
   try {
     const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { id } = await ctx.params
-    const contact = await getContactById(id)
-    if (!contact) return err('Contato não encontrado', 404)
-    if (contact.anonymized_at) return err('Contato anonimizado', 410)
-
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const allowed = await contactBelongsToProfessional(id, proScope)
+      if (!allowed) return err('Contato não encontrado', 404)
+    }
     await logEvent({
       contactId: id,
-      channel: 'manual',
-      direction: 'in',
+      channel: 'whatsapp',
+      direction: 'out',
       handledBy: 'human',
       payload: { handoff_resolved: true, by: auth.session.user },
     })
 
-    // Sai do estado de espera humana no funil, sem rebaixar quem já agendou/converteu.
-    if (contact.status === 'em_atendimento' || contact.status === 'novo') {
-      await updateContact(id, { status: 'em_atendimento' })
-    }
-
-    const refreshed = await getContactById(id)
-    return ok(refreshed ?? contact)
+    return ok({ resolved: true })
   } catch (e) {
     return handleError(e)
   }
