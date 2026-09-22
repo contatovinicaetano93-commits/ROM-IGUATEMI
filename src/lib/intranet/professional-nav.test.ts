@@ -17,19 +17,19 @@ describe('isProfessionalStaff', () => {
 })
 
 describe('shouldHideOpsShellNav', () => {
-  it('esconde de admin, dono e profissional; mantém staff operacional', () => {
+  it('esconde Balcão/Pós/Operação de qualquer papel autenticado', () => {
     expect(shouldHideOpsShellNav('admin', null)).toBe(true)
     expect(shouldHideOpsShellNav('financeiro', null)).toBe(true)
     expect(shouldHideOpsShellNav('estoque', null)).toBe(true)
     expect(shouldHideOpsShellNav('mkt', null)).toBe(true)
+    expect(shouldHideOpsShellNav('staff', null)).toBe(true)
     expect(shouldHideOpsShellNav('staff', 'Romeu Felipe')).toBe(true)
-    expect(shouldHideOpsShellNav('staff', null)).toBe(false)
-    expect(shouldHideOpsShellNav('staff', '  ')).toBe(false)
+    expect(shouldHideOpsShellNav(null, null)).toBe(false)
   })
 })
 
 describe('isProfessionalHiddenPath', () => {
-  it('esconde Balcão, Pós-venda e Operação', () => {
+  it('marca Balcão, Pós-venda e Operação', () => {
     for (const href of PROFESSIONAL_HIDDEN_HREFS) {
       expect(isProfessionalHiddenPath(href)).toBe(true)
       expect(isProfessionalHiddenPath(`${href}/x`)).toBe(true)

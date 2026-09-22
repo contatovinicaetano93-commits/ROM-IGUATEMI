@@ -32,27 +32,20 @@ describe('systemsForAccess', () => {
     expect(hrefs).not.toContain('/pos-venda')
   })
 
-  it('staff operacional vê Balcão/Pós; mkt não — sem financeiro nem Visão', () => {
-    const staff = systemsForAccess('staff').map((item) => item.href)
-    expect(staff).toContain('/pipeline')
-    expect(staff).toContain('/contatos')
-    expect(staff).toContain('/meu-faturamento')
-    expect(staff).toContain('/recepcao')
-    expect(staff).toContain('/pos-venda')
-    expect(staff).toContain('/hoje')
-    expect(staff).not.toContain('/financeiro')
-
-    const mkt = systemsForAccess('mkt').map((item) => item.href)
-    expect(mkt).toContain('/pipeline')
-    expect(mkt).toContain('/contatos')
-    expect(mkt).toContain('/meu-faturamento')
-    expect(mkt).not.toContain('/recepcao')
-    expect(mkt).not.toContain('/pos-venda')
-    expect(mkt).not.toContain('/hoje')
-    expect(mkt).not.toContain('/financeiro')
-    expect(mkt).not.toContain('/dashboard')
-    expect(mkt).not.toContain('/auditoria')
-    expect(mkt).not.toContain('/pessoas')
+  it('staff e mkt: Agenda + Contatos + faturamento — sem Balcão/Pós/Operação', () => {
+    for (const role of ['staff', 'mkt'] as const) {
+      const hrefs = systemsForAccess(role).map((item) => item.href)
+      expect(hrefs).toContain('/pipeline')
+      expect(hrefs).toContain('/contatos')
+      expect(hrefs).toContain('/meu-faturamento')
+      expect(hrefs).not.toContain('/recepcao')
+      expect(hrefs).not.toContain('/pos-venda')
+      expect(hrefs).not.toContain('/hoje')
+      expect(hrefs).not.toContain('/financeiro')
+      expect(hrefs).not.toContain('/dashboard')
+      expect(hrefs).not.toContain('/auditoria')
+      expect(hrefs).not.toContain('/pessoas')
+    }
   })
 
   it('financeiro vê omie e estoque, sem pipeline nem shells de balcão', () => {

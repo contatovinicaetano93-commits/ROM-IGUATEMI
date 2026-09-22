@@ -12,14 +12,16 @@ describe('resolveBottomNav', () => {
     expect(more.some((item) => item.href === '/pos-venda')).toBe(false)
   })
 
-  it('staff (profissional/recepção): Contatos + Agenda + Tarefas, sem financeiro', () => {
+  it('staff: Contatos + Agenda + Tarefas; sem Balcão/Pós/Operação', () => {
     const { dock, more } = resolveBottomNav('staff', [])
     expect(dock.map((item) => item.href)).toEqual(['/', '/contatos', '/pipeline', '/flow'])
     expect(more.some((item) => item.href === '/financeiro')).toBe(false)
     expect(more.some((item) => item.href === '/dashboard')).toBe(false)
     expect(more.some((item) => item.href === '/pessoas')).toBe(false)
     expect(more.some((item) => item.href === '/meu-faturamento')).toBe(true)
-    expect(more.some((item) => item.href === '/recepcao')).toBe(true)
+    expect(more.some((item) => item.href === '/recepcao')).toBe(false)
+    expect(more.some((item) => item.href === '/pos-venda')).toBe(false)
+    expect(more.some((item) => item.href === '/hoje')).toBe(false)
   })
 
   it('profissional com professional_name: sem Balcão/Pós-venda/Operação no Mais', () => {

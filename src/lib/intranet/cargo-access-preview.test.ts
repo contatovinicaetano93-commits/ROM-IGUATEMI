@@ -17,17 +17,18 @@ describe('cargoAccessPreviewLabels', () => {
     ])
   })
 
-  it('recepção e pós-venda não escondem o balcão / filas', () => {
+  it('recepção e pós-venda também ficam em Agenda + Contatos', () => {
     for (const id of ['recepcao', 'pos_venda'] as const) {
       const pack = cargoPackageById(id)
       expect(pack).not.toBeNull()
       if (!pack) return
       const labels = cargoAccessPreviewLabels(pack)
-      expect(labels).toContain('Recepção')
-      expect(labels).toContain('Pós-venda')
       expect(labels).toContain('Meu faturamento')
       expect(labels).toContain('Agenda do dia')
       expect(labels).toContain('Contatos')
+      expect(labels).not.toContain('Recepção')
+      expect(labels).not.toContain('Pós-venda')
+      expect(labels).not.toContain('Operação do dia')
     }
   })
 
@@ -74,13 +75,8 @@ describe('cargoAccessPreviewLabels', () => {
 })
 
 describe('includedShellLabelsForRole', () => {
-  it('staff vê shells de operação; financeiro só meu faturamento', () => {
-    expect(includedShellLabelsForRole('staff')).toEqual([
-      'Operação do dia',
-      'Recepção',
-      'Pós-venda',
-      'Meu faturamento',
-    ])
+  it('qualquer papel: só Meu faturamento como shell (sem Balcão/Pós/Operação)', () => {
+    expect(includedShellLabelsForRole('staff')).toEqual(['Meu faturamento'])
     expect(includedShellLabelsForRole('financeiro')).toEqual(['Meu faturamento'])
     expect(includedShellLabelsForRole('admin')).toEqual(['Meu faturamento'])
   })

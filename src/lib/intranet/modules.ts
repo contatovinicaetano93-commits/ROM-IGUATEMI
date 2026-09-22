@@ -107,8 +107,7 @@ export function canSeeNavHref(
   if (path === '/auditoria' || path.startsWith('/auditoria/')) return role === 'admin'
   // Cadastro/edição de acessos é só admin master — não poluir o menu dos demais cargos.
   if (path === '/pessoas' || path.startsWith('/pessoas/')) return role === 'admin'
-  // Balcão / Pós-venda / Operação: só staff operacional (sem professional_name).
-  // Admin, dono, finanças, estoque, mkt e cabeleireiros usam Agenda + Contatos.
+  // Balcão / Pós-venda / Operação: fora do menu — Agenda + Contatos bastam.
   if (shouldHideOpsShellNav(role, opts?.professionalName) && isProfessionalHiddenPath(path)) {
     return false
   }

@@ -18,7 +18,7 @@ const ROLE_DOCK_PRIORITY: Record<AuthRole, readonly string[]> = {
   admin: ['/', '/financeiro', '/flow', '/dashboard', '/estoque', '/contatos', '/pipeline'],
   financeiro: ['/', '/financeiro', '/dashboard', '/relatorios', '/estoque', '/flow'],
   estoque: ['/', '/estoque', '/flow', '/financeiro'],
-  staff: ['/', '/contatos', '/pipeline', '/flow', '/hoje', '/meu-faturamento', '/recepcao', '/pos-venda'],
+  staff: ['/', '/contatos', '/pipeline', '/flow', '/meu-faturamento'],
   mkt: ['/', '/empresa', '/contatos', '/pipeline', '/flow'],
 }
 
@@ -42,10 +42,7 @@ const DOCK_LABELS: Record<string, string> = {
 const MORE_CATALOG: readonly BottomMoreItem[] = [
   { href: '/pipeline', label: 'Agenda do dia' },
   { href: '/contatos', label: 'Contatos' },
-  { href: '/recepcao', label: 'Recepção' },
-  { href: '/pos-venda', label: 'Pós-venda' },
   { href: '/meu-faturamento', label: 'Meu faturamento' },
-  { href: '/hoje', label: 'Operação do dia' },
   { href: '/flow', label: 'Rom Flow · tarefas' },
   { href: '/pessoas', label: 'Gestão de usuário' },
   { href: '/empresa', label: 'Notícias e eventos' },
