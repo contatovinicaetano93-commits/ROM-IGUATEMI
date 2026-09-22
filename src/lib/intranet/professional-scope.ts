@@ -47,6 +47,7 @@ export function professionalNamesMatch(
 /**
  * Match amplo: chave canônica OU nomes frouxos (Romeu ↔ Romeu Felipe,
  * apelido Avec ↔ nome completo do cadastro).
+ * Aceita também listas Avec com vários pros: "DORA,ROMEU FELIPE".
  */
 export function professionalNameOwns(
   candidateName: string | null | undefined,
@@ -54,8 +55,26 @@ export function professionalNameOwns(
 ): boolean {
   const raw = candidateName?.trim()
   if (!raw) return false
+  if (ownsSingleProfessionalName(raw, sessionProfessionalName)) return true
+  const parts = splitProfessionalNameList(raw)
+  if (parts.length <= 1) return false
+  return parts.some((part) => ownsSingleProfessionalName(part, sessionProfessionalName))
+}
+
+function ownsSingleProfessionalName(raw: string, sessionProfessionalName: string): boolean {
   if (professionalNamesMatch(raw, sessionProfessionalName)) return true
   return namesLooselyMatch(occupancyMergeKey(raw), occupancyMergeKey(sessionProfessionalName))
+}
+
+/**
+ * Avec às vezes grava vários profissionais numa única string
+ * (`"ALINE,ROMEU FELIPE"`). Quebra por vírgula / barra / ponto-e-vírgula.
+ */
+export function splitProfessionalNameList(raw: string): string[] {
+  return raw
+    .split(/[,;/|]+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
 }
 
 /** Nomes brutos na base que batem com o profissional da sessão. */
