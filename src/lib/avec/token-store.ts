@@ -65,6 +65,107 @@ export async function saveAvecApiToken(token: string): Promise<void> {
       expires_at = excluded.expires_at,
       updated_at = now()
   `
+  await recordAvecTokenRefreshResult({ ok: true, hours_left: hoursLeftInToken(token) })
+}
+
+const REFRESH_META_KEY = 'avec_api_token_refresh_meta'
+
+export type AvecTokenRefreshMeta = {
+  ok: boolean
+  error: string | null
+  hours_left: number | null
+  at: string
+}
+
+/** Grava resultado do refresh — health fica vermelho se mint falhar de forma persistente. */
+export async function recordAvecTokenRefreshResult(result: {
+  ok: boolean
+  error?: string | null
+  hours_left?: number | null
+}): Promise<void> {
+  try {
+    await ensureTokenStore()
+    const sql = getSql()
+    const meta: AvecTokenRefreshMeta = {
+      ok: result.ok,
+      error: result.error ?? null,
+      hours_left: result.hours_left ?? null,
+      at: new Date().toISOString(),
+    }
+    await sql`
+      insert into app_runtime_secrets (key, value, expires_at, updated_at)
+      values (${REFRESH_META_KEY}, ${JSON.stringify(meta)}, null, now())
+      on conflict (key) do update set value = excluded.value, updated_at = now()
+    `
+  } catch {
+    /* health degrada sem meta — não derruba sync */
+  }
+}
+
+export async function loadAvecTokenRefreshMeta(): Promise<AvecTokenRefreshMeta | null> {
+  try {
+    await ensureTokenStore()
+    const sql = getSql()
+    const rows = (await sql`
+      select value from app_runtime_secrets where key = ${REFRESH_META_KEY} limit 1
+    `) as { value: string }[]
+    const raw = rows[0]?.value
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as AvecTokenRefreshMeta
+    if (typeof parsed?.ok !== 'boolean') return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+export type AvecTokenHealth = {
+  ok: boolean
+  hours_left: number | null
+  login_configured: boolean
+  source: 'runtime' | 'env' | 'none'
+  last_refresh_error: string | null
+  last_refresh_at: string | null
+}
+
+/** Probe leve — não faz mint. RED quando não há JWT usável. */
+export async function probeAvecTokenHealth(): Promise<AvecTokenHealth> {
+  const login_configured = isAvecLoginConfigured()
+  const meta = await loadAvecTokenRefreshMeta()
+  const runtime = await loadRuntimeAvecApiToken()
+  const envTok = process.env.AVEC_API_TOKEN?.trim() || null
+
+  let best: { token: string; source: 'runtime' | 'env'; hours_left: number } | null = null
+  for (const [source, t] of [
+    ['runtime', runtime],
+    ['env', envTok],
+  ] as const) {
+    if (!t) continue
+    const left = hoursLeftInToken(t)
+    if (left > 0 && (!best || left > best.hours_left)) {
+      best = { token: t, source, hours_left: left }
+    }
+  }
+
+  if (best) {
+    return {
+      ok: true,
+      hours_left: Math.round(best.hours_left * 100) / 100,
+      login_configured,
+      source: best.source,
+      last_refresh_error: meta?.ok === false ? meta.error : null,
+      last_refresh_at: meta?.at ?? null,
+    }
+  }
+
+  return {
+    ok: false,
+    hours_left: null,
+    login_configured,
+    source: 'none',
+    last_refresh_error: meta?.error ?? (login_configured ? 'sem JWT válido' : 'token/login ausente'),
+    last_refresh_at: meta?.at ?? null,
+  }
 }
 
 /**
@@ -140,14 +241,22 @@ export async function ensureFreshAvecApiToken(opts?: {
   if (refreshInFlight) return refreshInFlight
 
   refreshInFlight = (async () => {
-    const minted = await mintAvecApiToken({
-      force: true,
-      currentToken: runtime ?? envTok,
-      minHoursLeft: 0,
-    })
-    await saveAvecApiToken(minted.token)
-    memToken = { token: minted.token, expiresAtMs: Date.now() + MEM_TOKEN_TTL_MS }
-    return minted.token
+    try {
+      const minted = await mintAvecApiToken({
+        force: true,
+        currentToken: runtime ?? envTok,
+        minHoursLeft: 0,
+      })
+      await saveAvecApiToken(minted.token)
+      memToken = { token: minted.token, expiresAtMs: Date.now() + MEM_TOKEN_TTL_MS }
+      return minted.token
+    } catch (e) {
+      await recordAvecTokenRefreshResult({
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      })
+      throw e
+    }
   })()
 
   try {

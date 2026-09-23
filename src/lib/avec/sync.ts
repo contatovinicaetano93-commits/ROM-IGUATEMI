@@ -104,6 +104,8 @@ import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
 import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
 import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
+import { pickNewestUsableAvecRun } from '@/lib/avec/sync-run-health'
+import { notifyOpsAvecAlert } from '@/lib/whatsapp/staff-alert'
 
 export type AvecSyncMode = 'fast' | 'full'
 
@@ -322,6 +324,35 @@ export async function getLastAvecSync(
         limit 1
       `) as AvecSyncRun[])
   return rows[0] ?? null
+}
+
+/**
+ * Último run usável (pula empty-kill) — health/painel não podem usar kill fresco como “sync ok”.
+ */
+export async function getLastUsableAvecSync(
+  kind: string,
+  opts?: { stage?: AvecSyncStage; limit?: number },
+): Promise<AvecSyncRun | null> {
+  const sql = getSql()
+  const limit = Math.min(Math.max(opts?.limit ?? 12, 1), 40)
+  const stage = opts?.stage
+  const rows = stage
+    ? ((await sql`
+        select * from avec_sync_runs
+        where kind = ${kind}
+          and coalesce(stats->>'stage', 'all') = ${stage}
+          and coalesce(stats->>'running', 'false') <> 'true'
+        order by created_at desc
+        limit ${limit}
+      `) as AvecSyncRun[])
+    : ((await sql`
+        select * from avec_sync_runs
+        where kind = ${kind}
+          and coalesce(stats->>'running', 'false') <> 'true'
+        order by created_at desc
+        limit ${limit}
+      `) as AvecSyncRun[])
+  return pickNewestUsableAvecRun(rows)
 }
 
 /**
@@ -1771,6 +1802,14 @@ async function runAvecSyncBody(
 
     const finished = await finishAvecSyncRun(run.id, status, stats, topError)
 
+    if (status === 'error') {
+      const detail = topError ?? stats.errors[0] ?? 'sync error'
+      void notifyOpsAvecAlert(
+        `❌ Sync Avec ${mode} falhou — ${getDeploymentContext().display_name}\n${detail}`,
+        { dedupeKey: `avec_sync_error_${mode}`, minIntervalMs: 60 * 60 * 1000 },
+      ).catch(() => {})
+    }
+
     await logEvent({
       contactId: null,
       channel: 'avec',
@@ -1792,7 +1831,14 @@ async function runAvecSyncBody(
       hadCoreRows: avecHadCoreProgress(stats),
       thrown: true,
     })
-    return finishAvecSyncRun(run.id, status, stats, msg)
+    const finished = await finishAvecSyncRun(run.id, status, stats, msg)
+    if (status === 'error') {
+      void notifyOpsAvecAlert(
+        `❌ Sync Avec ${mode} falhou — ${getDeploymentContext().display_name}\n${msg}`,
+        { dedupeKey: `avec_sync_error_${mode}`, minIntervalMs: 60 * 60 * 1000 },
+      ).catch(() => {})
+    }
+    return finished
   } finally {
     setActiveSyncDeadlineAt(null)
     endSyncServiceCache()
