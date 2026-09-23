@@ -126,10 +126,25 @@ export function resolveMeuComissao(
 }
 
 /**
- * Avec pro id do elenco da unidade a partir do Nome no Avec do employee.
- * Sem match ou sem id no roster → null (0029 não roda).
+ * Vinculado ao Avec = tem Nome no Avec preenchido.
+ * O `name` do employee sozinho NÃO conta (evita falso positivo).
  */
-export function resolveAvecProId(linkName: string | null | undefined): string | null {
+export function isMeuFaturamentoLinked(
+  employee: { professional_name?: string | null } | null | undefined,
+): boolean {
+  return Boolean(employee?.professional_name?.trim())
+}
+
+/**
+ * Avec pro id: preferência ao id persistido no employee; senão match por nome no elenco.
+ * Sem id → null (0029 não roda).
+ */
+export function resolveAvecProId(
+  linkName: string | null | undefined,
+  storedAvecProId?: string | null,
+): string | null {
+  const stored = storedAvecProId?.trim()
+  if (stored) return stored
   const name = linkName?.trim() ?? ''
   if (!name) return null
   const hit = matchDirectorProfessional(name, listDirectorProfessionals())

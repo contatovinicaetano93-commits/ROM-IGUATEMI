@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/auth'
 import { findEmployeeById } from '@/lib/employees'
 import { getOrFetchCommissionDiscounts0029 } from '@/lib/avec/fetch-commission-discounts'
 import {
+  isMeuFaturamentoLinked,
   resolveAvecProId,
   resolveMeuComissao,
   resolveMeuFaturamento,
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
     const metrics = resolveMeuFaturamento(professionals, linkName)
     const commission = resolveMeuComissao(commissionRows, linkName)
 
-    const avecProId = resolveAvecProId(linkName)
+    const avecProId = resolveAvecProId(linkName, employee?.avec_pro_id)
     const anchorDay =
       commissionSnapshot?.day ??
       p1Snapshot?.day ??
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
       discount_reference_day: discounts.reference_day,
       avec_pro_id: avecProId,
       link_name: linkName || null,
-      linked: Boolean(employee?.professional_name?.trim() || employee?.name),
+      linked: isMeuFaturamentoLinked(employee),
       employee_id: employee?.id ?? null,
       ...metrics,
       ...commission,

@@ -30,6 +30,7 @@ type Employee = {
   flow_role: string
   status: string
   professional_name?: string | null
+  avec_pro_id?: string | null
   modules?: GrantableModuleKey[]
   areaIds?: RequestArea[]
 }
@@ -106,9 +107,11 @@ export default function PessoasPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editModules, setEditModules] = useState<GrantableModuleKey[]>([])
   const [editProfessionalName, setEditProfessionalName] = useState('')
+  const [editAvecProId, setEditAvecProId] = useState('')
   const [selectedProId, setSelectedProId] = useState('')
   const [createName, setCreateName] = useState('')
   const [createProfessionalName, setCreateProfessionalName] = useState('')
+  const [createAvecProId, setCreateAvecProId] = useState('')
   const [proSearch, setProSearch] = useState('')
   const canManage = session != null && (!session.auth_enabled || session.role === 'admin')
   const isProfissionalCargo = cargoId === 'profissional'
@@ -147,6 +150,7 @@ export default function PessoasPage() {
     if (pack.id !== 'profissional') {
       setSelectedProId('')
       setCreateProfessionalName('')
+      setCreateAvecProId('')
       setProSearch('')
     }
   }, [pack])
@@ -164,10 +168,12 @@ export default function PessoasPage() {
     const pro = professionals.find((item) => item.id === proId)
     if (!pro) {
       setCreateProfessionalName('')
+      setCreateAvecProId('')
       return
     }
     setCreateName(pro.name)
     setCreateProfessionalName(pro.name)
+    setCreateAvecProId(pro.avec_pro_id?.trim() ?? '')
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -193,6 +199,9 @@ export default function PessoasPage() {
         professional_name: isProfissionalCargo
           ? createProfessionalName.trim()
           : String(form.get('professional_name') ?? '').trim() || null,
+        avec_pro_id: isProfissionalCargo
+          ? createAvecProId.trim() || null
+          : null,
         panel_role: pack.panel_role,
         flow_role: pack.flow_role,
         can_publish: pack.can_publish,
@@ -217,6 +226,7 @@ export default function PessoasPage() {
     e.currentTarget.reset()
     setCreateName('')
     setCreateProfessionalName('')
+    setCreateAvecProId('')
     setSelectedProId('')
     setCreateModules([...pack.extras])
     setFineTune(false)
@@ -264,6 +274,7 @@ export default function PessoasPage() {
       body: JSON.stringify({
         modules: editModules,
         professional_name: editProfessionalName.trim() || null,
+        avec_pro_id: editAvecProId.trim() || null,
       }),
     })
     const json = await res.json()
@@ -311,7 +322,10 @@ export default function PessoasPage() {
                     <p className="text-sm font-medium">{person.name}</p>
                     <p className="text-xs text-muted">{person.email}</p>
                     {person.professional_name ? (
-                      <p className="mt-0.5 text-xs text-muted">Avec: {person.professional_name}</p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        Avec: {person.professional_name}
+                        {person.avec_pro_id ? ` · id ${person.avec_pro_id}` : ''}
+                      </p>
                     ) : null}
                     <p className="mt-1 text-[0.65rem] uppercase tracking-wide text-gold-strong">
                       {matched?.alias ?? person.panel_role}
@@ -329,6 +343,7 @@ export default function PessoasPage() {
                             setEditingId(person.id)
                             setEditModules(extras)
                             setEditProfessionalName(person.professional_name ?? '')
+                            setEditAvecProId(person.avec_pro_id ?? '')
                           }}
                         >
                           Ajustar
@@ -359,6 +374,7 @@ export default function PessoasPage() {
                           onChange={(e) => {
                             const pro = professionals.find((item) => item.id === e.target.value)
                             setEditProfessionalName(pro?.name ?? '')
+                            setEditAvecProId(pro?.avec_pro_id?.trim() ?? '')
                           }}
                           className="w-full rounded-xl border border-border bg-background px-3 py-2"
                         >
@@ -376,7 +392,10 @@ export default function PessoasPage() {
                         <input
                           type="text"
                           value={editProfessionalName}
-                          onChange={(e) => setEditProfessionalName(e.target.value)}
+                          onChange={(e) => {
+                            setEditProfessionalName(e.target.value)
+                            setEditAvecProId('')
+                          }}
                           placeholder="Igual ao relatório de profissionais"
                           className="w-full rounded-xl border border-border bg-background px-3 py-2"
                         />

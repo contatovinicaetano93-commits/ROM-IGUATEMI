@@ -22,6 +22,8 @@ export type EmployeeRecord = {
   can_publish: boolean
   /** Nome como aparece no Avec 0021 — usado em Meu faturamento. */
   professional_name: string | null
+  /** Id Avec do elenco (roster) — preferido sobre match por nome. */
+  avec_pro_id: string | null
   companyIds: string[]
   areaIds: RequestArea[]
   modules: GrantableModuleKey[]
@@ -72,7 +74,7 @@ export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_ha
     await ensureIntranetSchema()
     const sql = getIntranetSql()
     const rows = (await sql`
-      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.professional_name, e.created_at,
+      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.professional_name, e.avec_pro_id, e.created_at,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
         coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids,
         coalesce((select array_agg(module_key) from intranet_employee_modules m where m.employee_id = e.id), '{}') as module_keys
@@ -98,6 +100,7 @@ export async function createEmployee(input: {
   flow_role: FlowRole
   can_publish?: boolean
   professional_name?: string | null
+  avec_pro_id?: string | null
   companyIds?: string[]
   areaIds?: RequestArea[]
   modules?: GrantableModuleKey[]
@@ -119,8 +122,12 @@ export async function createEmployee(input: {
     typeof input.professional_name === 'string' && input.professional_name.trim()
       ? input.professional_name.trim()
       : null
+  const avecProId =
+    typeof input.avec_pro_id === 'string' && input.avec_pro_id.trim()
+      ? input.avec_pro_id.trim()
+      : null
   const rows = (await sql`
-    insert into intranet_employees (email, name, password_hash, panel_role, flow_role, can_publish, professional_name)
+    insert into intranet_employees (email, name, password_hash, panel_role, flow_role, can_publish, professional_name, avec_pro_id)
     values (
       ${input.email.trim().toLowerCase()},
       ${input.name.trim()},
@@ -128,7 +135,8 @@ export async function createEmployee(input: {
       ${input.panel_role},
       ${flowRole},
       ${canPublish},
-      ${professionalName}
+      ${professionalName},
+      ${avecProId}
     )
     returning *
   `) as Array<Record<string, unknown>>
@@ -294,19 +302,32 @@ export async function updateEmployeeModules(
   userId: string,
   selected: readonly GrantableModuleKey[],
   professionalName?: string | null,
+  avecProId?: string | null,
 ): Promise<Omit<EmployeeRecord, 'password_hash'>> {
   const current = await findEmployeeById(userId)
   if (!current) throw new Error('Usuário não encontrado.')
   const extras = extrasBeyondRole(current.panel_role, parseGrantableModules(selected))
   await replaceEmployeeModules(userId, extras)
-  if (professionalName !== undefined) {
+  if (professionalName !== undefined || avecProId !== undefined) {
     await ensureIntranetSchema()
     const sql = getIntranetSql()
     const nextName =
-      typeof professionalName === 'string' && professionalName.trim() ? professionalName.trim() : null
+      professionalName === undefined
+        ? current.professional_name
+        : typeof professionalName === 'string' && professionalName.trim()
+          ? professionalName.trim()
+          : null
+    const nextAvecId =
+      avecProId === undefined
+        ? current.avec_pro_id
+        : typeof avecProId === 'string' && avecProId.trim()
+          ? avecProId.trim()
+          : null
     await sql`
       update intranet_employees
-      set professional_name = ${nextName}, updated_at = now()
+      set professional_name = ${nextName},
+          avec_pro_id = ${nextAvecId},
+          updated_at = now()
       where id = ${userId}::uuid
     `
   }
@@ -314,6 +335,7 @@ export async function updateEmployeeModules(
     from: current.modules,
     to: extras,
     professional_name: professionalName === undefined ? undefined : professionalName,
+    avec_pro_id: avecProId === undefined ? undefined : avecProId,
   })
   const updated = await findEmployeeById(userId)
   if (!updated) throw new Error('Usuário não encontrado.')
@@ -422,6 +444,10 @@ function mapEmployee(row: Record<string, unknown>): EmployeeRecord {
     professional_name:
       typeof row.professional_name === 'string' && row.professional_name.trim()
         ? row.professional_name.trim()
+        : null,
+    avec_pro_id:
+      typeof row.avec_pro_id === 'string' && row.avec_pro_id.trim()
+        ? row.avec_pro_id.trim()
         : null,
     companyIds,
     areaIds,
