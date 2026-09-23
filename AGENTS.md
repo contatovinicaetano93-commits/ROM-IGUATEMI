@@ -64,4 +64,4 @@ Se for pegar tarefa nova, estes são reais e estão sem dono:
 
 - **`maxDuration = 800` em `/api/avec/sync` exige Fluid Compute na Vercel.** Rotas logam `warnIfLongMaxDuration` no cold start. Se Fluid não estiver ligado, todo sync full morre em 300s.
 - **Lint ainda não é gate bloqueante** (passivo atual: `no-explicit-any` + `react-hooks/refs`).
-- **O Iguatemi não tem `reminders/financeiro`** (lembrete WhatsApp semanal de despesas que o Brasil tem). Allowlist morta no middleware foi removida. Portar a rota exige decisão humana (passa a poder mandar mensagem para a equipe do Iguatemi).
+- **O Iguatemi não tem `reminders/financeiro`** (lembrete WhatsApp semanal de despesas que o Brasil tem). Não portar a rota nem o cron — exige decisão humana (passa a poder mandar mensagem para a equipe do Iguatemi). A allowlist morta `/api/reminders/financeiro` no middleware foi removida; `aftercare` permanece.
