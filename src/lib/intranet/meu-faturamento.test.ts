@@ -3,6 +3,8 @@ import {
   resolveAvecProId,
   resolveMeuComissao,
   resolveMeuFaturamento,
+  groupCommissionDiscountLines,
+  commissionTotalForReconcileKey,
 } from '@/lib/intranet/meu-faturamento'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 import type { P1ProfessionalRow } from '@/lib/salon/p1-metrics'
@@ -93,5 +95,39 @@ describe('resolveAvecProId', () => {
   it('casa Jefferson do elenco Iguatemi com id Avec', () => {
     process.env.ROM_PANEL = 'iguatemi'
     expect(resolveAvecProId('Jefferson Policarpo')).toBe('913293')
+  })
+})
+
+describe('groupCommissionDiscountLines', () => {
+  it('agrupa por categoria e soma amounts (null não inventa 0 no total vazio)', () => {
+    const groups = groupCommissionDiscountLines([
+      { category: 'Taxa Crédito', description: null, amount: -13.52, day: '2026-09-01' },
+      { category: 'Taxa Crédito', description: null, amount: -13.52, day: '2026-09-01' },
+      { category: 'Taxa Crédito', description: null, amount: -13.52, day: '2026-09-01' },
+      { category: 'Desconto Assistente', description: null, amount: -56.33, day: '2026-09-01' },
+      { category: 'Desconto Assistente', description: null, amount: -56.33, day: '2026-09-01' },
+      { category: 'Desconto Assistente', description: null, amount: -90, day: '2026-09-01' },
+    ])
+    expect(groups).toHaveLength(2)
+    const assist = groups.find((g) => g.key.includes('assistente'))
+    const taxa = groups.find((g) => g.key.includes('cr'))
+    expect(assist?.count).toBe(3)
+    expect(assist?.total).toBeCloseTo(-202.66, 2)
+    expect(assist?.reconcile_key).toBe('assistant_discount')
+    expect(taxa?.count).toBe(3)
+    expect(taxa?.total).toBeCloseTo(-40.56, 2)
+    expect(taxa?.reconcile_key).toBe('card_fee')
+  })
+
+  it('lista vazia → []', () => {
+    expect(groupCommissionDiscountLines([])).toEqual([])
+  })
+})
+
+describe('commissionTotalForReconcileKey', () => {
+  it('lê o bucket 8123 correspondente', () => {
+    const metrics = resolveMeuComissao(commissions, 'Jefferson Policarpo')
+    expect(commissionTotalForReconcileKey(metrics, 'assistant_discount')).toBe(-150)
+    expect(commissionTotalForReconcileKey(metrics, null)).toBeNull()
   })
 })

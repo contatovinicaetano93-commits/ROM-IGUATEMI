@@ -137,4 +137,129 @@ export function resolveAvecProId(linkName: string | null | undefined): string | 
   return id || null
 }
 
+/** Campo 8123 com o qual o grupo 0029 concilia (quando reconhecido). */
+export type CommissionDiscountReconcileKey =
+  | 'assistant_discount'
+  | 'product_spend'
+  | 'other_discounts'
+  | 'card_fee'
+  | 'admin_fee'
+  | 'tip'
+
+export type CommissionDiscountGroup = {
+  /** Chave estável (categoria normalizada). */
+  key: string
+  /** Rótulo de exibição (primeira ocorrência). */
+  category: string
+  /** Soma dos amounts presentes; null se nenhum amount. */
+  total: number | null
+  count: number
+  lines: CommissionDiscountLine[]
+  reconcile_key: CommissionDiscountReconcileKey | null
+}
+
+function categoryKey(raw: string | null | undefined): string {
+  const s = (raw ?? '').trim().toLowerCase()
+  return s || 'lancamento'
+}
+
+function displayCategory(raw: string | null | undefined): string {
+  const s = (raw ?? '').trim()
+  return s || 'Lançamento'
+}
+
+/**
+ * Mapeia categoria 0029 → bucket de abatimento 8123 (conciliação).
+ * Desconhecido → null (não força “outros”).
+ */
+export function reconcileKeyForDiscountCategory(
+  category: string | null | undefined,
+): CommissionDiscountReconcileKey | null {
+  const key = categoryKey(category)
+  if (!key || key === 'lancamento') return null
+  if (key.includes('assistente')) return 'assistant_discount'
+  if (key.includes('produto') || key.includes('gasto')) return 'product_spend'
+  if (
+    key.includes('taxa') &&
+    (key.includes('cr') || key.includes('cart') || key.includes('credito') || key.includes('crédito'))
+  ) {
+    return 'card_fee'
+  }
+  if (key.includes('taxa') && (key.includes('adm') || key.includes('administr'))) {
+    return 'admin_fee'
+  }
+  if (key.includes('caixinha') || key.includes('gorjeta')) return 'tip'
+  if (key.includes('desconto') || key.includes('bônus') || key.includes('bonus')) {
+    return 'other_discounts'
+  }
+  return null
+}
+
+/**
+ * Agrupa linhas 0029 por categoria: total + N lançamentos (para conciliar com 8123).
+ * Ordem: maior |total| primeiro; empate alfabético.
+ */
+export function groupCommissionDiscountLines(
+  lines: readonly CommissionDiscountLine[],
+): CommissionDiscountGroup[] {
+  const byKey = new Map<string, CommissionDiscountGroup>()
+  for (const line of lines) {
+    const key = categoryKey(line.category)
+    const existing = byKey.get(key)
+    if (!existing) {
+      const amount = line.amount
+      byKey.set(key, {
+        key,
+        category: displayCategory(line.category),
+        total: amount,
+        count: 1,
+        lines: [line],
+        reconcile_key: reconcileKeyForDiscountCategory(line.category),
+      })
+      continue
+    }
+    existing.count += 1
+    existing.lines.push(line)
+    if (amountHas(line.amount)) {
+      existing.total = (existing.total ?? 0) + line.amount!
+    }
+  }
+  return [...byKey.values()].sort((a, b) => {
+    const ta = a.total == null ? 0 : Math.abs(a.total)
+    const tb = b.total == null ? 0 : Math.abs(b.total)
+    if (tb !== ta) return tb - ta
+    return a.category.localeCompare(b.category, 'pt-BR')
+  })
+}
+
+function amountHas(value: number | null | undefined): value is number {
+  return value != null && Number.isFinite(value)
+}
+
+/** Lê o total 8123 correspondente ao grupo (conciliação). */
+export function commissionTotalForReconcileKey(
+  metrics: MeuComissaoMetrics,
+  key: CommissionDiscountReconcileKey | null,
+): number | null {
+  if (!key) return null
+  switch (key) {
+    case 'assistant_discount':
+      return metrics.assistant_discount
+    case 'product_spend':
+      return metrics.product_spend
+    case 'other_discounts':
+      return metrics.other_discounts
+    case 'card_fee':
+      return metrics.card_fee
+    case 'admin_fee':
+      return metrics.admin_fee
+    case 'tip':
+      return metrics.tip
+    default: {
+      const _exhaustive: never = key
+      return _exhaustive
+    }
+  }
+}
+
 export type { CommissionDiscountLine }
