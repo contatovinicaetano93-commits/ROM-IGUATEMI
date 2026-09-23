@@ -165,3 +165,115 @@ export function pickHojeAvecSyncRun<T extends AvecRunHealthRow>(
   if (full != null && !isEmptyKillAvecRun(full)) return full
   return fast ?? full ?? null
 }
+
+/** Stats mínimas para saúde do sync 8123 (comissões / Meu faturamento). */
+export type Commissions8123HealthStats = {
+  commissions_rows?: number | null
+  errors?: unknown
+  warnings?: unknown
+}
+
+export type Commissions8123Health = {
+  /**
+   * null = desconhecido (full sem sinal de 8123) — nunca inventa verde.
+   * false = pulado por budget ou erro 8123 (pode ficar vermelho).
+   * true = rodou com `commissions_rows` presente.
+   */
+  ok: boolean | null
+  skipped_budget: boolean
+  has_errors: boolean
+  rows: number | null
+  message: string | null
+}
+
+function asStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value) as unknown
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (item): item is string => typeof item === 'string' && item.trim().length > 0,
+        )
+      }
+    } catch {
+      return [value]
+    }
+  }
+  return []
+}
+
+/** Detecta aviso de 8123 pulado por orçamento. */
+export function isCommissions8123BudgetSkipWarning(warning: string): boolean {
+  return /8123:.*orçamento esgotado/i.test(warning)
+}
+
+/**
+ * Saúde do sync 8123 a partir de stats do last full.
+ * Prova vermelho: skipped_budget ou erro 8123 → ok=false.
+ * Sem sinal → ok=null (não inventa verde).
+ */
+export function computeCommissions8123Health(
+  stats: Commissions8123HealthStats | null | undefined,
+): Commissions8123Health {
+  if (stats == null) {
+    return {
+      ok: null,
+      skipped_budget: false,
+      has_errors: false,
+      rows: null,
+      message: null,
+    }
+  }
+
+  const warnings = asStringList(stats.warnings)
+  const errors = asStringList(stats.errors)
+  const skippedBudget = warnings.some(isCommissions8123BudgetSkipWarning)
+  const commissionErrors = errors.filter((e) => /8123|commission/i.test(e))
+  const hasErrors = commissionErrors.length > 0
+  const rawRows = stats.commissions_rows
+  const rows =
+    rawRows == null || !Number.isFinite(Number(rawRows)) ? null : Number(rawRows)
+
+  if (skippedBudget) {
+    return {
+      ok: false,
+      skipped_budget: true,
+      has_errors: hasErrors,
+      rows,
+      message:
+        warnings.find(isCommissions8123BudgetSkipWarning) ??
+        '8123: comissões puladas — orçamento esgotado',
+    }
+  }
+
+  if (hasErrors) {
+    return {
+      ok: false,
+      skipped_budget: false,
+      has_errors: true,
+      rows,
+      message: commissionErrors[0] ?? '8123 commissions error',
+    }
+  }
+
+  if (rows != null) {
+    return {
+      ok: true,
+      skipped_budget: false,
+      has_errors: false,
+      rows,
+      message: null,
+    }
+  }
+
+  return {
+    ok: null,
+    skipped_budget: false,
+    has_errors: false,
+    rows: null,
+    message: null,
+  }
+}

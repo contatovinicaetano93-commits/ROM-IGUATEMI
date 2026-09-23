@@ -107,6 +107,9 @@ export function canSeeNavHref(
   if (path === '/auditoria' || path.startsWith('/auditoria/')) return role === 'admin'
   // Cadastro/edição de acessos é só admin master — não poluir o menu dos demais cargos.
   if (path === '/pessoas' || path.startsWith('/pessoas/')) return role === 'admin'
+  // Stub RH → Flow; Treinamentos → Onboarding. Fora do Mais para não-admin.
+  if (path === '/rh' || path.startsWith('/rh/')) return role === 'admin'
+  if (path === '/treinamentos' || path.startsWith('/treinamentos/')) return role === 'admin'
   // Balcão / Pós-venda / Operação: fora do menu — Agenda + Contatos bastam.
   if (shouldHideOpsShellNav(role, opts?.professionalName) && isProfessionalHiddenPath(path)) {
     return false

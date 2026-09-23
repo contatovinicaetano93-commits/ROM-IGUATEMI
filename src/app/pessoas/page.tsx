@@ -30,6 +30,7 @@ type Employee = {
   flow_role: string
   status: string
   professional_name?: string | null
+  avec_pro_id?: string | null
   modules?: GrantableModuleKey[]
   areaIds?: RequestArea[]
 }
@@ -42,6 +43,23 @@ type UnitProfessional = {
   linked_employee_id: string | null
   linked_email: string | null
   linked_name: string | null
+}
+
+type AvecLinkCoverage = {
+  staff_active: number
+  staff_with_professional_name: number
+  staff_without_professional_name: number
+  pct_staff_with_professional_name: number | null
+  floor_roster_size: number
+  floor_with_avec_pro_id: number
+  floor_without_avec_pro_id: number
+  pct_floor_with_avec_pro_id: number | null
+  floor_linked_to_employee: number
+  pct_floor_linked: number | null
+}
+
+function formatCoveragePct(value: number | null): string {
+  return value == null ? '—' : `${value}%`
 }
 
 function ModuleChecks({
@@ -96,6 +114,7 @@ export default function PessoasPage() {
   const { session } = useClientSession()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [professionals, setProfessionals] = useState<UnitProfessional[]>([])
+  const [coverage, setCoverage] = useState<AvecLinkCoverage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -106,9 +125,11 @@ export default function PessoasPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editModules, setEditModules] = useState<GrantableModuleKey[]>([])
   const [editProfessionalName, setEditProfessionalName] = useState('')
+  const [editAvecProId, setEditAvecProId] = useState('')
   const [selectedProId, setSelectedProId] = useState('')
   const [createName, setCreateName] = useState('')
   const [createProfessionalName, setCreateProfessionalName] = useState('')
+  const [createAvecProId, setCreateAvecProId] = useState('')
   const [proSearch, setProSearch] = useState('')
   const canManage = session != null && (!session.auth_enabled || session.role === 'admin')
   const isProfissionalCargo = cargoId === 'profissional'
@@ -141,12 +162,21 @@ export default function PessoasPage() {
   }, [canManage])
 
   useEffect(() => {
+    if (!canManage) return
+    fetch('/api/admin/avec-link-coverage', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((json) => setCoverage(json.data?.coverage ?? null))
+      .catch(() => setCoverage(null))
+  }, [canManage, employees.length])
+
+  useEffect(() => {
     if (!pack) return
     setCreateModules([...pack.extras])
     setFineTune(false)
     if (pack.id !== 'profissional') {
       setSelectedProId('')
       setCreateProfessionalName('')
+      setCreateAvecProId('')
       setProSearch('')
     }
   }, [pack])
@@ -164,10 +194,12 @@ export default function PessoasPage() {
     const pro = professionals.find((item) => item.id === proId)
     if (!pro) {
       setCreateProfessionalName('')
+      setCreateAvecProId('')
       return
     }
     setCreateName(pro.name)
     setCreateProfessionalName(pro.name)
+    setCreateAvecProId(pro.avec_pro_id?.trim() ?? '')
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -193,6 +225,9 @@ export default function PessoasPage() {
         professional_name: isProfissionalCargo
           ? createProfessionalName.trim()
           : String(form.get('professional_name') ?? '').trim() || null,
+        avec_pro_id: isProfissionalCargo
+          ? createAvecProId.trim() || null
+          : null,
         panel_role: pack.panel_role,
         flow_role: pack.flow_role,
         can_publish: pack.can_publish,
@@ -217,6 +252,7 @@ export default function PessoasPage() {
     e.currentTarget.reset()
     setCreateName('')
     setCreateProfessionalName('')
+    setCreateAvecProId('')
     setSelectedProId('')
     setCreateModules([...pack.extras])
     setFineTune(false)
@@ -264,6 +300,7 @@ export default function PessoasPage() {
       body: JSON.stringify({
         modules: editModules,
         professional_name: editProfessionalName.trim() || null,
+        avec_pro_id: editAvecProId.trim() || null,
       }),
     })
     const json = await res.json()
@@ -290,6 +327,16 @@ export default function PessoasPage() {
       subtitle="Escolha o cargo (pacote), preencha nome e senha. O acesso do painel e do Rom Flow já vem montado."
     >
       <SectionCard title="Colaboradores" badge={<span className="text-xs text-muted">{employees.length}</span>}>
+        {canManage && coverage ? (
+          <p className="mb-3 text-xs text-muted">
+            Vínculo Avec — staff com nome {coverage.staff_with_professional_name}/
+            {coverage.staff_active} ({formatCoveragePct(coverage.pct_staff_with_professional_name)})
+            {' · '}piso com id {coverage.floor_with_avec_pro_id}/{coverage.floor_roster_size} (
+            {formatCoveragePct(coverage.pct_floor_with_avec_pro_id)})
+            {' · '}linked {coverage.floor_linked_to_employee}/{coverage.floor_roster_size} (
+            {formatCoveragePct(coverage.pct_floor_linked)})
+          </p>
+        ) : null}
         {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
         {notice ? <p className="mb-3 text-sm text-success">{notice}</p> : null}
         <ul className="divide-y divide-border">
@@ -311,7 +358,10 @@ export default function PessoasPage() {
                     <p className="text-sm font-medium">{person.name}</p>
                     <p className="text-xs text-muted">{person.email}</p>
                     {person.professional_name ? (
-                      <p className="mt-0.5 text-xs text-muted">Avec: {person.professional_name}</p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        Avec: {person.professional_name}
+                        {person.avec_pro_id ? ` · id ${person.avec_pro_id}` : ''}
+                      </p>
                     ) : null}
                     <p className="mt-1 text-[0.65rem] uppercase tracking-wide text-gold-strong">
                       {matched?.alias ?? person.panel_role}
@@ -329,6 +379,7 @@ export default function PessoasPage() {
                             setEditingId(person.id)
                             setEditModules(extras)
                             setEditProfessionalName(person.professional_name ?? '')
+                            setEditAvecProId(person.avec_pro_id ?? '')
                           }}
                         >
                           Ajustar
@@ -359,6 +410,7 @@ export default function PessoasPage() {
                           onChange={(e) => {
                             const pro = professionals.find((item) => item.id === e.target.value)
                             setEditProfessionalName(pro?.name ?? '')
+                            setEditAvecProId(pro?.avec_pro_id?.trim() ?? '')
                           }}
                           className="w-full rounded-xl border border-border bg-background px-3 py-2"
                         >
@@ -376,7 +428,10 @@ export default function PessoasPage() {
                         <input
                           type="text"
                           value={editProfessionalName}
-                          onChange={(e) => setEditProfessionalName(e.target.value)}
+                          onChange={(e) => {
+                            setEditProfessionalName(e.target.value)
+                            setEditAvecProId('')
+                          }}
                           placeholder="Igual ao relatório de profissionais"
                           className="w-full rounded-xl border border-border bg-background px-3 py-2"
                         />

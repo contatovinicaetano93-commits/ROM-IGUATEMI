@@ -26,14 +26,28 @@ type SyncStatsLike = {
   aborted?: boolean
 }
 
-function reportDeadline() {
-  return { deadlineAt: getActiveSyncDeadlineAt() }
+/** Aviso HARD quando 8123 não roda por orçamento — Meu faturamento sem refresh. */
+export const COMMISSIONS_8123_BUDGET_SKIP_WARNING =
+  '8123: comissões puladas — orçamento esgotado (Meu faturamento sem refresh)'
+
+/**
+ * Marca abort limpo + warning específico 8123 (idempotente no texto).
+ * Sempre empurra o aviso 8123 mesmo se o abort genérico já existia —
+ * senão o monitor não vê que comissões ficaram de fora.
+ */
+export function noteCommissions8123BudgetSkip(stats: {
+  aborted?: boolean
+  warnings?: string[]
+}) {
+  noteSyncBudgetExhausted(stats, 'comissões 8123')
+  if (!stats.warnings) stats.warnings = []
+  if (!stats.warnings.some((w) => /8123:.*orçamento esgotado/i.test(w))) {
+    stats.warnings.push(COMMISSIONS_8123_BUDGET_SKIP_WARNING)
+  }
 }
 
-function skipIfBudgetExhausted(stats: SyncStatsLike, stage: string): boolean {
-  if (!isSyncBudgetExhausted()) return false
-  noteSyncBudgetExhausted(stats, stage)
-  return true
+function reportDeadline() {
+  return { deadlineAt: getActiveSyncDeadlineAt() }
 }
 
 function todayIsoLocal() {
@@ -110,7 +124,10 @@ export async function syncCommissions8123(
   const reportId = def ? resolveReportId(def) : null
   if (!reportId) return
 
-  if (skipIfBudgetExhausted(stats, 'comissões 8123')) return
+  if (isSyncBudgetExhausted()) {
+    noteCommissions8123BudgetSkip(stats)
+    return
+  }
 
   const { inicio, fim } = calendarMonthRangeBr(day)
   const params = withRequiredAvecReportParams(reportId, { inicio, fim, limit: 250 })

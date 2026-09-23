@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
+import { MonthYearField } from '../_components/MonthYearField'
 import { SectionCard } from '../_components/ui'
 import { useClientSession } from '../_components/SessionProvider'
 import {
@@ -10,6 +12,7 @@ import {
   groupCommissionDiscountLines,
   type MeuComissaoMetrics,
 } from '@/lib/intranet/meu-faturamento'
+import { todayIso } from '@/lib/salon/format'
 
 type DiscountLine = {
   category: string | null
@@ -47,6 +50,14 @@ type Payload = {
   discount_lines: DiscountLine[]
 }
 
+function currentMonthKey() {
+  return todayIso().slice(0, 7)
+}
+
+function parseMonthParam(raw: string | null): string {
+  return raw && /^\d{4}-\d{2}$/.test(raw) ? raw : currentMonthKey()
+}
+
 function formatMoney(value: number | null): string {
   if (value == null) return '—'
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -81,14 +92,38 @@ function moneyClose(a: number | null, b: number | null): boolean | null {
 }
 
 export default function MeuFaturamentoPage() {
+  return (
+    <Suspense
+      fallback={
+        <IntranetPage kicker="Performance" title="Meu faturamento" subtitle="Carregando…">
+          <div className="h-40 animate-pulse rounded-2xl bg-card" />
+        </IntranetPage>
+      }
+    >
+      <MeuFaturamentoPageContent />
+    </Suspense>
+  )
+}
+
+function MeuFaturamentoPageContent() {
   const { session } = useClientSession()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [month, setMonth] = useState(() => parseMonthParam(searchParams.get('month')))
   const [data, setData] = useState<Payload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
+    const fromUrl = parseMonthParam(searchParams.get('month'))
+    setMonth((prev) => (prev === fromUrl ? prev : fromUrl))
+  }, [searchParams])
+
+  useEffect(() => {
     let cancelled = false
-    fetch('/api/kpis/meu-faturamento', { credentials: 'include', cache: 'no-store' })
+    const q = new URLSearchParams({ month })
+    fetch(`/api/kpis/meu-faturamento?${q}`, { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? 'Falha ao carregar')
@@ -100,7 +135,17 @@ export default function MeuFaturamentoPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [month])
+
+  function onMonthChange(next: string) {
+    if (!/^\d{4}-\d{2}$/.test(next)) return
+    setMonth(next)
+    setError(null)
+    setData(null)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('month', next)
+    router.replace(`${pathname}?${params.toString()}`)
+  }
 
   const name = session?.displayName || session?.user || 'Você'
   const hasCommission =
@@ -144,6 +189,23 @@ export default function MeuFaturamentoPage() {
     setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
+  const adminLink = (
+    <>
+      Em{' '}
+      <Link href="/pessoas" className="text-gold-strong hover:underline">
+        Gestão de usuário
+      </Link>
+      , preencha o campo <span className="font-medium">Nome no Avec</span> igual ao relatório
+      0021/8123.
+    </>
+  )
+  const staffHint = (
+    <>
+      Peça ao admin para vincular seu <span className="font-medium">Nome no Avec</span> em Gestão de
+      usuário.
+    </>
+  )
+
   return (
     <IntranetPage
       kicker="Performance"
@@ -152,11 +214,25 @@ export default function MeuFaturamentoPage() {
     >
       {error && <p className="text-sm text-danger">{error}</p>}
 
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[0.65rem] uppercase tracking-wide text-muted">Mês</span>
+          <MonthYearField value={month} onChange={onMonthChange} aria-label="Mês do faturamento" />
+        </label>
+        {data?.reference_day || data?.commission_reference_day ? (
+          <p className="text-xs text-muted">
+            {data.reference_day ? `P1 ${data.reference_day}` : null}
+            {data.reference_day && data.commission_reference_day ? ' · ' : null}
+            {data.commission_reference_day ? `8123 ${data.commission_reference_day}` : null}
+          </p>
+        ) : null}
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SectionCard title="Produção bruta">
           <p className="text-2xl font-semibold">{formatMoney(data?.revenue ?? null)}</p>
           <p className="mt-1 text-xs text-muted">
-            {data?.month ? `Mês ${data.month}` : 'Aguardando mês'}
+            {data?.month ? `Mês ${data.month}` : `Mês ${month}`}
             {data?.reference_day ? ` · ref. ${data.reference_day}` : ''}
           </p>
         </SectionCard>
@@ -208,7 +284,13 @@ export default function MeuFaturamentoPage() {
           </div>
         ) : (
           <p className="mt-3 text-sm text-muted">
-            Ainda sem snapshot de comissão (8123) para o seu nome neste mês.
+            {data == null
+              ? 'Carregando comissão…'
+              : !data.linked
+                ? 'Sem Nome no Avec no seu cadastro — a comissão 8123 só aparece depois do vínculo em Gestão de usuário.'
+                : !data.commission_reference_day
+                  ? 'Sem snapshot 8123 para este mês (ainda não sincronizou ou o fechamento não chegou).'
+                  : 'Seu nome não aparece no snapshot 8123 deste mês.'}
           </p>
         )}
 
@@ -281,16 +363,27 @@ export default function MeuFaturamentoPage() {
             </ul>
           ) : (
             <p className="text-sm text-muted">
-              {data?.avec_pro_id
-                ? 'Sem lançamentos 0029 neste período (ou ainda sincronizando).'
-                : 'Sem id Avec no elenco para este nome — não dá para puxar o detalhe linha a linha.'}
+              {data == null
+                ? 'Carregando lançamentos…'
+                : !data.linked
+                  ? 'Sem Nome no Avec — não dá para puxar o detalhe 0029.'
+                  : !data.avec_pro_id
+                    ? 'Sem avec_pro_id no cadastro (e sem id no elenco para este nome) — o detalhe linha a linha 0029 fica indisponível.'
+                    : 'Sem lançamentos 0029 neste período (ou ainda sincronizando).'}
             </p>
           )}
         </div>
       </SectionCard>
 
       <SectionCard title="Vínculo Avec">
-        {data?.matched_name || data?.commission_matched_name ? (
+        {!data ? (
+          <p className="text-sm text-muted">Carregando vínculo…</p>
+        ) : !data.linked ? (
+          <p className="text-sm text-muted">
+            Sem Nome no Avec no seu cadastro.
+            {session?.role === 'admin' ? <> {adminLink}</> : <> {staffHint}</>}
+          </p>
+        ) : data.matched_name || data.commission_matched_name ? (
           <p className="text-sm">
             Casado com{' '}
             <span className="font-medium">
@@ -302,28 +395,28 @@ export default function MeuFaturamentoPage() {
             ) : null}
             {data.avec_pro_id ? (
               <span className="text-muted"> · id {data.avec_pro_id}</span>
-            ) : null}
+            ) : (
+              <span className="text-muted">
+                {' '}
+                · sem avec_pro_id (escolha o profissional na lista em Gestão de usuário)
+              </span>
+            )}
+          </p>
+        ) : !data.commission_reference_day && !data.reference_day ? (
+          <p className="text-sm text-muted">
+            Nome no Avec preenchido, mas sem snapshot P1/8123 para {data.month ?? month}.
           </p>
         ) : (
           <p className="text-sm text-muted">
-            Ainda não encontramos seu nome no snapshot Avec deste mês.
-            {session?.role === 'admin' ? (
+            Nome no Avec preenchido ({data.link_name}), mas não encontramos match no snapshot deste
+            mês.
+            {!data.avec_pro_id ? (
               <>
                 {' '}
-                Em{' '}
-                <Link href="/pessoas" className="text-gold-strong hover:underline">
-                  Gestão de usuário
-                </Link>
-                , preencha o campo <span className="font-medium">Nome no Avec</span> igual ao
-                relatório 0021/8123.
+                Também falta <span className="font-medium">avec_pro_id</span> — escolha o
+                profissional na lista em Gestão de usuário.
               </>
-            ) : (
-              <>
-                {' '}
-                Peça ao admin para vincular seu{' '}
-                <span className="font-medium">Nome no Avec</span> em Gestão de usuário.
-              </>
-            )}
+            ) : null}
           </p>
         )}
       </SectionCard>

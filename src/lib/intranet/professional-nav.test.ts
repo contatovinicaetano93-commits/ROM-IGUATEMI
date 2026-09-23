@@ -43,4 +43,8 @@ describe('isProfessionalHiddenPath', () => {
     expect(isProfessionalHiddenPath('/meu-faturamento')).toBe(false)
     expect(isProfessionalHiddenPath('/flow')).toBe(false)
   })
+
+  it('deep links legados continuam marcados (páginas redirecionam para Agenda/Contatos)', () => {
+    expect(PROFESSIONAL_HIDDEN_HREFS).toEqual(['/hoje', '/recepcao', '/pos-venda'])
+  })
 })

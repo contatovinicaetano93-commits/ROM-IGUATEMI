@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   computePanelSyncOk,
+  computeCommissions8123Health,
   hardTimeoutHealthMessage,
   isClassic300sHardTimeout,
+  isCommissions8123BudgetSkipWarning,
   isEmptyKillAvecRun,
   isHardPlatformTimeoutAvecRun,
   pickHojeAvecSyncRun,
@@ -170,5 +172,43 @@ describe('computePanelSyncOk', () => {
     )
     expect(r.ok).toBe(false)
     expect(r.reason).toMatch(/fast stale/)
+  })
+})
+
+describe('computeCommissions8123Health', () => {
+  it('sem stats → ok null (não inventa verde)', () => {
+    expect(computeCommissions8123Health(null).ok).toBeNull()
+    expect(computeCommissions8123Health(undefined).ok).toBeNull()
+    expect(computeCommissions8123Health({}).ok).toBeNull()
+  })
+
+  it('budget skip → ok false (pode ficar vermelho)', () => {
+    const h = computeCommissions8123Health({
+      warnings: [
+        'sync: orçamento esgotado em P1 (abort limpo)',
+        '8123: comissões puladas — orçamento esgotado (Meu faturamento sem refresh)',
+      ],
+    })
+    expect(h.ok).toBe(false)
+    expect(h.skipped_budget).toBe(true)
+    expect(h.message).toMatch(/8123/)
+    expect(isCommissions8123BudgetSkipWarning(h.message!)).toBe(true)
+  })
+
+  it('erro 8123 → ok false', () => {
+    const h = computeCommissions8123Health({
+      errors: ['8123 commissions: HTTP 500'],
+      commissions_rows: null,
+    })
+    expect(h.ok).toBe(false)
+    expect(h.has_errors).toBe(true)
+    expect(h.skipped_budget).toBe(false)
+  })
+
+  it('commissions_rows presente sem erro → ok true', () => {
+    const h = computeCommissions8123Health({ commissions_rows: 12, warnings: [], errors: [] })
+    expect(h.ok).toBe(true)
+    expect(h.rows).toBe(12)
+    expect(h.message).toBeNull()
   })
 })

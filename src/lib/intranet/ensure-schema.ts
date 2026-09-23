@@ -12,6 +12,7 @@ const INTRANET_SQL_FILES = [
   'delta-intranet.sql',
   'delta-intranet-modules.sql',
   'delta-intranet-pro-link.sql',
+  'delta-intranet-avec-pro-id.sql',
   'delta-intranet-policy.sql',
 ] as const
 
