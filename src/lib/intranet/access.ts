@@ -59,6 +59,9 @@ export function isDashboardPath(pathname: string) {
   if (pathname === '/api/kpis/meu-faturamento' || pathname.startsWith('/api/kpis/meu-faturamento/')) {
     return false
   }
+  if (pathname === '/api/kpis/resumo-do-dia' || pathname.startsWith('/api/kpis/resumo-do-dia/')) {
+    return false
+  }
   return pathname === '/dashboard' || pathname.startsWith('/api/kpis')
 }
 
@@ -68,6 +71,15 @@ export function isMeuFaturamentoPath(pathname: string) {
     pathname.startsWith('/meu-faturamento/') ||
     pathname === '/api/kpis/meu-faturamento' ||
     pathname.startsWith('/api/kpis/meu-faturamento/')
+  )
+}
+
+export function isResumoDoDiaPath(pathname: string) {
+  return (
+    pathname === '/resumo-do-dia' ||
+    pathname.startsWith('/resumo-do-dia/') ||
+    pathname === '/api/kpis/resumo-do-dia' ||
+    pathname.startsWith('/api/kpis/resumo-do-dia/')
   )
 }
 
@@ -116,6 +128,7 @@ export function canAccessProtectedPath(
     return true
   }
   if (isMeuFaturamentoPath(pathname)) return true
+  if (isResumoDoDiaPath(pathname)) return true
   if (isPipelinePath(pathname)) return hasPanelModule(role, extras, 'pipeline')
   if (isContatosPath(pathname)) return hasPanelModule(role, extras, 'contatos')
   if (isFinancePath(pathname)) return hasPanelModule(role, extras, 'financeiro')
