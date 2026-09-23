@@ -24,6 +24,11 @@ export async function PATCH(
         : typeof body.professional_name === 'string'
           ? body.professional_name
           : null,
+      body.avec_pro_id === undefined
+        ? undefined
+        : typeof body.avec_pro_id === 'string'
+          ? body.avec_pro_id
+          : null,
     )
     return ok({ employee })
   } catch (error) {

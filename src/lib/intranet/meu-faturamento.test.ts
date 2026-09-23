@@ -5,6 +5,7 @@ import {
   resolveMeuFaturamento,
   groupCommissionDiscountLines,
   commissionTotalForReconcileKey,
+  isMeuFaturamentoLinked,
 } from '@/lib/intranet/meu-faturamento'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 import type { P1ProfessionalRow } from '@/lib/salon/p1-metrics'
@@ -38,6 +39,15 @@ const commissions: CommissionProfessionalRow[] = [
     house_share: 4000,
   },
 ]
+
+describe('isMeuFaturamentoLinked', () => {
+  it('só professional_name trimado conta — name sozinho não', () => {
+    expect(isMeuFaturamentoLinked(null)).toBe(false)
+    expect(isMeuFaturamentoLinked({ professional_name: null })).toBe(false)
+    expect(isMeuFaturamentoLinked({ professional_name: '   ' })).toBe(false)
+    expect(isMeuFaturamentoLinked({ professional_name: 'Jefferson Policarpo' })).toBe(true)
+  })
+})
 
 describe('resolveMeuFaturamento', () => {
   it('sem nome ou sem snapshot → null (não inventa 0)', () => {
@@ -87,14 +97,22 @@ describe('resolveMeuComissao', () => {
 })
 
 describe('resolveAvecProId', () => {
-  it('sem nome → null', () => {
+  it('sem nome e sem id armazenado → null', () => {
     expect(resolveAvecProId(null)).toBeNull()
     expect(resolveAvecProId('')).toBeNull()
+    expect(resolveAvecProId(null, '  ')).toBeNull()
   })
 
-  it('casa Jefferson do elenco Iguatemi com id Avec', () => {
+  it('preferência ao avec_pro_id armazenado (antes do match por nome)', () => {
+    process.env.ROM_PANEL = 'iguatemi'
+    expect(resolveAvecProId('Jefferson Policarpo', '999001')).toBe('999001')
+    expect(resolveAvecProId('Nome Que Nao Existe No Roster', '913293')).toBe('913293')
+  })
+
+  it('casa Jefferson do elenco Iguatemi com id Avec quando não há id armazenado', () => {
     process.env.ROM_PANEL = 'iguatemi'
     expect(resolveAvecProId('Jefferson Policarpo')).toBe('913293')
+    expect(resolveAvecProId('Jefferson Policarpo', null)).toBe('913293')
   })
 })
 
