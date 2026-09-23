@@ -15,10 +15,10 @@ const DOCK_CAP = 4
 
 /** Ordem de preferência do dock por papel (Home sempre entra primeiro). */
 const ROLE_DOCK_PRIORITY: Record<AuthRole, readonly string[]> = {
-  admin: ['/', '/financeiro', '/flow', '/dashboard', '/estoque', '/contatos', '/pipeline'],
-  financeiro: ['/', '/financeiro', '/dashboard', '/relatorios', '/estoque', '/flow'],
+  admin: ['/', '/resumo-do-dia', '/financeiro', '/flow', '/dashboard', '/estoque', '/contatos', '/pipeline'],
+  financeiro: ['/', '/resumo-do-dia', '/financeiro', '/dashboard', '/relatorios', '/estoque', '/flow'],
   estoque: ['/', '/estoque', '/flow', '/financeiro'],
-  staff: ['/', '/contatos', '/pipeline', '/flow', '/meu-faturamento'],
+  staff: ['/', '/resumo-do-dia', '/contatos', '/pipeline', '/flow', '/meu-faturamento'],
   mkt: ['/', '/empresa', '/contatos', '/pipeline', '/flow'],
 }
 
@@ -28,6 +28,7 @@ const DOCK_LABELS: Record<string, string> = {
   '/estoque': 'Estoque',
   '/flow': 'Tarefas',
   '/hoje': 'Operação',
+  '/resumo-do-dia': 'Dia',
   '/contatos': 'Contatos',
   '/pipeline': 'Agenda',
   '/dashboard': 'Visão',
@@ -40,6 +41,7 @@ const DOCK_LABELS: Record<string, string> = {
 
 /** Catálogo do sheet "Mais" — só entra o que `canSeeNavHref` liberar. */
 const MORE_CATALOG: readonly BottomMoreItem[] = [
+  { href: '/resumo-do-dia', label: 'Resumo do dia' },
   { href: '/pipeline', label: 'Agenda do dia' },
   { href: '/contatos', label: 'Contatos' },
   { href: '/meu-faturamento', label: 'Meu faturamento' },
