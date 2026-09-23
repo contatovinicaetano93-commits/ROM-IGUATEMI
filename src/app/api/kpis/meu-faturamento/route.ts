@@ -2,7 +2,12 @@ import { NextRequest } from 'next/server'
 import { err, ok, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { findEmployeeById } from '@/lib/employees'
-import { resolveMeuComissao, resolveMeuFaturamento } from '@/lib/intranet/meu-faturamento'
+import { getOrFetchCommissionDiscounts0029 } from '@/lib/avec/fetch-commission-discounts'
+import {
+  resolveAvecProId,
+  resolveMeuComissao,
+  resolveMeuFaturamento,
+} from '@/lib/intranet/meu-faturamento'
 import {
   getLatestSalonCommissionsDaily,
   getSalonCommissionsDailyNear,
@@ -41,15 +46,31 @@ export async function GET(req: NextRequest) {
     const metrics = resolveMeuFaturamento(professionals, linkName)
     const commission = resolveMeuComissao(commissionRows, linkName)
 
+    const avecProId = resolveAvecProId(linkName)
+    const anchorDay =
+      commissionSnapshot?.day ??
+      p1Snapshot?.day ??
+      (month ? monthToDateRange(month).to : null)
+    const discounts = avecProId
+      ? await getOrFetchCommissionDiscounts0029(avecProId, {
+          anchorDay: anchorDay ?? undefined,
+          maxSkewDays: 14,
+        })
+      : { lines: [], reference_day: null, avec_pro_id: null as string | null, source: 'none' as const }
+
     return ok({
       month: month ?? p1Snapshot?.day.slice(0, 7) ?? commissionSnapshot?.day.slice(0, 7) ?? null,
       reference_day: p1Snapshot?.day ?? null,
       commission_reference_day: commissionSnapshot?.day ?? null,
+      discount_reference_day: discounts.reference_day,
+      avec_pro_id: avecProId,
       link_name: linkName || null,
       linked: Boolean(employee?.professional_name?.trim() || employee?.name),
       employee_id: employee?.id ?? null,
       ...metrics,
       ...commission,
+      discount_lines: discounts.lines,
+      discount_source: discounts.source,
     })
   } catch (e) {
     return handleError(e)

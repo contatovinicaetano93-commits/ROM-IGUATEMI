@@ -1,7 +1,17 @@
-import { describe, expect, it } from 'vitest'
-import { resolveMeuComissao, resolveMeuFaturamento } from '@/lib/intranet/meu-faturamento'
+import { afterEach, describe, expect, it } from 'vitest'
+import {
+  resolveAvecProId,
+  resolveMeuComissao,
+  resolveMeuFaturamento,
+} from '@/lib/intranet/meu-faturamento'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 import type { P1ProfessionalRow } from '@/lib/salon/p1-metrics'
+
+const ORIGINAL_PANEL = process.env.ROM_PANEL
+
+afterEach(() => {
+  process.env.ROM_PANEL = ORIGINAL_PANEL
+})
 
 const sample: P1ProfessionalRow[] = [
   { name: 'Ana Souza', revenue: 1200, attended: 10, ticket_avg: 120, occupancy: 0.4 },
@@ -56,11 +66,14 @@ describe('resolveMeuComissao', () => {
     expect(resolveMeuComissao(commissions, null).net_payable).toBeNull()
     expect(resolveMeuComissao(commissions, 'Fulano').net_payable).toBeNull()
     expect(resolveMeuComissao(commissions, 'Fulano').assistant_discount).toBeNull()
+    expect(resolveMeuComissao(commissions, 'Fulano').charged).toBeNull()
   })
 
-  it('espelha a_pagar e abatimentos do 8123', () => {
+  it('espelha a_pagar, rateios e abatimentos do 8123', () => {
     const row = resolveMeuComissao(commissions, 'Jefferson Policarpo')
     expect(row.commission_matched_name).toBe('JEFFERSON POLICARPO DOS SANTOS')
+    expect(row.charged).toBe(12000)
+    expect(row.service_share).toBe(8000)
     expect(row.net_payable).toBe(6032.64)
     expect(row.assistant_discount).toBe(-150)
     expect(row.product_spend).toBe(-114.12)
@@ -68,5 +81,17 @@ describe('resolveMeuComissao', () => {
     expect(row.card_fee).toBeNull()
     expect(row.tip).toBe(50)
     expect(row.house_share).toBe(4000)
+  })
+})
+
+describe('resolveAvecProId', () => {
+  it('sem nome → null', () => {
+    expect(resolveAvecProId(null)).toBeNull()
+    expect(resolveAvecProId('')).toBeNull()
+  })
+
+  it('casa Jefferson do elenco Iguatemi com id Avec', () => {
+    process.env.ROM_PANEL = 'iguatemi'
+    expect(resolveAvecProId('Jefferson Policarpo')).toBe('913293')
   })
 })

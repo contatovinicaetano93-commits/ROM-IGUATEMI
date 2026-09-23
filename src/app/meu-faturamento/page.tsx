@@ -6,10 +6,19 @@ import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { SectionCard } from '../_components/ui'
 import { useClientSession } from '../_components/SessionProvider'
 
+type DiscountLine = {
+  category: string | null
+  description: string | null
+  amount: number | null
+  day: string | null
+}
+
 type Payload = {
   month: string | null
   reference_day: string | null
   commission_reference_day: string | null
+  discount_reference_day: string | null
+  avec_pro_id: string | null
   link_name: string | null
   linked: boolean
   matched_name: string | null
@@ -18,6 +27,10 @@ type Payload = {
   ticket_avg: number | null
   occupancy: number | null
   commission_matched_name: string | null
+  charged: number | null
+  service_share: number | null
+  product_share: number | null
+  other_share: number | null
   assistant_discount: number | null
   product_spend: number | null
   other_discounts: number | null
@@ -26,6 +39,7 @@ type Payload = {
   tip: number | null
   net_payable: number | null
   house_share: number | null
+  discount_lines: DiscountLine[]
 }
 
 function formatMoney(value: number | null): string {
@@ -80,12 +94,20 @@ export default function MeuFaturamentoPage() {
   const name = session?.displayName || session?.user || 'Você'
   const hasCommission =
     data?.net_payable != null ||
+    data?.charged != null ||
     data?.assistant_discount != null ||
     data?.product_spend != null ||
     data?.other_discounts != null ||
     data?.card_fee != null ||
     data?.admin_fee != null ||
     data?.tip != null
+  const hasDynamics =
+    data?.charged != null ||
+    data?.service_share != null ||
+    data?.product_share != null ||
+    data?.other_share != null ||
+    data?.house_share != null
+  const lines = data?.discount_lines ?? []
 
   return (
     <IntranetPage
@@ -116,9 +138,9 @@ export default function MeuFaturamentoPage() {
 
       <SectionCard title="Comissão (Avec)">
         <p className="text-xs text-muted">
-          Espelho do relatório 8123 — não recalculamos %. Valores ausentes aparecem como —.
+          Espelho 8123 (fechamento) + 0029 (lançamentos). Não recalculamos %. Ausente = —.
           {data?.commission_reference_day
-            ? ` · ref. ${data.commission_reference_day}`
+            ? ` · ref. 8123 ${data.commission_reference_day}`
             : null}
         </p>
         <div className="mt-4 rounded-xl border border-border bg-background/60 px-4 py-4">
@@ -127,22 +149,69 @@ export default function MeuFaturamentoPage() {
             {formatMoney(data?.net_payable ?? null)}
           </p>
         </div>
+
+        {hasDynamics ? (
+          <div className="mt-4">
+            <p className="mb-1 text-xs uppercase tracking-wide text-muted">Dinâmica do mês</p>
+            <DeductionRow label="Valor cobrado" value={data?.charged ?? null} />
+            <DeductionRow label="Rateio serviços" value={data?.service_share ?? null} />
+            <DeductionRow label="Rateio produtos" value={data?.product_share ?? null} />
+            <DeductionRow label="Rateio outros" value={data?.other_share ?? null} />
+            <DeductionRow label="Valor casa" value={data?.house_share ?? null} />
+          </div>
+        ) : null}
+
         {hasCommission ? (
           <div className="mt-4">
-            <p className="mb-1 text-xs uppercase tracking-wide text-muted">Abatimentos</p>
+            <p className="mb-1 text-xs uppercase tracking-wide text-muted">Abatimentos (totais)</p>
             <DeductionRow label="Desconto assistente" value={data?.assistant_discount ?? null} />
             <DeductionRow label="Gasto com produtos" value={data?.product_spend ?? null} />
             <DeductionRow label="Outros descontos" value={data?.other_discounts ?? null} />
             <DeductionRow label="Taxa cartão" value={data?.card_fee ?? null} />
             <DeductionRow label="Taxa administrativa" value={data?.admin_fee ?? null} />
             <DeductionRow label="Caixinha" value={data?.tip ?? null} />
-            <DeductionRow label="Valor casa" value={data?.house_share ?? null} />
           </div>
         ) : (
           <p className="mt-3 text-sm text-muted">
             Ainda sem snapshot de comissão (8123) para o seu nome neste mês.
           </p>
         )}
+
+        <div className="mt-6">
+          <p className="mb-1 text-xs uppercase tracking-wide text-muted">
+            Lançamentos (por quê)
+            {data?.discount_reference_day ? ` · ref. ${data.discount_reference_day}` : ''}
+          </p>
+          {lines.length > 0 ? (
+            <ul className="divide-y divide-border/60">
+              {lines.map((line, idx) => (
+                <li
+                  key={`${line.day ?? ''}-${line.category ?? ''}-${line.description ?? ''}-${idx}`}
+                  className="flex items-start justify-between gap-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">
+                      {line.category ?? 'Lançamento'}
+                    </p>
+                    {line.description ? (
+                      <p className="text-muted truncate">{line.description}</p>
+                    ) : null}
+                    {line.day ? <p className="text-xs text-muted">{line.day}</p> : null}
+                  </div>
+                  <span className="shrink-0 font-medium tabular-nums">
+                    {formatMoney(line.amount)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">
+              {data?.avec_pro_id
+                ? 'Sem lançamentos 0029 neste período (ou ainda sincronizando).'
+                : 'Sem id Avec no elenco para este nome — não dá para puxar o detalhe linha a linha.'}
+            </p>
+          )}
+        </div>
       </SectionCard>
 
       <SectionCard title="Vínculo Avec">
@@ -155,6 +224,9 @@ export default function MeuFaturamentoPage() {
             {data.link_name &&
             data.link_name !== (data.commission_matched_name ?? data.matched_name) ? (
               <span className="text-muted"> (busca: {data.link_name})</span>
+            ) : null}
+            {data.avec_pro_id ? (
+              <span className="text-muted"> · id {data.avec_pro_id}</span>
             ) : null}
           </p>
         ) : (
