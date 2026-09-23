@@ -8,6 +8,7 @@ import { getLastAvecSync, getRecentHardPlatformTimeoutFullRuns } from '@/lib/ave
 import { getLastStockSync } from '@/lib/avec/sync-stock'
 import {
   computePanelSyncOk,
+  computeCommissions8123Health,
   hardTimeoutHealthMessage,
   isClassic300sHardTimeout,
   isHardPlatformTimeoutAvecRun,
@@ -173,6 +174,7 @@ export async function getPublicHealthStatus() {
   let sync_ok = connected
   let sync_reason: string | null = connected ? null : 'database disconnected'
   let hard_timeout_ok = true
+  let commissions_ok: boolean | null = null
   if (connected) {
     try {
       const [lastFast, lastFull, hardTimeoutHits] = await Promise.all([
@@ -185,6 +187,12 @@ export async function getPublicHealthStatus() {
       sync_reason = sync.reason
       const hardHits = hardTimeoutHits.filter(isHardPlatformTimeoutAvecRun)
       hard_timeout_ok = hardHits.length === 0
+      const commissions = computeCommissions8123Health(lastFull?.stats ?? null)
+      commissions_ok = commissions.ok
+      if (commissions.ok === false) sync_ok = false
+      if (commissions.ok === false && !sync_reason) {
+        sync_reason = commissions.message
+      }
     } catch (e) {
       logger.warn('public health sync probe failed', {
         error: e instanceof Error ? e.message : String(e),
@@ -194,11 +202,12 @@ export async function getPublicHealthStatus() {
     }
   }
   return {
-    ok: connected && sync_ok && hard_timeout_ok,
+    ok: connected && sync_ok && hard_timeout_ok && commissions_ok !== false,
     db_quota,
     sync_ok,
     sync_reason,
     hard_timeout_ok,
+    commissions_8123_ok: commissions_ok,
   }
 }
 
@@ -277,11 +286,14 @@ export async function getHealthStatus() {
   }
   const syncProbe = computePanelSyncOk(lastFast, lastFull)
   const sync_ok = syncProbe.ok
+  const commissions_8123 = computeCommissions8123Health(lastFull?.stats ?? null)
+  /** Só falha quando há sinal vermelho explícito — null (desconhecido) não inventa verde nem vermelho no gate. */
+  const commissionsOk = commissions_8123.ok !== false
 
   const awaitingToken = !isAvecConfigured() && !isAvecMock()
 
   return {
-    ok: connected && validation.ok && hard_timeout.ok && sync_ok,
+    ok: connected && validation.ok && hard_timeout.ok && sync_ok && commissionsOk,
     sync_ok,
     sync_reason: syncProbe.reason,
     deployment,
@@ -322,6 +334,11 @@ export async function getHealthStatus() {
       kpi_layers: kpiLayers,
       /** RED quando full morre por kill duro (~300s) sem aborted limpo — Fluid/maxDuration. */
       hard_timeout,
+      /**
+       * Saúde do 8123 (Meu faturamento). ok=false quando pulado por budget ou erro.
+       * ok=null = sem sinal no last full — não inventa verde.
+       */
+      commissions_8123,
     },
     whatsapp: {
       configured:

@@ -44,6 +44,23 @@ type UnitProfessional = {
   linked_name: string | null
 }
 
+type AvecLinkCoverage = {
+  staff_active: number
+  staff_with_professional_name: number
+  staff_without_professional_name: number
+  pct_staff_with_professional_name: number | null
+  floor_roster_size: number
+  floor_with_avec_pro_id: number
+  floor_without_avec_pro_id: number
+  pct_floor_with_avec_pro_id: number | null
+  floor_linked_to_employee: number
+  pct_floor_linked: number | null
+}
+
+function formatCoveragePct(value: number | null): string {
+  return value == null ? '—' : `${value}%`
+}
+
 function ModuleChecks({
   role,
   selected,
@@ -96,6 +113,7 @@ export default function PessoasPage() {
   const { session } = useClientSession()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [professionals, setProfessionals] = useState<UnitProfessional[]>([])
+  const [coverage, setCoverage] = useState<AvecLinkCoverage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -139,6 +157,14 @@ export default function PessoasPage() {
       .then((json) => setProfessionals(json.data?.professionals ?? []))
       .catch(() => setProfessionals([]))
   }, [canManage])
+
+  useEffect(() => {
+    if (!canManage) return
+    fetch('/api/admin/avec-link-coverage', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((json) => setCoverage(json.data?.coverage ?? null))
+      .catch(() => setCoverage(null))
+  }, [canManage, employees.length])
 
   useEffect(() => {
     if (!pack) return
@@ -290,6 +316,16 @@ export default function PessoasPage() {
       subtitle="Escolha o cargo (pacote), preencha nome e senha. O acesso do painel e do Rom Flow já vem montado."
     >
       <SectionCard title="Colaboradores" badge={<span className="text-xs text-muted">{employees.length}</span>}>
+        {canManage && coverage ? (
+          <p className="mb-3 text-xs text-muted">
+            Vínculo Avec — staff com nome {coverage.staff_with_professional_name}/
+            {coverage.staff_active} ({formatCoveragePct(coverage.pct_staff_with_professional_name)})
+            {' · '}piso com id {coverage.floor_with_avec_pro_id}/{coverage.floor_roster_size} (
+            {formatCoveragePct(coverage.pct_floor_with_avec_pro_id)})
+            {' · '}linked {coverage.floor_linked_to_employee}/{coverage.floor_roster_size} (
+            {formatCoveragePct(coverage.pct_floor_linked)})
+          </p>
+        ) : null}
         {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
         {notice ? <p className="mb-3 text-sm text-success">{notice}</p> : null}
         <ul className="divide-y divide-border">
