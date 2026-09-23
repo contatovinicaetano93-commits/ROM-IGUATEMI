@@ -1,10 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { SectionCard } from '../_components/ui'
 import { useClientSession } from '../_components/SessionProvider'
+import {
+  commissionTotalForReconcileKey,
+  groupCommissionDiscountLines,
+  type MeuComissaoMetrics,
+} from '@/lib/intranet/meu-faturamento'
 
 type DiscountLine = {
   category: string | null
@@ -70,10 +75,16 @@ function DeductionRow({ label, value }: { label: string; value: number | null })
   )
 }
 
+function moneyClose(a: number | null, b: number | null): boolean | null {
+  if (a == null || b == null) return null
+  return Math.abs(a - b) < 0.02
+}
+
 export default function MeuFaturamentoPage() {
   const { session } = useClientSession()
   const [data, setData] = useState<Payload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -107,7 +118,31 @@ export default function MeuFaturamentoPage() {
     data?.product_share != null ||
     data?.other_share != null ||
     data?.house_share != null
+
   const lines = data?.discount_lines ?? []
+  const groups = useMemo(() => groupCommissionDiscountLines(lines), [lines])
+
+  const commissionMetrics: MeuComissaoMetrics | null = data
+    ? {
+        commission_matched_name: data.commission_matched_name,
+        charged: data.charged,
+        service_share: data.service_share,
+        product_share: data.product_share,
+        other_share: data.other_share,
+        assistant_discount: data.assistant_discount,
+        product_spend: data.product_spend,
+        other_discounts: data.other_discounts,
+        card_fee: data.card_fee,
+        admin_fee: data.admin_fee,
+        tip: data.tip,
+        net_payable: data.net_payable,
+        house_share: data.house_share,
+      }
+    : null
+
+  function toggleGroup(key: string) {
+    setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
 
   return (
     <IntranetPage
@@ -138,7 +173,7 @@ export default function MeuFaturamentoPage() {
 
       <SectionCard title="Comissão (Avec)">
         <p className="text-xs text-muted">
-          Espelho 8123 (fechamento) + 0029 (lançamentos). Não recalculamos %. Ausente = —.
+          Espelho 8123 (fechamento) + 0029 (lançamentos agrupados). Não recalculamos %. Ausente = —.
           {data?.commission_reference_day
             ? ` · ref. 8123 ${data.commission_reference_day}`
             : null}
@@ -163,7 +198,7 @@ export default function MeuFaturamentoPage() {
 
         {hasCommission ? (
           <div className="mt-4">
-            <p className="mb-1 text-xs uppercase tracking-wide text-muted">Abatimentos (totais)</p>
+            <p className="mb-1 text-xs uppercase tracking-wide text-muted">Abatimentos (totais 8123)</p>
             <DeductionRow label="Desconto assistente" value={data?.assistant_discount ?? null} />
             <DeductionRow label="Gasto com produtos" value={data?.product_spend ?? null} />
             <DeductionRow label="Outros descontos" value={data?.other_discounts ?? null} />
@@ -179,30 +214,70 @@ export default function MeuFaturamentoPage() {
 
         <div className="mt-6">
           <p className="mb-1 text-xs uppercase tracking-wide text-muted">
-            Lançamentos (por quê)
+            Descontos por grupo (0029)
             {data?.discount_reference_day ? ` · ref. ${data.discount_reference_day}` : ''}
           </p>
-          {lines.length > 0 ? (
+          <p className="mb-3 text-xs text-muted">
+            Soma das linhas por categoria · toque no grupo para ver cada lançamento · concilia com o
+            total 8123 quando o tipo é reconhecido.
+          </p>
+          {groups.length > 0 ? (
             <ul className="divide-y divide-border/60">
-              {lines.map((line, idx) => (
-                <li
-                  key={`${line.day ?? ''}-${line.category ?? ''}-${line.description ?? ''}-${idx}`}
-                  className="flex items-start justify-between gap-3 py-2 text-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                      {line.category ?? 'Lançamento'}
-                    </p>
-                    {line.description ? (
-                      <p className="text-muted truncate">{line.description}</p>
+              {groups.map((group) => {
+                const open = Boolean(openGroups[group.key])
+                const reconcile =
+                  commissionMetrics && group.reconcile_key
+                    ? commissionTotalForReconcileKey(commissionMetrics, group.reconcile_key)
+                    : null
+                const match = moneyClose(group.total, reconcile)
+                return (
+                  <li key={group.key} className="py-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.key)}
+                      className="flex w-full items-start justify-between gap-3 text-left text-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground">
+                          {open ? '▾ ' : '▸ '}
+                          {group.category}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {group.count} lançamento{group.count === 1 ? '' : 's'}
+                          {reconcile != null ? (
+                            <>
+                              {' '}
+                              · 8123 {formatMoney(reconcile)}
+                              {match === true ? ' · ok' : match === false ? ' · diverge' : ''}
+                            </>
+                          ) : null}
+                        </p>
+                      </div>
+                      <span className="shrink-0 font-medium tabular-nums">
+                        {formatMoney(group.total)}
+                      </span>
+                    </button>
+                    {open ? (
+                      <ul className="mt-2 space-y-1 border-l border-border/80 pl-3">
+                        {group.lines.map((line, idx) => (
+                          <li
+                            key={`${group.key}-${line.day ?? ''}-${line.amount ?? ''}-${idx}`}
+                            className="flex items-start justify-between gap-3 text-xs text-muted"
+                          >
+                            <span className="min-w-0 truncate">
+                              {line.description || line.day || 'Lançamento'}
+                              {line.description && line.day ? ` · ${line.day}` : ''}
+                            </span>
+                            <span className="shrink-0 tabular-nums text-foreground">
+                              {formatMoney(line.amount)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
-                    {line.day ? <p className="text-xs text-muted">{line.day}</p> : null}
-                  </div>
-                  <span className="shrink-0 font-medium tabular-nums">
-                    {formatMoney(line.amount)}
-                  </span>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
           ) : (
             <p className="text-sm text-muted">
