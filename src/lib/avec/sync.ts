@@ -98,6 +98,7 @@ import {
   shouldStartComandaClock,
 } from '@/lib/salon/visit-spans'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
+import { syncCommissions8123 } from '@/lib/avec/sync-commissions'
 import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
@@ -156,6 +157,7 @@ export interface AvecSyncStats {
   errors: string[]
   warnings: string[]
   p1_rows?: number
+  commissions_rows?: number
   p2_rows?: number
   p3_rows?: number
   /** Visitas 0002 gravadas em salon_client_visits (0011 offline). */
@@ -1666,6 +1668,7 @@ async function runAvecSyncBody(
       // Full fatiado: ops (P1–P3/TM) → agenda (caixa) → catalog (0004).
       const opsSteps = [
         ['P1', () => syncP1Kpis(stats, syncRunId)],
+        ['8123', () => syncCommissions8123(stats, syncRunId)],
         ['P2', () => syncP2Kpis(stats, syncRunId)],
         ['P3', () => syncP3Kpis(stats, syncRunId)],
         ['tm-0223', () => syncDurationFrom0223(stats, syncRunId)],

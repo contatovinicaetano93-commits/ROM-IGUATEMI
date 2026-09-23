@@ -489,6 +489,23 @@ export function parseOptionalMoney(raw: unknown): number | null {
   return n
 }
 
+/**
+ * Valor monetário com sinal (comissões 8123: abatimentos negativos, a_pagar ≥ 0).
+ * Campo ausente/inválido → null. Zero real da API → 0 (não vira null).
+ */
+export function parseSignedOptionalMoney(raw: unknown): number | null {
+  if (raw == null) return null
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) ? raw : null
+  }
+  const str = String(raw).trim()
+  if (str === '') return null
+  const cleaned = str.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
+  const n = Number(cleaned)
+  if (!Number.isFinite(n)) return null
+  return n
+}
+
 export function normalizeRevenueRow(row: Record<string, unknown>): NormalizedAvecRevenue | null {
   // 0088 manda `faturamento` / `comandaQtd` — priorizar antes de `valor`/`total` genéricos
   // (alguns payloads trazem lixo em campos auxiliares e distorciam o KPI).
@@ -713,6 +730,58 @@ export function normalizeP1AcquisitionRow(
   if (clients <= 0) return null
   const channel = channelRaw ?? 'Não informado'
   return { channel, clients }
+}
+
+/** Linha do report 8123 — espelho do fechamento de comissão (não recalcula %). */
+export type NormalizedCommissionRow = {
+  name: string
+  role: string | null
+  charged: number | null
+  service_share: number | null
+  product_share: number | null
+  other_share: number | null
+  tip: number | null
+  product_spend: number | null
+  card_fee: number | null
+  admin_fee: number | null
+  assistant_discount: number | null
+  other_discounts: number | null
+  net_payable: number | null
+  house_share: number | null
+}
+
+/** 8123 — profissionais e comissões (detalhado / líquido). */
+export function normalizeCommission8123Row(
+  row: Record<string, unknown>,
+): NormalizedCommissionRow | null {
+  const name = pick(row, [
+    'nome',
+    'profissional',
+    'nome_profissional',
+    'colaborador',
+    'funcionario',
+    'apelido',
+  ])
+  if (!name) return null
+  const role = pick(row, ['cargo', 'funcao', 'função', 'role'])
+  return {
+    name,
+    role,
+    charged: parseSignedOptionalMoney(pickRaw(row, ['valor_cobrado', 'cobrado', 'faturamento'])),
+    service_share: parseSignedOptionalMoney(pickRaw(row, ['rateio_servico', 'rateio_servicos'])),
+    product_share: parseSignedOptionalMoney(pickRaw(row, ['rateio_produtos', 'rateio_produto'])),
+    other_share: parseSignedOptionalMoney(pickRaw(row, ['rateio_outros', 'rateio_outro'])),
+    tip: parseSignedOptionalMoney(pickRaw(row, ['caixinha', 'gorjeta'])),
+    product_spend: parseSignedOptionalMoney(pickRaw(row, ['gasto_produtos', 'gastos_produtos'])),
+    card_fee: parseSignedOptionalMoney(pickRaw(row, ['taxa_cartao', 'taxa_cartão'])),
+    admin_fee: parseSignedOptionalMoney(pickRaw(row, ['taxa_adm', 'taxa_administrativa'])),
+    assistant_discount: parseSignedOptionalMoney(
+      pickRaw(row, ['desconto_assistente', 'desconto_assistentes']),
+    ),
+    other_discounts: parseSignedOptionalMoney(pickRaw(row, ['descontos', 'desconto'])),
+    net_payable: parseSignedOptionalMoney(pickRaw(row, ['a_pagar', 'apagar', 'liquido', 'líquido'])),
+    house_share: parseSignedOptionalMoney(pickRaw(row, ['valor_casa', 'casa'])),
+  }
 }
 
 /** 0056 — agendamentos por canal */

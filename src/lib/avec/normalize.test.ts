@@ -10,11 +10,13 @@ import {
   normalizeAttendanceRow,
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
+  normalizeCommission8123Row,
   normalizeP2ChannelRow,
   normalizePhone,
   normalizeRevenueRow,
   parseAvecDateTime,
   parseOptionalMoney,
+  parseSignedOptionalMoney,
   parseServiceTempoMinutes,
 } from '@/lib/avec/normalize'
 
@@ -68,6 +70,46 @@ describe('parseOptionalMoney', () => {
     expect(parseOptionalMoney('')).toBeNull()
     expect(parseOptionalMoney(0)).toBeNull()
     expect(parseOptionalMoney(-5)).toBeNull()
+  })
+})
+
+describe('parseSignedOptionalMoney', () => {
+  it('aceita zero e negativos (abatimentos 8123)', () => {
+    expect(parseSignedOptionalMoney(0)).toBe(0)
+    expect(parseSignedOptionalMoney(-150)).toBe(-150)
+    expect(parseSignedOptionalMoney('-114,12')).toBe(-114.12)
+    expect(parseSignedOptionalMoney(6032.64)).toBe(6032.64)
+  })
+
+  it('ausente → null', () => {
+    expect(parseSignedOptionalMoney(null)).toBeNull()
+    expect(parseSignedOptionalMoney('')).toBeNull()
+  })
+})
+
+describe('normalizeCommission8123Row', () => {
+  it('espelha campos do fechamento líquido', () => {
+    const row = normalizeCommission8123Row({
+      nome: 'JEFFERSON POLICARPO DOS SANTOS',
+      cargo: 'MULTIPLICADOR',
+      valor_cobrado: 12000,
+      desconto_assistente: -150,
+      gasto_produtos: -114.12,
+      descontos: -707.19,
+      a_pagar: 6032.64,
+      valor_casa: 4000,
+      caixinha: 50,
+    })
+    expect(row?.name).toBe('JEFFERSON POLICARPO DOS SANTOS')
+    expect(row?.assistant_discount).toBe(-150)
+    expect(row?.product_spend).toBe(-114.12)
+    expect(row?.net_payable).toBe(6032.64)
+    expect(row?.card_fee).toBeNull()
+    expect(row?.tip).toBe(50)
+  })
+
+  it('sem nome → null', () => {
+    expect(normalizeCommission8123Row({ a_pagar: 100 })).toBeNull()
   })
 })
 
