@@ -7,6 +7,8 @@ describe('resolveBottomNav', () => {
     expect(dock.map((item) => item.href)).toEqual(['/', '/financeiro', '/flow', '/dashboard'])
     expect(more.some((item) => item.href === '/pessoas')).toBe(true)
     expect(more.some((item) => item.href === '/auditoria')).toBe(true)
+    expect(more.some((item) => item.href === '/rh')).toBe(true)
+    expect(more.some((item) => item.href === '/treinamentos')).toBe(true)
     expect(more.some((item) => item.href === '/hoje')).toBe(false)
     expect(more.some((item) => item.href === '/recepcao')).toBe(false)
     expect(more.some((item) => item.href === '/pos-venda')).toBe(false)
@@ -18,6 +20,8 @@ describe('resolveBottomNav', () => {
     expect(more.some((item) => item.href === '/financeiro')).toBe(false)
     expect(more.some((item) => item.href === '/dashboard')).toBe(false)
     expect(more.some((item) => item.href === '/pessoas')).toBe(false)
+    expect(more.some((item) => item.href === '/rh')).toBe(false)
+    expect(more.some((item) => item.href === '/treinamentos')).toBe(false)
     expect(more.some((item) => item.href === '/meu-faturamento')).toBe(true)
     expect(more.some((item) => item.href === '/recepcao')).toBe(false)
     expect(more.some((item) => item.href === '/pos-venda')).toBe(false)
@@ -30,6 +34,8 @@ describe('resolveBottomNav', () => {
     expect(more.some((item) => item.href === '/recepcao')).toBe(false)
     expect(more.some((item) => item.href === '/pos-venda')).toBe(false)
     expect(more.some((item) => item.href === '/hoje')).toBe(false)
+    expect(more.some((item) => item.href === '/rh')).toBe(false)
+    expect(more.some((item) => item.href === '/treinamentos')).toBe(false)
     expect(more.some((item) => item.href === '/meu-faturamento')).toBe(true)
   })
 
@@ -61,6 +67,8 @@ describe('resolveBottomNav', () => {
     expect(dock.map((item) => item.href)).toEqual(['/', '/estoque', '/flow'])
     expect(more.some((item) => item.href === '/financeiro')).toBe(false)
     expect(more.some((item) => item.href === '/hoje')).toBe(false)
+    expect(more.some((item) => item.href === '/rh')).toBe(false)
+    expect(more.some((item) => item.href === '/treinamentos')).toBe(false)
   })
 
   it('mkt: Notícias + Contatos + Agenda', () => {

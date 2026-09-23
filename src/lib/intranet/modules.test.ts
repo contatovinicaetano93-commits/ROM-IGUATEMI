@@ -57,6 +57,15 @@ describe('canSeeNavHref', () => {
     expect(canSeeNavHref('/auditoria', 'financeiro', [])).toBe(false)
   })
 
+  it('stubs RH e Treinamentos só no Mais do admin (Flow / Onboarding cobrem o resto)', () => {
+    expect(canSeeNavHref('/rh', 'admin', [])).toBe(true)
+    expect(canSeeNavHref('/treinamentos', 'admin', [])).toBe(true)
+    for (const role of ['staff', 'financeiro', 'estoque', 'mkt'] as const) {
+      expect(canSeeNavHref('/rh', role, [])).toBe(false)
+      expect(canSeeNavHref('/treinamentos', role, [])).toBe(false)
+    }
+  })
+
   it('módulos grantable respeitam o pacote + extras', () => {
     expect(canSeeNavHref('/financeiro', 'staff', [])).toBe(false)
     expect(canSeeNavHref('/financeiro', 'staff', ['financeiro'])).toBe(true)

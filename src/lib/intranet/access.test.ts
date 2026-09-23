@@ -70,4 +70,11 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/contatos', 'staff', [], opts)).toBe(true)
     expect(canAccessProtectedPath('/meu-faturamento', 'staff', [], opts)).toBe(true)
   })
+
+  it('staff genérico ainda alcança deep links de Operação (redirect na página)', () => {
+    expect(canAccessProtectedPath('/hoje', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/recepcao', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/pos-venda', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/hoje', 'staff', [])).toBe(true)
+  })
 })
