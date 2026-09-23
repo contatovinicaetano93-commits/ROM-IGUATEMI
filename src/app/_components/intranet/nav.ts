@@ -4,6 +4,7 @@ export const INTRANET_NAV = [
   { href: '/pessoas', label: 'Gestão de usuário', short: 'Usuários' },
   { href: '/empresa', label: 'Notícias e eventos', short: 'Notícias' },
   { href: '/flow', label: 'Rom Flow', short: 'Rom Flow' },
+  { href: '/resumo-do-dia', label: 'Resumo do dia', short: 'Dia' },
   { href: '/meu-faturamento', label: 'Meu faturamento', short: 'Faturamento' },
   { href: '/financeiro', label: 'Financeiro', short: 'Financeiro' },
   { href: '/estoque', label: 'Estoque', short: 'Estoque' },

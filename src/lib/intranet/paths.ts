@@ -11,6 +11,7 @@ export const INTRANET_PAGE_PREFIXES = [
   '/operacao',
   '/auditoria',
   '/meu-faturamento',
+  '/resumo-do-dia',
   '/recepcao',
   '/pos-venda',
 ] as const
