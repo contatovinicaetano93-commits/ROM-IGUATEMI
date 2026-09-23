@@ -1,6 +1,12 @@
-import { findNearProInMap, occupancyMergeKey } from '@/lib/director-report/match-pro'
+import {
+  findNearProInMap,
+  matchDirectorProfessional,
+  occupancyMergeKey,
+} from '@/lib/director-report/match-pro'
+import { listDirectorProfessionals } from '@/lib/director-report/professionals'
 import type { P1ProfessionalRow } from '@/lib/salon/p1-metrics'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
+import type { CommissionDiscountLine } from '@/lib/salon/commission-discount-metrics'
 
 export type MeuFaturamentoMetrics = {
   matched_name: string | null
@@ -13,6 +19,10 @@ export type MeuFaturamentoMetrics = {
 /** Espelho 8123 — ausente → null (não inventa 0). */
 export type MeuComissaoMetrics = {
   commission_matched_name: string | null
+  charged: number | null
+  service_share: number | null
+  product_share: number | null
+  other_share: number | null
   assistant_discount: number | null
   product_spend: number | null
   other_discounts: number | null
@@ -33,6 +43,10 @@ const EMPTY_P1: MeuFaturamentoMetrics = {
 
 const EMPTY_COMMISSION: MeuComissaoMetrics = {
   commission_matched_name: null,
+  charged: null,
+  service_share: null,
+  product_share: null,
+  other_share: null,
   assistant_discount: null,
   product_spend: null,
   other_discounts: null,
@@ -74,7 +88,7 @@ export function resolveMeuFaturamento(
 }
 
 /**
- * Resolve comissão líquida / abatimentos no snapshot 8123.
+ * Resolve comissão líquida / abatimentos / rateios no snapshot 8123.
  * Espelho Avec — não aplica % sobre revenue do 0021.
  */
 export function resolveMeuComissao(
@@ -96,6 +110,10 @@ export function resolveMeuComissao(
   const row = hit.value
   return {
     commission_matched_name: row.name,
+    charged: row.charged,
+    service_share: row.service_share,
+    product_share: row.product_share,
+    other_share: row.other_share,
     assistant_discount: row.assistant_discount,
     product_spend: row.product_spend,
     other_discounts: row.other_discounts,
@@ -106,3 +124,17 @@ export function resolveMeuComissao(
     house_share: row.house_share,
   }
 }
+
+/**
+ * Avec pro id do elenco da unidade a partir do Nome no Avec do employee.
+ * Sem match ou sem id no roster → null (0029 não roda).
+ */
+export function resolveAvecProId(linkName: string | null | undefined): string | null {
+  const name = linkName?.trim() ?? ''
+  if (!name) return null
+  const hit = matchDirectorProfessional(name, listDirectorProfessionals())
+  const id = hit?.avec_pro_id?.trim()
+  return id || null
+}
+
+export type { CommissionDiscountLine }

@@ -784,6 +784,61 @@ export function normalizeCommission8123Row(
   }
 }
 
+/** Linha do report 0029 — descontos/bônus linha a linha (exige profissional_id). */
+export type NormalizedCommissionDiscountLine = {
+  category: string | null
+  description: string | null
+  amount: number | null
+  day: string | null
+}
+
+/**
+ * 0029 — quadro Descontos e Bônus detalhado.
+ * Precisa de categoria, descrição ou valor; senão descarta.
+ */
+export function normalizeCommission0029Row(
+  row: Record<string, unknown>,
+): NormalizedCommissionDiscountLine | null {
+  const category = pick(row, [
+    'categoria',
+    'tipo',
+    'tipo_desconto',
+    'tipoDesconto',
+    'grupo',
+    'classificacao',
+    'classificação',
+  ])
+  const description = pick(row, [
+    'descricao',
+    'descrição',
+    'historico',
+    'histórico',
+    'observacao',
+    'observação',
+    'motivo',
+    'detalhe',
+    'cliente',
+    'nome_cliente',
+    'nome',
+  ])
+  const amount = parseSignedOptionalMoney(
+    pickRaw(row, [
+      'valor',
+      'desconto',
+      'valor_desconto',
+      'valorDesconto',
+      'amount',
+      'total',
+      'liquido',
+      'líquido',
+    ]),
+  )
+  const datePart = pick(row, ['data', 'dia', 'date', 'periodo', 'período', 'data_lancamento'])
+  const day = datePart ? toSalonDateIso(parseAvecDateTime(datePart)) : null
+  if (!category && !description && amount == null) return null
+  return { category, description, amount, day }
+}
+
 /** 0056 — agendamentos por canal */
 export function normalizeP2ChannelRow(row: Record<string, unknown>): NormalizedP2Channel | null {
   const channelRaw = pick(row, [

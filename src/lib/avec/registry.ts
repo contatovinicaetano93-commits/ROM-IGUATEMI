@@ -11,6 +11,7 @@ export type AvecMapperKind =
   | 'professionals_revenue'
   | 'professionals_occupancy'
   | 'professionals_commissions'
+  | 'commission_discounts'
   | 'top_services'
   | 'reactivation'
   | 'acquisition'
@@ -82,6 +83,15 @@ const CORE: AvecReportDef[] = [
     mapper: 'professionals_commissions',
     schedule: 'daily',
     envKey: 'AVEC_REPORT_COMMISSIONS',
+  },
+  {
+    // Exige profissional_id — fetch on-demand no Meu faturamento (não no fast).
+    id: '0029',
+    tier: 'B',
+    name: 'Descontos e bônus (linhas)',
+    mapper: 'commission_discounts',
+    schedule: 'on_demand',
+    envKey: 'AVEC_REPORT_COMMISSION_DISCOUNTS',
   },
   { id: '0032', tier: 'B', name: 'Top serviços', mapper: 'top_services', schedule: 'daily' },
   { id: '0107', tier: 'B', name: 'Sem retorno', mapper: 'reactivation', schedule: 'daily' },

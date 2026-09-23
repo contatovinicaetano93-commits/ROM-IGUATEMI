@@ -11,6 +11,7 @@ import {
   normalizeP1AcquisitionRow,
   normalizeP1OccupancyRow,
   normalizeCommission8123Row,
+  normalizeCommission0029Row,
   normalizeP2ChannelRow,
   normalizePhone,
   normalizeRevenueRow,
@@ -110,6 +111,27 @@ describe('normalizeCommission8123Row', () => {
 
   it('sem nome → null', () => {
     expect(normalizeCommission8123Row({ a_pagar: 100 })).toBeNull()
+  })
+})
+
+describe('normalizeCommission0029Row', () => {
+  it('espelha categoria + valor (Desconto Assistente)', () => {
+    const row = normalizeCommission0029Row({
+      categoria: 'Desconto Assistente',
+      descricao: 'Meio a meio — Ana',
+      valor: -60,
+      data: '05/09/2026',
+    })
+    expect(row?.category).toBe('Desconto Assistente')
+    expect(row?.description).toBe('Meio a meio — Ana')
+    expect(row?.amount).toBe(-60)
+    expect(row?.day).toBeTruthy()
+  })
+
+  it('aceita zero real e rejeita linha vazia', () => {
+    expect(normalizeCommission0029Row({ categoria: 'Bônus', valor: 0 })?.amount).toBe(0)
+    expect(normalizeCommission0029Row({})).toBeNull()
+    expect(normalizeCommission0029Row({ foo: 1 })).toBeNull()
   })
 })
 
