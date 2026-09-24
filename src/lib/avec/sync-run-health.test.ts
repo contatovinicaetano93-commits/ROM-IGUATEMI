@@ -173,6 +173,35 @@ describe('computePanelSyncOk', () => {
     expect(r.ok).toBe(false)
     expect(r.reason).toMatch(/fast stale/)
   })
+
+  it('empty-kill recente não mascara fast stale', () => {
+    const r = computePanelSyncOk(
+      {
+        status: 'error',
+        created_at: iso(5),
+        error: 'Sync interrompido (timeout/kill)',
+      },
+      { status: 'ok', created_at: iso(120), error: null },
+      NOW,
+    )
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/no fast sync|only empty-kill/)
+  })
+
+  it('running órfão antigo não mascara stale', () => {
+    const r = computePanelSyncOk(
+      {
+        status: 'partial',
+        created_at: iso(90),
+        error: null,
+        stats: { running: true },
+      },
+      { status: 'ok', created_at: iso(120), error: null },
+      NOW,
+    )
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/fast stale/)
+  })
 })
 
 describe('computeCommissions8123Health', () => {

@@ -90,7 +90,8 @@ function ageMinutes(iso: string, now: number): number | null {
 /**
  * Sync operacional do painel (unidade).
  * - erro real (não empty-kill) → false
- * - fast >1h ou full >24h (fora de running) → false
+ * - fast >1h ou full >24h (fora de running fresco) → false
+ * - empty-kill não conta como fresco (senão mascara stale)
  * - partial com abort limpo de budget NÃO falha (diferente do Cérebro: aqui partial é comum)
  * Hard platform timeout fica em `hard_timeout` separado.
  */
@@ -99,25 +100,34 @@ export function computePanelSyncOk(
   lastFull: AvecRunHealthRow | null | undefined,
   now = Date.now(),
 ): { ok: boolean; reason: string | null } {
-  const fast = lastFast ?? null
-  const full = lastFull ?? null
-  if (!fast && !full) return { ok: false, reason: 'no avec sync runs' }
+  const fastRaw = lastFast ?? null
+  const fullRaw = lastFull ?? null
+  // Empty-kill não serve pra frescor nem pra "temos sync" — senão kill recente mascara stale.
+  const fast = fastRaw && !isEmptyKillAvecRun(fastRaw) ? fastRaw : null
+  const full = fullRaw && !isEmptyKillAvecRun(fullRaw) ? fullRaw : null
+  if (!fast && !full) {
+    if (fastRaw || fullRaw) return { ok: false, reason: 'only empty-kill avec sync runs' }
+    return { ok: false, reason: 'no avec sync runs' }
+  }
 
-  const running =
-    parseStats(fast?.stats).running === true || parseStats(full?.stats).running === true
+  const RUNNING_TTL_MS = 16 * 60_000
+  const runningFresh = ([fastRaw, fullRaw] as const).some((row) => {
+    if (!row || parseStats(row.stats).running !== true) return false
+    const age = ageMinutes(row.created_at, now)
+    return age != null && age * 60_000 <= RUNNING_TTL_MS
+  })
 
   for (const [label, row] of [
     ['fast', fast],
     ['full', full],
   ] as const) {
     if (!row) continue
-    if (isEmptyKillAvecRun(row)) continue
     if (row.status === 'error') {
       return { ok: false, reason: `${label} status=error` }
     }
   }
 
-  if (running) return { ok: true, reason: null }
+  if (runningFresh) return { ok: true, reason: null }
 
   if (fast) {
     const age = ageMinutes(fast.created_at, now)
