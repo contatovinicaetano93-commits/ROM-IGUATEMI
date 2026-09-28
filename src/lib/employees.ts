@@ -143,23 +143,35 @@ export async function createEmployee(input: {
   const created = rows[0]
   if (!created) throw new Error('Falha ao criar colaborador.')
   const id = String(created.id)
-  for (const companyId of companyIds) {
-    await sql`
-      insert into intranet_employee_companies (employee_id, company_id)
-      values (${id}::uuid, ${companyId})
-      on conflict do nothing
-    `
-  }
   const areas = areaIds.length > 0 ? areaIds : flowRole === 'master' ? ['financeiro', 'manutencao', 'compras', 'rh'] : areaIds
-  for (const area of areas) {
-    await sql`
-      insert into intranet_employee_areas (employee_id, area)
-      values (${id}::uuid, ${area})
-      on conflict do nothing
-    `
-  }
   const modules = extrasBeyondRole(input.panel_role, parseGrantableModules(input.modules))
-  await replaceEmployeeModules(id, modules)
+  try {
+    for (const companyId of companyIds) {
+      await sql`
+        insert into intranet_employee_companies (employee_id, company_id)
+        values (${id}::uuid, ${companyId})
+        on conflict do nothing
+      `
+    }
+    for (const area of areas) {
+      await sql`
+        insert into intranet_employee_areas (employee_id, area)
+        values (${id}::uuid, ${area})
+        on conflict do nothing
+      `
+    }
+    await replaceEmployeeModules(id, modules)
+  } catch (error) {
+    // Evita colaborador “pela metade” (nome na lista sem módulos) quando o check de module_key falha.
+    await sql`delete from intranet_employees where id = ${id}::uuid`.catch(() => {})
+    const msg = error instanceof Error ? error.message : String(error)
+    if (/intranet_employee_modules_module_key_check/i.test(msg)) {
+      throw new Error(
+        'Módulo de acesso inválido para o banco desta unidade. Atualize o schema da intranet (Ativações) e tente de novo.',
+      )
+    }
+    throw error
+  }
   const mapped = mapEmployee({
     ...created,
     company_ids: companyIds,
