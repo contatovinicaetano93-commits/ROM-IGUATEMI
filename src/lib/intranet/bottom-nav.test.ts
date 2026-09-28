@@ -73,9 +73,9 @@ describe('resolveBottomNav', () => {
     expect(more.some((item) => item.href === '/treinamentos')).toBe(false)
   })
 
-  it('mkt: Notícias + Contatos + Agenda', () => {
+  it('mkt: Notícias + Ativações + Contatos + Agenda', () => {
     const { dock } = resolveBottomNav('mkt', [])
-    expect(dock.map((item) => item.href)).toEqual(['/', '/empresa', '/contatos', '/pipeline'])
+    expect(dock.map((item) => item.href)).toEqual(['/', '/empresa', '/ativacoes', '/contatos'])
   })
 
   it('sem role e sem openAuth: vazio', () => {

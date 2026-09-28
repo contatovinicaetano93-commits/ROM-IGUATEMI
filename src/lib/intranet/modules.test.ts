@@ -40,6 +40,10 @@ describe('roleModulePack / effectiveModules', () => {
   it('exporta o pacote fixo do papel', () => {
     expect(roleModulePack('estoque')).toEqual(['estoque'])
     expect(effectiveModules('staff', ['dashboard'])).toEqual(['pipeline', 'contatos', 'dashboard'])
+    expect(effectiveModules('mkt', [])).toEqual(['pipeline', 'contatos', 'ativacoes'])
+    expect(hasPanelModule('mkt', [], 'ativacoes')).toBe(true)
+    expect(hasPanelModule('staff', ['ativacoes'], 'ativacoes')).toBe(true)
+    expect(hasPanelModule('staff', [], 'ativacoes')).toBe(false)
   })
 })
 
@@ -70,6 +74,10 @@ describe('canSeeNavHref', () => {
     expect(canSeeNavHref('/financeiro', 'staff', [])).toBe(false)
     expect(canSeeNavHref('/financeiro', 'staff', ['financeiro'])).toBe(true)
     expect(canSeeNavHref('/contatos', 'financeiro', [])).toBe(false)
+    expect(canSeeNavHref('/ativacoes', 'mkt', [])).toBe(true)
+    expect(canSeeNavHref('/ativacoes', 'staff', [])).toBe(false)
+    expect(canSeeNavHref('/ativacoes', 'staff', ['ativacoes'])).toBe(true)
+    expect(canSeeNavHref('/ativacoes', 'admin', [])).toBe(true)
   })
 
   it('ninguém vê Balcão/Pós/Operação no menu; Agenda e Contatos ficam', () => {

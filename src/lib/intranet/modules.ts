@@ -7,6 +7,7 @@ import {
 export type GrantableModuleKey =
   | 'pipeline'
   | 'contatos'
+  | 'ativacoes'
   | 'financeiro'
   | 'estoque'
   | 'relatorios'
@@ -21,6 +22,7 @@ export type GrantableModule = {
 export const GRANTABLE_MODULES: readonly GrantableModule[] = [
   { key: 'pipeline', href: '/pipeline', label: 'Agenda do dia' },
   { key: 'contatos', href: '/contatos', label: 'Contatos' },
+  { key: 'ativacoes', href: '/ativacoes', label: 'Ativações' },
   { key: 'financeiro', href: '/financeiro', label: 'Financeiro' },
   { key: 'estoque', href: '/estoque', label: 'Estoque' },
   { key: 'relatorios', href: '/relatorios', label: 'Relatórios' },
@@ -32,7 +34,7 @@ const ALL_KEYS: readonly GrantableModuleKey[] = GRANTABLE_MODULES.map((item) => 
 const ROLE_MODULES: Record<AuthRole, readonly GrantableModuleKey[]> = {
   admin: ALL_KEYS,
   staff: ['pipeline', 'contatos'],
-  mkt: ['pipeline', 'contatos'],
+  mkt: ['pipeline', 'contatos', 'ativacoes'],
   financeiro: ['financeiro', 'estoque', 'relatorios'],
   estoque: ['estoque'],
 }

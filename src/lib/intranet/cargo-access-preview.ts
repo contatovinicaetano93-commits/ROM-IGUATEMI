@@ -17,6 +17,7 @@ export const INCLUDED_SHELL_SYSTEMS = [
 
 const PREVIEW_ORDER = [
   '/pipeline',
+  '/ativacoes',
   '/contatos',
   '/recepcao',
   '/pos-venda',

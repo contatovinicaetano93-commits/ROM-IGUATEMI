@@ -38,6 +38,12 @@ const OPERACAO: IntranetSystem[] = [
     group: 'operacao',
   },
   { href: '/pipeline', label: 'Agenda do dia', description: 'Funil e agenda do salão.', group: 'operacao' },
+  {
+    href: '/ativacoes',
+    label: 'Ativações',
+    description: 'Calendário de marca no lavatório (MKT + gestora).',
+    group: 'operacao',
+  },
   { href: '/meu-faturamento', label: 'Meu faturamento', description: 'Seu mês no salão (só você).', group: 'operacao' },
   { href: '/contatos', label: 'Contatos', description: 'Base de clientes.', group: 'operacao' },
 ]

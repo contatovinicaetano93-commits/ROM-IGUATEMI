@@ -65,6 +65,15 @@ export function isDashboardPath(pathname: string) {
   return pathname === '/dashboard' || pathname.startsWith('/api/kpis')
 }
 
+export function isAtivacoesPath(pathname: string) {
+  return (
+    pathname === '/ativacoes' ||
+    pathname.startsWith('/ativacoes/') ||
+    pathname === '/api/ativacoes' ||
+    pathname.startsWith('/api/ativacoes/')
+  )
+}
+
 export function isMeuFaturamentoPath(pathname: string) {
   return (
     pathname === '/meu-faturamento' ||
@@ -135,5 +144,6 @@ export function canAccessProtectedPath(
   if (isRelatoriosPath(pathname)) return hasPanelModule(role, extras, 'relatorios')
   if (isStockPath(pathname)) return hasPanelModule(role, extras, 'estoque')
   if (isDashboardPath(pathname)) return hasPanelModule(role, extras, 'dashboard')
+  if (isAtivacoesPath(pathname)) return hasPanelModule(role, extras, 'ativacoes')
   return false
 }

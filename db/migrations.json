@@ -293,6 +293,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "037_ativacoes",
+      "file": "delta-ativacoes.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }
