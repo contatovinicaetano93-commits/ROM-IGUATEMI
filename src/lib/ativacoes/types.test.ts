@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   conditionLabel,
+  isEndOnOrAfterStart,
   isIsoDay,
   isIsoMonth,
+  normalizeClockTime,
   normalizeStartTime,
   parseAtivacaoCondition,
+  unitLabel,
 } from '@/lib/ativacoes/types'
 
 describe('ativacoes types', () => {
@@ -14,11 +17,18 @@ describe('ativacoes types', () => {
     expect(parseAtivacaoCondition('outra')).toBeNull()
   })
 
-  it('normaliza horário de início', () => {
-    expect(normalizeStartTime('09:30')).toBe('09:30')
+  it('normaliza horário', () => {
+    expect(normalizeClockTime('09:30')).toBe('09:30')
+    expect(normalizeClockTime('09:30:00')).toBe('09:30')
     expect(normalizeStartTime('09:30:00')).toBe('09:30')
-    expect(normalizeStartTime('25:00')).toBeNull()
-    expect(normalizeStartTime('')).toBeNull()
+    expect(normalizeClockTime('25:00')).toBeNull()
+    expect(normalizeClockTime('')).toBeNull()
+  })
+
+  it('aceita fim igual ou depois do início', () => {
+    expect(isEndOnOrAfterStart('10:00', '10:00')).toBe(true)
+    expect(isEndOnOrAfterStart('10:00', '12:00')).toBe(true)
+    expect(isEndOnOrAfterStart('12:00', '10:00')).toBe(false)
   })
 
   it('valida dia e mês ISO', () => {
@@ -28,8 +38,10 @@ describe('ativacoes types', () => {
     expect(isIsoMonth('2026-9')).toBe(false)
   })
 
-  it('rótulos de condição', () => {
+  it('rótulos', () => {
     expect(conditionLabel('comercial')).toBe('Condição comercial')
     expect(conditionLabel('servicos')).toBe('Condição de serviços')
+    expect(unitLabel('brasil')).toBe('Brasil')
+    expect(unitLabel('iguatemi')).toBe('Iguatemi')
   })
 })

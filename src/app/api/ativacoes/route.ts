@@ -2,16 +2,17 @@ import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
+import { createBrandActivation, listBrandActivationsForMonth } from '@/lib/ativacoes/store'
 import {
-  createBrandActivation,
-  DayConflictError,
-  listBrandActivationsForMonth,
-} from '@/lib/ativacoes/store'
+  listPeerBrandActivationsForMonth,
+  mergeSharedActivations,
+} from '@/lib/ativacoes/peer'
 import { notifyAtivacoesEvent } from '@/lib/ativacoes/notify'
 import {
+  isEndOnOrAfterStart,
   isIsoDay,
   isIsoMonth,
-  normalizeStartTime,
+  normalizeClockTime,
   parseAtivacaoCondition,
 } from '@/lib/ativacoes/types'
 
@@ -39,8 +40,19 @@ export async function GET(req: NextRequest) {
   const month = isIsoMonth(monthParam) ? monthParam : todayMonthBr()
 
   try {
-    const activations = await listBrandActivationsForMonth(month)
-    return ok({ month, activations })
+    const [local, peer] = await Promise.all([
+      listBrandActivationsForMonth(month),
+      listPeerBrandActivationsForMonth(month),
+    ])
+    const activations = mergeSharedActivations(local, peer.activations)
+    return ok({
+      month,
+      activations,
+      peer: {
+        offline: peer.offline,
+        unconfigured: peer.unconfigured,
+      },
+    })
   } catch (error) {
     return err(error instanceof Error ? error.message : 'Falha ao listar ativações', 500)
   }
@@ -55,19 +67,27 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== 'object') return err('Dados inválidos', 400)
 
   const day = isIsoDay(body.day) ? body.day : null
-  const start_time = normalizeStartTime(body.start_time)
+  const start_time = normalizeClockTime(body.start_time)
+  const end_time = normalizeClockTime(body.end_time)
   const brand = typeof body.brand === 'string' ? body.brand.trim() : ''
   const condition = parseAtivacaoCondition(body.condition)
   const notes = typeof body.notes === 'string' ? body.notes.trim() : null
 
-  if (!day || !start_time || !brand || !condition) {
-    return err('Informe data, horário de início, marca e condição (comercial ou serviços)', 400)
+  if (!day || !start_time || !end_time || !brand || !condition) {
+    return err(
+      'Informe data, horário de início, horário de fim, marca e condição (comercial ou serviços)',
+      400,
+    )
+  }
+  if (!isEndOnOrAfterStart(start_time, end_time)) {
+    return err('Horário de fim deve ser igual ou depois do início', 400)
   }
 
   const actorName = auth.session.displayName || auth.session.user
   const input = {
     day,
     start_time,
+    end_time,
     brand,
     condition,
     notes,
@@ -81,15 +101,6 @@ export async function POST(req: NextRequest) {
     void notifyAtivacoesEvent({ kind: 'created', activation, actorName }).catch(() => {})
     return ok({ activation }, undefined, 201)
   } catch (error) {
-    if (error instanceof DayConflictError) {
-      void notifyAtivacoesEvent({
-        kind: 'conflict',
-        activation: input,
-        existing: error.existing,
-        actorName,
-      }).catch(() => {})
-      return err(error.message, 409)
-    }
     return err(error instanceof Error ? error.message : 'Falha ao criar ativação', 500)
   }
 }

@@ -8,7 +8,7 @@ import {
   type CreateBrandActivationInput,
 } from '@/lib/ativacoes/types'
 
-export type AtivacaoNotifyKind = 'created' | 'cancelled' | 'conflict'
+export type AtivacaoNotifyKind = 'created' | 'cancelled'
 
 function resendFrom(): string {
   return (
@@ -70,14 +70,19 @@ export async function listAtivacoesNotifyEmails(): Promise<string[]> {
 function formatActivationLines(a: {
   day: string
   start_time: string
+  end_time?: string
   brand: string
   condition: BrandActivation['condition']
   created_by_name?: string
   notes?: string | null
 }): string[] {
+  const window =
+    a.end_time && a.end_time !== a.start_time
+      ? `${a.start_time}–${a.end_time}`
+      : a.start_time
   const lines = [
     `Data: ${a.day}`,
-    `Início: ${a.start_time}`,
+    `Horário: ${window}`,
     `Marca: ${a.brand}`,
     `Condição: ${conditionLabel(a.condition)}`,
   ]
@@ -91,12 +96,12 @@ function buildMessage(
   primary: {
     day: string
     start_time: string
+    end_time?: string
     brand: string
     condition: BrandActivation['condition']
     created_by_name?: string
     notes?: string | null
   },
-  existing?: BrandActivation | null,
   actorName?: string,
 ): { subject: string; text: string; html: string } {
   const brand = getBrand()
@@ -111,16 +116,6 @@ function buildMessage(
     case 'cancelled':
       title = `Ativação cancelada · ${primary.brand} · ${primary.day}`
       if (actorName) lines.push(`Cancelado por: ${actorName}`)
-      break
-    case 'conflict':
-      title = `Conflito de ativação · ${primary.day}`
-      lines.unshift('Tentativa bloqueada — o dia já está reservado.')
-      if (actorName) lines.push(`Tentativa de: ${actorName}`)
-      if (existing) {
-        lines.push('')
-        lines.push('Já reservado:')
-        lines.push(...formatActivationLines(existing))
-      }
       break
     default: {
       const _exhaustive: never = kind
@@ -142,7 +137,6 @@ function buildMessage(
 export async function notifyAtivacoesEvent(input: {
   kind: AtivacaoNotifyKind
   activation: BrandActivation | CreateBrandActivationInput
-  existing?: BrandActivation | null
   actorName?: string
 }): Promise<{ sent: number; skipped?: string }> {
   const to = await listAtivacoesNotifyEmails()
@@ -152,13 +146,14 @@ export async function notifyAtivacoesEvent(input: {
   const primary = {
     day: input.activation.day,
     start_time: input.activation.start_time,
+    end_time: input.activation.end_time,
     brand: input.activation.brand,
     condition: input.activation.condition,
     created_by_name:
       'created_by_name' in input.activation ? input.activation.created_by_name : input.actorName,
     notes: 'notes' in input.activation ? input.activation.notes ?? null : null,
   }
-  const msg = buildMessage(input.kind, primary, input.existing, input.actorName)
+  const msg = buildMessage(input.kind, primary, input.actorName)
 
   let sent = 0
   await Promise.all(
