@@ -5,10 +5,16 @@ import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { PanelButton, SectionCard } from '../_components/ui'
 import {
   conditionLabel,
+  dayCellTone,
+  unitChipClasses,
+  unitDisplayClasses,
   unitLabel,
   type AtivacaoCondition,
+  type AtivacaoUnit,
   type BrandActivation,
 } from '@/lib/ativacoes/types'
+
+const CALENDAR_PREVIEW_LINES = 3
 
 function currentMonthKey() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -200,7 +206,9 @@ export default function AtivacoesPage() {
             <PanelButton type="button" variant="outline" onClick={() => setMonth((m) => shiftMonth(m, -1))}>
               ←
             </PanelButton>
-            <p className="min-w-[10rem] text-center text-sm font-semibold">{formatMonthTitle(month)}</p>
+            <p className="min-w-[10rem] text-center font-serif text-base font-semibold tracking-tight">
+              {formatMonthTitle(month)}
+            </p>
             <PanelButton type="button" variant="outline" onClick={() => setMonth((m) => shiftMonth(m, 1))}>
               →
             </PanelButton>
@@ -218,7 +226,12 @@ export default function AtivacoesPage() {
           </PanelButton>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-center text-[0.65rem] uppercase tracking-wide text-muted">
+        <div className="mb-3 flex flex-wrap items-baseline gap-4 text-sm">
+          <span className={unitDisplayClasses('brasil')}>Brasil</span>
+          <span className={unitDisplayClasses('iguatemi')}>Iguatemi</span>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 text-center text-[0.7rem] font-semibold uppercase tracking-wide text-muted">
           {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((w) => (
             <div key={w} className="py-1">
               {w}
@@ -228,37 +241,53 @@ export default function AtivacoesPage() {
         <div className="mt-1 grid grid-cols-7 gap-1">
           {cells.map((cell, idx) => {
             if (!cell.iso || cell.day == null) {
-              return <div key={`e-${idx}`} className="min-h-14 rounded-lg bg-transparent" />
+              return <div key={`e-${idx}`} className="min-h-[4.5rem] rounded-lg bg-transparent" />
             }
             const booked = confirmedByDay.get(cell.iso) ?? []
             const selected = selectedDay === cell.iso
-            const label =
-              booked.length === 0
-                ? null
-                : booked.length === 1
-                  ? booked[0]!.brand
-                  : `${booked.length} ativações`
+            const units = Array.from(new Set(booked.map((b) => b.unit))) as AtivacaoUnit[]
+            const preview = booked.slice(0, CALENDAR_PREVIEW_LINES)
+            const extra = booked.length - preview.length
             return (
               <button
                 key={cell.iso}
                 type="button"
                 onClick={() => setSelectedDay(cell.iso)}
-                className={`min-h-14 rounded-lg border px-1 py-1.5 text-left transition ${
+                className={`min-h-[4.5rem] rounded-lg border px-1.5 py-1.5 text-left transition ${
                   selected
-                    ? 'border-foreground bg-foreground text-background'
-                    : booked.length > 0
-                      ? 'border-gold/50 bg-gold/10 text-foreground'
-                      : 'border-border bg-background/60 text-foreground hover:border-foreground/30'
+                    ? 'border-foreground bg-foreground text-background shadow-sm'
+                    : dayCellTone(units)
                 }`}
               >
-                <span className="text-xs font-semibold tabular-nums">{cell.day}</span>
-                {label ? (
-                  <span
-                    className={`mt-1 block truncate text-[0.65rem] leading-tight ${
-                      selected ? 'text-background/80' : 'text-muted'
-                    }`}
-                  >
-                    {label}
+                <span
+                  className={`block text-sm font-bold tabular-nums leading-none ${
+                    selected ? 'text-background' : 'text-foreground'
+                  }`}
+                >
+                  {cell.day}
+                </span>
+                {preview.length > 0 ? (
+                  <span className="mt-1.5 flex flex-col gap-0.5">
+                    {preview.map((item) => (
+                      <span
+                        key={`${item.unit}-${item.id}`}
+                        className={`block truncate text-[0.68rem] leading-tight ${unitDisplayClasses(
+                          item.unit,
+                          { onDark: selected },
+                        )}`}
+                      >
+                        {item.brand}
+                      </span>
+                    ))}
+                    {extra > 0 ? (
+                      <span
+                        className={`text-[0.62rem] font-semibold ${
+                          selected ? 'text-background/70' : 'text-muted'
+                        }`}
+                      >
+                        +{extra}
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
               </button>
@@ -287,15 +316,21 @@ export default function AtivacoesPage() {
                 {dayItems.map((item) => (
                   <li key={`${item.unit}-${item.id}`} className="flex flex-wrap items-start justify-between gap-3 py-3">
                     <div className="min-w-0">
-                      <p className="font-medium">
-                        {item.brand}
-                        <span className="ml-2 text-xs font-normal text-muted">
-                          · {unitLabel(item.unit)}
-                          {item.status === 'cancelled' ? ' · cancelada' : null}
-                          {!item.writable && item.status === 'confirmed' ? ' · só leitura' : null}
+                      <p className="flex flex-wrap items-center gap-2">
+                        <span className={`text-base ${unitDisplayClasses(item.unit)}`}>{item.brand}</span>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[0.7rem] ${unitChipClasses(item.unit)}`}
+                        >
+                          {unitLabel(item.unit)}
                         </span>
+                        {item.status === 'cancelled' ? (
+                          <span className="text-xs text-muted">cancelada</span>
+                        ) : null}
+                        {!item.writable && item.status === 'confirmed' ? (
+                          <span className="text-xs text-muted">só leitura</span>
+                        ) : null}
                       </p>
-                      <p className="text-sm text-muted">
+                      <p className="mt-1 text-sm text-muted">
                         {timeWindow(item)} · {conditionLabel(item.condition)} · {item.created_by_name}
                       </p>
                       {item.notes ? <p className="mt-1 text-sm text-muted">{item.notes}</p> : null}

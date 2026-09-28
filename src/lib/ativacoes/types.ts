@@ -67,6 +67,52 @@ export function unitLabel(unit: AtivacaoUnit): string {
   }
 }
 
+/**
+ * Tipografia + cor por unidade (leitura macro no calendário).
+ * Brasil = serif dourado; Iguatemi = sans sage.
+ */
+export function unitDisplayClasses(unit: AtivacaoUnit, opts?: { onDark?: boolean }): string {
+  switch (unit) {
+    case 'brasil':
+      return opts?.onDark
+        ? 'font-serif font-semibold tracking-[0.02em] text-[#f0d9a8]'
+        : 'font-serif font-semibold tracking-[0.02em] text-gold-strong'
+    case 'iguatemi':
+      return opts?.onDark
+        ? 'font-sans font-bold tracking-tight text-[#9fd9c8]'
+        : 'font-sans font-bold tracking-tight text-[#1f6b5c]'
+    default: {
+      const _exhaustive: never = unit
+      return _exhaustive
+    }
+  }
+}
+
+export function unitChipClasses(unit: AtivacaoUnit): string {
+  switch (unit) {
+    case 'brasil':
+      return 'border-gold/40 bg-gold/15 font-serif font-semibold text-gold-strong'
+    case 'iguatemi':
+      return 'border-[#1f6b5c]/35 bg-[#1f6b5c]/10 font-sans font-bold tracking-tight text-[#1f6b5c]'
+    default: {
+      const _exhaustive: never = unit
+      return _exhaustive
+    }
+  }
+}
+
+/** Fundo/borda da célula conforme unidades presentes no dia. */
+export function dayCellTone(units: AtivacaoUnit[]): string {
+  const hasBr = units.includes('brasil')
+  const hasIg = units.includes('iguatemi')
+  if (hasBr && hasIg) {
+    return 'border-[#8f6a38]/50 bg-[linear-gradient(135deg,rgba(143,106,56,0.14),rgba(31,107,92,0.14))]'
+  }
+  if (hasBr) return 'border-gold/55 bg-gold/15'
+  if (hasIg) return 'border-[#1f6b5c]/45 bg-[#1f6b5c]/10'
+  return 'border-border bg-background/60 hover:border-foreground/30'
+}
+
 /** Aceita HH:MM ou HH:MM:SS; devolve HH:MM. */
 export function normalizeClockTime(value: unknown): string | null {
   if (typeof value !== 'string') return null

@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   conditionLabel,
+  dayCellTone,
   isEndOnOrAfterStart,
   isIsoDay,
   isIsoMonth,
   normalizeClockTime,
   normalizeStartTime,
   parseAtivacaoCondition,
+  unitDisplayClasses,
   unitLabel,
 } from '@/lib/ativacoes/types'
 
@@ -43,5 +45,14 @@ describe('ativacoes types', () => {
     expect(conditionLabel('servicos')).toBe('Condição de serviços')
     expect(unitLabel('brasil')).toBe('Brasil')
     expect(unitLabel('iguatemi')).toBe('Iguatemi')
+  })
+
+  it('separa unidades por tipografia/cor', () => {
+    expect(unitDisplayClasses('brasil')).toContain('font-serif')
+    expect(unitDisplayClasses('brasil')).toContain('text-gold-strong')
+    expect(unitDisplayClasses('iguatemi')).toContain('font-sans')
+    expect(unitDisplayClasses('iguatemi')).toContain('text-[#1f6b5c]')
+    expect(dayCellTone(['brasil', 'iguatemi'])).toContain('linear-gradient')
+    expect(dayCellTone(['brasil'])).toContain('bg-gold')
   })
 })
