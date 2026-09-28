@@ -27,14 +27,14 @@ describe('ativacoes peer', () => {
     expect(
       peekPeerDatabaseUrl('brasil', {
         UNIT_IGUATEMI_DATABASE_URL: 'postgres://ig',
-      } as NodeJS.ProcessEnv),
+      }),
     ).toBe('postgres://ig')
     expect(
       peekPeerDatabaseUrl('iguatemi', {
         UNIT_BRASIL_DATABASE_URL: 'postgres://br',
-      } as NodeJS.ProcessEnv),
+      }),
     ).toBe('postgres://br')
-    expect(peekPeerDatabaseUrl('brasil', {} as NodeJS.ProcessEnv)).toBeNull()
+    expect(peekPeerDatabaseUrl('brasil', {})).toBeNull()
   })
 
   it('mescla e ordena calendário compartilhado', () => {

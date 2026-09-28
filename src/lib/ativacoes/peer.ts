@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getRomPanelId, type RomPanelId } from '@/lib/brand'
-import { getSql } from '@/lib/db'
+import { getSqlForUrl } from '@/lib/db'
 import type { AtivacaoUnit, BrandActivation } from '@/lib/ativacoes/types'
 import { mapActivationRow } from '@/lib/ativacoes/store'
 
@@ -20,7 +20,7 @@ function peerUnitOf(local: RomPanelId): AtivacaoUnit {
 /** Env canônica + legado — mesma ordem do Cérebro. */
 export function peekPeerDatabaseUrl(
   local: RomPanelId = getRomPanelId(),
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): string | null {
   const names =
     local === 'brasil'
@@ -46,7 +46,7 @@ export async function listPeerBrandActivationsForMonth(month: string): Promise<P
   }
 
   try {
-    const sql = getSql(url)
+    const sql = getSqlForUrl(url)
     const start = `${month}-01`
     let rows: Record<string, unknown>[]
     try {
