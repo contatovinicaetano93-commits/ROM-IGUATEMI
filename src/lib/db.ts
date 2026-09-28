@@ -171,6 +171,27 @@ export function getSql(): Sql {
   return cachedWrapped
 }
 
+/** Cliente para URL explícita (ex.: banco da unidade irmã em Ativações). */
+const clientsByUrl = new Map<string, { raw: PostgresSql; wrapped: Sql }>()
+
+export function getSqlForUrl(databaseUrl: string): Sql {
+  const url = toTransactionPoolerUrl(databaseUrl)
+  let entry = clientsByUrl.get(url)
+  if (!entry) {
+    const raw = postgres(url, {
+      ssl: 'require',
+      max: 1,
+      prepare: false,
+      idle_timeout: 5,
+      max_lifetime: 60 * 2,
+      connect_timeout: 10,
+    })
+    entry = { raw, wrapped: wrap(raw) }
+    clientsByUrl.set(url, entry)
+  }
+  return entry.wrapped
+}
+
 function readIntranetOverlayUrl(): string | null {
   const candidates = [
     join(process.cwd(), 'secrets', 'intranet-database-url.txt'),

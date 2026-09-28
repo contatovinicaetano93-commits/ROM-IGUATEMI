@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { PanelButton, SectionCard } from '../_components/ui'
-import { conditionLabel, type AtivacaoCondition, type BrandActivation } from '@/lib/ativacoes/types'
+import {
+  conditionLabel,
+  unitLabel,
+  type AtivacaoCondition,
+  type BrandActivation,
+} from '@/lib/ativacoes/types'
 
 function currentMonthKey() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -49,14 +54,24 @@ function formatMonthTitle(month: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
+function timeWindow(item: BrandActivation): string {
+  if (item.end_time && item.end_time !== item.start_time) {
+    return `${item.start_time}–${item.end_time}`
+  }
+  return item.start_time
+}
+
 export default function AtivacoesPage() {
   const [month, setMonth] = useState(currentMonthKey)
   const [items, setItems] = useState<BrandActivation[]>([])
+  const [peerOffline, setPeerOffline] = useState(false)
+  const [peerUnconfigured, setPeerUnconfigured] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(todayIso)
   const [brand, setBrand] = useState('')
   const [startTime, setStartTime] = useState('10:00')
+  const [endTime, setEndTime] = useState('12:00')
   const [condition, setCondition] = useState<AtivacaoCondition>('comercial')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
@@ -75,6 +90,8 @@ export default function AtivacoesPage() {
         return
       }
       setItems(json.data?.activations ?? [])
+      setPeerOffline(Boolean(json.data?.peer?.offline))
+      setPeerUnconfigured(Boolean(json.data?.peer?.unconfigured))
     } catch {
       setError('Falha ao carregar ativações')
       setItems([])
@@ -88,9 +105,12 @@ export default function AtivacoesPage() {
   }, [load, month])
 
   const confirmedByDay = useMemo(() => {
-    const map = new Map<string, BrandActivation>()
+    const map = new Map<string, BrandActivation[]>()
     for (const item of items) {
-      if (item.status === 'confirmed') map.set(item.day, item)
+      if (item.status !== 'confirmed') continue
+      const list = map.get(item.day) ?? []
+      list.push(item)
+      map.set(item.day, list)
     }
     return map
   }, [items])
@@ -99,8 +119,6 @@ export default function AtivacoesPage() {
     if (!selectedDay) return []
     return items.filter((item) => item.day === selectedDay)
   }, [items, selectedDay])
-
-  const selectedConfirmed = selectedDay ? confirmedByDay.get(selectedDay) ?? null : null
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -115,6 +133,7 @@ export default function AtivacoesPage() {
         body: JSON.stringify({
           day: selectedDay,
           start_time: startTime,
+          end_time: endTime,
           brand,
           condition,
           notes: notes.trim() || null,
@@ -137,7 +156,7 @@ export default function AtivacoesPage() {
   }
 
   async function onCancel(id: string) {
-    if (!window.confirm('Cancelar esta ativação? O dia fica livre de novo.')) return
+    if (!window.confirm('Cancelar esta ativação nesta unidade?')) return
     setSaving(true)
     setError(null)
     try {
@@ -173,7 +192,7 @@ export default function AtivacoesPage() {
     <IntranetPage
       kicker="Unidade"
       title="Ativações"
-      subtitle="Calendário comunitário MKT + gestora · 1 marca por dia no lavatório · avisos por e-mail."
+      subtitle="Calendário compartilhado Brasil + Iguatemi · reserva só na unidade logada · avisos por e-mail."
     >
       <SectionCard title="Calendário">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -211,8 +230,14 @@ export default function AtivacoesPage() {
             if (!cell.iso || cell.day == null) {
               return <div key={`e-${idx}`} className="min-h-14 rounded-lg bg-transparent" />
             }
-            const booked = confirmedByDay.get(cell.iso)
+            const booked = confirmedByDay.get(cell.iso) ?? []
             const selected = selectedDay === cell.iso
+            const label =
+              booked.length === 0
+                ? null
+                : booked.length === 1
+                  ? booked[0]!.brand
+                  : `${booked.length} ativações`
             return (
               <button
                 key={cell.iso}
@@ -221,19 +246,19 @@ export default function AtivacoesPage() {
                 className={`min-h-14 rounded-lg border px-1 py-1.5 text-left transition ${
                   selected
                     ? 'border-foreground bg-foreground text-background'
-                    : booked
+                    : booked.length > 0
                       ? 'border-gold/50 bg-gold/10 text-foreground'
                       : 'border-border bg-background/60 text-foreground hover:border-foreground/30'
                 }`}
               >
                 <span className="text-xs font-semibold tabular-nums">{cell.day}</span>
-                {booked ? (
+                {label ? (
                   <span
                     className={`mt-1 block truncate text-[0.65rem] leading-tight ${
                       selected ? 'text-background/80' : 'text-muted'
                     }`}
                   >
-                    {booked.brand}
+                    {label}
                   </span>
                 ) : null}
               </button>
@@ -241,6 +266,16 @@ export default function AtivacoesPage() {
           })}
         </div>
         {loading ? <p className="mt-3 text-sm text-muted">Carregando…</p> : null}
+        {peerOffline ? (
+          <p className="mt-3 text-sm text-danger">
+            Calendário da outra unidade indisponível no momento — mostrando só esta unidade.
+          </p>
+        ) : null}
+        {peerUnconfigured && !peerOffline ? (
+          <p className="mt-3 text-sm text-muted">
+            Visão da outra unidade ainda não configurada neste ambiente.
+          </p>
+        ) : null}
         {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
       </SectionCard>
 
@@ -250,20 +285,22 @@ export default function AtivacoesPage() {
             {dayItems.length > 0 ? (
               <ul className="divide-y divide-border/60">
                 {dayItems.map((item) => (
-                  <li key={item.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
+                  <li key={`${item.unit}-${item.id}`} className="flex flex-wrap items-start justify-between gap-3 py-3">
                     <div className="min-w-0">
                       <p className="font-medium">
                         {item.brand}
-                        {item.status === 'cancelled' ? (
-                          <span className="ml-2 text-xs font-normal text-muted">· cancelada</span>
-                        ) : null}
+                        <span className="ml-2 text-xs font-normal text-muted">
+                          · {unitLabel(item.unit)}
+                          {item.status === 'cancelled' ? ' · cancelada' : null}
+                          {!item.writable && item.status === 'confirmed' ? ' · só leitura' : null}
+                        </span>
                       </p>
                       <p className="text-sm text-muted">
-                        Início {item.start_time} · {conditionLabel(item.condition)} · {item.created_by_name}
+                        {timeWindow(item)} · {conditionLabel(item.condition)} · {item.created_by_name}
                       </p>
                       {item.notes ? <p className="mt-1 text-sm text-muted">{item.notes}</p> : null}
                     </div>
-                    {item.status === 'confirmed' ? (
+                    {item.status === 'confirmed' && item.writable ? (
                       <PanelButton
                         type="button"
                         variant="outline"
@@ -277,64 +314,67 @@ export default function AtivacoesPage() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted">Nenhuma ativação neste dia — dia livre.</p>
+              <p className="text-sm text-muted">Nenhuma ativação neste dia.</p>
             )}
 
-            {selectedConfirmed ? (
-              <p className="rounded-xl border border-gold/40 bg-gold/10 px-3 py-2 text-sm">
-                Dia ocupado por <strong>{selectedConfirmed.brand}</strong>. Para outra marca, cancele a
-                atual primeiro.
-              </p>
-            ) : (
-              <form onSubmit={(e) => void onCreate(e)} className="space-y-3 rounded-xl border border-border p-4">
-                <p className="text-xs uppercase tracking-wide text-muted">Nova ativação</p>
+            <form onSubmit={(e) => void onCreate(e)} className="space-y-3 rounded-xl border border-border p-4">
+              <p className="text-xs uppercase tracking-wide text-muted">Nova ativação nesta unidade</p>
+              <label className="block text-sm">
+                <span className="text-muted">Marca</span>
+                <input
+                  required
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+                  placeholder="Ex.: L’Oréal"
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block text-sm">
-                  <span className="text-muted">Marca</span>
+                  <span className="text-muted">Início</span>
                   <input
                     required
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
-                    placeholder="Ex.: L’Oréal"
                   />
                 </label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block text-sm">
-                    <span className="text-muted">Horário de início</span>
-                    <input
-                      required
-                      type="time"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
-                    />
-                  </label>
-                  <label className="block text-sm">
-                    <span className="text-muted">Condição</span>
-                    <select
-                      value={condition}
-                      onChange={(e) => setCondition(e.target.value as AtivacaoCondition)}
-                      className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
-                    >
-                      <option value="comercial">Condição comercial</option>
-                      <option value="servicos">Condição de serviços</option>
-                    </select>
-                  </label>
-                </div>
                 <label className="block text-sm">
-                  <span className="text-muted">Observação (opcional)</span>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={2}
+                  <span className="text-muted">Fim</span>
+                  <input
+                    required
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
                   />
                 </label>
-                <PanelButton type="submit" disabled={saving || !brand.trim()}>
-                  {saving ? 'Salvando…' : 'Reservar dia'}
-                </PanelButton>
-              </form>
-            )}
+                <label className="block text-sm">
+                  <span className="text-muted">Condição</span>
+                  <select
+                    value={condition}
+                    onChange={(e) => setCondition(e.target.value as AtivacaoCondition)}
+                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+                  >
+                    <option value="comercial">Condição comercial</option>
+                    <option value="servicos">Condição de serviços</option>
+                  </select>
+                </label>
+              </div>
+              <label className="block text-sm">
+                <span className="text-muted">Observação (opcional)</span>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+                />
+              </label>
+              <PanelButton type="submit" disabled={saving || !brand.trim()}>
+                {saving ? 'Salvando…' : 'Reservar'}
+              </PanelButton>
+            </form>
           </div>
         ) : (
           <p className="text-sm text-muted">Toque em um dia no calendário.</p>
