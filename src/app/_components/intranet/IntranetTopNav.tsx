@@ -19,6 +19,7 @@ const SEARCH_TARGETS = [
   { href: '/flow', label: 'Rom Flow · solicitações' },
   { href: '/resumo-do-dia', label: 'Resumo do dia' },
   { href: '/pipeline', label: 'Agenda do dia' },
+  { href: '/ativacoes', label: 'Ativações' },
   { href: '/meu-faturamento', label: 'Meu faturamento' },
   { href: '/contatos', label: 'Contatos' },
   { href: '/dashboard', label: 'Visão analítica' },

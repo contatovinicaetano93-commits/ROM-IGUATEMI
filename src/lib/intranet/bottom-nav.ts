@@ -19,7 +19,7 @@ const ROLE_DOCK_PRIORITY: Record<AuthRole, readonly string[]> = {
   financeiro: ['/', '/resumo-do-dia', '/financeiro', '/dashboard', '/relatorios', '/estoque', '/flow'],
   estoque: ['/', '/estoque', '/flow', '/financeiro'],
   staff: ['/', '/resumo-do-dia', '/contatos', '/pipeline', '/flow', '/meu-faturamento'],
-  mkt: ['/', '/empresa', '/contatos', '/pipeline', '/flow'],
+  mkt: ['/', '/empresa', '/ativacoes', '/contatos', '/pipeline', '/flow'],
 }
 
 const DOCK_LABELS: Record<string, string> = {
@@ -31,6 +31,7 @@ const DOCK_LABELS: Record<string, string> = {
   '/resumo-do-dia': 'Dia',
   '/contatos': 'Contatos',
   '/pipeline': 'Agenda',
+  '/ativacoes': 'Ativações',
   '/dashboard': 'Visão',
   '/relatorios': 'Relatórios',
   '/empresa': 'Notícias',
@@ -43,6 +44,7 @@ const DOCK_LABELS: Record<string, string> = {
 const MORE_CATALOG: readonly BottomMoreItem[] = [
   { href: '/resumo-do-dia', label: 'Resumo do dia' },
   { href: '/pipeline', label: 'Agenda do dia' },
+  { href: '/ativacoes', label: 'Ativações' },
   { href: '/contatos', label: 'Contatos' },
   { href: '/meu-faturamento', label: 'Meu faturamento' },
   { href: '/flow', label: 'Rom Flow · tarefas' },
