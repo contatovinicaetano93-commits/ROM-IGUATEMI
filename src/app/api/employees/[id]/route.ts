@@ -32,7 +32,14 @@ export async function PATCH(
     )
     return ok({ employee })
   } catch (error) {
-    return err(error instanceof Error ? error.message : 'Falha ao atualizar sistemas', 400)
+    const msg = error instanceof Error ? error.message : String(error)
+    if (/intranet_employee_modules_module_key_check/i.test(msg)) {
+      return err(
+        'Módulo de acesso inválido para o banco desta unidade. Atualize o schema da intranet (Ativações) e tente de novo.',
+        400,
+      )
+    }
+    return err(msg || 'Falha ao atualizar sistemas', 400)
   }
 }
 

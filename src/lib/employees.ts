@@ -8,6 +8,7 @@ import { AuditLogger } from '@/lib/audit'
 import { hashPassword, MIN_EMPLOYEE_PASSWORD } from '@/lib/intranet/password'
 import { companiesForPanel } from '@/lib/intranet/companies'
 import { ensureIntranetSchema } from '@/lib/intranet/ensure-schema'
+import { ensureGrantableModuleKeyCheck } from '@/lib/intranet/ensure-module-key-check'
 import { extrasBeyondRole, parseGrantableModules, type GrantableModuleKey } from '@/lib/intranet/modules'
 import { getRomPanelId } from '@/lib/brand'
 
@@ -248,7 +249,9 @@ async function replaceEmployeeAreas(id: string, areaIds: RequestArea[]): Promise
 async function replaceEmployeeModules(id: string, modules: GrantableModuleKey[]): Promise<void> {
   await ensureIntranetSchema()
   const sql = getIntranetSql()
-  await sql`delete from intranet_employee_modules where employee_id = ${id}::uuid`
+  // CHECK antigo sem 'ativacoes' derrubava o Salvar; ampliar antes de gravar.
+  await ensureGrantableModuleKeyCheck(sql)
+  // Upsert primeiro; só remove o que sobrou — se um insert falhar, não zera o acesso.
   for (const key of modules) {
     await sql`
       insert into intranet_employee_modules (employee_id, module_key)
@@ -256,6 +259,15 @@ async function replaceEmployeeModules(id: string, modules: GrantableModuleKey[])
       on conflict do nothing
     `
   }
+  if (modules.length === 0) {
+    await sql`delete from intranet_employee_modules where employee_id = ${id}::uuid`
+    return
+  }
+  await sql`
+    delete from intranet_employee_modules
+    where employee_id = ${id}::uuid
+      and module_key not in ${sql(modules)}
+  `
 }
 
 async function countActiveMasters(): Promise<number> {
