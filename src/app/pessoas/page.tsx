@@ -293,28 +293,38 @@ export default function PessoasPage() {
   async function saveModules(person: Employee) {
     setSaving(true)
     setError(null)
-    const res = await fetch(`/api/employees/${person.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        modules: editModules,
-        professional_name: editProfessionalName.trim() || null,
-        avec_pro_id: editAvecProId.trim() || null,
-      }),
-    })
-    const json = await res.json()
-    setSaving(false)
-    if (!res.ok) {
-      setError(json.error ?? 'Não foi possível salvar os sistemas')
-      return
+    setNotice(null)
+    try {
+      const res = await fetch(`/api/employees/${person.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          modules: editModules,
+          professional_name: editProfessionalName.trim() || null,
+          avec_pro_id: editAvecProId.trim() || null,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error ?? 'Não foi possível salvar os sistemas')
+        return
+      }
+      const updated = json.data?.employee as Employee | undefined
+      setEmployees((prev) =>
+        prev.map((item) => (item.id === person.id ? (updated ?? { ...item, modules: editModules }) : item)),
+      )
+      setEditingId(null)
+      setNotice(`Sistemas de ${person.name} atualizados.`)
+      fetch('/api/employees/professionals', { credentials: 'include' })
+        .then((r) => r.json())
+        .then((body) => setProfessionals(body.data?.professionals ?? []))
+        .catch(() => null)
+    } catch {
+      setError('Falha de rede ao salvar os sistemas. Tente de novo.')
+    } finally {
+      setSaving(false)
     }
-    setEmployees((prev) => prev.map((item) => (item.id === person.id ? json.data.employee : item)))
-    setEditingId(null)
-    fetch('/api/employees/professionals', { credentials: 'include' })
-      .then((r) => r.json())
-      .then((body) => setProfessionals(body.data?.professionals ?? []))
-      .catch(() => null)
   }
 
   const previewSystemLabels = pack ? cargoAccessPreviewLabels(pack) : []
@@ -445,6 +455,7 @@ export default function PessoasPage() {
                         includedShellLabels={includedShellLabelsForRole(person.panel_role, editModules)}
                       />
                     ) : null}
+                    {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
                     <div className="mt-3 flex gap-2">
                       <PanelButton
                         type="button"
