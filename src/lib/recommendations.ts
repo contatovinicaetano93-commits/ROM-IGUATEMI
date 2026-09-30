@@ -1,4 +1,5 @@
 import type { ClientService } from '@/lib/services'
+import { isCadencePlaceholderServiceName } from '@/lib/salon/cadence-placeholder'
 import { DAY_MS, DUE_SOON_DAYS, SCHEDULED_SOON_DAYS } from '@/lib/salon/constants'
 import { fmtSchedule } from '@/lib/salon/format'
 
@@ -24,7 +25,8 @@ export interface Recommendation {
 export function enrichServices(services: ClientService[]): EnrichedService[] {
   const now = Date.now()
   return services.map((s) => {
-    if (!s.cadence_days) {
+    // "Atendimento" e similares = fallback Avec, não ciclo de retorno real.
+    if (!s.cadence_days || isCadencePlaceholderServiceName(s.name)) {
       return { ...s, next_due_at: null, days_until: null, state: 'no_cadence' as const }
     }
 

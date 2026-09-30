@@ -48,6 +48,8 @@ export async function listActionItems(opts: ListActionItemsOpts = {}): Promise<A
         scheduled_at,
         case
           when cadence_days is null or last_done_at is null then null
+          -- Placeholder Avec (Atendimento etc.) — ver isCadencePlaceholderServiceName
+          when lower(btrim(name)) in ('atendimento', 'servico', 'serviço', 'visita', 'service') then null
           else last_done_at + (cadence_days * interval '1 day')
         end as next_due
       from client_services

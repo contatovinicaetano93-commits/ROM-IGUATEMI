@@ -150,7 +150,11 @@ function ServiceStateBadge({ state, days }: { state: Service['state']; days: num
         <CircleCheck size={11} /> Em dia
       </span>
     )
-  return <span className="rounded-full bg-border px-2 py-0.5 text-[0.65rem] font-semibold text-muted">Avulso</span>
+  return (
+    <span className="rounded-full bg-border px-2 py-0.5 text-[0.65rem] font-semibold text-muted">
+      Sem ciclo
+    </span>
+  )
 }
 
 const HANDLED_BY_LABEL: Record<string, string> = { ai: 'IA', human: 'Equipe', system: 'Sistema' }
@@ -734,7 +738,7 @@ function ContactDetailPageContent() {
                   <p className="mt-0.5 text-xs text-muted">
                     {CATEGORY_LABEL[s.category] ?? s.category}
                     {s.product ? ` · ${s.product}` : ''}
-                    {s.cadence_days ? ` · a cada ${s.cadence_days}d` : ''}
+                    {s.cadence_days && s.state !== 'no_cadence' ? ` · a cada ${s.cadence_days}d` : ''}
                     {s.scheduled_at ? ` · ${fmtSchedule(s.scheduled_at)}` : ''}
                   </p>
                 </div>

@@ -208,6 +208,8 @@ async function rankUrgentContactIds(
         scheduled_at,
         case
           when cadence_days is null or last_done_at is null then null
+          -- Placeholder Avec (Atendimento etc.) — ver isCadencePlaceholderServiceName
+          when lower(btrim(name)) in ('atendimento', 'servico', 'serviço', 'visita', 'service') then null
           else last_done_at + (cadence_days * interval '1 day')
         end as next_due
       from client_services
@@ -297,6 +299,8 @@ export async function countUrgencyQueues(
         scheduled_at,
         case
           when cadence_days is null or last_done_at is null then null
+          -- Placeholder Avec (Atendimento etc.) — ver isCadencePlaceholderServiceName
+          when lower(btrim(name)) in ('atendimento', 'servico', 'serviço', 'visita', 'service') then null
           else last_done_at + (cadence_days * interval '1 day')
         end as next_due
       from client_services
@@ -577,6 +581,7 @@ export async function countNewContactsNotInAvec(opts?: {
           and cs.active = true
           and cs.last_done_at is not null
           and cs.cadence_days is not null
+          and lower(btrim(cs.name)) not in ('atendimento', 'servico', 'serviço', 'visita', 'service')
       )
   `) as { n: number }[]
   return Number(rows[0]?.n ?? 0) || 0
@@ -641,6 +646,7 @@ export async function listNewContactsNotInAvec(opts?: {
           and cs.active = true
           and cs.last_done_at is not null
           and cs.cadence_days is not null
+          and lower(btrim(cs.name)) not in ('atendimento', 'servico', 'serviço', 'visita', 'service')
       )
     order by created_at desc
     limit ${limit}
@@ -686,6 +692,7 @@ export async function countContactsWithoutServices(opts?: {
           and cs.active = true
           and cs.last_done_at is not null
           and cs.cadence_days is not null
+          and lower(btrim(cs.name)) not in ('atendimento', 'servico', 'serviço', 'visita', 'service')
       )
   `) as { n: number }[]
   return Number(rows[0]?.n ?? 0) || 0
@@ -717,6 +724,7 @@ export async function listContactsWithoutServices(opts?: {
           and cs.active = true
           and cs.last_done_at is not null
           and cs.cadence_days is not null
+          and lower(btrim(cs.name)) not in ('atendimento', 'servico', 'serviço', 'visita', 'service')
       )
     order by created_at desc
     limit ${limit}
