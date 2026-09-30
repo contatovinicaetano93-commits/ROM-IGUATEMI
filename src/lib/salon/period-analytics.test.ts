@@ -52,9 +52,9 @@ describe('period-analytics', () => {
   it('não inventa pacotes/novos quando P2/P3 ausentes', async () => {
     sqlMock
       .mockResolvedValueOnce([{ revenue: 10000, attended: 50, revenue_days: 1, attended_days: 1 }])
-      .mockResolvedValueOnce([{ cancelled: 2, no_shows: 3 }])
+      .mockResolvedValueOnce([{ cancelled: 2, cancelled_days: 1, no_shows: 3, no_show_days: 1 }])
       .mockResolvedValueOnce([{ revenue: 9000, attended: 45, revenue_days: 1, attended_days: 1 }])
-      .mockResolvedValueOnce([{ cancelled: 1, no_shows: 1 }])
+      .mockResolvedValueOnce([{ cancelled: 1, cancelled_days: 1, no_shows: 1, no_show_days: 1 }])
     getSalonP1DailyNear.mockResolvedValue({
       day: '2026-07-31',
       professionals: [
@@ -81,9 +81,9 @@ describe('period-analytics', () => {
     sqlMock
       // *_days > 0 = há dia conhecido; sem isso sumPeriodBase devolve null.
       .mockResolvedValueOnce([{ revenue: 10000, attended: 50, revenue_days: 1, attended_days: 1 }])
-      .mockResolvedValueOnce([{ cancelled: 2, no_shows: 3 }])
+      .mockResolvedValueOnce([{ cancelled: 2, cancelled_days: 1, no_shows: 3, no_show_days: 1 }])
       .mockResolvedValueOnce([{ revenue: 8000, attended: 40, revenue_days: 1, attended_days: 1 }])
-      .mockResolvedValueOnce([{ cancelled: 1, no_shows: 1 }])
+      .mockResolvedValueOnce([{ cancelled: 1, cancelled_days: 1, no_shows: 1, no_show_days: 1 }])
     getSalonP1DailyNear.mockResolvedValue({
       day: '2026-07-31',
       professionals: [
@@ -135,14 +135,31 @@ describe('period-analytics', () => {
   it('KPI ausente é null quando P2/P3 não existem', async () => {
     sqlMock
       .mockResolvedValueOnce([{ revenue: 1000, attended: 10, revenue_days: 1, attended_days: 1 }])
-      .mockResolvedValueOnce([{ cancelled: 0, no_shows: 0 }])
+      .mockResolvedValueOnce([{ cancelled: 0, cancelled_days: 1, no_shows: 0, no_show_days: 1 }])
       .mockResolvedValueOnce([{ revenue: null, attended: null, revenue_days: 0, attended_days: 0 }])
-      .mockResolvedValueOnce([{ cancelled: 0, no_shows: 0 }])
+      .mockResolvedValueOnce([{ cancelled: 0, cancelled_days: 1, no_shows: 0, no_show_days: 1 }])
 
     const { computePeriodAnalytics } = await import('@/lib/salon/period-analytics')
     const result = await computePeriodAnalytics({ month: '2026-07' })
     expect(result.packages_sold).toBeNull()
     expect(result.new_clients_period).toBeNull()
     expect(result.return_rate).toBeNull()
+  })
+
+  it('não inventa cancelados/no-shows 0 quando não há dias com dado', async () => {
+    sqlMock
+      .mockResolvedValueOnce([{ revenue: null, attended: null, revenue_days: 0, attended_days: 0 }])
+      .mockResolvedValueOnce([{ cancelled: null, cancelled_days: 0, no_shows: null, no_show_days: 0 }])
+      .mockResolvedValueOnce([{ revenue: null, attended: null, revenue_days: 0, attended_days: 0 }])
+      .mockResolvedValueOnce([{ cancelled: null, cancelled_days: 0, no_shows: null, no_show_days: 0 }])
+
+    const { computePeriodAnalytics, estimateLostRevenue } = await import(
+      '@/lib/salon/period-analytics'
+    )
+    expect(estimateLostRevenue(null, null, 100)).toBeNull()
+    const result = await computePeriodAnalytics({ month: '2026-07' })
+    expect(result.cancelled).toBeNull()
+    expect(result.no_shows).toBeNull()
+    expect(result.lost_revenue).toBeNull()
   })
 })

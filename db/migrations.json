@@ -309,6 +309,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "040_nullable_month_metrics",
+      "file": "delta-nullable-month-metrics.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

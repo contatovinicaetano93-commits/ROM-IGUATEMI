@@ -30,17 +30,17 @@ export async function ensureSalonMonthMetricsTable(): Promise<void> {
           days_missing text[] not null default '{}',
           status text not null default 'incomplete'
             check (status in ('complete', 'in_progress', 'incomplete')),
-          revenue numeric(14, 2) not null default 0,
-          attended int not null default 0,
-          cancelled int not null default 0,
-          no_shows int not null default 0,
-          appointments int not null default 0,
-          new_clients int not null default 0,
-          returning_clients int not null default 0,
+          revenue numeric(14, 2),
+          attended int,
+          cancelled int,
+          no_shows int,
+          appointments int,
+          new_clients int,
+          returning_clients int,
           ticket_avg numeric(12, 2),
-          expenses numeric(14, 2) not null default 0,
-          cmv numeric(14, 2) not null default 0,
-          cash_flow numeric(14, 2) not null default 0,
+          expenses numeric(14, 2),
+          cmv numeric(14, 2),
+          cash_flow numeric(14, 2),
           payload jsonb,
           materialized_at timestamptz not null default now(),
           updated_at timestamptz not null default now()
@@ -208,40 +208,61 @@ async function queryDailyTotals(from: string, to: string) {
     select
       sum(revenue)::float as revenue,
       count(revenue)::int as revenue_days,
-      coalesce(sum(attended), 0)::int as attended,
-      coalesce(sum(cancelled), 0)::int as cancelled,
-      coalesce(sum(no_shows), 0)::int as no_shows,
-      coalesce(sum(appointments), 0)::int as appointments,
-      coalesce(sum(new_clients), 0)::int as new_clients,
-      coalesce(sum(returning_clients), 0)::int as returning_clients
+      sum(attended)::int as attended,
+      count(attended)::int as attended_days,
+      sum(cancelled)::int as cancelled,
+      count(cancelled)::int as cancelled_days,
+      sum(no_shows)::int as no_shows,
+      count(no_shows)::int as no_show_days,
+      sum(appointments)::int as appointments,
+      count(appointments)::int as appointment_days,
+      sum(new_clients)::int as new_clients,
+      count(new_clients)::int as new_client_days,
+      sum(returning_clients)::int as returning_clients,
+      count(returning_clients)::int as returning_client_days
     from salon_daily_metrics
     where day >= ${from}::date and day <= ${to}::date
   `) as {
     revenue: number | null
     revenue_days: number
-    attended: number
-    cancelled: number
-    no_shows: number
-    appointments: number
-    new_clients: number
-    returning_clients: number
+    attended: number | null
+    attended_days: number
+    cancelled: number | null
+    cancelled_days: number
+    no_shows: number | null
+    no_show_days: number
+    appointments: number | null
+    appointment_days: number
+    new_clients: number | null
+    new_client_days: number
+    returning_clients: number | null
+    returning_client_days: number
   }[]
   const r = rows[0]
   const revenueDays = Number(r?.revenue_days ?? 0)
   // Sem dia com receita conhecida → null (não inventar R$0).
   const revenue =
     revenueDays > 0 ? Math.round(Number(r?.revenue ?? 0) * 100) / 100 : null
-  const attended = Number(r?.attended ?? 0) || 0
+  const attendedDays = Number(r?.attended_days ?? 0)
+  const attended = attendedDays > 0 ? Number(r?.attended ?? 0) || 0 : null
+  const cancelledDays = Number(r?.cancelled_days ?? 0)
+  const noShowDays = Number(r?.no_show_days ?? 0)
+  const appointmentDays = Number(r?.appointment_days ?? 0)
+  const newClientDays = Number(r?.new_client_days ?? 0)
+  const returningClientDays = Number(r?.returning_client_days ?? 0)
   return {
     revenue,
     attended,
-    cancelled: Number(r?.cancelled ?? 0) || 0,
-    no_shows: Number(r?.no_shows ?? 0) || 0,
-    appointments: Number(r?.appointments ?? 0) || 0,
-    new_clients: Number(r?.new_clients ?? 0) || 0,
-    returning_clients: Number(r?.returning_clients ?? 0) || 0,
+    cancelled: cancelledDays > 0 ? Number(r?.cancelled ?? 0) || 0 : null,
+    no_shows: noShowDays > 0 ? Number(r?.no_shows ?? 0) || 0 : null,
+    appointments: appointmentDays > 0 ? Number(r?.appointments ?? 0) || 0 : null,
+    new_clients: newClientDays > 0 ? Number(r?.new_clients ?? 0) || 0 : null,
+    returning_clients:
+      returningClientDays > 0 ? Number(r?.returning_clients ?? 0) || 0 : null,
     ticket_avg:
-      revenue != null && attended > 0 ? Math.round((revenue / attended) * 100) / 100 : null,
+      revenue != null && attended != null && attended > 0
+        ? Math.round((revenue / attended) * 100) / 100
+        : null,
   }
 }
 
@@ -263,7 +284,17 @@ export async function sumSalonCmvRange(from: string, to: string): Promise<number
 async function sumDailyTotals(from: string, to: string) {
   try {
     const daily = await queryDailyTotals(from, to)
-    return { ...daily, revenue: daily.revenue ?? 0 }
+    // Materialização / soma operacional: coalesce só na gravação (NOT NULL legado).
+    return {
+      revenue: daily.revenue ?? 0,
+      attended: daily.attended ?? 0,
+      cancelled: daily.cancelled ?? 0,
+      no_shows: daily.no_shows ?? 0,
+      appointments: daily.appointments ?? 0,
+      new_clients: daily.new_clients ?? 0,
+      returning_clients: daily.returning_clients ?? 0,
+      ticket_avg: daily.ticket_avg,
+    }
   } catch {
     return {
       revenue: 0,
@@ -303,9 +334,9 @@ export async function readSalonWindowTotals(
     const [expenses, cmv] = await Promise.all([sumExpenses(from, to), sumStockCogs(from, to)])
     return {
       revenue: daily.revenue,
-      attended: daily.attended,
-      cancelled: daily.cancelled,
-      no_shows: daily.no_shows,
+      attended: daily.attended ?? 0,
+      cancelled: daily.cancelled ?? 0,
+      no_shows: daily.no_shows ?? 0,
       ticket_avg: daily.ticket_avg,
       expenses,
       cmv,

@@ -141,6 +141,28 @@ export async function runPendingMigrations(opts?: {
   }
 }
 
+/** Contagem leve de migrations pendentes — probe de health, sem aplicar. */
+export async function getPendingMigrationsCount(opts?: {
+  panel?: RomPanelId
+  cwd?: string
+}): Promise<number> {
+  const status = await getMigrationStatus(opts)
+  return status.pending.length
+}
+
+/**
+ * Em produção, pending > 0 é RED. Fora de prod (ou probe null) não inventa falha.
+ * Exportado puro para o teste provar que o health consegue ficar vermelho.
+ */
+export function migrationsPendingHealthOk(opts: {
+  isProduction: boolean
+  pendingCount: number | null
+}): boolean {
+  if (!opts.isProduction) return true
+  if (opts.pendingCount == null) return true
+  return opts.pendingCount === 0
+}
+
 export async function getMigrationStatus(opts?: {
   panel?: RomPanelId
   cwd?: string

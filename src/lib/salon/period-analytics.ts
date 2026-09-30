@@ -65,14 +65,15 @@ export function averageOccupancy(professionals: P1ProfessionalRow[]): number | n
 }
 
 /** Receita perdida estimada: (cancelados + no-shows) × ticket médio.
- * Sem ticket → null (não inventar R$ 0,00 nos cards). */
+ * Sem ticket ou sem perda conhecida → null (não inventar R$ 0,00 nos cards). */
 export function estimateLostRevenue(
-  cancelled: number,
-  noShows: number,
+  cancelled: number | null,
+  noShows: number | null,
   ticketAvg: number | null,
 ): number | null {
   if (ticketAvg == null || !(ticketAvg > 0)) return null
-  const lost = (Math.max(0, cancelled) + Math.max(0, noShows)) * ticketAvg
+  if (cancelled == null && noShows == null) return null
+  const lost = (Math.max(0, cancelled ?? 0) + Math.max(0, noShows ?? 0)) * ticketAvg
   return Math.round(lost * 100) / 100
 }
 
@@ -112,22 +113,31 @@ async function sumRevenueAndAttended(
 async function sumAttendanceLoss(
   from: string,
   to: string,
-): Promise<{ cancelled: number; no_shows: number }> {
+): Promise<{ cancelled: number | null; no_shows: number | null }> {
   const sql = getSql()
   try {
     const rows = (await sql`
       select
-        coalesce(sum(cancelled), 0)::int as cancelled,
-        coalesce(sum(no_shows), 0)::int as no_shows
+        sum(cancelled)::int as cancelled,
+        count(cancelled)::int as cancelled_days,
+        sum(no_shows)::int as no_shows,
+        count(no_shows)::int as no_show_days
       from salon_daily_metrics
       where day >= ${from}::date and day <= ${to}::date
-    `) as { cancelled: number; no_shows: number }[]
+    `) as {
+      cancelled: number | null
+      cancelled_days: number
+      no_shows: number | null
+      no_show_days: number
+    }[]
+    const cancelledDays = Number(rows[0]?.cancelled_days ?? 0)
+    const noShowDays = Number(rows[0]?.no_show_days ?? 0)
     return {
-      cancelled: Number(rows[0]?.cancelled ?? 0) || 0,
-      no_shows: Number(rows[0]?.no_shows ?? 0) || 0,
+      cancelled: cancelledDays > 0 ? Number(rows[0]?.cancelled ?? 0) || 0 : null,
+      no_shows: noShowDays > 0 ? Number(rows[0]?.no_shows ?? 0) || 0 : null,
     }
   } catch {
-    return { cancelled: 0, no_shows: 0 }
+    return { cancelled: null, no_shows: null }
   }
 }
 
@@ -138,8 +148,10 @@ export interface PeriodCompareBucket {
   revenue: number | null
   /** null = nenhum dia com atendidos conhecidos no intervalo. */
   attended: number | null
-  cancelled: number
-  no_shows: number
+  /** null = nenhum dia com cancelados conhecidos. */
+  cancelled: number | null
+  /** null = nenhum dia com no-shows conhecidos. */
+  no_shows: number | null
   ticket_avg: number | null
   lost_revenue: number | null
   /** Ocupação média do snapshot P1 do fim da janela comparável (null se sem dados). */
@@ -167,8 +179,10 @@ export interface PeriodAnalytics {
   /** true se a janela atual é MTD (mês corrente). */
   mtd: boolean
   occupancy_avg: number | null
-  cancelled: number
-  no_shows: number
+  /** null = nenhum dia com cancelados conhecidos. */
+  cancelled: number | null
+  /** null = nenhum dia com no-shows conhecidos. */
+  no_shows: number | null
   ticket_avg: number | null
   lost_revenue: number | null
   packages: P2PackageRow[]

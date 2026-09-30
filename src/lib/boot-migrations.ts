@@ -5,13 +5,17 @@ const logger = new Logger('Boot')
 /**
  * Boot migrations on Vercel serverless cold starts compete with cron handlers
  * for the single postgres.js connection (max: 1) and can surface statement_timeout
- * as Unhandled Rejection noise (director-visits, avec sync). On Vercel, run schema
- * via POST /api/admin/migrations or `npm run db:migrate` on deploy instead.
+ * as Unhandled Rejection noise (director-visits, avec sync).
+ *
+ * Default: skip on Vercel. Apply schema via POST /api/admin/migrations or
+ * `npm run db:migrate` on deploy. Opt-in with RUN_BOOT_MIGRATIONS=1.
  */
 export function shouldRunBootMigrations(): boolean {
   if (!process.env.DATABASE_URL) return false
   if (process.env.ROM_SKIP_BOOT_MIGRATIONS === '1') return false
+  if (process.env.RUN_BOOT_MIGRATIONS === '1') return true
   if (process.env.VERCEL === '1') return false
+  if (process.env.RUN_BOOT_MIGRATIONS === '0') return false
   return true
 }
 
