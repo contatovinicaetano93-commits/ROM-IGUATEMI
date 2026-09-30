@@ -71,6 +71,7 @@ describe('isHardPlatformTimeoutAvecRun', () => {
   it('mensagem de health aponta Fluid quando classic300', () => {
     const msg = hardTimeoutHealthMessage({ count: 2, classic300: 1 })
     expect(msg).toMatch(/Fluid Compute/)
+    expect(msg).toMatch(/vercel\.json tem fluid:true/)
     expect(hardTimeoutHealthMessage({ count: 0, classic300: 0 })).toBeNull()
   })
 })
