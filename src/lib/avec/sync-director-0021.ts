@@ -6,7 +6,11 @@
 import { extractRows, fetchAvecReport, fmtAvecDate } from '@/lib/avec/client'
 import { normalizeP1ProfessionalRevenueRow } from '@/lib/avec/normalize'
 import { getAvecReportRegistry, resolveReportId } from '@/lib/avec/registry'
-import { noteSyncBudgetExhausted } from '@/lib/avec/sync-budget'
+import { noteSyncBudgetExhausted, hasSyncBudgetForHeavyStep } from '@/lib/avec/sync-budget'
+import {
+  isPostgresStatementTimeoutError,
+  noteStatementTimeoutSoftFail,
+} from '@/lib/avec/db-statement-timeout'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
 import {
@@ -171,7 +175,7 @@ async function syncOneMonth(
 
   try {
     for (let page = 1; page <= MAX_PAGES_PER_MONTH; page++) {
-      if (opts?.shouldAbort?.()) {
+      if (opts?.shouldAbort?.() || !hasSyncBudgetForHeavyStep()) {
         aborted = true
         truncated = true
         noteSyncBudgetExhausted(stats, `director-0021 ${month}`)
@@ -278,7 +282,7 @@ export async function syncDirector0021(
 ): Promise<void> {
   const months = opts?.months?.length ? opts.months : monthsToSync()
   for (const month of months) {
-    if (opts?.shouldAbort?.()) {
+    if (opts?.shouldAbort?.() || !hasSyncBudgetForHeavyStep()) {
       noteSyncBudgetExhausted(stats, 'director-0021')
       stats.warnings.push(`director-0021: abortado por orçamento antes de ${month}`)
       break
@@ -290,6 +294,10 @@ export async function syncDirector0021(
       }
       await syncOneMonth(month, stats, opts)
     } catch (e) {
+      if (isPostgresStatementTimeoutError(e)) {
+        noteStatementTimeoutSoftFail(stats, `director-0021 ${month}`)
+        break
+      }
       const msg = e instanceof Error ? e.message : String(e)
       if (/salon_director_0021_months/i.test(msg)) {
         stats.warnings.push(`director-0021: schema pendente (${msg.slice(0, 80)})`)

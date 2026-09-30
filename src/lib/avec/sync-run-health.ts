@@ -76,7 +76,7 @@ export function hardTimeoutHealthMessage(hits: {
 }): string | null {
   if (hits.count <= 0) return null
   if (hits.classic300 > 0) {
-    return `Full sync hard-timeout (~300s) sem aborted limpo — possível Fluid Compute off (Settings → Functions → Fluid). hits=${hits.count} classic300=${hits.classic300}`
+    return `Full sync hard-timeout (~300s) sem aborted limpo — vercel.json tem fluid:true, mas Classic ainda capa em 300s se Fluid estiver off (Settings → Functions → Fluid Compute ON). hits=${hits.count} classic300=${hits.classic300}`
   }
   return `Full sync hard-timeout (kill/abandon sem aborted) — checar Fluid Compute / maxDuration 800. hits=${hits.count}`
 }

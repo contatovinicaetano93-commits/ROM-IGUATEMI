@@ -6,7 +6,11 @@
 
 import { extractRows, fetchAvecReport, fmtAvecDate } from '@/lib/avec/client'
 import { normalizeAttendanceRow } from '@/lib/avec/normalize'
-import { noteSyncBudgetExhausted } from '@/lib/avec/sync-budget'
+import { noteSyncBudgetExhausted, hasSyncBudgetForHeavyStep } from '@/lib/avec/sync-budget'
+import {
+  isPostgresStatementTimeoutError,
+  noteStatementTimeoutSoftFail,
+} from '@/lib/avec/db-statement-timeout'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { getSql } from '@/lib/db'
 import {
@@ -238,7 +242,7 @@ async function syncOneQuarter(
 
   try {
     for (let page = 1; page <= MAX_PAGES_PER_QUARTER; page++) {
-      if (opts?.shouldAbort?.()) {
+      if (opts?.shouldAbort?.() || !hasSyncBudgetForHeavyStep()) {
         aborted = true
         truncated = true
         noteSyncBudgetExhausted(stats, `director-visits ${quarter}`)
@@ -386,7 +390,7 @@ export async function syncDirectorVisits(
 ): Promise<void> {
   const quarters = opts?.quarters?.length ? opts.quarters : quartersToSync()
   for (const q of quarters) {
-    if (opts?.shouldAbort?.()) {
+    if (opts?.shouldAbort?.() || !hasSyncBudgetForHeavyStep()) {
       noteSyncBudgetExhausted(stats, 'director-visits')
       stats.warnings.push(`director-visits: abortado por orçamento antes de ${q}`)
       break
@@ -398,6 +402,10 @@ export async function syncDirectorVisits(
       }
       await syncOneQuarter(q, stats, syncRunId, opts)
     } catch (e) {
+      if (isPostgresStatementTimeoutError(e)) {
+        noteStatementTimeoutSoftFail(stats, `director-visits ${q}`)
+        break
+      }
       const msg = e instanceof Error ? e.message : String(e)
       // Tabela ainda não migrada — não derruba o sync full.
       if (/salon_client_visits|salon_visit_sync_coverage/i.test(msg)) {

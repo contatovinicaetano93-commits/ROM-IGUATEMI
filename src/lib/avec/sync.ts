@@ -44,15 +44,21 @@ import {
 } from '@/lib/avec/sync-finish-status'
 import {
   getActiveSyncDeadlineAt,
+  hasSyncBudgetForHeavyStep,
   isSyncBudgetExhausted,
   noteSyncBudgetExhausted,
   setActiveSyncDeadlineAt,
   syncBudgetExhausted,
   markSyncBudgetExhausted,
 } from '@/lib/avec/sync-budget'
+import {
+  isPostgresStatementTimeoutError,
+  noteStatementTimeoutSoftFail,
+} from '@/lib/avec/db-statement-timeout'
 
 export {
   getActiveSyncDeadlineAt,
+  hasSyncBudgetForHeavyStep,
   isSyncBudgetExhausted,
   noteSyncBudgetExhausted,
   syncBudgetExhausted,
@@ -672,6 +678,11 @@ async function healImportadoStatus(stats: AvecSyncStats) {
 }
 
 async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
+  // Dump 0004 + upsert massivo: não começar com <30s (vira 57014 / kill mid-loop).
+  if (!hasSyncBudgetForHeavyStep()) {
+    markSyncBudgetExhausted(stats, 'antes do catálogo 0004 (<30s)')
+    return
+  }
   try {
     const params = { limit: 250, site: avecSiteParam() }
     const result = await fetchSyncReport('0004', params)
@@ -679,6 +690,10 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
     await snapshotReport('0004', params, result.rows, stats, syncRunId)
 
     for (const row of result.rows) {
+      if (!hasSyncBudgetForHeavyStep()) {
+        markSyncBudgetExhausted(stats, 'catálogo 0004 mid-upsert (<30s)')
+        break
+      }
       try {
         const c = normalizeClientRow(row)
         if (!c) continue
@@ -694,10 +709,18 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
         })
         stats.clients_upserted++
       } catch (e) {
+        if (isPostgresStatementTimeoutError(e)) {
+          noteStatementTimeoutSoftFail(stats, 'catálogo 0004 upsert')
+          break
+        }
         stats.errors.push(`cliente: ${e instanceof Error ? e.message : String(e)}`)
       }
     }
   } catch (e) {
+    if (isPostgresStatementTimeoutError(e)) {
+      noteStatementTimeoutSoftFail(stats, 'catálogo 0004')
+      return
+    }
     // Não derruba o full sync — P1/0021 (top profissionais) ainda precisa rodar.
     stats.errors.push(`clientes 0004: ${e instanceof Error ? e.message : String(e)}`)
   }
@@ -1765,7 +1788,9 @@ async function runAvecSyncBody(
     // director-visits: cron dedicado (não no full/agenda).
 
     if (runCatalog) {
-      if (!syncBudgetExhausted()) {
+      if (!hasSyncBudgetForHeavyStep()) {
+        markSyncBudgetExhausted(stats, 'antes do catálogo 0004 (<30s)')
+      } else if (!syncBudgetExhausted()) {
         const dumpClients = await shouldSyncClientCatalog()
         if (dumpClients) {
           step('clients…')
@@ -1780,12 +1805,15 @@ async function runAvecSyncBody(
       } else {
         markSyncBudgetExhausted(stats, 'antes do catálogo 0004')
       }
-      if (!syncBudgetExhausted()) {
+      if (!syncBudgetExhausted() && hasSyncBudgetForHeavyStep()) {
         // Limpeza silenciosa — não vira warning (senão full ok marca "partial").
         try {
           await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
-        } catch {
-          /* ignore */
+        } catch (purgeErr) {
+          if (isPostgresStatementTimeoutError(purgeErr)) {
+            noteStatementTimeoutSoftFail(stats, 'purge pós-catálogo')
+          }
+          /* ignore demais */
         }
       }
     }
@@ -1814,7 +1842,24 @@ async function runAvecSyncBody(
         ? (authErr ?? formatAvecUserMessage(stats.errors[0]) ?? stats.errors[0] ?? undefined)
         : authErr
 
-    const finished = await finishAvecSyncRun(run.id, status, stats, topError)
+    let finished: AvecSyncRun
+    try {
+      finished = await finishAvecSyncRun(run.id, status, stats, topError)
+    } catch (finishErr) {
+      if (isPostgresStatementTimeoutError(finishErr)) {
+        noteStatementTimeoutSoftFail(stats, 'finishAvecSyncRun')
+        finished = {
+          id: run.id,
+          kind: run.kind,
+          created_at: run.created_at,
+          status: 'partial',
+          stats,
+          error: null,
+        }
+      } else {
+        throw finishErr
+      }
+    }
 
     if (status === 'error') {
       const detail = topError ?? stats.errors[0] ?? 'sync error'
@@ -1830,13 +1875,22 @@ async function runAvecSyncBody(
       direction: 'in',
       handledBy: 'system',
       payload: { avec_sync: stats, status, mode },
-    })
+    }).catch(() => {})
 
     return finished
   } catch (e) {
-    const raw = e instanceof Error ? e.message : String(e)
-    const msg = formatAvecUserMessage(raw) ?? raw
-    stats.errors.push(msg)
+    // 57014: soft abort (partial) — não vira unhandled / HTTP 500.
+    if (isPostgresStatementTimeoutError(e)) {
+      noteStatementTimeoutSoftFail(stats, `${mode}/${stage}`)
+    } else {
+      const raw = e instanceof Error ? e.message : String(e)
+      const msg = formatAvecUserMessage(raw) ?? raw
+      stats.errors.push(msg)
+    }
+    const topCatchError = isPostgresStatementTimeoutError(e)
+      ? undefined
+      : (formatAvecUserMessage(e instanceof Error ? e.message : String(e)) ??
+        (e instanceof Error ? e.message : String(e)))
     // Progresso checkpointado / abort limpo → partial (não pintar Cérebro de error falso).
     const status = resolveAvecFinishStatus({
       errorCount: stats.errors.length,
@@ -1845,10 +1899,34 @@ async function runAvecSyncBody(
       hadCoreRows: avecHadCoreProgress(stats),
       thrown: true,
     })
-    const finished = await finishAvecSyncRun(run.id, status, stats, msg)
+    let finished: AvecSyncRun
+    try {
+      finished = await finishAvecSyncRun(run.id, status, stats, topCatchError)
+    } catch (finishErr) {
+      if (isPostgresStatementTimeoutError(finishErr)) {
+        noteStatementTimeoutSoftFail(stats, 'finishAvecSyncRun após catch')
+        finished = {
+          id: run.id,
+          kind: run.kind,
+          created_at: run.created_at,
+          status: 'partial',
+          stats,
+          error: topCatchError ?? null,
+        }
+      } else {
+        finished = {
+          id: run.id,
+          kind: run.kind,
+          created_at: run.created_at,
+          status,
+          stats,
+          error: topCatchError ?? (finishErr instanceof Error ? finishErr.message : String(finishErr)),
+        }
+      }
+    }
     if (status === 'error') {
       void notifyOpsAvecAlert(
-        `❌ Sync Avec ${mode} falhou — ${getDeploymentContext().display_name}\n${msg}`,
+        `❌ Sync Avec ${mode} falhou — ${getDeploymentContext().display_name}\n${topCatchError ?? 'sync error'}`,
         { dedupeKey: `avec_sync_error_${mode}`, minIntervalMs: 60 * 60 * 1000 },
       ).catch(() => {})
     }

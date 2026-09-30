@@ -215,6 +215,11 @@ describe('isSoftAvecSyncWarning', () => {
       ),
     ).toBe(true)
     expect(isSoftAvecSyncWarning('heal importado: timeout no update')).toBe(true)
+    expect(
+      isSoftAvecSyncWarning(
+        'sync: Postgres statement_timeout (57014) em full/catalog — abort limpo parcial',
+      ),
+    ).toBe(true)
     expect(isSoftAvecSyncWarning('snapshot 0004: disk full')).toBe(true)
     expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
     // 8123 pulado por budget é HARD — monitor / health podem ficar vermelhos.
