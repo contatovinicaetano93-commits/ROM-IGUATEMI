@@ -2,21 +2,17 @@
 -- Modelo A: 1 Almoxarifado (retirada) + Piso 1/2/3.
 -- Idempotente. Não apaga dados.
 -- Soma dos saldos por ponto deve bater com stock_products.current_qty (Avec).
+-- Sem DO $$ — o runner parte statements por `;` (autocommit).
 
 alter table stock_locations
   add column if not exists rom_code text,
   add column if not exists rom_kind text;
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint where conname = 'stock_locations_rom_kind_check'
-  ) then
-    alter table stock_locations
-      add constraint stock_locations_rom_kind_check
-      check (rom_kind is null or rom_kind in ('almox', 'piso'));
-  end if;
-end $$;
+alter table stock_locations drop constraint if exists stock_locations_rom_kind_check;
+
+alter table stock_locations
+  add constraint stock_locations_rom_kind_check
+  check (rom_kind is null or rom_kind in ('almox', 'piso'));
 
 create unique index if not exists stock_locations_rom_code_uidx
   on stock_locations (rom_code)

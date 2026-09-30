@@ -15,27 +15,89 @@ export function assertSafeDbFileName(fileName: string): string {
   return base
 }
 
-/** Remove comentários de linha SQL e parte o arquivo em statements. */
+/**
+ * Remove comentários de linha SQL e parte o arquivo em statements.
+ * Respeita strings `'...'` e dollar-quotes `$$...$$` / `$tag$...$tag$`
+ * para não cortar `;` internos (ex.: blocos DO).
+ */
 export function splitSqlStatements(sql: string): string[] {
-  const withoutLineComments = sql
-    .split('\n')
-    .map((line) => {
-      const trimmed = line.trim()
-      if (trimmed.startsWith('--')) return ''
-      const commentIdx = line.indexOf('--')
-      if (commentIdx === -1) return line
-      // Mantém `--` dentro de strings simples (casos raros nos nossos deltas).
-      const before = line.slice(0, commentIdx)
-      const singles = (before.match(/'/g) || []).length
-      if (singles % 2 === 1) return line
-      return before
-    })
-    .join('\n')
+  const statements: string[] = []
+  let current = ''
+  let i = 0
+  let inSingle = false
+  let dollarTag: string | null = null
 
-  return withoutLineComments
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
+  const startsDollarTag = (from: number): string | null => {
+    if (sql[from] !== '$') return null
+    let j = from + 1
+    while (j < sql.length && /[A-Za-z0-9_]/.test(sql[j]!)) j += 1
+    if (j < sql.length && sql[j] === '$') return sql.slice(from, j + 1)
+    return null
+  }
+
+  while (i < sql.length) {
+    const ch = sql[i]!
+
+    if (dollarTag) {
+      if (sql.startsWith(dollarTag, i)) {
+        current += dollarTag
+        i += dollarTag.length
+        dollarTag = null
+        continue
+      }
+      current += ch
+      i += 1
+      continue
+    }
+
+    if (inSingle) {
+      current += ch
+      if (ch === "'" && sql[i + 1] === "'") {
+        current += "'"
+        i += 2
+        continue
+      }
+      if (ch === "'") inSingle = false
+      i += 1
+      continue
+    }
+
+    if (ch === '-' && sql[i + 1] === '-') {
+      i += 2
+      while (i < sql.length && sql[i] !== '\n') i += 1
+      continue
+    }
+
+    const tag = startsDollarTag(i)
+    if (tag) {
+      dollarTag = tag
+      current += tag
+      i += tag.length
+      continue
+    }
+
+    if (ch === "'") {
+      inSingle = true
+      current += ch
+      i += 1
+      continue
+    }
+
+    if (ch === ';') {
+      const trimmed = current.trim()
+      if (trimmed.length > 0) statements.push(trimmed)
+      current = ''
+      i += 1
+      continue
+    }
+
+    current += ch
+    i += 1
+  }
+
+  const tail = current.trim()
+  if (tail.length > 0) statements.push(tail)
+  return statements
 }
 
 export function readDbSqlFile(fileName: string, cwd = process.cwd()): string {
