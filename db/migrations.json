@@ -317,6 +317,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "040_contacts_list_indexes",
+      "file": "delta-contacts-list-indexes.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }
