@@ -602,8 +602,8 @@ export interface FinanceKpiBucket {
   expenses: number
   /** Split por CNPJ Omie (serviços / comércio) + manuais. */
   expenses_by_cnpj: ExpenseCnpjBreakdown
-  /** Proxy de comandas finalizadas (métrica attended da Avec/Lake). */
-  attended: number
+  /** Proxy de comandas finalizadas (métrica attended da Avec/Lake). null se ausente. */
+  attended: number | null
   /** Ticket médio do período (receita ÷ atendidos). */
   ticket_avg: number | null
   /** Série diária do mês (salon_daily_metrics — Avec sync + seed Lake). */
@@ -667,7 +667,6 @@ async function buildBucket(
   }
   const revenueRounded = Math.round(revenue * 100) / 100
   const expensesRounded = Math.round(expenses * 100) / 100
-  const attendedKnown = attended ?? 0
   const gross_margin =
     revenue > 0 ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null
   const ticket_avg =
@@ -686,7 +685,7 @@ async function buildBucket(
     revenue_source,
     expenses: expensesRounded,
     expenses_by_cnpj: expenseBreakdown,
-    attended: attendedKnown,
+    attended,
     ticket_avg,
     daily,
     cmv,

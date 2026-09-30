@@ -43,7 +43,7 @@ interface KpiData {
   conversion: {
     conversion_rate: number | null
     total_contacts: number
-    funnel_contacts?: number
+    funnel_contacts?: number | null
     imported_contacts?: number
   } | null
   window?: { from: string; to: string; days: number }
@@ -199,9 +199,9 @@ export default function DashboardPage() {
     if (!ok) setWarn('Permita pop-ups para gerar o PDF (imprimir / salvar como PDF).')
   }
 
-  const funnelContacts = data?.conversion?.funnel_contacts ?? 0
-  const importedContacts = data?.conversion?.imported_contacts ?? 0
-  const totalContacts = data?.conversion?.total_contacts ?? 0
+  const funnelContacts = data?.conversion?.funnel_contacts ?? null
+  const importedContacts = data?.conversion?.imported_contacts ?? null
+  const totalContacts = data?.conversion?.total_contacts ?? null
   const conversionRate = data?.conversion?.conversion_rate ?? null
   const crmWindow = data?.window ?? contactKpiWindow(30)
   const chartData = data
@@ -358,13 +358,21 @@ export default function DashboardPage() {
             icon={<Users size={15} />}
             label="Cancel. + no-show"
             value={
-              loading || !period ? '—' : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
+              loading || !period
+                ? '—'
+                : period.cancelled == null && period.no_shows == null
+                  ? '—'
+                  : String((period.cancelled ?? 0) + (period.no_shows ?? 0))
             }
             compare={
               period?.previous?.label
                 ? momCompareLine(
-                    (period.cancelled ?? 0) + (period.no_shows ?? 0),
-                    period.previous.cancelled + period.previous.no_shows,
+                    period.cancelled == null && period.no_shows == null
+                      ? null
+                      : (period.cancelled ?? 0) + (period.no_shows ?? 0),
+                    period.previous.cancelled == null && period.previous.no_shows == null
+                      ? null
+                      : (period.previous.cancelled ?? 0) + (period.previous.no_shows ?? 0),
                     period.previous.label,
                     { kind: 'number', invertGood: true },
                   )
@@ -689,9 +697,11 @@ export default function DashboardPage() {
             </div>
             {!loading && (
               <p className="mt-2 text-[0.7rem] text-muted">
-                Entrada no mês (funil CRM): {funnelContacts.toLocaleString('pt-BR')} ·
-                importados Avec: {importedContacts.toLocaleString('pt-BR')} · total cadastrado:{' '}
-                {totalContacts.toLocaleString('pt-BR')}
+                Entrada no mês (funil CRM):{' '}
+                {funnelContacts == null ? '—' : funnelContacts.toLocaleString('pt-BR')} ·
+                importados Avec:{' '}
+                {importedContacts == null ? '—' : importedContacts.toLocaleString('pt-BR')} · total
+                cadastrado: {totalContacts == null ? '—' : totalContacts.toLocaleString('pt-BR')}
               </p>
             )}
           </div>
