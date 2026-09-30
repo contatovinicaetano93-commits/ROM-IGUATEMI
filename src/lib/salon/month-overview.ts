@@ -48,10 +48,10 @@ export interface MonthOverview {
   finance: FinanceKpis['current']
   analytics: PeriodAnalytics
   closing: {
-    revenue: number
-    attended: number
-    cancelled: number
-    no_shows: number
+    revenue: number | null
+    attended: number | null
+    cancelled: number | null
+    no_shows: number | null
     ticket_avg: number | null
     expenses: number
     cmv: number
@@ -65,10 +65,10 @@ export interface MonthOverview {
   /** Totais do mês comparado (MTD alinhado) — para deltas nos cards de Relatórios. */
   previous_label: string
   previous_closing: {
-    revenue: number
-    attended: number
-    cancelled: number
-    no_shows: number
+    revenue: number | null
+    attended: number | null
+    cancelled: number | null
+    no_shows: number | null
     ticket_avg: number | null
     expenses: number
     cmv: number

@@ -463,7 +463,9 @@ export default function FinanceiroPage() {
         'Atendidos',
         formatNumberBr(cur.attended, 0),
         formatNumberBr(prev.attended, 0),
-        formatNumberBr(cur.attended - prev.attended, 0),
+        cur.attended != null && prev.attended != null
+          ? formatNumberBr(cur.attended - prev.attended, 0)
+          : '—',
       ),
       csvRow(
         'Ticket médio',
