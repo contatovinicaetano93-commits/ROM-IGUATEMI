@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Columns3, RefreshCw } from 'lucide-react'
 import { apiFetch, clearApiClientCache } from '@/lib/api-client'
 import { useLiveRefresh } from '@/lib/use-live-refresh'
-import { fmtScheduleParts } from '@/lib/salon/format'
+import { fmtScheduleParts, toSalonDateIso } from '@/lib/salon/format'
 import { contactHref } from '@/lib/auth-redirect'
 import { CountBadge } from '../_components/ui'
 import {
@@ -156,8 +156,8 @@ export default function PipelinePage() {
 
   const load = useCallback(async (opts?: { fresh?: boolean; silent?: boolean }) => {
     const silent = opts?.silent === true
-    if (opts?.fresh) {
-      setLoading(true)
+    // Refresh: gira o botão sem esvaziar as colunas (mantém último snapshot).
+    if (opts?.fresh && !silent) {
       setError(null)
     }
     try {
@@ -239,10 +239,9 @@ export default function PipelinePage() {
         <button
           type="button"
           onClick={() => void load({ fresh: true })}
-          disabled={loading}
-          className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground/90 transition-colors hover:bg-card"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : undefined} />
+          <RefreshCw size={14} className={loading && !data ? 'animate-spin' : undefined} />
           Atualizar
         </button>
       </div>
@@ -258,32 +257,39 @@ export default function PipelinePage() {
           title="Agendados"
           hint="Abertos do dia (agenda e encaixe), sem teste/cortesia."
           storageKey="pipeline.section.agendados.open"
-          count={loading ? 0 : (data?.counts.scheduled ?? 0)}
+          count={data?.counts.scheduled ?? 0}
           tone="gold"
-          items={loading ? [] : (data?.scheduled ?? [])}
+          items={data?.scheduled ?? []}
           timeFrom={(item) => item.scheduled_at}
-          emptyLabel={loading ? 'Carregando…' : 'Nenhum atendimento aberto hoje.'}
+          emptyLabel={!data && loading ? 'Carregando…' : 'Nenhum atendimento aberto hoje.'}
         />
         <PipelineColumn
           title="Teste / Cortesia"
           hint="Cortesia/brinde no nome, ou preço zero pago. TESTE DE MECHAS fica em Agendados."
           storageKey="pipeline.section.cortesia.open"
-          count={loading ? 0 : (data?.counts.courtesy ?? 0)}
+          count={data?.counts.courtesy ?? 0}
           tone="sky"
-          items={loading ? [] : (data?.courtesy ?? [])}
-          timeFrom={(item) => item.last_done_at ?? item.scheduled_at}
-          emptyLabel={loading ? 'Carregando…' : 'Nenhum teste ou cortesia hoje.'}
+          items={data?.courtesy ?? []}
+          timeFrom={(item) => {
+            // last_done_at em aberto pode ser visita anterior — só vale se for do dia.
+            const day = data?.day
+            if (item.last_done_at && day && toSalonDateIso(item.last_done_at) === day) {
+              return item.last_done_at
+            }
+            return item.scheduled_at ?? item.last_done_at
+          }}
+          emptyLabel={!data && loading ? 'Carregando…' : 'Nenhum teste ou cortesia hoje.'}
           showKind
         />
         <PipelineColumn
           title="Concluídos"
           hint="Pagos/fechados do dia, sem teste/cortesia."
           storageKey="pipeline.section.concluidos.open"
-          count={loading ? 0 : (data?.counts.completed ?? 0)}
+          count={data?.counts.completed ?? 0}
           tone="success"
-          items={loading ? [] : (data?.completed ?? [])}
+          items={data?.completed ?? []}
           timeFrom={(item) => item.last_done_at}
-          emptyLabel={loading ? 'Carregando…' : 'Nenhum atendimento concluído hoje.'}
+          emptyLabel={!data && loading ? 'Carregando…' : 'Nenhum atendimento concluído hoje.'}
         />
       </div>
     </main>

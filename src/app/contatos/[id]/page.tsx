@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import posthog from 'posthog-js'
 import {
   ChevronLeft,
   Phone,
@@ -31,9 +32,10 @@ import {
   CHANNEL_LABEL,
   STATUS_LABEL,
 } from '../../_components/ui'
-import { fmtSchedule, whatsAppUrl, formatCurrency, formatVisitDate, toDatetimeLocalValue, fromDatetimeLocalValue } from '@/lib/salon/format'
+import { fmtSchedule, whatsAppUrl, formatCurrency } from '@/lib/salon/format'
 import { CATEGORY_LABEL } from '@/lib/salon/constants'
 import { apiFetch } from '@/lib/api-client'
+import { useClientSession } from '../../_components/SessionProvider'
 import { buildClientWhatsAppMessage } from '@/lib/whatsapp/client-message'
 import { LastVisitCard, type LastVisitData } from '../../_components/LastVisitCard'
 import { contactReturnLabel, sanitizeContactReturnTo } from '@/lib/auth-redirect'
@@ -112,7 +114,7 @@ interface Profile {
   can_view_revenue?: boolean
 }
 
-const STATUS_FLOW = ['importado', 'novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']
+const STATUS_FLOW = ['novo', 'em_atendimento', 'agendado', 'convertido', 'perdido']
 
 const VISIT_SOURCE_LABEL: Record<ServiceVisit['source'], string> = {
   avec: 'Avec',
@@ -244,7 +246,8 @@ function ContactDetailPageContent() {
   const [mutationOk, setMutationOk] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [visitsLoadingMore, setVisitsLoadingMore] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const { session } = useClientSession()
+  const isAdmin = Boolean(session?.can_view_revenue)
 
   const load = useCallback(async () => {
     const res = await apiFetch(`/api/contacts/${id}`, { cache: 'no-store' })
@@ -285,11 +288,6 @@ function ContactDetailPageContent() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false))
-
-    apiFetch('/api/auth/session', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((json) => setIsAdmin(Boolean(json.data?.can_view_revenue)))
-      .catch(() => setIsAdmin(false))
   }, [id])
 
   async function anonymize() {
@@ -317,7 +315,7 @@ function ContactDetailPageContent() {
       const offset = data.service_visits.length
       const res = await apiFetch(
         `/api/contacts/${id}/service-visits?offset=${offset}&limit=30`,
-        { cache: 'no-store' },
+        { cache: 'no-store', clientCache: false },
       )
       const json = await res.json()
       if (!res.ok || json.error) {
@@ -363,19 +361,21 @@ function ContactDetailPageContent() {
   }, [id, loading, error])
 
   async function changeStatus(status: string) {
-    await mutate(
+    const ok = await mutate(
       `/api/contacts/${id}`,
       { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) },
       'Status atualizado'
     )
+    if (ok) posthog.capture('contact_status_changed', { new_status: status })
   }
 
   async function markDone(serviceId: string) {
-    await mutate(
+    const ok = await mutate(
       `/api/services/${serviceId}`,
       { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'done' }) },
       'Serviço marcado como feito'
     )
+    if (ok) posthog.capture('service_marked_done')
   }
 
   async function unschedule(serviceId: string) {
@@ -396,8 +396,10 @@ function ContactDetailPageContent() {
         setBriefError(json.error ?? 'Não foi possível gerar o briefing')
         return
       }
-      if (json.data?.brief) setBrief({ text: json.data.brief, source: json.data.source })
-      else setBriefError('Resposta vazia do servidor')
+      if (json.data?.brief) {
+        setBrief({ text: json.data.brief, source: json.data.source })
+        posthog.capture('client_brief_generated', { source: json.data.source })
+      } else setBriefError('Resposta vazia do servidor')
     } catch (e) {
       setBriefError(String(e))
     } finally {
@@ -410,6 +412,7 @@ function ContactDetailPageContent() {
     try {
       await navigator.clipboard.writeText(brief.text)
       setBriefCopied(true)
+      posthog.capture('client_brief_copied')
       window.setTimeout(() => setBriefCopied(false), 2000)
     } catch {
       setMutationError('Não foi possível copiar o briefing.')
@@ -419,7 +422,9 @@ function ContactDetailPageContent() {
   if (loading) {
     return (
       <main className="flex flex-1 flex-col gap-4 px-5 py-6">
-        <div className="h-6 w-24 animate-pulse rounded bg-border" />
+        <button onClick={goBack} className="flex items-center gap-1 text-sm text-muted">
+          <ChevronLeft size={18} /> {backLabel}
+        </button>
         <div className="h-28 animate-pulse rounded-2xl bg-card" />
         <div className="h-40 animate-pulse rounded-2xl bg-card" />
       </main>
@@ -566,22 +571,19 @@ function ContactDetailPageContent() {
         </div>
       </div>
 
-      <LastVisitCard visit={last_visit} showPrice={isAdmin} />
+      <LastVisitCard visit={last_visit} />
 
-      {/* Ficha do cliente (Sprint 3) — ticket/LTV só com can_view_revenue */}
-      {(client_stats.cadence_avg_days != null ||
-        client_stats.completed_services_count > 0 ||
-        (isAdmin &&
-          (client_stats.ticket_avg != null || client_stats.ltv_projection != null))) && (
+      {/* Ficha do cliente (Sprint 3) */}
+      {(client_stats.ticket_avg != null ||
+        client_stats.cadence_avg_days != null ||
+        client_stats.completed_services_count > 0) && (
         <div className="grid grid-cols-2 gap-2">
-          {isAdmin && (
-            <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
-              <p className="text-[0.65rem] uppercase tracking-wide text-muted">Ticket médio</p>
-              <p className="mt-1 text-sm font-semibold tabular-nums">
-                {client_stats.ticket_avg != null ? formatCurrency(client_stats.ticket_avg) : '—'}
-              </p>
-            </div>
-          )}
+          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+            <p className="text-[0.65rem] uppercase tracking-wide text-muted">Ticket médio</p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">
+              {client_stats.ticket_avg != null ? formatCurrency(client_stats.ticket_avg) : '—'}
+            </p>
+          </div>
           <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
             <p className="text-[0.65rem] uppercase tracking-wide text-muted">Cadência esperada</p>
             <p className="mt-1 text-sm font-semibold tabular-nums">
@@ -592,19 +594,17 @@ function ContactDetailPageContent() {
             <p className="text-[0.65rem] uppercase tracking-wide text-muted">Serviços realizados</p>
             <p className="mt-1 text-sm font-semibold tabular-nums">{client_stats.completed_services_count}</p>
           </div>
-          {isAdmin && (
-            <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
-              <p className="text-[0.65rem] uppercase tracking-wide text-muted">
-                LTV projetado (2a)
-              </p>
-              <p className="mt-1 text-sm font-semibold tabular-nums">
-                {client_stats.ltv_projection != null ? formatCurrency(client_stats.ltv_projection) : '—'}
-              </p>
-            </div>
-          )}
+          <div className="rounded-xl border border-border bg-surface/80 px-3 py-2.5">
+            <p className="text-[0.65rem] uppercase tracking-wide text-muted">
+              LTV projetado (2a)
+            </p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">
+              {client_stats.ltv_projection != null ? formatCurrency(client_stats.ltv_projection) : '—'}
+            </p>
+          </div>
         </div>
       )}
-      {isAdmin && client_stats.ltv_projection != null && (
+      {client_stats.ltv_projection != null && (
         <p className="-mt-3 text-[0.65rem] text-muted">
           LTV é projeção (ticket médio × frequência × 2 anos), não histórico real de gasto.
         </p>
@@ -686,6 +686,7 @@ function ContactDetailPageContent() {
           rel="noopener noreferrer"
           title="Abrir WhatsApp com mensagem pessoal de reativação"
           onClick={() => {
+            posthog.capture('contact_whatsapp_opened')
             void apiFetch('/api/reactivation/outreach', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -798,7 +799,7 @@ function ContactDetailPageContent() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{v.service_name}</p>
                   <p className="mt-0.5 text-xs text-muted">
-                    {formatVisitDate(v.done_at)}
+                    {new Date(v.done_at).toLocaleDateString('pt-BR')}
                     {v.professional_name ? ` · ${v.professional_name}` : ''}
                     {canViewRevenue && v.price != null ? ` · ${formatCurrency(v.price)}` : ''}
                   </p>
@@ -906,12 +907,12 @@ function ScheduleSheet({
   onScheduled: () => void
 }) {
   const defaultWhen = service.scheduled_at
-    ? toDatetimeLocalValue(service.scheduled_at)
+    ? new Date(service.scheduled_at).toISOString().slice(0, 16)
     : (() => {
         const d = new Date()
         d.setDate(d.getDate() + 1)
         d.setHours(10, 0, 0, 0)
-        return toDatetimeLocalValue(d)
+        return d.toISOString().slice(0, 16)
       })()
   const [when, setWhen] = useState(defaultWhen)
   const [submitting, setSubmitting] = useState(false)
@@ -925,13 +926,14 @@ function ScheduleSheet({
       const res = await apiFetch(`/api/services/${service.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'schedule', scheduledAt: fromDatetimeLocalValue(when) }),
+        body: JSON.stringify({ action: 'schedule', scheduledAt: new Date(when).toISOString() }),
       })
       const json = await res.json()
       if (!res.ok || json.error) {
         setErr(json.error ?? 'Erro ao agendar')
         return
       }
+      posthog.capture('service_scheduled', { service_category: service.category })
       onScheduled()
     } catch (e) {
       setErr(String(e))

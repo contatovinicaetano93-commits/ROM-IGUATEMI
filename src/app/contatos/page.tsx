@@ -14,6 +14,7 @@ import {
   MessageSquare,
   UserPlus,
   HelpCircle,
+  Loader2,
 } from 'lucide-react'
 import posthog from 'posthog-js'
 import { Avatar, PrimaryButton } from '../_components/ui'
@@ -209,9 +210,12 @@ export default function ContatosPage() {
     <Suspense
       fallback={
         <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6">
-          <div className="h-8 w-48 animate-pulse rounded-xl bg-card" />
+          <div className="h-3 w-20 animate-pulse rounded bg-gold/25" />
+          <div className="mt-1 h-7 w-40 animate-pulse rounded-lg bg-card" />
           <div className="h-12 w-full animate-pulse rounded-2xl bg-card" />
-          <div className="h-64 w-full animate-pulse rounded-2xl bg-card" />
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
+            Carregando contatos…
+          </div>
         </main>
       }
     >
@@ -259,6 +263,7 @@ function ContatosPageContent() {
 
   function selectMode(next: ListMode) {
     setIgnoreUrlFilters(true)
+    // Não zera a lista aqui — o efeito troca os dados; evita flash em branco nas abas.
     setLoading(true)
     setMode(next)
   }
@@ -645,19 +650,19 @@ function ContatosPageContent() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        {loading &&
-          Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 border-b border-border px-4 py-3.5 last:border-0">
-              <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-border" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3 w-32 animate-pulse rounded bg-border" />
-                <div className="h-2.5 w-40 animate-pulse rounded bg-border" />
-              </div>
-            </div>
-          ))}
+      <div
+        className={`overflow-hidden rounded-2xl border border-border bg-card transition-opacity duration-200 ${
+          loading && visible.length > 0 ? 'opacity-60' : 'opacity-100'
+        }`}
+      >
+        {loading && visible.length === 0 && (
+          <div className="flex items-center justify-center gap-2 px-4 py-12 text-sm text-muted">
+            <Loader2 size={16} className="animate-spin text-gold" />
+            Carregando…
+          </div>
+        )}
 
-        {!loading && !error && visible.length === 0 && (
+        {!error && visible.length === 0 && !loading && (
           <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
             <p className="text-sm text-muted">{emptyCopy}</p>
             <div className="flex flex-wrap items-center justify-center gap-2">
@@ -685,7 +690,7 @@ function ContatosPageContent() {
           </div>
         )}
 
-        {!loading &&
+        {visible.length > 0 &&
           visible.map((c, i) => {
             const q = contactQueue(c)
             const wa = whatsappHrefFor(c)
