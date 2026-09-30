@@ -7,7 +7,6 @@ import { defaultProductionHost } from '@/lib/deployment'
 import { listEmployees, type EmployeeRecord } from '@/lib/employees'
 import { AREA_LABEL } from '@/lib/flow/format'
 import type { RequestArea } from '@/lib/flow/types'
-import { flowAudienceKey } from '@/lib/intranet/notifications'
 import { Logger } from '@/lib/logger'
 
 const logger = new Logger('employee-created')
@@ -22,18 +21,18 @@ export type CreateUserAuditActor = {
   role: string
 }
 
-/** Destinatários de e-mail: ativos com área em comum, admin do painel ou master do Flow — sem o próprio cadastro. */
+/**
+ * Destinatários do e-mail "Novo acesso criado": só admin do painel ou master do Flow.
+ * Não fan-out por área — marketing/compras/etc. não devem receber auditoria de cadastro.
+ */
 export function selectCreateUserAuditRecipients(
-  created: Pick<CreateUserAuditPerson, 'id' | 'areaIds'>,
+  created: Pick<CreateUserAuditPerson, 'id'>,
   people: readonly CreateUserAuditPerson[],
 ): CreateUserAuditPerson[] {
-  const createdAreas = new Set(created.areaIds)
   return people.filter((person) => {
     if (person.id === created.id) return false
     if (person.status !== 'active') return false
-    if (person.panel_role === 'admin') return true
-    if (person.flow_role === 'master') return true
-    return person.areaIds.some((area) => createdAreas.has(area))
+    return person.panel_role === 'admin' || person.flow_role === 'master'
   })
 }
 
@@ -188,14 +187,7 @@ export async function announceEmployeeCreated(input: {
     companies: employee.companyIds,
   })
 
-  for (const area of employee.areaIds) {
-    await notifyIntranet({
-      title,
-      body,
-      href,
-      audience_key: flowAudienceKey(area),
-    })
-  }
+  // Só masters/admins (audience role:admin). Sem fan-out por área do Flow.
   await notifyIntranet({
     title,
     body,

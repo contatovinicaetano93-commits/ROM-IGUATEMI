@@ -27,11 +27,11 @@ describe('selectCreateUserAuditRecipients', () => {
     areaIds: ['financeiro', 'compras'],
   })
 
-  it('inclui quem tem sobreposição de áreas', () => {
-    const overlap = person({ id: 'overlap', areaIds: ['compras', 'rh'] })
+  it('não inclui quem só tem área em comum (ex.: MKT/compras)', () => {
+    const overlap = person({ id: 'overlap-mkt', areaIds: ['compras', 'rh'] })
     const other = person({ id: 'other', areaIds: ['rh'] })
     const selected = selectCreateUserAuditRecipients(created, [created, overlap, other])
-    expect(selected.map((p) => p.id)).toEqual(['overlap'])
+    expect(selected).toEqual([])
   })
 
   it('inclui panel_role admin mesmo sem área em comum', () => {
@@ -54,16 +54,19 @@ describe('selectCreateUserAuditRecipients', () => {
     expect(selected.map((p) => p.id)).toEqual(['master'])
   })
 
-  it('exclui o próprio colaborador recém-criado', () => {
-    const selected = selectCreateUserAuditRecipients(created, [
-      created,
-      person({ id: 'same-email-diff-id', email: created.email, areaIds: ['financeiro'] }),
-    ])
-    expect(selected.map((p) => p.id)).toEqual(['same-email-diff-id'])
-    expect(selected.some((p) => p.id === created.id)).toBe(false)
+  it('exclui o próprio colaborador recém-criado mesmo se for admin', () => {
+    const selfAdmin = person({
+      id: 'new',
+      panel_role: 'admin',
+      flow_role: 'master',
+      areaIds: ['financeiro'],
+    })
+    const otherMaster = person({ id: 'henrique', flow_role: 'master' })
+    const selected = selectCreateUserAuditRecipients(selfAdmin, [selfAdmin, otherMaster])
+    expect(selected.map((p) => p.id)).toEqual(['henrique'])
   })
 
-  it('exclui inativos mesmo com área em comum ou admin', () => {
+  it('exclui inativos mesmo admin/master', () => {
     const inactiveOverlap = person({
       id: 'inactive-overlap',
       status: 'inactive',
