@@ -15,8 +15,3 @@ export function isCadencePlaceholderServiceName(name: string): boolean {
   const n = name.trim().toLowerCase()
   return (CADENCE_PLACEHOLDER_SERVICE_NAMES as readonly string[]).includes(n)
 }
-
-/** Predicado SQL (Postgres) — espelho de isCadencePlaceholderServiceName. */
-export const SQL_IS_CADENCE_PLACEHOLDER_NAME = `(
-  lower(btrim(name)) in ('atendimento', 'servico', 'serviço', 'visita', 'service')
-)`
