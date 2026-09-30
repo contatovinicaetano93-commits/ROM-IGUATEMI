@@ -127,19 +127,36 @@ async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
   `) as ContactRow[]
 }
 
-/** Carrega serviços só dos contatos pedidos — evita scan full de client_services. */
+/** Carrega serviços só dos contatos pedidos — colunas de urgência (sem notes/payloads pesados). */
 async function loadServicesByContactIds(ids: string[]): Promise<Map<string, ClientService[]>> {
   const byContact = new Map<string, ClientService[]>()
   if (ids.length === 0) return byContact
   const sql = getSql()
   const services = (await sql`
-    select * from client_services
+    select
+      id,
+      contact_id,
+      name,
+      category,
+      cadence_days,
+      last_done_at,
+      scheduled_at,
+      product,
+      active,
+      created_at
+    from client_services
     where active = true and contact_id in ${sql(ids)}
-  `) as ClientService[]
+  `) as Omit<ClientService, 'notes' | 'professional_name' | 'last_price'>[]
   for (const s of services) {
-    const list = byContact.get(s.contact_id) ?? []
-    list.push(s)
-    byContact.set(s.contact_id, list)
+    const row: ClientService = {
+      ...s,
+      notes: null,
+      professional_name: null,
+      last_price: null,
+    }
+    const list = byContact.get(row.contact_id) ?? []
+    list.push(row)
+    byContact.set(row.contact_id, list)
   }
   return byContact
 }
@@ -788,7 +805,7 @@ export async function listActivatedContacts(opts?: {
 
 /**
  * Contagens Atrasados/Vencendo/Agendados da carteira do profissional.
- * Sem teto de página — não usar `listContactsOwnedByIds` (limite 500) para badge.
+ * Agrega no SQL — não carrega client_services inteiro em JS só para badges.
  */
 export async function countOwnedUrgencyQueues(
   ownedContactIds: readonly string[],
@@ -796,18 +813,52 @@ export async function countOwnedUrgencyQueues(
   if (ownedContactIds.length === 0) {
     return { overdue: 0, due_soon: 0, scheduled: 0 }
   }
-  const contacts = await fetchContactsByIds([...ownedContactIds])
-  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
-  let overdue = 0
-  let due_soon = 0
-  let scheduled = 0
-  for (const c of contacts) {
-    const u = urgencyForServices(byContact.get(c.id) ?? [])
-    if (u.overdue > 0) overdue += 1
-    else if (u.due_soon > 0) due_soon += 1
-    if (u.scheduled_soon > 0) scheduled += 1
-  }
-  return { overdue, due_soon, scheduled }
+  const sql = getSql()
+  const ids = [...ownedContactIds]
+  const rows = (await sql`
+    with svc as (
+      select
+        contact_id,
+        scheduled_at,
+        case
+          when cadence_days is null or last_done_at is null then null
+          -- Placeholder Avec (Atendimento etc.) — ver isCadencePlaceholderServiceName
+          when lower(btrim(name)) in ('atendimento', 'servico', 'serviço', 'visita', 'service') then null
+          else last_done_at + (cadence_days * interval '1 day')
+        end as next_due
+      from client_services
+      where active = true
+        and contact_id in ${sql(ids)}
+    ),
+    per_contact as (
+      select
+        contact_id,
+        count(*) filter (where next_due is not null and next_due < now())::int as overdue,
+        count(*) filter (
+          where next_due is not null
+            and next_due >= now()
+            and next_due <= now() + (${DUE_SOON_DAYS} * interval '1 day')
+        )::int as due_soon,
+        count(*) filter (
+          where scheduled_at is not null
+            and (scheduled_at at time zone 'America/Sao_Paulo')::date
+              >= (now() at time zone 'America/Sao_Paulo')::date
+            and (scheduled_at at time zone 'America/Sao_Paulo')::date
+              <= (now() at time zone 'America/Sao_Paulo')::date
+                + (${SCHEDULED_SOON_DAYS} * interval '1 day')
+        )::int as scheduled_soon
+      from svc
+      group by contact_id
+    )
+    select
+      count(*) filter (where pc.overdue > 0)::int as overdue,
+      count(*) filter (where pc.overdue = 0 and pc.due_soon > 0)::int as due_soon,
+      count(*) filter (where pc.scheduled_soon > 0)::int as scheduled
+    from per_contact pc
+    join contacts c on c.id = pc.contact_id
+    where c.anonymized_at is null
+  `) as UrgencyQueueCounts[]
+  return rows[0] ?? { overdue: 0, due_soon: 0, scheduled: 0 }
 }
 
 export async function listContactsOwnedByIds(
