@@ -81,4 +81,34 @@ describe('wrapSqlClient', () => {
     expect(first).toEqual([{ query: 'select 1', params: [1] }])
     expect(second).toEqual([{ query: 'select 2', params: [] }])
   })
+
+  it('begin conserva unsafe().execute e embrulha o txn sem begin', async () => {
+    const beginQuery = { execute: vi.fn(() => undefined) }
+    const rootUnsafe = vi.fn(() => beginQuery)
+    const innerUnsafe = vi.fn(async (query: string, params?: unknown[]) => [{ query, params }])
+    const inner = { unsafe: innerUnsafe }
+    const root: {
+      unsafe: (query: string, params?: unknown[], options?: unknown) => { execute?: () => void }
+      begin: (fn: (tx: typeof inner) => Promise<unknown>) => Promise<unknown>
+    } = {
+      unsafe: rootUnsafe,
+      begin: () => Promise.resolve(undefined),
+    }
+    root.begin = (fn) => {
+      const query = root.unsafe('begin ', [], { onexecute: true })
+      if (typeof query.execute !== 'function') {
+        throw new TypeError('sql.unsafe(...).execute is not a function')
+      }
+      query.execute()
+      return fn(inner)
+    }
+
+    const wrapped = wrapSqlClient(root as unknown as PostgresSql)
+    const rows = await wrapped.begin(async (txn) => txn.unsafe('select 1', [1]))
+
+    expect(beginQuery.execute).toHaveBeenCalledOnce()
+    expect(rootUnsafe).toHaveBeenCalledWith('begin ', [], { onexecute: true })
+    expect(innerUnsafe).toHaveBeenCalledWith('select 1', [1])
+    expect(rows).toEqual([{ query: 'select 1', params: [1] }])
+  })
 })

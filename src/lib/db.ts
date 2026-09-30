@@ -69,15 +69,21 @@ export function wrapSqlClient(sql: PostgresSql): Sql {
   // `client` é o mesmo objeto postgres.js. Tem de capturar unsafe/begin
   // originais antes de reatribuir — senão wrap.unsafe chama a si mesmo
   // (RangeError no POST /api/admin/migrations).
+  // unsafe não pode ser async: sql.begin faz sql.unsafe(...).execute() e
+  // passa { onexecute }. O handle interno da transação não tem begin.
   const unsafe = sql.unsafe.bind(sql)
-  const begin = sql.begin.bind(sql)
   const client = sql as unknown as Sql
 
-  client.begin = <T>(fn: (tx: Sql) => Promise<T>) =>
-    begin(async (tx) => fn(wrapSqlClient(tx as unknown as PostgresSql))) as Promise<T>
+  if (typeof sql.begin === 'function') {
+    const begin = sql.begin.bind(sql)
+    client.begin = <T>(fn: (tx: Sql) => Promise<T>) =>
+      begin(async (tx) => fn(wrapSqlClient(tx as unknown as PostgresSql))) as Promise<T>
+  }
 
-  client.unsafe = async (query: string, params: unknown[] = []) =>
-    unsafe(query, params as never[]) as unknown as unknown[]
+  client.unsafe = ((query: string, params?: unknown[], options?: unknown) => {
+    if (options !== undefined) return unsafe(query, (params ?? []) as never[], options as never)
+    return unsafe(query, (params ?? []) as never[])
+  }) as Sql['unsafe']
 
   return client
 }

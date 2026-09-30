@@ -38,6 +38,24 @@ export function peekPeerDatabaseUrl(
   return null
 }
 
+/** 42703 só no fallback pré-v2. Timeout (57014) e os demais erros não reconsultam. */
+function isMissingEndTimeColumn(error: unknown): boolean {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? (error as { code?: unknown }).code
+      : undefined
+  if (code != null && code !== '42703') return false
+
+  const column =
+    error && typeof error === 'object' && 'column_name' in error
+      ? (error as { column_name?: unknown }).column_name
+      : undefined
+  if (typeof column === 'string') return column === 'end_time'
+
+  const msg = error instanceof Error ? error.message : String(error)
+  return /column ["']end_time["'] does not exist/i.test(msg)
+}
+
 async function selectPeerMonthRows(sql: Sql, start: string): Promise<Record<string, unknown>[]> {
   // IG Sql usa begin/unsafe (não transaction/query do Brasil).
   try {
@@ -68,9 +86,10 @@ async function selectPeerMonthRows(sql: Sql, start: string): Promise<Record<stri
         order by day asc, start_time asc, created_at asc
       `) as Record<string, unknown>[]
     })
-  } catch {
+  } catch (error) {
+    if (!isMissingEndTimeColumn(error)) throw error
     // Peer ainda sem end_time (pré-v2): espelha início como fim.
-    return await sql.begin(async (txn) => {
+    return sql.begin(async (txn) => {
       await txn.unsafe(`select set_config('statement_timeout', $1, true)`, [
         String(PEER_STATEMENT_TIMEOUT_MS),
       ])
