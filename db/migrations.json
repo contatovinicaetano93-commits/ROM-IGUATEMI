@@ -309,6 +309,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "039_p3_presence_flags",
+      "file": "delta-p3-presence-flags.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }
