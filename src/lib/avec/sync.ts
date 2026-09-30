@@ -20,6 +20,7 @@ import {
   clearOrphanSchedulesForDay,
   clearServiceSchedule,
   ensureServiceCadence,
+  clearServiceCadence,
 } from '@/lib/services'
 import {
   fetchAllAvecReport,
@@ -68,6 +69,7 @@ import {
   parseAvecDateTime,
   guessServiceCategory,
   defaultCadenceDaysForServiceName,
+  isCadencePlaceholderServiceName,
   isNailService,
   isHairService,
 } from '@/lib/avec/normalize'
@@ -547,8 +549,20 @@ async function findOrCreateService(contactId: string, serviceName: string) {
   const match = services.find((s) => s.name.toLowerCase() === serviceName.toLowerCase())
   const cadenceDays = defaultCadenceDaysForServiceName(serviceName)
   if (match) {
+    // Placeholder genérico (Atendimento): limpa cadência inventada — sem atraso falso.
+    if (isCadencePlaceholderServiceName(serviceName)) {
+      if (match.cadence_days != null) {
+        const cleared = await clearServiceCadence(match.id)
+        if (cleared && cache) {
+          const idx = services.findIndex((s) => s.id === cleared.id)
+          if (idx >= 0) services[idx] = cleared
+        }
+        return cleared ?? { ...match, cadence_days: null }
+      }
+      return match
+    }
     // Sync antigo criava serviços sem cadence — completa na próxima visita/agenda.
-    if (match.cadence_days == null) {
+    if (match.cadence_days == null && cadenceDays != null) {
       const patched = await ensureServiceCadence(match.id, cadenceDays)
       if (patched && cache) {
         const idx = services.findIndex((s) => s.id === patched.id)

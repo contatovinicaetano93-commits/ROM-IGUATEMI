@@ -1,5 +1,8 @@
 import { createHash } from 'crypto'
+import { isCadencePlaceholderServiceName } from '@/lib/salon/cadence-placeholder'
 import { toSalonDateIso } from '@/lib/salon/format'
+
+export { isCadencePlaceholderServiceName } from '@/lib/salon/cadence-placeholder'
 
 // Normalização defensiva — colunas dos relatórios Avec variam por unidade/versão.
 
@@ -1400,6 +1403,11 @@ export function defaultCadenceDaysForCategory(category: AvecServiceCategory): nu
   }
 }
 
-export function defaultCadenceDaysForServiceName(name: string): number {
+/**
+ * Cadência padrão pelo nome. Placeholder genérico (ex.: "Atendimento") → null:
+ * não inventa ciclo de retorno para linha de fallback do sync.
+ */
+export function defaultCadenceDaysForServiceName(name: string): number | null {
+  if (isCadencePlaceholderServiceName(name)) return null
   return defaultCadenceDaysForCategory(guessServiceCategory(name))
 }

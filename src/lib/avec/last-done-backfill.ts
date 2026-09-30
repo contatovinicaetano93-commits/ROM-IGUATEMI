@@ -4,10 +4,11 @@ import {
   parseAvecDateTime,
   defaultCadenceDaysForServiceName,
   guessServiceCategory,
+  isCadencePlaceholderServiceName,
 } from '@/lib/avec/normalize'
 import { upsertContact } from '@/lib/contacts'
 import { getSql } from '@/lib/db'
-import { listServices, addService, ensureServiceCadence } from '@/lib/services'
+import { listServices, addService, ensureServiceCadence, clearServiceCadence } from '@/lib/services'
 import { todayIso } from '@/lib/salon/format'
 
 export type LastDoneBackfillStats = {
@@ -83,7 +84,14 @@ async function findOrCreateServiceForBackfill(contactId: string, serviceName: st
   const match = services.find((s) => s.name.toLowerCase() === serviceName.toLowerCase())
   const cadenceDays = defaultCadenceDaysForServiceName(serviceName)
   if (match) {
-    if (match.cadence_days == null) {
+    if (isCadencePlaceholderServiceName(serviceName)) {
+      if (match.cadence_days != null) {
+        const cleared = await clearServiceCadence(match.id)
+        return cleared ?? { ...match, cadence_days: null }
+      }
+      return match
+    }
+    if (match.cadence_days == null && cadenceDays != null) {
       const patched = await ensureServiceCadence(match.id, cadenceDays)
       return patched ?? match
     }

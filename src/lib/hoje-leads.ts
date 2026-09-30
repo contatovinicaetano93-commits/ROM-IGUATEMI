@@ -29,6 +29,7 @@ export async function countNovosHoje(day: string): Promise<number> {
           and cs.active = true
           and cs.last_done_at is not null
           and cs.cadence_days is not null
+          and lower(btrim(cs.name)) not in ('atendimento', 'servico', 'serviço', 'visita', 'service')
           and cs.last_done_at + (cs.cadence_days * interval '1 day')
             <= now() + (${DUE_SOON_DAYS} * interval '1 day')
       )

@@ -58,6 +58,26 @@ describe('enrichServices', () => {
     ])
     expect(enriched[0]?.state).toBe('due_soon')
   })
+
+  it('não marca atraso em Atendimento genérico mesmo com cadence_days', () => {
+    const enriched = enrichServices([
+      service({
+        name: 'Atendimento',
+        category: 'outro',
+        cadence_days: 30,
+        last_done_at: new Date(Date.now() - 183 * 86_400_000).toISOString(),
+      }),
+      service({
+        name: 'MANICURE - PEDICURE 185,00',
+        category: 'bem_estar',
+        cadence_days: 28,
+        last_done_at: new Date(Date.now() - 10 * 86_400_000).toISOString(),
+      }),
+    ])
+    expect(enriched[0]?.state).toBe('no_cadence')
+    expect(enriched[0]?.days_until).toBeNull()
+    expect(enriched[1]?.state).not.toBe('overdue')
+  })
 })
 
 describe('computeRecommendations', () => {

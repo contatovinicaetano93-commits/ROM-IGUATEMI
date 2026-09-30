@@ -248,6 +248,8 @@ describe('defaultCadenceDaysForCategory', () => {
     expect(defaultCadenceDaysForCategory('bem_estar')).toBe(28)
     expect(defaultCadenceDaysForCategory('outro')).toBe(30)
     expect(defaultCadenceDaysForServiceName('Corte feminino')).toBe(35)
+    expect(defaultCadenceDaysForServiceName('Atendimento')).toBeNull()
+    expect(defaultCadenceDaysForServiceName('Serviço')).toBeNull()
     expect(guessServiceCategory('Hidratação profunda')).toBe('tratamento')
   })
 })
