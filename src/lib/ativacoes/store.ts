@@ -108,12 +108,15 @@ function localUnit(): AtivacaoUnit {
   return getRomPanelId()
 }
 
-export async function listBrandActivationsForMonth(month: string): Promise<BrandActivation[]> {
-  await ensureBrandActivationsTable()
+function isMissingRelation(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return /relation .*unit_brand_activations.* does not exist|42P01/i.test(msg)
+}
+
+async function selectLocalMonthRows(month: string): Promise<Record<string, unknown>[]> {
   const sql = getSql()
   const start = `${month}-01`
-  const unit = localUnit()
-  const rows = (await sql`
+  return (await sql`
     select
       id::text as id,
       day::text as day,
@@ -135,7 +138,24 @@ export async function listBrandActivationsForMonth(month: string): Promise<Brand
       and day < (${start}::date + interval '1 month')
     order by day asc, start_time asc, created_at asc
   `) as Record<string, unknown>[]
-  return rows.map((row) => mapActivationRow(row, { unit, writable: true }))
+}
+
+/**
+ * Lista do mês — SELECT direto (sem DDL).
+ * DDL de ensure só roda se a tabela ainda não existir; evita lock de ALTER
+ * segurar o GET do calendário até o hard timeout da Vercel (300s).
+ */
+export async function listBrandActivationsForMonth(month: string): Promise<BrandActivation[]> {
+  const unit = localUnit()
+  try {
+    const rows = await selectLocalMonthRows(month)
+    return rows.map((row) => mapActivationRow(row, { unit, writable: true }))
+  } catch (error) {
+    if (!isMissingRelation(error)) throw error
+    await ensureBrandActivationsTable()
+    const rows = await selectLocalMonthRows(month)
+    return rows.map((row) => mapActivationRow(row, { unit, writable: true }))
+  }
 }
 
 export async function getBrandActivationById(id: string): Promise<BrandActivation | null> {

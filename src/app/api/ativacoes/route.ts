@@ -16,6 +16,9 @@ import {
   parseAtivacaoCondition,
 } from '@/lib/ativacoes/types'
 
+/** Calendário tem de responder rápido; peer/local lentos não podem ir a 300s. */
+export const maxDuration = 30
+
 function todayMonthBr(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',

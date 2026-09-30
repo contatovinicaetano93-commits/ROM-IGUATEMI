@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { mergeSharedActivations, peekPeerDatabaseUrl } from '@/lib/ativacoes/peer'
+import {
+  mergeSharedActivations,
+  peekPeerDatabaseUrl,
+  PEER_LIST_SOFT_MS,
+} from '@/lib/ativacoes/peer'
 import type { BrandActivation } from '@/lib/ativacoes/types'
 
 function stub(partial: Partial<BrandActivation> & Pick<BrandActivation, 'id' | 'day' | 'unit'>): BrandActivation {
@@ -43,5 +47,10 @@ describe('ativacoes peer', () => {
       [stub({ id: '2', day: '2026-09-28', unit: 'iguatemi', start_time: '10:00', end_time: '11:00', writable: false })],
     )
     expect(merged.map((a) => a.id)).toEqual(['2', '1'])
+  })
+
+  it('mantém soft-timeout do peer bem abaixo do hard limit da Vercel', () => {
+    expect(PEER_LIST_SOFT_MS).toBeLessThan(10_000)
+    expect(PEER_LIST_SOFT_MS).toBeGreaterThan(0)
   })
 })
