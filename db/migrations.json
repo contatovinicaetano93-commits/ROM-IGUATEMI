@@ -325,6 +325,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "041_auth_rate_limits",
+      "file": "delta-auth-rate-limits.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

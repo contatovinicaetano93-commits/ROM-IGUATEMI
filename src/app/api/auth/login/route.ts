@@ -18,7 +18,7 @@ import { verifyPassword } from '@/lib/intranet/password'
 export async function POST(req: NextRequest) {
   if (!isAuthEnabled()) return ok({ auth: 'disabled', role: 'admin', can_view_revenue: true })
 
-  const rate = checkLoginRateLimit(req.headers)
+  const rate = await checkLoginRateLimit(req.headers)
   if (!rate.ok) {
     const res = err('Muitas tentativas de login. Aguarde alguns minutos.', 429)
     for (const [k, v] of Object.entries(rate.responseHeaders)) res.headers.set(k, v)
