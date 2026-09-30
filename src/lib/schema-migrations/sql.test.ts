@@ -34,6 +34,22 @@ create index if not exists foo_idx on foo (id);
     const sql = `insert into t (n) values ('a--b');`
     expect(splitSqlStatements(sql)).toEqual([`insert into t (n) values ('a--b')`])
   })
+
+  it('não corta ; dentro de dollar-quote DO $$', () => {
+    const sql = `
+do $$
+begin
+  if not exists (select 1) then
+    alter table t add constraint c check (x > 0);
+  end if;
+end $$;
+create index if not exists t_idx on t (id);
+`
+    expect(splitSqlStatements(sql)).toEqual([
+      `do $$\nbegin\n  if not exists (select 1) then\n    alter table t add constraint c check (x > 0);\n  end if;\nend $$`,
+      'create index if not exists t_idx on t (id)',
+    ])
+  })
 })
 
 describe('assertSafeDbFileName', () => {
