@@ -16,6 +16,8 @@ function isProtectedPage(pathname: string) {
     pathname === '/' ||
     pathname === '/hoje' ||
     pathname === '/pipeline' ||
+    pathname === '/ativacoes' ||
+    pathname.startsWith('/ativacoes/') ||
     pathname === '/dashboard' ||
     pathname === '/contatos' ||
     pathname.startsWith('/contatos/') ||
@@ -91,7 +93,6 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/financeiro/omie/sync' ||
     pathname === '/api/director-report' ||
     pathname === '/api/lgpd/purge' ||
-    pathname === '/api/reminders/financeiro' ||
     pathname === '/api/reminders/aftercare' ||
     pathname === '/api/admin/migrations' ||
     pathname === '/api/admin/intranet-ensure' ||
@@ -109,7 +110,9 @@ export async function middleware(req: NextRequest) {
   if (isCronAuthorized(req)) return NextResponse.next()
 
   const session = await getSession(req)
-  if (!canAccessProtectedPath(pathname, session?.role, session?.modules ?? [])) {
+  if (!canAccessProtectedPath(pathname, session?.role, session?.modules ?? [], {
+    professionalName: session?.professionalName,
+  })) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Acesso restrito a este sistema' }, { status: 403 })
     }
@@ -124,6 +127,8 @@ export const config = {
     '/',
     '/hoje',
     '/pipeline',
+    '/ativacoes',
+    '/ativacoes/:path*',
     '/dashboard',
     '/contatos',
     '/contatos/:path*',

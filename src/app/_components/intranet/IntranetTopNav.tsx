@@ -17,8 +17,10 @@ const SEARCH_TARGETS = [
   { href: '/empresa', label: 'Notícias e eventos' },
   { href: '/rh', label: 'RH e benefícios' },
   { href: '/flow', label: 'Rom Flow · solicitações' },
-  { href: '/hoje', label: 'Operação do dia' },
+  { href: '/resumo-do-dia', label: 'Resumo do dia' },
   { href: '/pipeline', label: 'Agenda do dia' },
+  { href: '/ativacoes', label: 'Ativações' },
+  { href: '/meu-faturamento', label: 'Meu faturamento' },
   { href: '/contatos', label: 'Contatos' },
   { href: '/dashboard', label: 'Visão analítica' },
   { href: '/relatorios', label: 'Relatórios · visão analítica' },
@@ -43,11 +45,13 @@ export function IntranetTopNav() {
   const initial = name.trim().charAt(0).toUpperCase() || 'R'
   const role = session?.role
   const extras = parseGrantableModules(session?.modules)
+  const professionalName = session?.professionalName ?? null
+  const navOpts = { professionalName }
   const links = INTRANET_NAV.filter((item) => {
     if (!session) return false
     if (!session.auth_enabled) return true
     if (role == null) return false
-    return canSeeNavHref(item.href, role, extras)
+    return canSeeNavHref(item.href, role, extras, navOpts)
   })
 
   const results = useMemo(() => {
@@ -57,9 +61,9 @@ export function IntranetTopNav() {
       if (!(item.label.toLowerCase().includes(q) || item.href.includes(q))) return false
       if (!session || !session.auth_enabled) return true
       if (role == null) return false
-      return canSeeNavHref(item.href, role, extras)
+      return canSeeNavHref(item.href, role, extras, navOpts)
     }).slice(0, 8)
-  }, [extras, query, role, session])
+  }, [extras, professionalName, query, role, session])
 
   return (
     <>

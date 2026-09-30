@@ -103,6 +103,7 @@ describe('createWelcomeEmailContent', () => {
         status: 'active',
         can_publish: false,
         professional_name: 'Romeu Felipe',
+        avec_pro_id: null,
         companyIds: [],
         areaIds: [],
         modules: [],

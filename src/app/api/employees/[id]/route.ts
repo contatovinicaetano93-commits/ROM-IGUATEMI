@@ -24,10 +24,22 @@ export async function PATCH(
         : typeof body.professional_name === 'string'
           ? body.professional_name
           : null,
+      body.avec_pro_id === undefined
+        ? undefined
+        : typeof body.avec_pro_id === 'string'
+          ? body.avec_pro_id
+          : null,
     )
     return ok({ employee })
   } catch (error) {
-    return err(error instanceof Error ? error.message : 'Falha ao atualizar sistemas', 400)
+    const msg = error instanceof Error ? error.message : String(error)
+    if (/intranet_employee_modules_module_key_check/i.test(msg)) {
+      return err(
+        'Módulo de acesso inválido para o banco desta unidade. Atualize o schema da intranet (Ativações) e tente de novo.',
+        400,
+      )
+    }
+    return err(msg || 'Falha ao atualizar sistemas', 400)
   }
 }
 

@@ -5,6 +5,10 @@ import { requireSession } from '@/lib/auth'
 import { getContactById, logEvent } from '@/lib/contacts'
 import { addService, listServices, SERVICE_CATEGORIES } from '@/lib/services'
 import { enrichServices } from '@/lib/recommendations'
+import {
+  contactBelongsToProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -17,6 +21,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     const contact = await getContactById(id)
     if (!contact) return err('Contato não encontrado', 404)
     if (contact.anonymized_at) return err('Contato anonimizado', 410)
+
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const allowed = await contactBelongsToProfessional(id, proScope)
+      if (!allowed) return err('Contato não encontrado', 404)
+    }
 
     const canViewRevenue = auth.session.can_view_revenue
     const services = enrichServices(await listServices(id)).map((s) =>
@@ -39,10 +49,19 @@ const schema = z.object({
 
 export async function POST(req: NextRequest, ctx: Ctx) {
   try {
+    const auth = await requireSession(req)
+    if (!auth.ok) return err(auth.message, auth.status)
+
     const { id } = await ctx.params
     const contact = await getContactById(id)
     if (!contact) return err('Contato não encontrado', 404)
     if (contact.anonymized_at) return err('Contato anonimizado', 410)
+
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const allowed = await contactBelongsToProfessional(id, proScope)
+      if (!allowed) return err('Contato não encontrado', 404)
+    }
 
     const payload = schema.parse(await req.json())
     const service = await addService(id, payload)

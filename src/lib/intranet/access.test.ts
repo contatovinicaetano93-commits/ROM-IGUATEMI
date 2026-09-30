@@ -59,4 +59,32 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/api/kpis', 'staff', [])).toBe(false)
     expect(canAccessProtectedPath('/dashboard', 'staff', [])).toBe(false)
   })
+
+  it('resumo do dia é self-serve — página + API sem grant de dashboard', () => {
+    expect(canAccessProtectedPath('/resumo-do-dia', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/kpis/resumo-do-dia', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/kpis/resumo-do-dia', 'estoque', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/kpis/resumo-do-dia', 'financeiro', [])).toBe(true)
+    expect(canAccessProtectedPath('/resumo-do-dia', 'admin', [])).toBe(true)
+  })
+
+  it('profissional (staff + professional_name) sem Balcão/Pós-venda/Operação', () => {
+    const opts = { professionalName: 'Alison Alvarez' }
+    expect(canAccessProtectedPath('/hoje', 'staff', [], opts)).toBe(false)
+    expect(canAccessProtectedPath('/recepcao', 'staff', [], opts)).toBe(false)
+    expect(canAccessProtectedPath('/pos-venda', 'staff', [], opts)).toBe(false)
+    expect(canAccessProtectedPath('/api/hoje', 'staff', [], opts)).toBe(false)
+    expect(canAccessProtectedPath('/pipeline', 'staff', [], opts)).toBe(true)
+    expect(canAccessProtectedPath('/contatos', 'staff', [], opts)).toBe(true)
+    expect(canAccessProtectedPath('/meu-faturamento', 'staff', [], opts)).toBe(true)
+    expect(canAccessProtectedPath('/resumo-do-dia', 'staff', [], opts)).toBe(true)
+    expect(canAccessProtectedPath('/api/kpis/resumo-do-dia', 'staff', [], opts)).toBe(true)
+  })
+
+  it('staff genérico ainda alcança deep links de Operação (redirect na página)', () => {
+    expect(canAccessProtectedPath('/hoje', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/recepcao', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/pos-venda', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/hoje', 'staff', [])).toBe(true)
+  })
 })

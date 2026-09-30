@@ -3,7 +3,13 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isAuthorized } from '@/lib/auth'
 import { isAvecLoginConfigured, mintAvecApiToken } from '@/lib/avec/refresh-token'
-import { loadRuntimeAvecApiToken, saveAvecApiToken } from '@/lib/avec/token-store'
+import {
+  loadRuntimeAvecApiToken,
+  recordAvecTokenRefreshResult,
+  saveAvecApiToken,
+} from '@/lib/avec/token-store'
+import { notifyOpsAvecAlert } from '@/lib/whatsapp/staff-alert'
+import { getBrand } from '@/lib/brand'
 
 export const maxDuration = 60
 
@@ -20,6 +26,10 @@ async function authorize(req: NextRequest) {
 
 async function execute(req: NextRequest) {
   if (!isAvecLoginConfigured()) {
+    await recordAvecTokenRefreshResult({
+      ok: false,
+      error: 'AVEC_LOGIN_EMAIL/PASSWORD/UNIT_ID ausentes',
+    })
     return err(
       'Refresh automático não configurado — defina AVEC_LOGIN_EMAIL, AVEC_LOGIN_PASSWORD e AVEC_UNIT_ID',
       503,
@@ -34,26 +44,41 @@ async function execute(req: NextRequest) {
   const current = runtime ?? process.env.AVEC_API_TOKEN ?? null
 
   // Cron 3h: se ainda restam ≥4h, não renova (evita churn).
-  const minted = await mintAvecApiToken({
-    force,
-    currentToken: current,
-    minHoursLeft: force ? 0 : 4,
-  })
+  try {
+    const minted = await mintAvecApiToken({
+      force,
+      currentToken: current,
+      minHoursLeft: force ? 0 : 4,
+    })
 
-  if (!minted.skipped) {
-    await saveAvecApiToken(minted.token)
+    if (!minted.skipped) {
+      await saveAvecApiToken(minted.token)
+    } else {
+      await recordAvecTokenRefreshResult({
+        ok: true,
+        hours_left: minted.hours_left,
+      })
+    }
+
+    return ok({
+      refreshed: !minted.skipped,
+      skipped: minted.skipped,
+      hours_left: Math.round(minted.hours_left * 100) / 100,
+      salon_id: minted.salon_id,
+      schedule: '30 */3 * * *',
+      note: minted.skipped
+        ? 'Token ainda válido (≥4h) — refresh adiado'
+        : 'Token Avec renovado e salvo no banco (sync usa na hora)',
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await recordAvecTokenRefreshResult({ ok: false, error: msg })
+    void notifyOpsAvecAlert(
+      `❌ Refresh token Avec falhou — ${getBrand().displayName}\n${msg}`,
+      { dedupeKey: 'avec_token_refresh', minIntervalMs: 60 * 60 * 1000 },
+    ).catch(() => {})
+    throw e
   }
-
-  return ok({
-    refreshed: !minted.skipped,
-    skipped: minted.skipped,
-    hours_left: Math.round(minted.hours_left * 100) / 100,
-    salon_id: minted.salon_id,
-    schedule: '30 */3 * * *',
-    note: minted.skipped
-      ? 'Token ainda válido (≥4h) — refresh adiado'
-      : 'Token Avec renovado e salvo no banco (sync usa na hora)',
-  })
 }
 
 export async function GET(req: NextRequest) {

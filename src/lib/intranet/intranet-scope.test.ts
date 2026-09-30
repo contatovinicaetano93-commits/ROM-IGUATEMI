@@ -25,19 +25,18 @@ describe('intranet paths', () => {
 })
 
 describe('intranet top bar', () => {
-  it('segue o mapa do painel admin: Home, gestão, notícias, agenda e visão', () => {
+  it('segue o mapa do painel: Home, gestão, notícias, dia, agenda, ativações e visão (sem Balcão/Pós/Operação)', () => {
     expect(INTRANET_NAV.map((item) => item.label)).toEqual([
       'Home',
       'Gestão de usuário',
       'Notícias e eventos',
       'Rom Flow',
+      'Resumo do dia',
       'Meu faturamento',
-      'Recepção',
-      'Pós-venda',
       'Financeiro',
       'Estoque',
-      'Operação do dia',
       'Agenda do dia',
+      'Ativações',
       'Visão analítica',
       'Contatos',
     ])
@@ -46,22 +45,24 @@ describe('intranet top bar', () => {
       'Usuários',
       'Notícias',
       'Rom Flow',
+      'Dia',
       'Faturamento',
-      'Balcão',
-      'Pós-venda',
       'Financeiro',
       'Estoque',
-      'Operação',
       'Agenda',
+      'Ativações',
       'Visão',
       'Contatos',
     ])
+    expect(INTRANET_NAV.find((item) => item.label === 'Resumo do dia')?.href).toBe('/resumo-do-dia')
     expect(INTRANET_NAV.find((item) => item.label === 'Agenda do dia')?.href).toBe('/pipeline')
+    expect(INTRANET_NAV.find((item) => item.label === 'Ativações')?.href).toBe('/ativacoes')
     expect(INTRANET_NAV.find((item) => item.label === 'Visão analítica')?.href).toBe('/dashboard')
     expect(INTRANET_NAV.find((item) => item.label === 'Meu faturamento')?.href).toBe('/meu-faturamento')
-    expect(INTRANET_NAV.find((item) => item.label === 'Recepção')?.href).toBe('/recepcao')
-    expect(INTRANET_NAV.find((item) => item.label === 'Pós-venda')?.href).toBe('/pos-venda')
     const navHrefs = INTRANET_NAV.map((item) => item.href as string)
+    expect(navHrefs).not.toContain('/recepcao')
+    expect(navHrefs).not.toContain('/pos-venda')
+    expect(navHrefs).not.toContain('/hoje')
     expect(navHrefs).not.toContain('/onboarding')
     expect(navHrefs).not.toContain('/ajuda')
   })
@@ -76,6 +77,7 @@ describe('intranet section label', () => {
     expect(intranetSectionLabel('/dashboard')).toBe('Visão analítica')
     expect(intranetSectionLabel('/relatorios')).toBe('Visão analítica')
     expect(intranetSectionLabel('/pipeline')).toBe('Agenda do dia')
+    expect(intranetSectionLabel('/resumo-do-dia')).toBe('Resumo do dia')
     expect(intranetSectionLabel('/auditoria')).toBe('Auditoria')
     expect(intranetSectionLabel('/meu-faturamento')).toBe('Meu faturamento')
     expect(intranetSectionLabel('/recepcao')).toBe('Recepção')

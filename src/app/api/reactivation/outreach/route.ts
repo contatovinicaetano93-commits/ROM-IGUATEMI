@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireAuth } from '@/lib/auth'
+import { MemoryCache } from '@/lib/cache'
 import { logReactivationOutreach } from '@/lib/salon/reactivation-kpi'
 
 const schema = z.object({
@@ -32,6 +33,8 @@ export async function POST(req: NextRequest) {
       listMode: body.listMode,
       lastDoneAtAtSend: body.lastDoneAtAtSend,
     })
+    MemoryCache.deletePrefix('contacts:ativados:')
+    MemoryCache.deletePrefix('contacts:queue-counts:')
     return ok(result)
   } catch (e) {
     return handleError(e)

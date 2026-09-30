@@ -224,6 +224,16 @@ export function withRequiredAvecReportParams(
         salao_id: params.salao_id ?? unit ?? undefined,
       }
     }
+    case '0029': {
+      // Descontos linha a linha — profissional_id obrigatório (sem id a Avec devolve 400).
+      const range = currentMonthRange()
+      return {
+        ...params,
+        inicio: params.inicio ?? range.inicio,
+        fim: params.fim ?? range.fim,
+        profissional_id: params.profissional_id,
+      }
+    }
     default:
       return params
   }

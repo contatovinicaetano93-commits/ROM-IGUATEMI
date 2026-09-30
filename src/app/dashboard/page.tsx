@@ -772,9 +772,9 @@ export default function DashboardPage() {
           </div>
         </SectionCard>
         <p className="text-xs text-muted">
-          Operação do dia:{' '}
-          <Link href="/hoje" className="text-gold hover:underline">
-            Hoje
+          Agenda do dia:{' '}
+          <Link href="/pipeline" className="text-gold hover:underline">
+            Agenda
           </Link>
           {' · '}
           Caixa:{' '}

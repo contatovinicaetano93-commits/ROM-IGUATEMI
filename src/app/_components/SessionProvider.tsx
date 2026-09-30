@@ -14,6 +14,8 @@ export interface ClientSession {
   employeeId?: string | null
   canPublish?: boolean
   modules?: string[]
+  /** Nome Avec — escopo de carteira do profissional; menu ops shells some para todos. */
+  professionalName?: string | null
   staff_login_configured?: boolean
 }
 

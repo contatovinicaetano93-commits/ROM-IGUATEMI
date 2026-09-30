@@ -7,6 +7,10 @@ import { enrichServices } from '@/lib/recommendations'
 import { getContactRecommendations } from '@/lib/salon/recommendations'
 import { resolveBriefCache } from '@/lib/salon/brief-cache'
 import { generateBrief } from '@/lib/brief'
+import {
+  contactBelongsToProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -19,6 +23,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     const contact = await getContactById(id)
     if (!contact) return err('Contato não encontrado', 404)
     if (contact.anonymized_at) return err('Contato anonimizado', 410)
+
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const allowed = await contactBelongsToProfessional(id, proScope)
+      if (!allowed) return err('Contato não encontrado', 404)
+    }
 
     const canViewRevenue = auth.session.can_view_revenue
     const rawServices = await listServices(id)
@@ -41,7 +51,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     }))
 
     const cached = await resolveBriefCache(contact, servicesForBrief, recommendations, () =>
-      generateBrief(contact, servicesForBrief, recommendations)
+      generateBrief(contact, servicesForBrief, recommendations),
     )
 
     if (!cached.from_cache) {

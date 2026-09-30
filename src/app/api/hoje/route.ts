@@ -21,6 +21,13 @@ import { compareScheduleByTimeThenName } from '@/lib/salon/sort'
 import { getReactivationKpis } from '@/lib/salon/reactivation-kpi'
 import { countNewContactsNotInAvec } from '@/lib/contact-summary'
 import { countWhatsappNovosToday } from '@/lib/hoje-leads'
+import {
+  filterByOwnedContactIds,
+  filterByProfessionalName,
+  listContactIdsOwnedByProfessional,
+  professionalScopeCacheKey,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 /** Painel Hoje — métricas vêm do sync (read-only); cache curto no isolate. */
 export const maxDuration = 30
@@ -35,9 +42,11 @@ export async function GET(req: NextRequest) {
     const role = auth.session.role
     const canViewRevenue = auth.session.can_view_revenue
     const day = todayIso()
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    const scopeKey = professionalScopeCacheKey(proScope)
 
     const payload = await ttlGetOrSet(
-      `hoje:v8:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}`,
+      `hoje:v9:${day}:${role}:${canViewRevenue ? 'rev' : 'norev'}:pro:${scopeKey}`,
       HOJE_CACHE_TTL_MS,
       async () => {
         // Sequencial no pooler max:1 — Promise.all competia consigo mesmo e com outras lambdas.
@@ -45,10 +54,13 @@ export async function GET(req: NextRequest) {
         const playbookAll = await listActionItems({ limit: 60 })
         const scheduleRaw = await listTodaySchedules(day, 200)
         // novos: paridade com Contatos · Novos (últimos NOVOS_WINDOW_DAYS).
-        const [novos, whatsapp_novos] = await Promise.all([
-          countNewContactsNotInAvec({ day }),
-          countWhatsappNovosToday(day),
-        ])
+        // Profissional: não carrega leads/KPI unitários (sigilo).
+        const [novos, whatsapp_novos] = proScope
+          ? [null as number | null, null as number | null]
+          : await Promise.all([
+              countNewContactsNotInAvec({ day }),
+              countWhatsappNovosToday(day),
+            ])
         // Hoje = caixa/agenda: badge pelo fast. Full só entra se não houver fast
         // (evita full parcial em P1 0107 pintar KPIs "incompleto" por horas).
         // Full KPI = ops/agenda/legado all — nunca catalog (dump não é analytics).
@@ -60,43 +72,71 @@ export async function GET(req: NextRequest) {
         ])
         const avecFull = pickNewestUsableAvecRun([fullOps, fullAgenda, fullLegacy])
         const avecLast = pickHojeAvecSyncRun(avecFast, avecFull)
-        const reactivation = await getReactivationKpis().catch(() => ({
-          window_days: 21,
-          contacted: 0,
-          reactivated: 0,
-          rate: null as number | null,
-        }))
+        const reactivationUnit = proScope
+          ? null
+          : await getReactivationKpis().catch(() => ({
+              window_days: 21,
+              contacted: 0,
+              reactivated: 0,
+              rate: null as number | null,
+            }))
 
         const playbookSlice = slicePlaybookForRole(playbookAll, role)
-        const playbook = playbookSlice.items
+        let playbook = playbookSlice.items
+        let scheduleToday = [...scheduleRaw].sort(compareScheduleByTimeThenName)
 
-        const scheduleToday = [...scheduleRaw].sort(compareScheduleByTimeThenName)
+        if (proScope) {
+          scheduleToday = filterByProfessionalName(scheduleToday, proScope)
+          const ownedIds = await listContactIdsOwnedByProfessional(proScope)
+          playbook = filterByOwnedContactIds(playbook, ownedIds)
+        }
+
         const scheduleHeads = countDistinctContactIds(scheduleToday)
         const leads = { novos, whatsapp_novos }
         // Sem linha de métricas do dia: não inventar 0 operacional — null → UI "—".
         // Paridade Cérebro: CS/agenda vs metrics Avec (nunca appointments < attended).
-        const appointmentsHeads = resolveAppointmentsHeads({
-          metricAppt: salonRaw?.appointments,
-          scheduleHeads,
-          attended: salonRaw?.attended,
-        })
-        const salonBase = salonRaw
-          ? { ...salonRaw, appointments: appointmentsHeads }
-          : {
+        // Profissional: só cabeças da própria agenda — não misturar KPI da unidade.
+        const appointmentsHeads = proScope
+          ? scheduleHeads
+          : resolveAppointmentsHeads({
+              metricAppt: salonRaw?.appointments,
+              scheduleHeads,
+              attended: salonRaw?.attended,
+            })
+        const salonBase = proScope
+          ? {
               day,
               revenue: null as number | null,
               appointments: appointmentsHeads,
               attended: null as number | null,
               no_shows: null as number | null,
               cancelled: null as number | null,
-              new_clients: leads.novos,
+              new_clients: null as number | null,
               returning_clients: null as number | null,
-              ticket_avg: null,
+              ticket_avg: null as number | null,
               service_duration_sum_minutes: 0,
               service_duration_count: 0,
               updated_at: new Date().toISOString(),
               _metrics_missing: true as const,
+              _professional_scope: true as const,
             }
+          : salonRaw
+            ? { ...salonRaw, appointments: appointmentsHeads }
+            : {
+                day,
+                revenue: null as number | null,
+                appointments: appointmentsHeads,
+                attended: null as number | null,
+                no_shows: null as number | null,
+                cancelled: null as number | null,
+                new_clients: leads.novos,
+                returning_clients: null as number | null,
+                ticket_avg: null,
+                service_duration_sum_minutes: 0,
+                service_duration_count: 0,
+                updated_at: new Date().toISOString(),
+                _metrics_missing: true as const,
+              }
 
         const tmTodayMinutes =
           salonBase.service_duration_count > 0
@@ -105,7 +145,7 @@ export async function GET(req: NextRequest) {
               ) / 10
             : null
 
-        const salon = canViewRevenue
+        const salon = canViewRevenue && !proScope
           ? salonBase
           : {
               ...salonBase,
@@ -113,14 +153,22 @@ export async function GET(req: NextRequest) {
               ticket_avg: null,
             }
 
-        const intelligence = canViewRevenue && salonRaw ? computeSalonIntelligence(salonRaw) : null
+        const intelligence =
+          canViewRevenue && salonRaw && !proScope ? computeSalonIntelligence(salonRaw) : null
+
+        const reactivation = reactivationUnit ?? {
+          window_days: 21,
+          contacted: null as number | null,
+          reactivated: null as number | null,
+          rate: null as number | null,
+        }
 
         return {
           day,
           salon,
           tm_today: { avg_minutes: tmTodayMinutes, sample_count: salonBase.service_duration_count },
           intelligence,
-          can_view_revenue: canViewRevenue,
+          can_view_revenue: canViewRevenue && !proScope,
           role,
           playbook,
           playbook_focus: playbookSlice.focus,
@@ -135,6 +183,7 @@ export async function GET(req: NextRequest) {
           overdue_contacts: countOverdueContacts(playbook),
           overdue_total: countOverdueServices(playbook),
           reactivation,
+          professional_scope: proScope,
           avec: {
             configured: isAvecConfigured(),
             last: avecLast,

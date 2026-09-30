@@ -8,6 +8,7 @@ import { AuditLogger } from '@/lib/audit'
 import { hashPassword, MIN_EMPLOYEE_PASSWORD } from '@/lib/intranet/password'
 import { companiesForPanel } from '@/lib/intranet/companies'
 import { ensureIntranetSchema } from '@/lib/intranet/ensure-schema'
+import { ensureGrantableModuleKeyCheck } from '@/lib/intranet/ensure-module-key-check'
 import { extrasBeyondRole, parseGrantableModules, type GrantableModuleKey } from '@/lib/intranet/modules'
 import { getRomPanelId } from '@/lib/brand'
 
@@ -22,6 +23,8 @@ export type EmployeeRecord = {
   can_publish: boolean
   /** Nome como aparece no Avec 0021 — usado em Meu faturamento. */
   professional_name: string | null
+  /** Id Avec do elenco (roster) — preferido sobre match por nome. */
+  avec_pro_id: string | null
   companyIds: string[]
   areaIds: RequestArea[]
   modules: GrantableModuleKey[]
@@ -72,7 +75,7 @@ export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_ha
     await ensureIntranetSchema()
     const sql = getIntranetSql()
     const rows = (await sql`
-      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.professional_name, e.created_at,
+      select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.professional_name, e.avec_pro_id, e.created_at,
         coalesce((select array_agg(company_id) from intranet_employee_companies c where c.employee_id = e.id), '{}') as company_ids,
         coalesce((select array_agg(area) from intranet_employee_areas a where a.employee_id = e.id), '{}') as area_ids,
         coalesce((select array_agg(module_key) from intranet_employee_modules m where m.employee_id = e.id), '{}') as module_keys
@@ -98,6 +101,7 @@ export async function createEmployee(input: {
   flow_role: FlowRole
   can_publish?: boolean
   professional_name?: string | null
+  avec_pro_id?: string | null
   companyIds?: string[]
   areaIds?: RequestArea[]
   modules?: GrantableModuleKey[]
@@ -119,8 +123,12 @@ export async function createEmployee(input: {
     typeof input.professional_name === 'string' && input.professional_name.trim()
       ? input.professional_name.trim()
       : null
+  const avecProId =
+    typeof input.avec_pro_id === 'string' && input.avec_pro_id.trim()
+      ? input.avec_pro_id.trim()
+      : null
   const rows = (await sql`
-    insert into intranet_employees (email, name, password_hash, panel_role, flow_role, can_publish, professional_name)
+    insert into intranet_employees (email, name, password_hash, panel_role, flow_role, can_publish, professional_name, avec_pro_id)
     values (
       ${input.email.trim().toLowerCase()},
       ${input.name.trim()},
@@ -128,30 +136,43 @@ export async function createEmployee(input: {
       ${input.panel_role},
       ${flowRole},
       ${canPublish},
-      ${professionalName}
+      ${professionalName},
+      ${avecProId}
     )
     returning *
   `) as Array<Record<string, unknown>>
   const created = rows[0]
   if (!created) throw new Error('Falha ao criar colaborador.')
   const id = String(created.id)
-  for (const companyId of companyIds) {
-    await sql`
-      insert into intranet_employee_companies (employee_id, company_id)
-      values (${id}::uuid, ${companyId})
-      on conflict do nothing
-    `
-  }
   const areas = areaIds.length > 0 ? areaIds : flowRole === 'master' ? ['financeiro', 'manutencao', 'compras', 'rh'] : areaIds
-  for (const area of areas) {
-    await sql`
-      insert into intranet_employee_areas (employee_id, area)
-      values (${id}::uuid, ${area})
-      on conflict do nothing
-    `
-  }
   const modules = extrasBeyondRole(input.panel_role, parseGrantableModules(input.modules))
-  await replaceEmployeeModules(id, modules)
+  try {
+    for (const companyId of companyIds) {
+      await sql`
+        insert into intranet_employee_companies (employee_id, company_id)
+        values (${id}::uuid, ${companyId})
+        on conflict do nothing
+      `
+    }
+    for (const area of areas) {
+      await sql`
+        insert into intranet_employee_areas (employee_id, area)
+        values (${id}::uuid, ${area})
+        on conflict do nothing
+      `
+    }
+    await replaceEmployeeModules(id, modules)
+  } catch (error) {
+    // Evita colaborador “pela metade” (nome na lista sem módulos) quando o check de module_key falha.
+    await sql`delete from intranet_employees where id = ${id}::uuid`.catch(() => {})
+    const msg = error instanceof Error ? error.message : String(error)
+    if (/intranet_employee_modules_module_key_check/i.test(msg)) {
+      throw new Error(
+        'Módulo de acesso inválido para o banco desta unidade. Atualize o schema da intranet (Ativações) e tente de novo.',
+      )
+    }
+    throw error
+  }
   const mapped = mapEmployee({
     ...created,
     company_ids: companyIds,
@@ -228,7 +249,9 @@ async function replaceEmployeeAreas(id: string, areaIds: RequestArea[]): Promise
 async function replaceEmployeeModules(id: string, modules: GrantableModuleKey[]): Promise<void> {
   await ensureIntranetSchema()
   const sql = getIntranetSql()
-  await sql`delete from intranet_employee_modules where employee_id = ${id}::uuid`
+  // CHECK antigo sem 'ativacoes' derrubava o Salvar; ampliar antes de gravar.
+  await ensureGrantableModuleKeyCheck(sql)
+  // Upsert primeiro; só remove o que sobrou — se um insert falhar, não zera o acesso.
   for (const key of modules) {
     await sql`
       insert into intranet_employee_modules (employee_id, module_key)
@@ -236,6 +259,15 @@ async function replaceEmployeeModules(id: string, modules: GrantableModuleKey[])
       on conflict do nothing
     `
   }
+  if (modules.length === 0) {
+    await sql`delete from intranet_employee_modules where employee_id = ${id}::uuid`
+    return
+  }
+  await sql`
+    delete from intranet_employee_modules
+    where employee_id = ${id}::uuid
+      and module_key not in ${sql(modules)}
+  `
 }
 
 async function countActiveMasters(): Promise<number> {
@@ -294,19 +326,32 @@ export async function updateEmployeeModules(
   userId: string,
   selected: readonly GrantableModuleKey[],
   professionalName?: string | null,
+  avecProId?: string | null,
 ): Promise<Omit<EmployeeRecord, 'password_hash'>> {
   const current = await findEmployeeById(userId)
   if (!current) throw new Error('Usuário não encontrado.')
   const extras = extrasBeyondRole(current.panel_role, parseGrantableModules(selected))
   await replaceEmployeeModules(userId, extras)
-  if (professionalName !== undefined) {
+  if (professionalName !== undefined || avecProId !== undefined) {
     await ensureIntranetSchema()
     const sql = getIntranetSql()
     const nextName =
-      typeof professionalName === 'string' && professionalName.trim() ? professionalName.trim() : null
+      professionalName === undefined
+        ? current.professional_name
+        : typeof professionalName === 'string' && professionalName.trim()
+          ? professionalName.trim()
+          : null
+    const nextAvecId =
+      avecProId === undefined
+        ? current.avec_pro_id
+        : typeof avecProId === 'string' && avecProId.trim()
+          ? avecProId.trim()
+          : null
     await sql`
       update intranet_employees
-      set professional_name = ${nextName}, updated_at = now()
+      set professional_name = ${nextName},
+          avec_pro_id = ${nextAvecId},
+          updated_at = now()
       where id = ${userId}::uuid
     `
   }
@@ -314,6 +359,7 @@ export async function updateEmployeeModules(
     from: current.modules,
     to: extras,
     professional_name: professionalName === undefined ? undefined : professionalName,
+    avec_pro_id: avecProId === undefined ? undefined : avecProId,
   })
   const updated = await findEmployeeById(userId)
   if (!updated) throw new Error('Usuário não encontrado.')
@@ -422,6 +468,10 @@ function mapEmployee(row: Record<string, unknown>): EmployeeRecord {
     professional_name:
       typeof row.professional_name === 'string' && row.professional_name.trim()
         ? row.professional_name.trim()
+        : null,
+    avec_pro_id:
+      typeof row.avec_pro_id === 'string' && row.avec_pro_id.trim()
+        ? row.avec_pro_id.trim()
         : null,
     companyIds,
     areaIds,

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireAuth } from '@/lib/auth'
+import { requireSession } from '@/lib/auth'
 import { getContactById, logEvent, updateContact } from '@/lib/contacts'
 import { getSql } from '@/lib/db'
 import {
@@ -11,6 +11,10 @@ import {
   clearServiceSchedule,
   type ClientService,
 } from '@/lib/services'
+import {
+  contactBelongsToProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -32,7 +36,7 @@ async function getServiceById(id: string): Promise<ClientService | null> {
 // PATCH /api/services/[id] — fluxo guiado de recorrência e agendamento.
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   try {
-    const auth = await requireAuth(req)
+    const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { id } = await ctx.params
@@ -42,6 +46,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (!existing) return err('Serviço não encontrado', 404)
     const contact = await getContactById(existing.contact_id)
     if (contact?.anonymized_at) return err('Contato anonimizado', 410)
+
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const allowed = await contactBelongsToProfessional(existing.contact_id, proScope)
+      if (!allowed) return err('Serviço não encontrado', 404)
+    }
 
     let service: ClientService | null
     if (body.action === 'done') service = await markServiceDone(id)

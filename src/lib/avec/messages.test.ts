@@ -217,6 +217,12 @@ describe('isSoftAvecSyncWarning', () => {
     expect(isSoftAvecSyncWarning('heal importado: timeout no update')).toBe(true)
     expect(isSoftAvecSyncWarning('snapshot 0004: disk full')).toBe(true)
     expect(isSoftAvecSyncWarning('Falha ao gravar snapshot')).toBe(false)
+    // 8123 pulado por budget é HARD — monitor / health podem ficar vermelhos.
+    expect(
+      isSoftAvecSyncWarning(
+        '8123: comissões puladas — orçamento esgotado (Meu faturamento sem refresh)',
+      ),
+    ).toBe(false)
     expect(
       isSoftAvecPeripheralError('P1 0107: The operation was aborted due to timeout'),
     ).toBe(true)

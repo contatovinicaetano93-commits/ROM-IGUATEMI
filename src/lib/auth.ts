@@ -17,6 +17,8 @@ export interface AuthSession {
   employeeId: string | null
   canPublish: boolean
   modules: GrantableModuleKey[]
+  /** Nome Avec vinculado — cargo Profissional / Meu faturamento. */
+  professionalName: string | null
 }
 
 export function canPublishContent(session: AuthSession | null | undefined) {
@@ -25,6 +27,10 @@ export function canPublishContent(session: AuthSession | null | undefined) {
 }
 
 function sessionFromRole(user: string, role: AuthRole, extra?: Partial<AuthSession>): AuthSession {
+  const professionalName =
+    typeof extra?.professionalName === 'string' && extra.professionalName.trim()
+      ? extra.professionalName.trim()
+      : null
   return {
     user,
     role,
@@ -33,6 +39,7 @@ function sessionFromRole(user: string, role: AuthRole, extra?: Partial<AuthSessi
     employeeId: extra?.employeeId ?? null,
     canPublish: extra?.canPublish ?? (role === 'admin' || role === 'mkt'),
     modules: parseGrantableModules(extra?.modules ?? []),
+    professionalName,
   }
 }
 
@@ -213,6 +220,8 @@ type V3Claims = {
   e: string | null
   p: boolean
   m?: GrantableModuleKey[]
+  /** professional_name Avec (opcional — cookies antigos sem pn). */
+  pn?: string | null
 }
 
 function utf8ToB64Url(value: string): string {
@@ -249,7 +258,9 @@ function parseAuthRole(value: unknown): AuthRole | null {
 export function buildAuthSession(
   user: string,
   role: AuthRole,
-  extra?: Partial<Pick<AuthSession, 'displayName' | 'employeeId' | 'canPublish' | 'modules'>>,
+  extra?: Partial<
+    Pick<AuthSession, 'displayName' | 'employeeId' | 'canPublish' | 'modules' | 'professionalName'>
+  >,
 ): AuthSession {
   return sessionFromRole(user, role, extra)
 }
@@ -266,6 +277,7 @@ export async function createV3SessionToken(session: AuthSession, expiresAtMs?: n
     e: session.employeeId,
     p: session.canPublish,
     m: session.modules,
+    pn: session.professionalName,
   }
   const payload = utf8ToB64Url(JSON.stringify(claims))
   const sig = await hmacHex(secret, `rom-session-v3:${exp}:${payload}`)
@@ -296,6 +308,8 @@ async function parseV3SessionToken(
         employeeId: typeof claims.e === 'string' && claims.e ? claims.e : null,
         canPublish: Boolean(claims.p) || role === 'admin' || role === 'mkt',
         modules: parseGrantableModules(claims.m),
+        professionalName:
+          typeof claims.pn === 'string' && claims.pn.trim() ? claims.pn.trim() : null,
       }),
     }
   } catch {

@@ -3,6 +3,10 @@ import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { getContactById } from '@/lib/contacts'
 import { listServiceVisits, getServiceVisitStats, SERVICE_VISIT_PAGE_SIZE } from '@/lib/services'
+import {
+  contactBelongsToProfessional,
+  resolveSessionProfessionalScope,
+} from '@/lib/intranet/professional-scope'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -16,6 +20,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     const contact = await getContactById(id)
     if (!contact) return err('Contato não encontrado', 404)
     if (contact.anonymized_at) return err('Contato anonimizado', 410)
+
+    const proScope = await resolveSessionProfessionalScope(auth.session)
+    if (proScope) {
+      const allowed = await contactBelongsToProfessional(id, proScope)
+      if (!allowed) return err('Contato não encontrado', 404)
+    }
 
     const url = new URL(req.url)
     const limitRaw = Number(url.searchParams.get('limit') ?? SERVICE_VISIT_PAGE_SIZE)

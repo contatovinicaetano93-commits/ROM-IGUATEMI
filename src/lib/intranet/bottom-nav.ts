@@ -15,11 +15,11 @@ const DOCK_CAP = 4
 
 /** Ordem de preferência do dock por papel (Home sempre entra primeiro). */
 const ROLE_DOCK_PRIORITY: Record<AuthRole, readonly string[]> = {
-  admin: ['/', '/financeiro', '/flow', '/hoje', '/dashboard', '/estoque', '/contatos', '/pipeline'],
-  financeiro: ['/', '/financeiro', '/dashboard', '/relatorios', '/estoque', '/flow', '/hoje'],
-  estoque: ['/', '/estoque', '/flow', '/hoje', '/financeiro'],
-  staff: ['/', '/contatos', '/pipeline', '/flow', '/hoje', '/meu-faturamento', '/recepcao', '/pos-venda'],
-  mkt: ['/', '/empresa', '/contatos', '/pipeline', '/flow', '/hoje'],
+  admin: ['/', '/resumo-do-dia', '/financeiro', '/flow', '/dashboard', '/estoque', '/contatos', '/pipeline'],
+  financeiro: ['/', '/resumo-do-dia', '/financeiro', '/dashboard', '/relatorios', '/estoque', '/flow'],
+  estoque: ['/', '/estoque', '/flow', '/financeiro'],
+  staff: ['/', '/resumo-do-dia', '/contatos', '/pipeline', '/flow', '/meu-faturamento'],
+  mkt: ['/', '/empresa', '/ativacoes', '/contatos', '/pipeline', '/flow'],
 }
 
 const DOCK_LABELS: Record<string, string> = {
@@ -28,8 +28,10 @@ const DOCK_LABELS: Record<string, string> = {
   '/estoque': 'Estoque',
   '/flow': 'Tarefas',
   '/hoje': 'Operação',
+  '/resumo-do-dia': 'Dia',
   '/contatos': 'Contatos',
   '/pipeline': 'Agenda',
+  '/ativacoes': 'Ativações',
   '/dashboard': 'Visão',
   '/relatorios': 'Relatórios',
   '/empresa': 'Notícias',
@@ -40,12 +42,11 @@ const DOCK_LABELS: Record<string, string> = {
 
 /** Catálogo do sheet "Mais" — só entra o que `canSeeNavHref` liberar. */
 const MORE_CATALOG: readonly BottomMoreItem[] = [
+  { href: '/resumo-do-dia', label: 'Resumo do dia' },
   { href: '/pipeline', label: 'Agenda do dia' },
+  { href: '/ativacoes', label: 'Ativações' },
   { href: '/contatos', label: 'Contatos' },
-  { href: '/recepcao', label: 'Recepção' },
-  { href: '/pos-venda', label: 'Pós-venda' },
   { href: '/meu-faturamento', label: 'Meu faturamento' },
-  { href: '/hoje', label: 'Operação do dia' },
   { href: '/flow', label: 'Rom Flow · tarefas' },
   { href: '/pessoas', label: 'Gestão de usuário' },
   { href: '/empresa', label: 'Notícias e eventos' },
@@ -74,9 +75,10 @@ function allowedHref(
   role: AuthRole | null,
   extras: readonly GrantableModuleKey[],
   openAuth: boolean,
+  professionalName?: string | null,
 ): boolean {
   if (openAuth) return true
-  return canSeeNavHref(href, role, extras)
+  return canSeeNavHref(href, role, extras, { professionalName })
 }
 
 /**
@@ -86,9 +88,10 @@ function allowedHref(
 export function resolveBottomNav(
   role: AuthRole | null | undefined,
   extras: readonly GrantableModuleKey[] = [],
-  opts: { openAuth?: boolean } = {},
+  opts: { openAuth?: boolean; professionalName?: string | null } = {},
 ): { dock: BottomDockItem[]; more: BottomMoreItem[] } {
   const openAuth = Boolean(opts.openAuth)
+  const professionalName = opts.professionalName ?? null
   if (!role && !openAuth) return { dock: [], more: [] }
 
   const resolvedRole: AuthRole = role ?? 'staff'
@@ -99,7 +102,7 @@ export function resolveBottomNav(
   for (const href of priority) {
     const path = normalizePath(href)
     if (seen.has(path)) continue
-    if (!allowedHref(path, role ?? null, extras, openAuth)) continue
+    if (!allowedHref(path, role ?? null, extras, openAuth, professionalName)) continue
     seen.add(path)
     dock.push({ href: path, shortLabel: dockLabel(path) })
     if (dock.length >= DOCK_CAP) break
@@ -113,7 +116,7 @@ export function resolveBottomNav(
   const more = MORE_CATALOG.filter((item) => {
     const path = normalizePath(item.href)
     if (seen.has(path)) return false
-    return allowedHref(path, role ?? null, extras, openAuth)
+    return allowedHref(path, role ?? null, extras, openAuth, professionalName)
   })
 
   return { dock, more }

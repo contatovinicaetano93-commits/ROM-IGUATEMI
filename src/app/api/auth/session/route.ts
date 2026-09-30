@@ -23,11 +23,13 @@ export async function GET(req: NextRequest) {
           employeeId: employee.id,
           canPublish: employee.can_publish || employee.panel_role === 'admin' || employee.panel_role === 'mkt',
           modules: employee.modules,
+          professionalName: employee.professional_name,
         })
         const same =
           next.role === session.role &&
           next.modules.join(',') === session.modules.join(',') &&
-          next.canPublish === session.canPublish
+          next.canPublish === session.canPublish &&
+          next.professionalName === session.professionalName
         session = next
         const res = ok({
           auth_enabled: enabled,
@@ -39,6 +41,7 @@ export async function GET(req: NextRequest) {
           employeeId: session.employeeId,
           canPublish: session.canPublish,
           modules: session.modules,
+          professionalName: session.professionalName,
           staff_login_configured: isStaffAuthConfigured(),
         })
         if (!same) {
@@ -66,6 +69,7 @@ export async function GET(req: NextRequest) {
     employeeId: session?.employeeId ?? null,
     canPublish: session?.canPublish ?? false,
     modules: session?.modules ?? [],
+    professionalName: session?.professionalName ?? null,
     staff_login_configured: isStaffAuthConfigured(),
   })
 }

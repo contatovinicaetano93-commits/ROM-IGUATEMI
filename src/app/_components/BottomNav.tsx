@@ -51,8 +51,12 @@ export function BottomNav({ light: _light = false }: { light?: boolean }) {
   const [more, setMore] = useState(false)
 
   const { dock: items, more: extrasMenu } = useMemo(
-    () => resolveBottomNav(role, extras, { openAuth }),
-    [extras, openAuth, role],
+    () =>
+      resolveBottomNav(role, extras, {
+        openAuth,
+        professionalName: session?.professionalName,
+      }),
+    [extras, openAuth, role, session?.professionalName],
   )
 
   if (items.length === 0) return null

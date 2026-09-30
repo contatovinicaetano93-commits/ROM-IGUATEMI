@@ -40,6 +40,10 @@ describe('roleModulePack / effectiveModules', () => {
   it('exporta o pacote fixo do papel', () => {
     expect(roleModulePack('estoque')).toEqual(['estoque'])
     expect(effectiveModules('staff', ['dashboard'])).toEqual(['pipeline', 'contatos', 'dashboard'])
+    expect(effectiveModules('mkt', [])).toEqual(['pipeline', 'contatos', 'ativacoes'])
+    expect(hasPanelModule('mkt', [], 'ativacoes')).toBe(true)
+    expect(hasPanelModule('staff', ['ativacoes'], 'ativacoes')).toBe(true)
+    expect(hasPanelModule('staff', [], 'ativacoes')).toBe(false)
   })
 })
 
@@ -57,9 +61,35 @@ describe('canSeeNavHref', () => {
     expect(canSeeNavHref('/auditoria', 'financeiro', [])).toBe(false)
   })
 
+  it('stubs RH e Treinamentos só no Mais do admin (Flow / Onboarding cobrem o resto)', () => {
+    expect(canSeeNavHref('/rh', 'admin', [])).toBe(true)
+    expect(canSeeNavHref('/treinamentos', 'admin', [])).toBe(true)
+    for (const role of ['staff', 'financeiro', 'estoque', 'mkt'] as const) {
+      expect(canSeeNavHref('/rh', role, [])).toBe(false)
+      expect(canSeeNavHref('/treinamentos', role, [])).toBe(false)
+    }
+  })
+
   it('módulos grantable respeitam o pacote + extras', () => {
     expect(canSeeNavHref('/financeiro', 'staff', [])).toBe(false)
     expect(canSeeNavHref('/financeiro', 'staff', ['financeiro'])).toBe(true)
     expect(canSeeNavHref('/contatos', 'financeiro', [])).toBe(false)
+    expect(canSeeNavHref('/ativacoes', 'mkt', [])).toBe(true)
+    expect(canSeeNavHref('/ativacoes', 'staff', [])).toBe(false)
+    expect(canSeeNavHref('/ativacoes', 'staff', ['ativacoes'])).toBe(true)
+    expect(canSeeNavHref('/ativacoes', 'admin', [])).toBe(true)
+  })
+
+  it('ninguém vê Balcão/Pós/Operação no menu; Agenda e Contatos ficam', () => {
+    for (const role of ['admin', 'staff', 'financeiro', 'estoque', 'mkt'] as const) {
+      expect(canSeeNavHref('/hoje', role, [])).toBe(false)
+      expect(canSeeNavHref('/recepcao', role, [])).toBe(false)
+      expect(canSeeNavHref('/pos-venda', role, [])).toBe(false)
+    }
+    expect(canSeeNavHref('/hoje', 'staff', [], { professionalName: 'Alison' })).toBe(false)
+    expect(canSeeNavHref('/pipeline', 'staff', [], { professionalName: 'Alison' })).toBe(true)
+    expect(canSeeNavHref('/contatos', 'staff', [], { professionalName: 'Alison' })).toBe(true)
+    expect(canSeeNavHref('/pipeline', 'admin', [])).toBe(true)
+    expect(canSeeNavHref('/contatos', 'admin', [])).toBe(true)
   })
 })

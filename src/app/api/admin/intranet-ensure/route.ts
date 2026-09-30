@@ -46,15 +46,17 @@ export async function POST(req: NextRequest) {
       from information_schema.columns
       where table_schema = 'public'
         and table_name = 'intranet_employees'
-        and column_name = 'professional_name'
+        and column_name in ('professional_name', 'avec_pro_id')
     `)) as { column_name: string }[]
 
+    const colNames = new Set(cols.map((c) => c.column_name))
     const names = tables.map((t) => t.table_name)
     return ok({
       host,
       files: applied.files,
       tables: names,
-      professionalNameReady: cols.length > 0,
+      professionalNameReady: colNames.has('professional_name'),
+      avecProIdReady: colNames.has('avec_pro_id'),
       modulesReady: names.includes('intranet_employee_modules'),
     })
   } catch (e) {

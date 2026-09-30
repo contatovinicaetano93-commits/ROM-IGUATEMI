@@ -37,11 +37,12 @@ export default function SistemasPage() {
 
   const items = useMemo(() => {
     const role = session?.role ?? 'staff'
+    const opts = { professionalName: session?.professionalName ?? null }
     const modules = !session || (session.auth_enabled && !session.authenticated)
       ? []
       : !session.auth_enabled
         ? systemsForAccess('admin')
-        : systemsForAccess(role, parseGrantableModules(session.modules))
+        : systemsForAccess(role, parseGrantableModules(session.modules), opts)
     return [...modules, ...flowAreaSystems(areaIds)]
   }, [areaIds, session])
 

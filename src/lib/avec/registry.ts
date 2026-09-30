@@ -10,6 +10,8 @@ export type AvecMapperKind =
   | 'cancellations'
   | 'professionals_revenue'
   | 'professionals_occupancy'
+  | 'professionals_commissions'
+  | 'commission_discounts'
   | 'top_services'
   | 'reactivation'
   | 'acquisition'
@@ -44,7 +46,8 @@ export interface AvecReportDef {
 
 /**
  * Mapa A→B→C (Cérebro: Hoje → Semana → Comercial).
- * Comissões e NF ficam de fora. Estoque tem registry próprio (ver STOCK abaixo).
+ * NF fica de fora. Estoque tem registry próprio (ver STOCK abaixo).
+ * Comissões líquidas: 8123 (Meu faturamento) — daily/full, não no fast.
  */
 const CORE: AvecReportDef[] = [
   // A — Hoje (cron fast)
@@ -73,6 +76,23 @@ const CORE: AvecReportDef[] = [
   // B — Semana (só full)
   { id: '0021', tier: 'B', name: 'Fat. por profissional', mapper: 'professionals_revenue', schedule: 'daily' },
   { id: '0126', tier: 'B', name: 'Ocupação', mapper: 'professionals_occupancy', schedule: 'daily' },
+  {
+    id: '8123',
+    tier: 'B',
+    name: 'Comissões detalhadas (líquido)',
+    mapper: 'professionals_commissions',
+    schedule: 'daily',
+    envKey: 'AVEC_REPORT_COMMISSIONS',
+  },
+  {
+    // Exige profissional_id — fetch on-demand no Meu faturamento (não no fast).
+    id: '0029',
+    tier: 'B',
+    name: 'Descontos e bônus (linhas)',
+    mapper: 'commission_discounts',
+    schedule: 'on_demand',
+    envKey: 'AVEC_REPORT_COMMISSION_DISCOUNTS',
+  },
   { id: '0032', tier: 'B', name: 'Top serviços', mapper: 'top_services', schedule: 'daily' },
   { id: '0107', tier: 'B', name: 'Sem retorno', mapper: 'reactivation', schedule: 'daily' },
   {

@@ -1,8 +1,13 @@
 import type { AuthRole } from '@/lib/auth'
+import {
+  isProfessionalHiddenPath,
+  shouldHideOpsShellNav,
+} from '@/lib/intranet/professional-nav'
 
 export type GrantableModuleKey =
   | 'pipeline'
   | 'contatos'
+  | 'ativacoes'
   | 'financeiro'
   | 'estoque'
   | 'relatorios'
@@ -17,6 +22,7 @@ export type GrantableModule = {
 export const GRANTABLE_MODULES: readonly GrantableModule[] = [
   { key: 'pipeline', href: '/pipeline', label: 'Agenda do dia' },
   { key: 'contatos', href: '/contatos', label: 'Contatos' },
+  { key: 'ativacoes', href: '/ativacoes', label: 'Ativações' },
   { key: 'financeiro', href: '/financeiro', label: 'Financeiro' },
   { key: 'estoque', href: '/estoque', label: 'Estoque' },
   { key: 'relatorios', href: '/relatorios', label: 'Relatórios' },
@@ -28,7 +34,7 @@ const ALL_KEYS: readonly GrantableModuleKey[] = GRANTABLE_MODULES.map((item) => 
 const ROLE_MODULES: Record<AuthRole, readonly GrantableModuleKey[]> = {
   admin: ALL_KEYS,
   staff: ['pipeline', 'contatos'],
-  mkt: ['pipeline', 'contatos'],
+  mkt: ['pipeline', 'contatos', 'ativacoes'],
   financeiro: ['financeiro', 'estoque', 'relatorios'],
   estoque: ['estoque'],
 }
@@ -96,12 +102,20 @@ export function canSeeNavHref(
   href: string,
   role: AuthRole | null | undefined,
   extras: readonly GrantableModuleKey[] = [],
+  opts?: { professionalName?: string | null },
 ): boolean {
   if (!role) return false
   const path = href.split('?')[0] || '/'
   if (path === '/auditoria' || path.startsWith('/auditoria/')) return role === 'admin'
   // Cadastro/edição de acessos é só admin master — não poluir o menu dos demais cargos.
   if (path === '/pessoas' || path.startsWith('/pessoas/')) return role === 'admin'
+  // Stub RH → Flow; Treinamentos → Onboarding. Fora do Mais para não-admin.
+  if (path === '/rh' || path.startsWith('/rh/')) return role === 'admin'
+  if (path === '/treinamentos' || path.startsWith('/treinamentos/')) return role === 'admin'
+  // Balcão / Pós-venda / Operação: fora do menu — Agenda + Contatos bastam.
+  if (shouldHideOpsShellNav(role, opts?.professionalName) && isProfessionalHiddenPath(path)) {
+    return false
+  }
   const key = moduleKeyFromHref(href)
   if (!key) return true
   return hasPanelModule(role, extras, key)

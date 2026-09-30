@@ -34,6 +34,19 @@ describe('cargo packages', () => {
     expect(pack?.flow_role).toBe('solicitante')
   })
 
+  it('gestor unidade e mkt ganham Ativações', () => {
+    const gestor = cargoPackageById('gestor_unidade')
+    expect(gestor).not.toBeNull()
+    if (!gestor) return
+    expect(gestor.extras).toEqual(['dashboard', 'ativacoes'])
+    expect(modulesForCargo(gestor)).toContain('ativacoes')
+
+    const mkt = cargoPackageById('mkt')
+    expect(mkt).not.toBeNull()
+    if (!mkt) return
+    expect(modulesForCargo(mkt)).toContain('ativacoes')
+  })
+
   it('ops financeiro ganha agenda e visão além do pacote financeiro', () => {
     const pack = cargoPackageById('ops_financeiro')
     expect(pack).not.toBeNull()

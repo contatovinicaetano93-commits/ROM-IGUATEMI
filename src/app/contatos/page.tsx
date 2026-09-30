@@ -93,7 +93,7 @@ function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos' |
   if (queue === 'novos') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] font-semibold text-gold">
-        <UserPlus size={10} /> Sem vínculo
+        <UserPlus size={10} /> Novo cliente
       </span>
     )
   }
@@ -143,6 +143,16 @@ function channelLabel(channel: string): string {
     default:
       return channel || '—'
   }
+}
+
+/** Aceita number ou string numérica (drivers às vezes serializam count como string). */
+function asQueueCount(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value)
+    if (Number.isFinite(n)) return n
+  }
+  return null
 }
 
 function logOutreach(contactId: string, listMode: 'reactivate' | 'sem_servicos' | 'novos') {
@@ -276,19 +286,17 @@ function ContatosPageContent() {
           setError(null)
           setContacts([])
           setTotalInBase(null)
-          const q = countsJson.meta?.queues
+          const q = countsJson.meta?.queues as Record<string, unknown> | undefined
           if (countsJson.meta?.sync) setSyncMeta(countsJson.meta.sync as ContactsSyncMeta)
-          if (q && typeof q.novos === 'number') {
+          if (q) {
             setQueueCounts((prev) => ({
-              overdue: typeof q.overdue === 'number' ? q.overdue : prev.overdue,
-              due_soon: typeof q.due_soon === 'number' ? q.due_soon : prev.due_soon,
-              scheduled: typeof q.scheduled === 'number' ? q.scheduled : prev.scheduled,
-              novos: q.novos,
-              sem_servicos:
-                typeof q.sem_servicos === 'number' ? q.sem_servicos : prev.sem_servicos,
-              ativados: typeof q.ativados === 'number' ? q.ativados : prev.ativados,
-              base_ativa:
-                typeof q.base_ativa === 'number' ? q.base_ativa : prev.base_ativa,
+              overdue: asQueueCount(q.overdue) ?? prev.overdue,
+              due_soon: asQueueCount(q.due_soon) ?? prev.due_soon,
+              scheduled: asQueueCount(q.scheduled) ?? prev.scheduled,
+              novos: asQueueCount(q.novos) ?? prev.novos,
+              sem_servicos: asQueueCount(q.sem_servicos) ?? prev.sem_servicos,
+              ativados: asQueueCount(q.ativados) ?? prev.ativados,
+              base_ativa: asQueueCount(q.base_ativa) ?? prev.base_ativa,
             }))
           }
           return
@@ -319,34 +327,55 @@ function ContatosPageContent() {
           if (urlStatus) params.set('status', urlStatus)
           if (hasUrlFilter) params.set('limit', '250')
         }
+        // Badges: counts=1 em paralelo + queues no meta da lista.
+        // Fila ativa: meta.total da lista filtrada é a fonte de verdade do badge.
+        const countsPromise =
+          mode === 'reactivate' || mode === 'novos' || mode === 'sem_servicos' || mode === 'ativados'
+            ? apiFetch('/api/contacts?counts=1', { cache: 'no-store' })
+                .then((r) => r.json())
+                .catch(() => null)
+            : Promise.resolve(null)
         const res = await apiFetch(`/api/contacts?${params}`, { cache: 'no-store' })
         const json = await res.json()
+        const countsJson = await countsPromise
         if (cancelled) return
         if (json.error) setError(json.error)
         else {
           setError(null)
           if (json.meta?.sync) setSyncMeta(json.meta.sync as ContactsSyncMeta)
           setContacts(json.data ?? [])
-          const total = json.meta?.total
-          setTotalInBase(typeof total === 'number' ? total : null)
-          const q = json.meta?.queues
-          if (q && typeof q.overdue === 'number') {
-            setQueueCounts({
-              overdue: q.overdue,
-              due_soon: q.due_soon,
-              scheduled: q.scheduled,
-              novos: typeof q.novos === 'number' ? q.novos : 0,
-              sem_servicos: typeof q.sem_servicos === 'number' ? q.sem_servicos : 0,
-              ativados: typeof q.ativados === 'number' ? q.ativados : 0,
-              base_ativa: typeof q.base_ativa === 'number' ? q.base_ativa : 0,
-            })
-          } else if (mode === 'ativados' && typeof total === 'number') {
-            setQueueCounts((prev) => ({ ...prev, ativados: total }))
-          } else if (mode === 'novos' && typeof total === 'number') {
-            setQueueCounts((prev) => ({ ...prev, novos: total }))
-          } else if (mode === 'sem_servicos' && typeof total === 'number') {
-            setQueueCounts((prev) => ({ ...prev, sem_servicos: total }))
-          }
+          const total = asQueueCount(json.meta?.total)
+          setTotalInBase(total)
+          const q = (countsJson?.meta?.queues ?? json.meta?.queues) as
+            | Record<string, unknown>
+            | undefined
+          setQueueCounts((prev) => {
+            const next = { ...prev }
+            if (q) {
+              const overdue = asQueueCount(q.overdue)
+              const dueSoon = asQueueCount(q.due_soon)
+              const scheduled = asQueueCount(q.scheduled)
+              const novos = asQueueCount(q.novos)
+              const semServicos = asQueueCount(q.sem_servicos)
+              const ativados = asQueueCount(q.ativados)
+              const baseAtiva = asQueueCount(q.base_ativa)
+              if (overdue != null) next.overdue = overdue
+              if (dueSoon != null) next.due_soon = dueSoon
+              if (scheduled != null) next.scheduled = scheduled
+              if (novos != null) next.novos = novos
+              if (semServicos != null) next.sem_servicos = semServicos
+              if (ativados != null) next.ativados = ativados
+              if (baseAtiva != null) next.base_ativa = baseAtiva
+            }
+            // Badge da fila/aba ativa = total da resposta (bate com a lista).
+            if (total != null) {
+              if (mode === 'reactivate') next[queue] = total
+              else if (mode === 'novos') next.novos = total
+              else if (mode === 'sem_servicos') next.sem_servicos = total
+              else if (mode === 'ativados') next.ativados = total
+            }
+            return next
+          })
         }
       } catch (e) {
         if (!cancelled) setError(String(e))
@@ -370,7 +399,7 @@ function ContatosPageContent() {
           }`
         : 'busque na base'
       : mode === 'novos'
-        ? `${visible.length} sem vínculo em ${NOVOS_WINDOW_DAYS} dias${
+        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} · ${NOVOS_WINDOW_DAYS} dias${
             totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
         : mode === 'sem_servicos'
@@ -391,7 +420,7 @@ function ContatosPageContent() {
         ? 'Nenhum contato encontrado.'
         : 'Digite um nome ou telefone para buscar na base.'
       : mode === 'novos'
-        ? `Nenhum cadastro sem vínculo Avec nos últimos ${NOVOS_WINDOW_DAYS} dias.`
+        ? `Nenhum cadastro de novos clientes nos últimos ${NOVOS_WINDOW_DAYS} dias.`
         : mode === 'sem_servicos'
           ? 'Ninguém fora do funil — todo contato tem retorno previsto.'
           : mode === 'ativados'
@@ -414,7 +443,7 @@ function ContatosPageContent() {
               : mode === 'ativados'
                 ? 'Chamados pelo painel — aguardando agenda ou visita na Avec (30 dias)'
                 : mode === 'novos'
-                ? `Lead dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda (Sem vínculo)`
+                ? `Lead dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda (Novos clientes)`
                 : mode === 'sem_servicos'
                   ? 'Passou dos 30 dias e segue sem retorno previsto — triar ou marcar perdido'
                   : hasUrlFilter
@@ -463,10 +492,10 @@ function ContatosPageContent() {
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <UserPlus size={16} className="text-gold" />
-            Sem vínculo Avec
+            Novos clientes
           </p>
           <p className="mt-0.5 text-[0.7rem] leading-snug text-muted">
-            Últimos {NOVOS_WINDOW_DAYS} dias, cadastro ROM ainda sem cliente no banco Avec
+            Últimos {NOVOS_WINDOW_DAYS} dias — ainda sem vínculo no banco Avec
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-gold/15 px-3 py-1 text-sm font-semibold tabular-nums text-gold">
@@ -483,7 +512,7 @@ function ContatosPageContent() {
           [
             { id: 'reactivate' as const, label: 'Reativar' },
             { id: 'ativados' as const, label: 'Ativados', count: queueCounts.ativados },
-            { id: 'novos' as const, label: 'Sem vínculo' },
+            { id: 'novos' as const, label: 'Novos clientes' },
             { id: 'sem_servicos' as const, label: 'Sem serviço' },
             { id: 'search' as const, label: 'Buscar' },
           ] as const
@@ -565,7 +594,7 @@ function ContatosPageContent() {
 
       {mode === 'novos' && (
         <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
-          Sem vínculo: lead que chegou pela Avec (agenda/atendimento), mas o ROM abriu cadastro
+          Novos clientes: lead que chegou pela Avec (agenda/atendimento), mas o ROM abriu cadastro
           porque o cliente ainda não existe no banco Avec (`avec_client_id` vazio). Não é “1ª
           visita no salão” do Cérebro/Visão. Fica aqui por {NOVOS_WINDOW_DAYS} dias; sai antes se
           fizer um serviço com cadência, e aí passa a aparecer em Vencendo/Atrasados.

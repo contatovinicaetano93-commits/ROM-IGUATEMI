@@ -1,5 +1,9 @@
 import { isIntranetPath } from '@/lib/intranet/paths'
 import { hasPanelModule, type GrantableModuleKey } from '@/lib/intranet/modules'
+import {
+  isProfessionalHiddenPath,
+  isProfessionalStaff,
+} from '@/lib/intranet/professional-nav'
 import type { AuthRole } from '@/lib/auth'
 
 function isFinanceAllowedAdminApi(pathname: string) {
@@ -55,7 +59,19 @@ export function isDashboardPath(pathname: string) {
   if (pathname === '/api/kpis/meu-faturamento' || pathname.startsWith('/api/kpis/meu-faturamento/')) {
     return false
   }
+  if (pathname === '/api/kpis/resumo-do-dia' || pathname.startsWith('/api/kpis/resumo-do-dia/')) {
+    return false
+  }
   return pathname === '/dashboard' || pathname.startsWith('/api/kpis')
+}
+
+export function isAtivacoesPath(pathname: string) {
+  return (
+    pathname === '/ativacoes' ||
+    pathname.startsWith('/ativacoes/') ||
+    pathname === '/api/ativacoes' ||
+    pathname.startsWith('/api/ativacoes/')
+  )
 }
 
 export function isMeuFaturamentoPath(pathname: string) {
@@ -64,6 +80,15 @@ export function isMeuFaturamentoPath(pathname: string) {
     pathname.startsWith('/meu-faturamento/') ||
     pathname === '/api/kpis/meu-faturamento' ||
     pathname.startsWith('/api/kpis/meu-faturamento/')
+  )
+}
+
+export function isResumoDoDiaPath(pathname: string) {
+  return (
+    pathname === '/resumo-do-dia' ||
+    pathname.startsWith('/resumo-do-dia/') ||
+    pathname === '/api/kpis/resumo-do-dia' ||
+    pathname.startsWith('/api/kpis/resumo-do-dia/')
   )
 }
 
@@ -99,20 +124,26 @@ export function canAccessProtectedPath(
   pathname: string,
   role: AuthRole | null | undefined,
   extras: readonly GrantableModuleKey[] = [],
+  opts?: { professionalName?: string | null },
 ): boolean {
   if (!role) return false
   if (isSessionApiPath(pathname)) return true
   if (role === 'admin') return true
   if (isAdminOpsPath(pathname)) return false
+  if (isProfessionalStaff(role, opts?.professionalName) && isProfessionalHiddenPath(pathname)) {
+    return false
+  }
   if (isIntranetPath(pathname) || pathname === '/' || isOnboardingPath(pathname) || isHojePath(pathname)) {
     return true
   }
   if (isMeuFaturamentoPath(pathname)) return true
+  if (isResumoDoDiaPath(pathname)) return true
   if (isPipelinePath(pathname)) return hasPanelModule(role, extras, 'pipeline')
   if (isContatosPath(pathname)) return hasPanelModule(role, extras, 'contatos')
   if (isFinancePath(pathname)) return hasPanelModule(role, extras, 'financeiro')
   if (isRelatoriosPath(pathname)) return hasPanelModule(role, extras, 'relatorios')
   if (isStockPath(pathname)) return hasPanelModule(role, extras, 'estoque')
   if (isDashboardPath(pathname)) return hasPanelModule(role, extras, 'dashboard')
+  if (isAtivacoesPath(pathname)) return hasPanelModule(role, extras, 'ativacoes')
   return false
 }

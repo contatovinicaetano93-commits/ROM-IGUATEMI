@@ -98,11 +98,14 @@ import {
   shouldStartComandaClock,
 } from '@/lib/salon/visit-spans'
 import { syncP1Kpis } from '@/lib/avec/sync-p1'
+import { syncCommissions8123, noteCommissions8123BudgetSkip } from '@/lib/avec/sync-commissions'
 import { syncP2Kpis, syncPaymentMixRecent } from '@/lib/avec/sync-p2'
 import { syncP3Kpis } from '@/lib/avec/sync-p3'
 import type { RomPanelId } from '@/lib/brand'
 import { avecSiteParam, getAvecUnitId } from '@/lib/brand'
 import { ensureFreshAvecApiToken } from '@/lib/avec/token-store'
+import { pickNewestUsableAvecRun } from '@/lib/avec/sync-run-health'
+import { notifyOpsAvecAlert } from '@/lib/whatsapp/staff-alert'
 
 export type AvecSyncMode = 'fast' | 'full'
 
@@ -156,6 +159,7 @@ export interface AvecSyncStats {
   errors: string[]
   warnings: string[]
   p1_rows?: number
+  commissions_rows?: number
   p2_rows?: number
   p3_rows?: number
   /** Visitas 0002 gravadas em salon_client_visits (0011 offline). */
@@ -320,6 +324,35 @@ export async function getLastAvecSync(
         limit 1
       `) as AvecSyncRun[])
   return rows[0] ?? null
+}
+
+/**
+ * Último run usável (pula empty-kill) — health/painel não podem usar kill fresco como “sync ok”.
+ */
+export async function getLastUsableAvecSync(
+  kind: string,
+  opts?: { stage?: AvecSyncStage; limit?: number },
+): Promise<AvecSyncRun | null> {
+  const sql = getSql()
+  const limit = Math.min(Math.max(opts?.limit ?? 12, 1), 40)
+  const stage = opts?.stage
+  const rows = stage
+    ? ((await sql`
+        select * from avec_sync_runs
+        where kind = ${kind}
+          and coalesce(stats->>'stage', 'all') = ${stage}
+          and coalesce(stats->>'running', 'false') <> 'true'
+        order by created_at desc
+        limit ${limit}
+      `) as AvecSyncRun[])
+    : ((await sql`
+        select * from avec_sync_runs
+        where kind = ${kind}
+          and coalesce(stats->>'running', 'false') <> 'true'
+        order by created_at desc
+        limit ${limit}
+      `) as AvecSyncRun[])
+  return pickNewestUsableAvecRun(rows)
 }
 
 /**
@@ -1666,6 +1699,7 @@ async function runAvecSyncBody(
       // Full fatiado: ops (P1–P3/TM) → agenda (caixa) → catalog (0004).
       const opsSteps = [
         ['P1', () => syncP1Kpis(stats, syncRunId)],
+        ['8123', () => syncCommissions8123(stats, syncRunId)],
         ['P2', () => syncP2Kpis(stats, syncRunId)],
         ['P3', () => syncP3Kpis(stats, syncRunId)],
         ['tm-0223', () => syncDurationFrom0223(stats, syncRunId)],
@@ -1686,6 +1720,7 @@ async function runAvecSyncBody(
       for (const [label, fn] of steps) {
         if (syncBudgetExhausted()) {
           markSyncBudgetExhausted(stats, `antes de ${label}`)
+          if (label === '8123') noteCommissions8123BudgetSkip(stats)
           break
         }
         try {
@@ -1767,6 +1802,14 @@ async function runAvecSyncBody(
 
     const finished = await finishAvecSyncRun(run.id, status, stats, topError)
 
+    if (status === 'error') {
+      const detail = topError ?? stats.errors[0] ?? 'sync error'
+      void notifyOpsAvecAlert(
+        `❌ Sync Avec ${mode} falhou — ${getDeploymentContext().display_name}\n${detail}`,
+        { dedupeKey: `avec_sync_error_${mode}`, minIntervalMs: 60 * 60 * 1000 },
+      ).catch(() => {})
+    }
+
     await logEvent({
       contactId: null,
       channel: 'avec',
@@ -1788,7 +1831,14 @@ async function runAvecSyncBody(
       hadCoreRows: avecHadCoreProgress(stats),
       thrown: true,
     })
-    return finishAvecSyncRun(run.id, status, stats, msg)
+    const finished = await finishAvecSyncRun(run.id, status, stats, msg)
+    if (status === 'error') {
+      void notifyOpsAvecAlert(
+        `❌ Sync Avec ${mode} falhou — ${getDeploymentContext().display_name}\n${msg}`,
+        { dedupeKey: `avec_sync_error_${mode}`, minIntervalMs: 60 * 60 * 1000 },
+      ).catch(() => {})
+    }
+    return finished
   } finally {
     setActiveSyncDeadlineAt(null)
     endSyncServiceCache()

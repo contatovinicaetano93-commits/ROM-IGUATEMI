@@ -4,16 +4,19 @@ import { isAvecConfigured, isAvecMock, getAvecBaseUrl } from '@/lib/avec/client'
 import { isAuthEnabled, isFinanceAuthConfigured, isStockAuthConfigured } from '@/lib/auth'
 import { isAiConfigured } from '@/lib/ai/client'
 import { getBrand, getRomPanelId } from '@/lib/brand'
-import { getLastAvecSync, getRecentHardPlatformTimeoutFullRuns } from '@/lib/avec/sync'
+import { getLastUsableAvecSync, getRecentHardPlatformTimeoutFullRuns } from '@/lib/avec/sync'
 import { getLastStockSync } from '@/lib/avec/sync-stock'
 import {
   computePanelSyncOk,
+  computeCommissions8123Health,
   hardTimeoutHealthMessage,
   isClassic300sHardTimeout,
   isHardPlatformTimeoutAvecRun,
 } from '@/lib/avec/sync-run-health'
 import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
+import { probeAvecTokenHealth } from '@/lib/avec/token-store'
+import { isProduction } from '@/lib/env'
 
 const logger = new Logger('Health')
 
@@ -173,18 +176,27 @@ export async function getPublicHealthStatus() {
   let sync_ok = connected
   let sync_reason: string | null = connected ? null : 'database disconnected'
   let hard_timeout_ok = true
+  let commissions_ok: boolean | null = null
   if (connected) {
     try {
-      const [lastFast, lastFull, hardTimeoutHits] = await Promise.all([
-        getLastAvecSync('fast'),
-        getLastAvecSync('full'),
+      const [lastFast, lastFullOps, lastFullAny, hardTimeoutHits] = await Promise.all([
+        getLastUsableAvecSync('fast'),
+        getLastUsableAvecSync('full', { stage: 'ops' }),
+        getLastUsableAvecSync('full'),
         getRecentHardPlatformTimeoutFullRuns(24),
       ])
+      const lastFull = lastFullOps ?? lastFullAny
       const sync = computePanelSyncOk(lastFast, lastFull)
       sync_ok = sync.ok
       sync_reason = sync.reason
       const hardHits = hardTimeoutHits.filter(isHardPlatformTimeoutAvecRun)
       hard_timeout_ok = hardHits.length === 0
+      const commissions = computeCommissions8123Health(lastFull?.stats ?? null)
+      commissions_ok = commissions.ok
+      if (commissions.ok === false) sync_ok = false
+      if (commissions.ok === false && !sync_reason) {
+        sync_reason = commissions.message
+      }
     } catch (e) {
       logger.warn('public health sync probe failed', {
         error: e instanceof Error ? e.message : String(e),
@@ -193,12 +205,21 @@ export async function getPublicHealthStatus() {
       sync_reason = 'sync probe failed'
     }
   }
+  let token_ok = true
+  try {
+    const token = await probeAvecTokenHealth()
+    token_ok = token.ok || isAvecMock()
+  } catch {
+    token_ok = isAvecMock() || isAvecConfigured()
+  }
   return {
-    ok: connected && sync_ok && hard_timeout_ok,
+    ok: connected && sync_ok && hard_timeout_ok && commissions_ok !== false && token_ok,
     db_quota,
     sync_ok,
     sync_reason,
     hard_timeout_ok,
+    commissions_8123_ok: commissions_ok,
+    token_ok,
   }
 }
 
@@ -211,8 +232,8 @@ export async function getHealthStatus() {
 
   // Sequencial: Promise.all de 5 leituras no pooler (max:1) competia com outras
   // lambdas e o /api/health estourava → HTML de timeout → SyntaxError no Safari.
-  let lastFast: Awaited<ReturnType<typeof getLastAvecSync>> = null
-  let lastFull: Awaited<ReturnType<typeof getLastAvecSync>> = null
+  let lastFast: Awaited<ReturnType<typeof getLastUsableAvecSync>> = null
+  let lastFull: Awaited<ReturnType<typeof getLastUsableAvecSync>> = null
   let kpiLayers: Record<string, number | null> = { p1: null, p2: null, p3: null }
   let metricsYtd: Awaited<ReturnType<typeof probeDailyMetricsYtd>> | null = null
   let opsYtd: Awaited<ReturnType<typeof probeOpsCoverageYtd>> | null = null
@@ -222,12 +243,14 @@ export async function getHealthStatus() {
 
   if (connected) {
     try {
-      lastFast = await getLastAvecSync('fast')
+      lastFast = await getLastUsableAvecSync('fast')
     } catch (e) {
       logger.warn('health last_fast failed', { error: e instanceof Error ? e.message : String(e) })
     }
     try {
-      lastFull = await getLastAvecSync('full')
+      lastFull =
+        (await getLastUsableAvecSync('full', { stage: 'ops' })) ??
+        (await getLastUsableAvecSync('full'))
     } catch (e) {
       logger.warn('health last_full failed', { error: e instanceof Error ? e.message : String(e) })
     }
@@ -277,20 +300,42 @@ export async function getHealthStatus() {
   }
   const syncProbe = computePanelSyncOk(lastFast, lastFull)
   const sync_ok = syncProbe.ok
+  const commissions_8123 = computeCommissions8123Health(lastFull?.stats ?? null)
+  /** Só falha quando há sinal vermelho explícito — null (desconhecido) não inventa verde nem vermelho no gate. */
+  const commissionsOk = commissions_8123.ok !== false
 
   const awaitingToken = !isAvecConfigured() && !isAvecMock()
+  let tokenHealth: Awaited<ReturnType<typeof probeAvecTokenHealth>> = {
+    ok: !awaitingToken,
+    hours_left: null,
+    login_configured: false,
+    source: 'none',
+    last_refresh_error: null,
+    last_refresh_at: null,
+  }
+  try {
+    tokenHealth = await probeAvecTokenHealth()
+  } catch (e) {
+    logger.warn('health token probe failed', { error: e instanceof Error ? e.message : String(e) })
+  }
+  const token_ok = isAvecMock() || tokenHealth.ok
+  const webhook_ready = envOk('AVEC_WEBHOOK_SECRET')
+  const webhook_ok = !isProduction() || webhook_ready
 
   return {
-    ok: connected && validation.ok && hard_timeout.ok && sync_ok,
+    ok: connected && validation.ok && hard_timeout.ok && sync_ok && commissionsOk && token_ok && webhook_ok,
     sync_ok,
     sync_reason: syncProbe.reason,
+    token_ok,
+    webhook_ok,
     deployment,
     validation,
     readiness: {
       awaiting_avec_token: awaitingToken,
       cron_ready: envOk('CRON_SECRET'),
-      webhook_ready: envOk('AVEC_WEBHOOK_SECRET'),
+      webhook_ready,
       unit_id_set: envOk('AVEC_UNIT_ID'),
+      token_ok,
     },
     panel: {
       id: getRomPanelId(),
@@ -315,6 +360,7 @@ export async function getHealthStatus() {
       mock: isAvecMock(),
       base_url: getAvecBaseUrl(),
       token: envOk('AVEC_API_TOKEN'),
+      token_health: tokenHealth,
       webhook_secret: envOk('AVEC_WEBHOOK_SECRET'),
       webhook_url: '/api/webhooks/avec',
       last_fast: lastFast,
@@ -322,6 +368,11 @@ export async function getHealthStatus() {
       kpi_layers: kpiLayers,
       /** RED quando full morre por kill duro (~300s) sem aborted limpo — Fluid/maxDuration. */
       hard_timeout,
+      /**
+       * Saúde do 8123 (Meu faturamento). ok=false quando pulado por budget ou erro.
+       * ok=null = sem sinal no last full — não inventa verde.
+       */
+      commissions_8123,
     },
     whatsapp: {
       configured:
