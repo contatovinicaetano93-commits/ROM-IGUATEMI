@@ -39,13 +39,13 @@ export function peekPeerDatabaseUrl(
 }
 
 async function selectPeerMonthRows(sql: Sql, start: string): Promise<Record<string, unknown>[]> {
-  const timeoutSql = `select set_config('statement_timeout', $1, true)`
-  const timeoutParam = [String(PEER_STATEMENT_TIMEOUT_MS)]
-
+  // IG Sql usa begin/unsafe (não transaction/query do Brasil).
   try {
-    const results = await sql.transaction((txn) => [
-      txn.query(timeoutSql, timeoutParam),
-      txn`
+    return await sql.begin(async (txn) => {
+      await txn.unsafe(`select set_config('statement_timeout', $1, true)`, [
+        String(PEER_STATEMENT_TIMEOUT_MS),
+      ])
+      return (await txn`
         select
           id::text as id,
           day::text as day,
@@ -66,14 +66,15 @@ async function selectPeerMonthRows(sql: Sql, start: string): Promise<Record<stri
         where day >= ${start}::date
           and day < (${start}::date + interval '1 month')
         order by day asc, start_time asc, created_at asc
-      `,
-    ])
-    return results[1] as Record<string, unknown>[]
+      `) as Record<string, unknown>[]
+    })
   } catch {
     // Peer ainda sem end_time (pré-v2): espelha início como fim.
-    const results = await sql.transaction((txn) => [
-      txn.query(timeoutSql, timeoutParam),
-      txn`
+    return await sql.begin(async (txn) => {
+      await txn.unsafe(`select set_config('statement_timeout', $1, true)`, [
+        String(PEER_STATEMENT_TIMEOUT_MS),
+      ])
+      return (await txn`
         select
           id::text as id,
           day::text as day,
@@ -94,9 +95,8 @@ async function selectPeerMonthRows(sql: Sql, start: string): Promise<Record<stri
         where day >= ${start}::date
           and day < (${start}::date + interval '1 month')
         order by day asc, start_time asc, created_at asc
-      `,
-    ])
-    return results[1] as Record<string, unknown>[]
+      `) as Record<string, unknown>[]
+    })
   }
 }
 
