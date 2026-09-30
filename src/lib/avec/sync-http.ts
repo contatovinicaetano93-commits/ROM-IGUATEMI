@@ -15,6 +15,10 @@ import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 import { isSyncLockBusyError } from '@/lib/sync-lock'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
+import {
+  isPostgresStatementTimeoutError,
+  noteStatementTimeoutSoftFail,
+} from '@/lib/avec/db-statement-timeout'
 import { purgeAvecStorageBloat } from '@/lib/avec/snapshots'
 import { repairSalonP1JsonbEncoding } from '@/lib/salon/p1-metrics'
 import { repairSalonP2JsonbEncoding } from '@/lib/salon/p2-metrics'
@@ -238,6 +242,26 @@ export async function executeAvecSync(
         })
       }
       return err(dbQuotaUserMessage(e), 503)
+    }
+    // 57014 fora do runAvecSync (ex.: getLast / finish) — HTTP 200 partial, não 500.
+    if (isPostgresStatementTimeoutError(e)) {
+      const soft = {
+        aborted: true as boolean | undefined,
+        warnings: [] as string[],
+        errors: [] as string[],
+      }
+      noteStatementTimeoutSoftFail(soft, `${effectiveMode}/${effectiveStage}`)
+      return ok({
+        skipped: false,
+        status: 'partial' as const,
+        aborted: true,
+        mode: effectiveMode,
+        stage: effectiveStage,
+        scope: effectiveScope,
+        errors: soft.errors,
+        warnings: soft.warnings,
+        note: 'Postgres statement_timeout (57014) — tratado como partial (não 500)',
+      })
     }
     throw e
   }

@@ -17,6 +17,10 @@ import { getDeploymentContext, validateDeploymentEnv } from '@/lib/deployment'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 import { probeAvecTokenHealth } from '@/lib/avec/token-store'
 import { isProduction } from '@/lib/env'
+import {
+  getPendingMigrationsCount,
+  migrationsPendingHealthOk,
+} from '@/lib/migrations'
 
 const logger = new Logger('Health')
 
@@ -212,14 +216,28 @@ export async function getPublicHealthStatus() {
   } catch {
     token_ok = isAvecMock() || isAvecConfigured()
   }
+  let pending_migrations: number | null = null
+  try {
+    pending_migrations = await getPendingMigrationsCount()
+  } catch (e) {
+    logger.warn('public health migrations probe failed', {
+      error: e instanceof Error ? e.message : String(e),
+    })
+  }
+  const migrations_ok = migrationsPendingHealthOk({
+    isProduction: isProduction(),
+    pendingCount: pending_migrations,
+  })
   return {
-    ok: connected && sync_ok && hard_timeout_ok && commissions_ok !== false && token_ok,
+    ok: connected && sync_ok && hard_timeout_ok && commissions_ok !== false && token_ok && migrations_ok,
     db_quota,
     sync_ok,
     sync_reason,
     hard_timeout_ok,
     commissions_8123_ok: commissions_ok,
     token_ok,
+    migrations_ok,
+    pending_migrations,
   }
 }
 
@@ -322,12 +340,35 @@ export async function getHealthStatus() {
   const webhook_ready = envOk('AVEC_WEBHOOK_SECRET')
   const webhook_ok = !isProduction() || webhook_ready
 
+  let pending_migrations: number | null = null
+  try {
+    pending_migrations = await getPendingMigrationsCount()
+  } catch (e) {
+    logger.warn('health migrations probe failed', {
+      error: e instanceof Error ? e.message : String(e),
+    })
+  }
+  const migrations_ok = migrationsPendingHealthOk({
+    isProduction: isProduction(),
+    pendingCount: pending_migrations,
+  })
+
   return {
-    ok: connected && validation.ok && hard_timeout.ok && sync_ok && commissionsOk && token_ok && webhook_ok,
+    ok:
+      connected &&
+      validation.ok &&
+      hard_timeout.ok &&
+      sync_ok &&
+      commissionsOk &&
+      token_ok &&
+      webhook_ok &&
+      migrations_ok,
     sync_ok,
     sync_reason: syncProbe.reason,
     token_ok,
     webhook_ok,
+    migrations_ok,
+    pending_migrations,
     deployment,
     validation,
     readiness: {

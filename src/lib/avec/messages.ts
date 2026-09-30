@@ -70,9 +70,12 @@ export function formatAvecErrorList(errors: string[]): string[] {
   return errors.map((e) => formatAvecUserMessage(e) ?? e)
 }
 
-/** Erros periféricos (P1 0107 timeout) que não devem sozinhos marcar sync partial. */
+/** Erros periféricos (P1 0107 timeout / PG 57014) que não devem sozinhos marcar sync partial. */
 export function isSoftAvecPeripheralError(error: string): boolean {
-  return /P1 0107:.*(timeout|abort)/i.test(error)
+  return (
+    /P1 0107:.*(timeout|abort)/i.test(error) ||
+    /statement_timeout|57014|canceling statement due to statement timeout/i.test(error)
+  )
 }
 
 /**
@@ -93,6 +96,8 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   if (/agenda:\s*\d+\s*agendamento/i.test(warning)) return true
   if (/agenda:\s*reconcile de órfãos adiado/i.test(warning)) return true
   if (/sync:\s*orçamento esgotado/i.test(warning)) return true
+  // Statement timeout Postgres — abort limpo (paridade orçamento).
+  if (/statement_timeout|57014/i.test(warning)) return true
   // Consequência do abort limpo por orçamento — core (receita/caixa) já veio.
   if (/agenda:.*orçamento/i.test(warning)) return true
   if (/agenda:\s*reconcile\/KPI adiado/i.test(warning)) return true

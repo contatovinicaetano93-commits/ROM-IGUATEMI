@@ -62,3 +62,17 @@ describe('getSalonP3DailyNear SQL', () => {
     expect(src).not.toMatch(/sql`\s*select\s+\*/)
   })
 })
+
+describe('delta-p3-presence-flags', () => {
+  it('nullifica return_rate / new_clients_period sem apagar dados', () => {
+    const sql = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../../db/delta-p3-presence-flags.sql'),
+      'utf8',
+    )
+    expect(sql).toMatch(/alter column return_rate drop not null/i)
+    expect(sql).toMatch(/alter column return_rate drop default/i)
+    expect(sql).toMatch(/alter column new_clients_period drop not null/i)
+    expect(sql).toMatch(/alter column new_clients_period drop default/i)
+    expect(sql).not.toMatch(/\b(truncate|drop table)\b/i)
+  })
+})

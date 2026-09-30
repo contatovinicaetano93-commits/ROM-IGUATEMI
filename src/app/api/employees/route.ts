@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/auth'
 import { createEmployee, listEmployees } from '@/lib/employees'
 import { ensureFlowCatalog } from '@/lib/flow/store'
 import { requireFlowMaster } from '@/lib/flow/require-master'
+import { canListAllEmployees } from '@/lib/intranet/employees-acl'
 import { announceEmployeeCreated } from '@/lib/intranet/employee-created'
 import { parseGrantableModules } from '@/lib/intranet/modules'
 import { parseAreas, parseRole } from '@/lib/flow/workflow'
@@ -12,8 +13,12 @@ import { Logger } from '@/lib/logger'
 const logger = new Logger('EmployeesApi')
 
 export async function GET(req: NextRequest) {
+  // Mesmo critério de PATCH/DELETE em /api/employees/[id]: panel_role admin.
   const auth = await requireSession(req)
   if (!auth.ok) return err(auth.message, auth.status)
+  if (!canListAllEmployees(auth.session.role)) {
+    return err('Acesso restrito ao admin operacional', 403)
+  }
   try {
     const employees = await listEmployees()
     return ok({ employees })

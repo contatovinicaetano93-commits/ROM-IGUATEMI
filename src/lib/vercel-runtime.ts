@@ -2,6 +2,6 @@
 export function warnIfLongMaxDuration(route: string, maxDuration: number) {
   if (process.env.VERCEL !== '1' || maxDuration <= 300) return
   console.warn(
-    `[${route}] maxDuration=${maxDuration}s requires Vercel Fluid Compute (Pro); without it invocations cap at 300s`,
+    `[${route}] maxDuration=${maxDuration}s requires Vercel Fluid Compute (Pro); vercel.json has fluid:true but Classic still caps at 300s if Fluid is off in project Settings → Functions`,
   )
 }

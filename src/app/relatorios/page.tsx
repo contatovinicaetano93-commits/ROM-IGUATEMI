@@ -319,7 +319,8 @@ export default function RelatoriosOverviewPage() {
               },
               {
                 label: 'Cancelamentos',
-                value: String(data.closing.cancelled),
+                value:
+                  data.closing.cancelled != null ? String(data.closing.cancelled) : '—',
                 compare: momCompareLine(
                   data.closing.cancelled,
                   data.previous_closing.cancelled,
@@ -329,7 +330,7 @@ export default function RelatoriosOverviewPage() {
               },
               {
                 label: 'No-shows',
-                value: String(data.closing.no_shows),
+                value: data.closing.no_shows != null ? String(data.closing.no_shows) : '—',
                 compare: momCompareLine(
                   data.closing.no_shows,
                   data.previous_closing.no_shows,

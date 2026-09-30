@@ -22,7 +22,9 @@ import {
 } from '@/lib/intranet/professional-scope'
 import { z } from 'zod'
 
-export const maxDuration = 25
+// Contatos counts/list scan active client_services for urgency — prod 504'd at 25s.
+// 60s is under Fluid Pro room (≠ sync 800) and leaves headroom without masking slow queries.
+export const maxDuration = 60
 
 const serviceSchema = z.object({
   name: z.string().min(1),
@@ -166,13 +168,13 @@ export async function GET(req: NextRequest) {
     }
 
     if (activatedQueue) {
-      const cacheKey = `contacts:ativados:v1:lim=${limit}`
+      // v2: list-only (UI already fetches counts=1 in parallel for badges)
+      const cacheKey = `contacts:ativados:v2:lim=${limit}`
       const result = await cachedFetch(
         cacheKey,
         async () => {
           const listed = await listActivatedContacts({ limit })
-          const queues = await countContactQueues({ channel, day })
-          return { items: listed.items, total: listed.total, queues }
+          return { items: listed.items, total: listed.total, queues: { ativados: listed.total } }
         },
         30,
       )
@@ -189,13 +191,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (withoutServices) {
-      const cacheKey = `contacts:sem-servicos:v1:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      // v2: list-only (UI already fetches counts=1 in parallel for badges)
+      const cacheKey = `contacts:sem-servicos:v2:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
       const result = await cachedFetch(
         cacheKey,
         async () => {
           const listed = await listContactsWithoutServices({ day, limit })
-          const queues = await countContactQueues({ channel, day })
-          return { items: listed.items, total: listed.total, queues }
+          return {
+            items: listed.items,
+            total: listed.total,
+            queues: { sem_servicos: listed.total },
+          }
         },
         30,
       )
@@ -248,8 +254,9 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // v10: pending list skips countContactQueues (UI fetches counts=1 in parallel)
     const cacheKey = [
-      'contacts:list:v9',
+      'contacts:list:v10',
       `lim=${limit}`,
       `sort=${sort}`,
       `pend=${pendingOnly ? 1 : 0}`,
@@ -277,14 +284,7 @@ export async function GET(req: NextRequest) {
           items = [...items].sort(compareByOverdueThenName)
         }
 
-        let queueTotal = total
-        let queues: Awaited<ReturnType<typeof countContactQueues>> | null = null
-        if (pendingOnly) {
-          queues = await countContactQueues({ channel, day })
-          if (urgencyQueue) queueTotal = queues[urgencyQueue]
-        }
-
-        return { items, total: queueTotal, queues }
+        return { items, total }
       },
       query ? 15 : 30,
     )
@@ -299,7 +299,6 @@ export async function GET(req: NextRequest) {
         channel: channel ?? 'all',
         pending: pendingOnly,
         queue: urgencyQueue ?? 'all',
-        queues: result.queues ?? undefined,
         sync: syncPayload,
       },
     )

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { isAuthorized, isAuthEnabled, getSession } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
-import { isProduction } from '@/lib/env'
+import { isVercelDeploy } from '@/lib/env'
 import { canAccessProtectedPath } from '@/lib/intranet/access'
 
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/webhooks']
@@ -55,6 +55,8 @@ function isProtectedPage(pathname: string) {
     pathname.startsWith('/auditoria/') ||
     pathname === '/meu-faturamento' ||
     pathname.startsWith('/meu-faturamento/') ||
+    pathname === '/resumo-do-dia' ||
+    pathname.startsWith('/resumo-do-dia/') ||
     pathname === '/recepcao' ||
     pathname.startsWith('/recepcao/') ||
     pathname === '/pos-venda' ||
@@ -74,7 +76,8 @@ export async function middleware(req: NextRequest) {
   if (!needsAuth) return NextResponse.next()
 
   if (!isAuthEnabled()) {
-    if (isProduction()) {
+    // Preview/production Vercel: fail-closed. Dev local (sem VERCEL) permanece aberto.
+    if (isVercelDeploy()) {
       const msg = 'Auth não configurado — defina ROM_ADMIN_PASSWORD'
       if (isProtectedApi(pathname)) {
         return NextResponse.json({ error: msg }, { status: 503 })
@@ -166,6 +169,8 @@ export const config = {
     '/auditoria/:path*',
     '/meu-faturamento',
     '/meu-faturamento/:path*',
+    '/resumo-do-dia',
+    '/resumo-do-dia/:path*',
     '/recepcao',
     '/recepcao/:path*',
     '/pos-venda',

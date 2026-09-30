@@ -8,7 +8,11 @@ import {
 } from '@/lib/avec/sync-director-0021'
 import type { AvecSyncStats } from '@/lib/avec/sync'
 import { authorizeAvecSync } from '@/lib/avec/sync-http'
-import { isSyncBudgetExhausted, setActiveSyncDeadlineAt } from '@/lib/avec/sync-budget'
+import { isSyncBudgetExhausted, setActiveSyncDeadlineAt, hasSyncBudgetForHeavyStep, noteSyncBudgetExhausted } from '@/lib/avec/sync-budget'
+import {
+  isPostgresStatementTimeoutError,
+  noteStatementTimeoutSoftFail,
+} from '@/lib/avec/db-statement-timeout'
 import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 import { getDeploymentContext } from '@/lib/deployment'
 import {
@@ -158,21 +162,41 @@ async function runSync(req: NextRequest) {
         const stats = emptyStats()
         setActiveSyncDeadlineAt(Date.now() + DIRECTOR_0021_BUDGET_MS)
         try {
-          await syncDirector0021(stats, undefined, {
-            months,
-            force,
-            shouldAbort: isSyncBudgetExhausted,
-          })
+          if (!hasSyncBudgetForHeavyStep()) {
+            noteSyncBudgetExhausted(stats, 'director-0021 (<30s)')
+          } else {
+            await syncDirector0021(stats, undefined, {
+              months,
+              force,
+              shouldAbort: () => isSyncBudgetExhausted() || !hasSyncBudgetForHeavyStep(),
+            })
+          }
+        } catch (syncErr) {
+          if (isPostgresStatementTimeoutError(syncErr)) {
+            noteStatementTimeoutSoftFail(stats, 'director-0021')
+          } else {
+            throw syncErr
+          }
         } finally {
           setActiveSyncDeadlineAt(null)
         }
-        const status = await list0021MonthCoverage()
+        let status: Awaited<ReturnType<typeof list0021MonthCoverage>>
+        try {
+          status = await list0021MonthCoverage()
+        } catch (covErr) {
+          if (isPostgresStatementTimeoutError(covErr)) {
+            noteStatementTimeoutSoftFail(stats, 'director-0021 coverage')
+            status = { coverage: [], month_rows: 0 }
+          } else {
+            throw covErr
+          }
+        }
 
         const okRun = stats.errors.length === 0
         return ok({
           ran: true,
           status: okRun
-            ? stats.aborted || stats.warnings.some((w) => /truncado|orçamento/i.test(w))
+            ? stats.aborted || stats.warnings.some((w) => /truncado|orçamento|statement_timeout/i.test(w))
               ? 'partial'
               : 'ok'
             : 'error',
@@ -198,6 +222,16 @@ async function runSync(req: NextRequest) {
         holder: e.holder,
         expires_at: e.expiresAt,
         note: 'Lock avecDirector — outro director-visits/0021 em andamento.',
+      })
+    }
+    if (isPostgresStatementTimeoutError(e)) {
+      return ok({
+        ran: true,
+        status: 'partial' as const,
+        aborted: true,
+        warnings: ['Postgres statement_timeout (57014) — director-0021 abort limpo'],
+        errors: [],
+        note: 'Statement timeout tratado como partial (não 500)',
       })
     }
     throw e

@@ -68,7 +68,7 @@ interface FinanceKpiBucket {
   revenue_source: 'metrics' | 'payments_0081' | 'empty'
   expenses: number
   expenses_by_cnpj: ExpenseCnpjBreakdown
-  attended: number
+  attended: number | null
   ticket_avg: number | null
   daily: {
     day: string
@@ -324,7 +324,7 @@ function normalizeKpiBucket(bucket: FinanceKpiBucket): FinanceKpiBucket {
   return {
     ...bucket,
     revenue_source: bucket.revenue_source ?? (bucket.revenue > 0 ? 'metrics' : 'empty'),
-    attended: bucket.attended ?? 0,
+    attended: bucket.attended ?? null,
     ticket_avg: bucket.ticket_avg ?? null,
     daily: (bucket.daily ?? []).map((d) => ({
       ...d,
@@ -463,7 +463,9 @@ export default function FinanceiroPage() {
         'Atendidos',
         formatNumberBr(cur.attended, 0),
         formatNumberBr(prev.attended, 0),
-        formatNumberBr(cur.attended - prev.attended, 0),
+        cur.attended != null && prev.attended != null
+          ? formatNumberBr(cur.attended - prev.attended, 0)
+          : '—',
       ),
       csvRow(
         'Ticket médio',
@@ -845,7 +847,7 @@ export default function FinanceiroPage() {
               ? '—'
               : awaitingCaixa
                 ? 'aguardando'
-                : String(kpis.current.attended ?? 0)
+                : kpis.current.attended == null ? '—' : String(kpis.current.attended)
           }
           delta={
             kpis && !awaitingCaixa

@@ -309,6 +309,38 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "039_p3_presence_flags",
+      "file": "delta-p3-presence-flags.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
+    },
+    {
+      "id": "040_contacts_list_indexes",
+      "file": "delta-contacts-list-indexes.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
+    },
+    {
+      "id": "041_auth_rate_limits",
+      "file": "delta-auth-rate-limits.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
+    },
+    {
+      "id": "042_nullable_month_metrics",
+      "file": "delta-nullable-month-metrics.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

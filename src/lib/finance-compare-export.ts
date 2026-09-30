@@ -224,7 +224,9 @@ function summaryRows(cur: FinanceKpiBucket, prev: FinanceKpiBucket): string {
       'Atendidos',
       num(cur.attended, 0),
       num(prev.attended, 0),
-      num(cur.attended - prev.attended, 0),
+      cur.attended != null && prev.attended != null
+        ? num(cur.attended - prev.attended, 0)
+        : '—',
     ],
     [
       'Ticket médio',
@@ -278,7 +280,12 @@ export function buildFinanceComparePrintHtml(
   const { current: cur, previous: prev } = kpis
   const moneyBars = financeCompareMoneyBars(kpis)
   const volumeBars: CompareBarSeries[] = [
-    { label: 'Atendidos', current: cur.attended, previous: prev.attended },
+    {
+      label: 'Atendidos',
+      // Gráfico precisa de número; null vira barra zero (rótulos da tabela já usam "—").
+      current: cur.attended ?? 0,
+      previous: prev.attended ?? 0,
+    },
   ]
   const daily = alignDailyRevenue(cur.daily, prev.daily)
   const generated = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })

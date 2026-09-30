@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { Logger } from '@/lib/logger'
 import { isProduction } from '@/lib/env'
+import { isDbStatementTimeoutError } from '@/lib/db-statement-timeout'
 import { isDbQuotaError, dbQuotaUserMessage } from '@/lib/avec/db-quota-errors'
 
 const logger = new Logger('API')
@@ -50,6 +51,19 @@ export function handleError(e: unknown) {
       message: e instanceof Error ? e.message : String(e),
     })
     return err(dbQuotaUserMessage(e), 503)
+  }
+  if (isDbStatementTimeoutError(e)) {
+    logger.error('DB statement timeout in API route', {
+      message: e instanceof Error ? e.message : String(e),
+    })
+    return err(
+      isProduction()
+        ? 'Consulta demorou demais — tente de novo ou refine a busca'
+        : e instanceof Error
+          ? e.message
+          : String(e),
+      504,
+    )
   }
   if (e instanceof Error) {
     // Log full error server-side, return generic message to client

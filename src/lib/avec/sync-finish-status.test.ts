@@ -141,4 +141,25 @@ describe('resolveAvecFinishStatus', () => {
       }),
     ).toBe('error')
   })
+
+  it('statement_timeout (57014) como thrown+aborted → partial', () => {
+    expect(
+      resolveAvecFinishStatus({
+        errorCount: 0,
+        hardWarningCount: 0,
+        aborted: true,
+        hadCoreRows: false,
+        thrown: true,
+      }),
+    ).toBe('partial')
+    expect(
+      resolveAvecFinishStatus({
+        errorCount: 0,
+        hardWarningCount: 0,
+        aborted: true,
+        hadCoreRows: true,
+        thrown: true,
+      }),
+    ).toBe('partial')
+  })
 })

@@ -5,6 +5,7 @@ describe('shouldRunBootMigrations', () => {
   const prev = {
     DATABASE_URL: process.env.DATABASE_URL,
     ROM_SKIP_BOOT_MIGRATIONS: process.env.ROM_SKIP_BOOT_MIGRATIONS,
+    RUN_BOOT_MIGRATIONS: process.env.RUN_BOOT_MIGRATIONS,
     VERCEL: process.env.VERCEL,
   }
 
@@ -26,15 +27,26 @@ describe('shouldRunBootMigrations', () => {
     expect(shouldRunBootMigrations()).toBe(false)
   })
 
-  it('returns false on Vercel serverless', () => {
+  it('returns false on Vercel serverless by default', () => {
     process.env.DATABASE_URL = 'postgres://local/test'
+    delete process.env.ROM_SKIP_BOOT_MIGRATIONS
+    delete process.env.RUN_BOOT_MIGRATIONS
     process.env.VERCEL = '1'
     expect(shouldRunBootMigrations()).toBe(false)
+  })
+
+  it('returns true on Vercel when RUN_BOOT_MIGRATIONS=1', () => {
+    process.env.DATABASE_URL = 'postgres://local/test'
+    delete process.env.ROM_SKIP_BOOT_MIGRATIONS
+    process.env.VERCEL = '1'
+    process.env.RUN_BOOT_MIGRATIONS = '1'
+    expect(shouldRunBootMigrations()).toBe(true)
   })
 
   it('returns true for local dev with DATABASE_URL', () => {
     process.env.DATABASE_URL = 'postgres://local/test'
     delete process.env.ROM_SKIP_BOOT_MIGRATIONS
+    delete process.env.RUN_BOOT_MIGRATIONS
     delete process.env.VERCEL
     expect(shouldRunBootMigrations()).toBe(true)
   })
