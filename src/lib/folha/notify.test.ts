@@ -40,6 +40,8 @@ const draft: FolhaDraft = {
       taxa_administrativa: null,
       taxa_administrativa_rate: null,
       taxa_administrativa_source: null,
+      outros_descontos: null,
+      rateio_apos_cartao: null,
       exception_id: null,
       folha_extras: {
         parc: null,

@@ -594,9 +594,15 @@ export default function FolhaPage() {
                       </p>
                     </div>
                     <div>
-                      <span className="text-muted">Taxa cartão</span>
+                      <span className="text-muted">Taxa cartão (8123)</span>
                       <p className="mt-1 tabular-nums">
                         {formatDeduction(selectedLine?.avec.card_fee)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">Rateio após cartão</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatMoney(selectedLine?.rateio_apos_cartao)}
                       </p>
                     </div>
                     <div>
@@ -626,6 +632,12 @@ export default function FolhaPage() {
                       <span className="text-muted">Meio a meio</span>
                       <p className="mt-1 tabular-nums">
                         {formatMoney(selectedLine?.meio_a_meio)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">Outros (olerite)</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatMoney(selectedLine?.outros_descontos)}
                       </p>
                     </div>
                     <div>
@@ -730,10 +742,12 @@ export default function FolhaPage() {
                         <th className="py-2 pr-3 font-medium">Cargo</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Faturado</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Tx cartão</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Rateio − cartão</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Produto</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Tx adm</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Assistente</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Meio a meio</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Outros</th>
                         {taxExtrasAllowed ? (
                           <>
                             <th className="py-2 pr-3 font-medium tabular-nums">DARF</th>
@@ -760,6 +774,9 @@ export default function FolhaPage() {
                             {formatDeduction(line.avec.card_fee)}
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.rateio_apos_cartao)}
+                          </td>
+                          <td className="py-2 pr-3 tabular-nums">
                             {formatDeduction(line.avec.product_spend)}
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
@@ -770,6 +787,9 @@ export default function FolhaPage() {
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
                             {formatMoney(line.meio_a_meio)}
+                          </td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.outros_descontos)}
                           </td>
                           {taxExtrasAllowed ? (
                             <>
@@ -841,6 +861,11 @@ export default function FolhaPage() {
                 30/40/50% no acumulado do mês
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
+              <li>
+                Olerite: se o 8123 zera taxa_adm e embute (adm − meio + outros) em
+                descontos, a Folha desmembra nas colunas Tx adm / Meio a meio / Outros.
+                Rateio − cartão espelha o “Total Rateio” do recibo Avec.
+              </li>
             </ul>
           </div>
         ) : null}

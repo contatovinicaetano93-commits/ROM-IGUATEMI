@@ -40,6 +40,8 @@ const sampleDraft: FolhaDraft = {
       taxa_administrativa: null,
       taxa_administrativa_rate: null,
       taxa_administrativa_source: null,
+      outros_descontos: 707.19,
+      rateio_apos_cartao: null,
       exception_id: 'romeu_assistant',
       folha_extras: {
         parc: null,
@@ -82,6 +84,8 @@ const sampleDraft: FolhaDraft = {
       taxa_administrativa: null,
       taxa_administrativa_rate: null,
       taxa_administrativa_source: null,
+      outros_descontos: null,
+      rateio_apos_cartao: null,
       exception_id: null,
       folha_extras: {
         parc: null,
@@ -117,10 +121,11 @@ describe('folhaLineToExportRow', () => {
     const row = folhaLineToExportRow(sampleDraft.lines[0]!)
     expect(row).toHaveLength(FOLHA_EXPORT_HEADERS.length)
     expect(row[0]).toBe('JEFFERSON POLICARPO DOS SANTOS')
-    expect(row[6]).toBe(150)
-    expect(row[7]).toBe(75)
-    expect(row[18]).toBe(6032.64)
-    expect(row[19]).toBe('romeu_assistant')
+    expect(row[7]).toBe(150) // Assistente
+    expect(row[8]).toBe(75) // Meio a meio
+    expect(row[10]).toBe(707.19) // Outros (olerite)
+    expect(row[20]).toBe(6032.64) // Líquido
+    expect(row[21]).toBe('romeu_assistant')
   })
 })
 

@@ -16,6 +16,10 @@ import {
   resolveMeioAMeioRate,
   type FolhaPersonRules,
 } from '@/lib/folha/exceptions'
+import {
+  disaggregateOleriteDescontos,
+  rateioAposCartao,
+} from '@/lib/folha/olerite-disaggregate'
 import { quinzenaForDay, todayIsoSaoPaulo, type FolhaQuinzena } from '@/lib/folha/period'
 import { normalizeFolhaCargo, type FolhaCargo } from '@/lib/folha/rules'
 import {
@@ -73,6 +77,16 @@ export type FolhaDraftLine = {
   taxa_administrativa_rate: number | null
   /** Origem do valor exibido/abatido. */
   taxa_administrativa_source: '8123' | 'motor' | null
+  /**
+   * Residual olerite após desmembrar (adm − meio) de `descontos` 8123
+   * (ex.: CONSUMO BARU). null se não há residual.
+   */
+  outros_descontos: number | null
+  /**
+   * Rateio após cartão — espelha “Total Rateio” do recibo Avec
+   * (service_share − |taxa_cartao|).
+   */
+  rateio_apos_cartao: number | null
   /** Id da exceção nomeada, se houver. */
   exception_id: string | null
   /** Camadas Folha ainda não no 8123 — null até IMAP/RH/U. */
@@ -181,8 +195,7 @@ function applyFolhaExtras(
 /**
  * Avec frequentemente embute no 8123 `descontos` o líquido
  * (TAXA ADM − MEIO A MEIO) + outros (ex.: CONSUMO BARU), com `taxa_adm` = 0.
- * Ex.: Ana Matsumoto IG — other=981.40 = 2045.13 − 1450.81 + 387.08.
- * Nesse caso a_pagar já está fechado: não reabater adm nem recreditar meio.
+ * Delegado a `disaggregateOleriteDescontos` (fonte única).
  */
 export function avecDescontosAlreadyNetsAdminMeio(args: {
   otherDiscounts: number | null | undefined
@@ -191,14 +204,14 @@ export function avecDescontosAlreadyNetsAdminMeio(args: {
   adminRate: number | null
   meioRate: number
 }): boolean {
-  const other = deductionMagnitude(args.otherDiscounts)
-  if (other == null || args.charged == null || args.adminRate == null) return false
-  const assist = deductionMagnitude(args.assistantDiscount) ?? 0
-  const adm = args.charged * args.adminRate
-  const meio = assist * args.meioRate
-  const admMinusMeio = adm - meio
-  if (admMinusMeio <= 0.005) return false
-  return other + 0.05 >= admMinusMeio
+  return disaggregateOleriteDescontos({
+    charged: args.charged,
+    adminFee8123: null,
+    assistantDiscount: args.assistantDiscount,
+    otherDiscounts: args.otherDiscounts,
+    adminRate: args.adminRate,
+    meioRate: args.meioRate,
+  }).embeddedAdminMeio
 }
 
 /**
@@ -254,13 +267,15 @@ export function buildFolhaDraftLine(
     assistantMag == null ? null : roundFolha(assistantMag * meioRate, 4)
 
   const adminRatePreview = resolveGrossAdminFeeRate(panel, cargo, person)
-  const embeddedInDescontos = avecDescontosAlreadyNetsAdminMeio({
-    otherDiscounts: row.other_discounts,
+  const olerite = disaggregateOleriteDescontos({
     charged: row.charged,
+    adminFee8123: row.admin_fee,
     assistantDiscount: row.assistant_discount,
+    otherDiscounts: row.other_discounts,
     adminRate: adminRatePreview,
     meioRate,
   })
+  const embeddedInDescontos = olerite.embeddedAdminMeio
 
   const admin = resolveLineAdminFee({
     panel,
@@ -272,6 +287,11 @@ export function buildFolhaDraftLine(
   })
   /** Meio a meio no proposed_pay só se Avec ainda não neteou em `descontos`. */
   const meioForProposedPay = embeddedInDescontos ? null : meio_a_meio
+  const rateio_apos_cartao = rateioAposCartao({
+    charged: row.charged,
+    serviceShare: row.service_share,
+    cardFee: row.card_fee,
+  })
 
   let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,
@@ -441,9 +461,11 @@ export function buildFolhaDraftLine(
     },
     meio_a_meio,
     meio_a_meio_rate: meioRate,
-    taxa_administrativa: admin.amount,
+    taxa_administrativa: admin.amount ?? olerite.taxaAdm,
     taxa_administrativa_rate: admin.rate,
     taxa_administrativa_source: admin.source,
+    outros_descontos: olerite.outrosResiduais,
+    rateio_apos_cartao,
     exception_id: person?.id ?? null,
     folha_extras,
     proposed_pay: roundFolha(
