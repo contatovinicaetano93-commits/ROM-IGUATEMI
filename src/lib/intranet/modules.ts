@@ -9,6 +9,7 @@ export type GrantableModuleKey =
   | 'contatos'
   | 'ativacoes'
   | 'financeiro'
+  | 'folha'
   | 'estoque'
   | 'relatorios'
   | 'dashboard'
@@ -24,6 +25,7 @@ export const GRANTABLE_MODULES: readonly GrantableModule[] = [
   { key: 'contatos', href: '/contatos', label: 'Contatos' },
   { key: 'ativacoes', href: '/ativacoes', label: 'Ativações' },
   { key: 'financeiro', href: '/financeiro', label: 'Financeiro' },
+  { key: 'folha', href: '/folha', label: 'Folha de pagamento' },
   { key: 'estoque', href: '/estoque', label: 'Estoque' },
   { key: 'relatorios', href: '/relatorios', label: 'Relatórios' },
   { key: 'dashboard', href: '/dashboard', label: 'Visão analítica' },

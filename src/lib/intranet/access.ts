@@ -74,6 +74,15 @@ export function isAtivacoesPath(pathname: string) {
   )
 }
 
+export function isFolhaPath(pathname: string) {
+  return (
+    pathname === '/folha' ||
+    pathname.startsWith('/folha/') ||
+    pathname === '/api/folha' ||
+    pathname.startsWith('/api/folha/')
+  )
+}
+
 export function isMeuFaturamentoPath(pathname: string) {
   return (
     pathname === '/meu-faturamento' ||
@@ -145,5 +154,6 @@ export function canAccessProtectedPath(
   if (isStockPath(pathname)) return hasPanelModule(role, extras, 'estoque')
   if (isDashboardPath(pathname)) return hasPanelModule(role, extras, 'dashboard')
   if (isAtivacoesPath(pathname)) return hasPanelModule(role, extras, 'ativacoes')
+  if (isFolhaPath(pathname)) return hasPanelModule(role, extras, 'folha')
   return false
 }

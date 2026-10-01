@@ -86,4 +86,11 @@ describe('systemsForAccess', () => {
     expect(hrefs).toContain('/dashboard')
     expect(hrefs).not.toContain('/relatorios')
   })
+
+  it('folha aparece só com módulo folha', () => {
+    expect(systemsForAccess('admin').map((item) => item.href)).toContain('/folha')
+    expect(systemsForAccess('financeiro').map((item) => item.href)).not.toContain('/folha')
+    expect(systemsForAccess('financeiro', ['folha']).map((item) => item.href)).toContain('/folha')
+    expect(systemsForAccess('staff', ['folha']).map((item) => item.href)).toContain('/folha')
+  })
 })

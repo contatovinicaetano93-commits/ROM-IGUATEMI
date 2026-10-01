@@ -29,6 +29,16 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/dashboard', 'financeiro', [])).toBe(false)
   })
 
+  it('folha só com módulo folha (admin/ops fin/RH)', () => {
+    expect(canAccessProtectedPath('/folha', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/folha', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/folha', 'financeiro', [])).toBe(false)
+    expect(canAccessProtectedPath('/folha', 'financeiro', ['folha'])).toBe(true)
+    expect(canAccessProtectedPath('/folha', 'staff', [])).toBe(false)
+    expect(canAccessProtectedPath('/folha', 'staff', ['folha'])).toBe(true)
+    expect(canAccessProtectedPath('/api/folha', 'mkt', [])).toBe(false)
+  })
+
   it('estoque não entra em financeiro nem Visão analítica', () => {
     expect(canAccessProtectedPath('/estoque', 'estoque', [])).toBe(true)
     expect(canAccessProtectedPath('/hoje', 'estoque', [])).toBe(true)

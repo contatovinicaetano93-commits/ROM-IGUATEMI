@@ -55,11 +55,25 @@ describe('cargo packages', () => {
       'pipeline',
       'contatos',
       'financeiro',
+      'folha',
       'estoque',
       'relatorios',
       'dashboard',
     ])
-    expect(extrasBeyondRole(pack.panel_role, pack.extras)).toEqual(['pipeline', 'contatos', 'dashboard'])
+    expect(extrasBeyondRole(pack.panel_role, pack.extras)).toEqual([
+      'pipeline',
+      'contatos',
+      'folha',
+      'dashboard',
+    ])
+  })
+
+  it('RH ganha Folha de pagamento além do pacote staff', () => {
+    const pack = cargoPackageById('rh')
+    expect(pack).not.toBeNull()
+    if (!pack) return
+    expect(modulesForCargo(pack)).toContain('folha')
+    expect(extrasBeyondRole(pack.panel_role, pack.extras)).toEqual(['folha'])
   })
 
   it('func financeiro: KPIs e dia a dia sem adminar Flow', () => {
@@ -78,7 +92,7 @@ describe('cargo packages', () => {
       matchCargoPackage({
         panel_role: 'financeiro',
         flow_role: 'master',
-        modules: ['pipeline', 'contatos', 'dashboard'],
+        modules: ['pipeline', 'contatos', 'dashboard', 'folha'],
         areaIds: ['financeiro', 'manutencao', 'compras', 'rh'],
       })?.id,
     ).toBe('ops_financeiro')

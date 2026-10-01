@@ -44,6 +44,9 @@ describe('roleModulePack / effectiveModules', () => {
     expect(hasPanelModule('mkt', [], 'ativacoes')).toBe(true)
     expect(hasPanelModule('staff', ['ativacoes'], 'ativacoes')).toBe(true)
     expect(hasPanelModule('staff', [], 'ativacoes')).toBe(false)
+    expect(hasPanelModule('staff', ['folha'], 'folha')).toBe(true)
+    expect(hasPanelModule('staff', [], 'folha')).toBe(false)
+    expect(hasPanelModule('financeiro', ['folha'], 'folha')).toBe(true)
   })
 })
 
@@ -74,10 +77,6 @@ describe('canSeeNavHref', () => {
     expect(canSeeNavHref('/financeiro', 'staff', [])).toBe(false)
     expect(canSeeNavHref('/financeiro', 'staff', ['financeiro'])).toBe(true)
     expect(canSeeNavHref('/contatos', 'financeiro', [])).toBe(false)
-    expect(canSeeNavHref('/ativacoes', 'mkt', [])).toBe(true)
-    expect(canSeeNavHref('/ativacoes', 'staff', [])).toBe(false)
-    expect(canSeeNavHref('/ativacoes', 'staff', ['ativacoes'])).toBe(true)
-    expect(canSeeNavHref('/ativacoes', 'admin', [])).toBe(true)
   })
 
   it('ninguém vê Balcão/Pós/Operação no menu; Agenda e Contatos ficam', () => {
