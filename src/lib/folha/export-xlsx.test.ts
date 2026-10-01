@@ -128,8 +128,8 @@ describe('folhaLineToExportRow', () => {
     expect(row[7]).toBe(150) // Assistente
     expect(row[8]).toBe(75) // Meio a meio
     expect(row[10]).toBe(707.19) // Outros (olerite)
-    expect(row[20]).toBeNull() // Acumulado mês Romeu
-    expect(row[21]).toBeNull() // Parcela Romeu
+    expect(row[20]).toBeNull() // Acumulado mês (U Romeu Q1+Q2)
+    expect(row[21]).toBeNull() // Top-up meta Romeu
     expect(row[22]).toBe(6032.64) // Líquido
     expect(row[23]).toBe('romeu_assistant')
   })

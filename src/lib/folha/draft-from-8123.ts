@@ -15,7 +15,7 @@ import {
   resolveGrossAdminFeeRate,
   resolveMeioAMeioRate,
   resolveProfessionalServiceTaxRate,
-  romeuAssistantPaySplit,
+  romeuAssistantMetaTopUp,
   type FolhaPersonRules,
 } from '@/lib/folha/exceptions'
 import {
@@ -113,13 +113,14 @@ export type FolhaDraftLine = {
     taxa_administrativa: number | null
     esteticista_bonus: number | null
     /**
-     * Acumulado mensal do assistente do Romeu (input RH) — define faixa 30/40/50.
-     * KPI ausente = null (não inventa 0).
+     * Acumulado mês = soma U Romeu Q1+Q2 (Serviços 30%), não faturado bruto.
+     * Define faixa 30/40/50. KPI ausente = null (não inventa 0).
      */
     acumulado_mes: number | null
     /**
-     * Parcela quinzenal da comissão progressiva Romeu (acumulado × faixa / 2).
-     * Crédito no proposed_pay; null se acumulado ausente ou fora das faixas.
+     * Top-up de meta Romeu (adic. além dos 30% já pagos nas quinzenas).
+     * Só creditado no Q2 (dia 05); null no Q1 ou se acumulado ausente/&lt;1000.
+     * 0 é valor real quando mês ficou na faixa 30%.
      */
     romeu_comissao_parcela: number | null
   }
@@ -341,13 +342,18 @@ export function buildFolhaDraftLine(
   const isAssistantLike =
     cargo === 'assistente' || cargo === 'multiplicador' || cargo === 'colorista'
 
-  /** Romeu: acumulado → parcela quinzenal (crédito); null se fora das faixas. */
-  const romeuSplit =
+  /**
+   * Romeu: acumulado mês → top-up de meta só no Q2 (applyTaxExtras false / dia 05).
+   * Q1: null — os 30% base já estão no Avec / Serviços 30%.
+   */
+  const romeuMeta =
     person?.isRomeuAssistant && extras?.acumulado_mes != null
-      ? romeuAssistantPaySplit(extras.acumulado_mes)
+      ? romeuAssistantMetaTopUp(extras.acumulado_mes)
       : null
   const romeuParcela =
-    romeuSplit?.parcel == null ? null : roundFolha(romeuSplit.parcel, 4)
+    !applyTaxExtras && romeuMeta?.topUp != null
+      ? roundFolha(romeuMeta.topUp, 4)
+      : null
 
   let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,

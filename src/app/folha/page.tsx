@@ -675,9 +675,9 @@ export default function FolhaPage() {
                   {selectedLine?.flags.includes('assistente_romeu') ? (
                     <label className="text-xs">
                       <span className="text-muted">
-                        Acumulado mês Romeu (faixa 30/40/50)
+                        Acumulado mês (soma U Romeu Q1+Q2)
                         {selectedLine.folha_extras.romeu_comissao_parcela != null
-                          ? ` · parcela ${formatMoney(selectedLine.folha_extras.romeu_comissao_parcela)}`
+                          ? ` · top-up meta ${formatMoney(selectedLine.folha_extras.romeu_comissao_parcela)}`
                           : ''}
                       </span>
                       <input
@@ -685,7 +685,7 @@ export default function FolhaPage() {
                         value={acumuladoInput}
                         onChange={(e) => setAcumuladoInput(e.target.value)}
                         inputMode="decimal"
-                        placeholder="ex. 15000"
+                        placeholder="ex. 10230.03"
                       />
                     </label>
                   ) : null}

@@ -221,6 +221,8 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
       'nicole moura',
       'pedro henrique sousa cardi',
       'pedro cardi',
+      'jonathan dias dos santos',
+      'jonathan dias',
     ],
     meioAMeioRate: null,
     assistantRemitRate: null,
@@ -340,7 +342,14 @@ export function resolveAssistantAdminTaxRate(
 }
 
 /**
- * Comissão progressiva do assistente do Romeu pelo acumulado do mês.
+ * Alíquota-base já paga nas quinzenas (Serviços 30% / Avec) quando o mês
+ * de serviços Romeu (soma U Q1+Q2) passa de R$ 1.000.
+ */
+export const ROMEU_ASSISTANT_BASE_RATE = 0.3
+
+/**
+ * Comissão progressiva do assistente do Romeu pelo acumulado do mês
+ * (soma U Romeu Q1+Q2 — Serviços 30%, não o faturado bruto).
  * Fora das faixas ( &lt; R$ 1.000 ) → null (não inventa 0).
  * Acima de R$ 30.000 → mantém 50%.
  */
@@ -359,21 +368,41 @@ export function romeuAssistantCommissionRate(
 }
 
 /**
- * Delta do mês (acumulado × faixa) — pago metade dia 20 (Q1) e metade dia 05 (Q2).
+ * Adicional de meta Romeu pago **uma vez** no dia 05 (2ª quinzena / Q2).
+ *
+ * Racional (aba Bonus): todo mundo já inicia em 30% quando mês &gt; R$ 1.000;
+ * esses 30% já foram pagos nas quinzenas. No dia 05 paga-se só o **top-up**
+ * por ter batido faixa maior:
+ * - [1000, 10000] → 30%, top-up 0
+ * - (10000, 20000] → 40%, top-up = 10% do mês
+ * - (20000, 30000] → 50%, top-up = 20% do mês
+ * - &gt;30000 → 50%, top-up = 20% do mês
+ *
+ * `topUp = monthTotal × (rate − 0.30)` quando rate &gt; 0.30; senão 0.
+ * null se acumulado ausente ou &lt; 1000.
+ */
+export function romeuAssistantMetaTopUp(
+  monthTotal: number | null | undefined,
+): { rate: number | null; monthTotal: number | null; topUp: number | null } {
+  const rate = romeuAssistantCommissionRate(monthTotal)
+  if (rate == null || monthTotal == null) {
+    return { rate: null, monthTotal: null, topUp: null }
+  }
+  const topUp =
+    rate > ROMEU_ASSISTANT_BASE_RATE
+      ? monthTotal * (rate - ROMEU_ASSISTANT_BASE_RATE)
+      : 0
+  return { rate, monthTotal, topUp }
+}
+
+/**
+ * @deprecated use {@link romeuAssistantMetaTopUp}. O modelo antigo
+ * `parcel = (acumulado × rate) / 2` estava errado frente à aba Bonus.
  */
 export function romeuAssistantPaySplit(
   monthAccumulated: number | null | undefined,
-): { rate: number | null; monthCommission: number | null; parcel: number | null } {
-  const rate = romeuAssistantCommissionRate(monthAccumulated)
-  if (rate == null || monthAccumulated == null) {
-    return { rate: null, monthCommission: null, parcel: null }
-  }
-  const monthCommission = monthAccumulated * rate
-  return {
-    rate,
-    monthCommission,
-    parcel: monthCommission / 2,
-  }
+): { rate: number | null; monthTotal: number | null; topUp: number | null } {
+  return romeuAssistantMetaTopUp(monthAccumulated)
 }
 
 /** Remessa V/U padrão (20%), sem override nomeado hoje. */

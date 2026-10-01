@@ -363,7 +363,7 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(68976.53, 1)
   })
 
-  it('Romeu: acumulado_mes → parcela progressiva no líquido; U não altera pay do assistente', () => {
+  it('Romeu Q2: acumulado_mes → top-up meta no líquido; U não altera pay do assistente', () => {
     const base = {
       name: 'GABRIELA DA SILVA SANTOS',
       role: 'MULTIPLICADOR',
@@ -390,15 +390,36 @@ describe('buildFolhaDraftLine', () => {
     expect(withU.folha_extras.valor_a_pagar_profissional).toBeCloseTo(986.008, 2)
     expect(withU.proposed_pay).toBeCloseTo(1114.77, 2)
 
+    // Sep IG Gabriela: Total 10230.03 → top-up 1023.003 (10%) no dia 05
     const withMeta = buildFolhaDraftLine(
       'iguatemi',
       base,
-      { servicos_assistente_como_pro: 4930.04, acumulado_mes: 15_000 },
+      { servicos_assistente_como_pro: 4930.04, acumulado_mes: 10_230.03 },
       { applyTaxExtras: false },
     )
     expect(withMeta.flags).not.toContain('meta_romeu_pendente')
-    expect(withMeta.folha_extras.romeu_comissao_parcela).toBe(3000)
-    expect(withMeta.proposed_pay).toBeCloseTo(4114.77, 2)
+    expect(withMeta.folha_extras.romeu_comissao_parcela).toBeCloseTo(1023.003, 5)
+    expect(withMeta.proposed_pay).toBeCloseTo(1114.77 + 1023.003, 2)
+
+    // Q1: top-up não entra (30% já no Avec)
+    const q1 = buildFolhaDraftLine(
+      'iguatemi',
+      base,
+      { acumulado_mes: 10_230.03 },
+      { applyTaxExtras: true },
+    )
+    expect(q1.folha_extras.romeu_comissao_parcela).toBeNull()
+    expect(q1.proposed_pay).toBeCloseTo(1114.77, 2)
+
+    // Faixa 30%: top-up 0 no Q2
+    const lucas = buildFolhaDraftLine(
+      'iguatemi',
+      { ...base, name: 'LUCAS RODRIGUES DE SOUZA' },
+      { acumulado_mes: 4980 },
+      { applyTaxExtras: false },
+    )
+    expect(lucas.folha_extras.romeu_comissao_parcela).toBe(0)
+    expect(lucas.proposed_pay).toBeCloseTo(1114.77, 2)
   })
 
   it('sem a_pagar → proposed_pay null (não inventa 0)', () => {
