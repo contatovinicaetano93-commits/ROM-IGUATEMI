@@ -32,8 +32,26 @@ describe('disaggregateOleriteDescontos', () => {
       meioRate: 0.5,
     })
     expect(d.embeddedAdminMeio).toBe(true)
+    expect(d.embeddedShortfall).toBeNull()
     expect(d.taxaAdm).toBeCloseTo(638.4, 2)
     expect(d.meioAMeio).toBeCloseTo(188.5, 2)
+    expect(d.outrosResiduais).toBeNull()
+  })
+
+  it('Daniel Chabaribery: descontos ≈ (adm − meio) − W → embutido com shortfall', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 50480,
+      adminFee8123: 0,
+      assistantDiscount: -4704.11,
+      otherDiscounts: -1116.17,
+      adminRate: 0.07,
+      meioRate: 0.5,
+      serviceTaxRate: 0.04,
+    })
+    expect(d.embeddedAdminMeio).toBe(true)
+    expect(d.taxaAdm).toBeCloseTo(3533.6, 1)
+    expect(d.meioAMeio).toBeCloseTo(2352.055, 2)
+    expect(d.embeddedShortfall).toBeCloseTo(65.37, 1)
     expect(d.outrosResiduais).toBeNull()
   })
 

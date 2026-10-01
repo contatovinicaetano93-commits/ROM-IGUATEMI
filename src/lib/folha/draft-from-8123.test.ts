@@ -254,6 +254,44 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(1114.77, 2)
   })
 
+  it('Daniel: descontos shortfall W → Tx adm 7% embutida; líquido = a_pagar; com U bate olerite', () => {
+    const row = {
+      name: 'DANIEL CHABARIBERY',
+      role: 'Cabeleireiro',
+      charged: 50480.0000038147,
+      service_share: 25240.00000190735,
+      product_share: 0,
+      other_share: 0,
+      tip: 0,
+      product_spend: -1317.4000057578087,
+      card_fee: -688.0939008593559,
+      admin_fee: 0,
+      assistant_discount: -4704.110007047653,
+      other_discounts: -1116.1701164245605,
+      net_payable: 17414.22597181797,
+      house_share: 25240.00000190735,
+    }
+    const line = buildFolhaDraftLine('iguatemi', row, undefined, {
+      applyTaxExtras: false,
+    })
+    expect(line.taxa_administrativa).toBeCloseTo(3533.6, 1)
+    expect(line.meio_a_meio).toBeCloseTo(2352.055, 2)
+    expect(line.rateio_apos_cartao).toBeCloseTo(24551.91, 1)
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.proposed_pay).toBeCloseTo(17414.23, 2)
+
+    // U = Dailza 420 + Evandro 1220.01 → V 328 − W 65.6 − shortfall ≈ PDF 17611.26
+    const withU = buildFolhaDraftLine(
+      'iguatemi',
+      row,
+      { servicos_assistente_como_pro: 1640.01 },
+      { applyTaxExtras: false },
+    )
+    expect(withU.folha_extras.valor_a_pagar_profissional).toBeCloseTo(328.002, 2)
+    expect(withU.folha_extras.taxa_servicos).toBeCloseTo(65.6, 1)
+    expect(withU.proposed_pay).toBeCloseTo(17611.26, 1)
+  })
+
   it('Lucas Romeu: descontos=0 → Tx adm 81.90 (3% de 2730); proposed = a_pagar + meio − adm', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',

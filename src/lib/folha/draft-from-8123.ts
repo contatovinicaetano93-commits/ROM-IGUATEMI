@@ -14,6 +14,7 @@ import {
   resolveFolhaPersonRules,
   resolveGrossAdminFeeRate,
   resolveMeioAMeioRate,
+  resolveProfessionalServiceTaxRate,
   type FolhaPersonRules,
 } from '@/lib/folha/exceptions'
 import {
@@ -271,6 +272,7 @@ export function buildFolhaDraftLine(
     cargo === 'assistente' || cargo === 'multiplicador' || cargo === 'colorista'
       ? resolveAssistantAdminTaxRate(panel, person)
       : null
+  const serviceTaxRate = resolveProfessionalServiceTaxRate(panel, person)
   const olerite = disaggregateOleriteDescontos({
     charged: row.charged,
     adminFee8123: row.admin_fee,
@@ -279,6 +281,7 @@ export function buildFolhaDraftLine(
     adminRate: adminRatePreview,
     meioRate,
     assistantAdminRate,
+    serviceTaxRate,
   })
   const embeddedInDescontos = olerite.embeddedAdminMeio
   const meioCreditedInNet = olerite.meioCreditedInNet
@@ -307,6 +310,7 @@ export function buildFolhaDraftLine(
   /**
    * Abate no proposed_pay: motor 7% (pro) ou adm 3% assistente quando
    * a_pagar ainda não fechou a taxa (Lucas: descontos=0).
+   * null explícito em extras antigos NÃO sobrescreve o motor.
    */
   const assistantAdmMotorExtra =
     !embeddedInDescontos &&
@@ -316,6 +320,10 @@ export function buildFolhaDraftLine(
       ? olerite.taxaAdm
       : null
   const taxaAdmMotorExtra = admin.motorExtra ?? assistantAdmMotorExtra
+  const rhTaxaAdm =
+    typeof extras?.taxa_administrativa === 'number'
+      ? extras.taxa_administrativa
+      : null
 
   let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,
@@ -329,10 +337,7 @@ export function buildFolhaDraftLine(
     valor_a_pagar_profissional: extras?.valor_a_pagar_profissional ?? null,
     taxa_servicos: extras?.taxa_servicos ?? null,
     taxa_adm_assistente: extras?.taxa_adm_assistente ?? null,
-    taxa_administrativa:
-      extras?.taxa_administrativa !== undefined
-        ? extras.taxa_administrativa
-        : taxaAdmMotorExtra,
+    taxa_administrativa: rhTaxaAdm ?? taxaAdmMotorExtra,
     esteticista_bonus: extras?.esteticista_bonus ?? null,
   }
   if (!applyTaxExtras) {
@@ -415,6 +420,24 @@ export function buildFolhaDraftLine(
         assistTax == null ? null : roundFolha(u * assistTax, 4)
     }
   }
+
+  /**
+   * 8123 às vezes embute W reduzindo `descontos` (Daniel: shortfall ≈ W).
+   * a_pagar fica alto demais em W; ao abater taxa_servicos no pay, compensar.
+   * Coluna W (taxa_servicos) permanece o valor verdadeiro U×alíquota.
+   */
+  const extrasForProposedPay =
+    folha_extras.taxa_servicos != null &&
+    olerite.embeddedShortfall != null &&
+    olerite.embeddedShortfall > 0.02
+      ? {
+          ...folha_extras,
+          taxa_servicos: roundFolha(
+            folha_extras.taxa_servicos + olerite.embeddedShortfall,
+            4,
+          ),
+        }
+      : folha_extras
 
   const flags: FolhaDraftFlag[] = []
   if (cargo === 'manicure' && admin.amount != null && admin.amount > 0) {
@@ -500,7 +523,7 @@ export function buildFolhaDraftLine(
     exception_id: person?.id ?? null,
     folha_extras,
     proposed_pay: roundFolha(
-      applyFolhaExtras(row.net_payable, folha_extras, meioForProposedPay),
+      applyFolhaExtras(row.net_payable, extrasForProposedPay, meioForProposedPay),
       4,
     ),
     formula_y_preview: roundFolha(yPreview, 4),

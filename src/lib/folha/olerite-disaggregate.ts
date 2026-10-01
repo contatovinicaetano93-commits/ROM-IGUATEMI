@@ -11,6 +11,10 @@
  *   B) `descontos` = 0 e taxa_adm 8123 = 0 — Lucas: adm = charged × 3%
  *      → a_pagar ainda sem meio/adm; proposed = a_pagar + meio − adm.
  *   C) `descontos` ≈ +meio — meio já no a_pagar; só falta abater adm 3%.
+ *
+ * Profissional: `descontos` ≈ (adm − meio) + residual (Ana/Amauri).
+ * Às vezes o 8123 embute W (taxa serviços 3%/4%) reduzindo o débito —
+ * Daniel: 1116 ≈ 1181 − 65 (W). Continua embutido; shortfall compensa no pay.
  */
 
 import { roundFolha } from '@/lib/folha/calc'
@@ -31,6 +35,11 @@ export type OleriteDisaggregate = {
    * sem a taxa adm correspondente — não recreditar meio.
    */
   meioCreditedInNet: boolean
+  /**
+   * Quando `descontos` ≈ (adm − meio) − W, o a_pagar fica alto demais em W.
+   * Magnitude do shortfall (para compensar ao aplicar taxa_servicos).
+   */
+  embeddedShortfall: number | null
   /** Taxa adm para coluna (conferência olerite). */
   taxaAdm: number | null
   /** Meio a meio (crédito) para coluna. */
@@ -76,6 +85,11 @@ export function disaggregateOleriteDescontos(args: {
    * incl. Romeu). null = não aplicar caminho assistente.
    */
   assistantAdminRate?: number | null
+  /**
+   * Alíquota W do profissional sobre U (BR 3% / IG 4%). Usada só para tolerar
+   * shortfall em `descontos` ≈ (adm − meio) − W.
+   */
+  serviceTaxRate?: number | null
 }): OleriteDisaggregate {
   const assist = mag(args.assistantDiscount)
   const meioAMeio =
@@ -110,6 +124,7 @@ export function disaggregateOleriteDescontos(args: {
           return {
             embeddedAdminMeio: true,
             meioCreditedInNet: true,
+            embeddedShortfall: null,
             taxaAdm: impliedAdm,
             meioAMeio,
             outrosResiduais: null,
@@ -127,6 +142,7 @@ export function disaggregateOleriteDescontos(args: {
         return {
           embeddedAdminMeio: false,
           meioCreditedInNet: true,
+          embeddedShortfall: null,
           taxaAdm: expectedAdm,
           meioAMeio,
           outrosResiduais: null,
@@ -144,6 +160,7 @@ export function disaggregateOleriteDescontos(args: {
       return {
         embeddedAdminMeio: false,
         meioCreditedInNet: false,
+        embeddedShortfall: null,
         taxaAdm: expectedAdm,
         meioAMeio,
         outrosResiduais: null,
@@ -152,7 +169,7 @@ export function disaggregateOleriteDescontos(args: {
     }
   }
 
-  // --- Caminho profissional: descontos (mag) ≈ (adm − meio) + residual ---
+  // --- Caminho profissional: descontos (mag) ≈ (adm − meio) ± residual/W ---
   let taxaAdm: number | null = null
   if (from8123Adm != null) {
     taxaAdm = roundFolha(from8123Adm, 4)
@@ -164,16 +181,38 @@ export function disaggregateOleriteDescontos(args: {
   const admMinusMeio =
     taxaAdm != null && meioAMeio != null ? taxaAdm - meioAMeio : null
 
-  const embeddedAdminMeio =
+  const shortfall =
+    otherMag != null && admMinusMeio != null
+      ? roundFolha(admMinusMeio - otherMag, 4)
+      : null
+  /** Teto do shortfall ≈ W máx. se U fosse o faturado inteiro. */
+  const maxShortfall =
+    args.charged != null && args.serviceTaxRate != null
+      ? args.charged * args.serviceTaxRate + 1
+      : null
+  const coversAdmMeio =
     otherMag != null &&
     admMinusMeio != null &&
     admMinusMeio > 0.005 &&
     otherMag + 0.05 >= admMinusMeio
+  const shortByW =
+    shortfall != null &&
+    shortfall > 0.02 &&
+    maxShortfall != null &&
+    shortfall <= maxShortfall &&
+    otherMag != null &&
+    admMinusMeio != null &&
+    otherMag + 0.05 >= admMinusMeio * 0.85
+
+  const embeddedAdminMeio = Boolean(coversAdmMeio || shortByW)
+  const embeddedShortfall =
+    embeddedAdminMeio && shortfall != null && shortfall > 0.02 ? shortfall : null
 
   let outrosResiduais: number | null = null
   if (otherMag != null) {
     if (embeddedAdminMeio && admMinusMeio != null) {
       const residual = roundFolha(otherMag - admMinusMeio, 4)
+      // Residual positivo = BARU etc.; shortfall negativo não vira “outros”.
       outrosResiduais = residual != null && residual > 0.02 ? residual : null
     } else if (!embeddedAdminMeio && otherMag > 0.02) {
       outrosResiduais = otherMag
@@ -183,6 +222,7 @@ export function disaggregateOleriteDescontos(args: {
   return {
     embeddedAdminMeio,
     meioCreditedInNet: embeddedAdminMeio,
+    embeddedShortfall,
     taxaAdm,
     meioAMeio,
     outrosResiduais,
