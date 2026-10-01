@@ -70,7 +70,7 @@ export function defaultAdminFeeRate(
     case 'esteticista':
       // Regra geral (BR e IG): 7% sobre faturado bruto.
       // Únicas exceções a 5%: Brunna / Joanides / Marcela (exceptions.ts).
-      return panel === 'iguatemi' || panel === 'brasil' ? 0.07 : 0.07
+      return 0.07
     case 'outro':
       return null
     default: {
