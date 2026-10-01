@@ -39,6 +39,8 @@ export type FolhaDraftFlag =
   | 'meta_quinzena_pendente'
   | 'assistente_romeu'
   | 'taxa_adm_motor'
+  /** Taxa adm (e meio) já no 8123 `descontos` — só conferência na coluna. */
+  | 'taxa_adm_em_descontos'
 
 export type FolhaDraftLine = {
   name: string
@@ -177,8 +179,32 @@ function applyFolhaExtras(
 }
 
 /**
+ * Avec frequentemente embute no 8123 `descontos` o líquido
+ * (TAXA ADM − MEIO A MEIO) + outros (ex.: CONSUMO BARU), com `taxa_adm` = 0.
+ * Ex.: Ana Matsumoto IG — other=981.40 = 2045.13 − 1450.81 + 387.08.
+ * Nesse caso a_pagar já está fechado: não reabater adm nem recreditar meio.
+ */
+export function avecDescontosAlreadyNetsAdminMeio(args: {
+  otherDiscounts: number | null | undefined
+  charged: number | null
+  assistantDiscount: number | null | undefined
+  adminRate: number | null
+  meioRate: number
+}): boolean {
+  const other = deductionMagnitude(args.otherDiscounts)
+  if (other == null || args.charged == null || args.adminRate == null) return false
+  const assist = deductionMagnitude(args.assistantDiscount) ?? 0
+  const adm = args.charged * args.adminRate
+  const meio = assist * args.meioRate
+  const admMinusMeio = adm - meio
+  if (admMinusMeio <= 0.005) return false
+  return other + 0.05 >= admMinusMeio
+}
+
+/**
  * Resolve taxa adm para exibição e abatimento.
- * 8123 com valor > 0 manda; senão motor aplica alíquota × faturado bruto.
+ * 8123 com valor > 0 manda; senão motor calcula alíquota × faturado (exibição).
+ * Abate no proposed_pay só se `descontos` NÃO parecer já embutir adm−meio.
  */
 export function resolveLineAdminFee(args: {
   panel: RomPanelId
@@ -186,11 +212,13 @@ export function resolveLineAdminFee(args: {
   charged: number | null
   adminFee8123: number | null | undefined
   person: FolhaPersonRules | null
+  /** Quando true, só exibe a taxa — a_pagar Avec já fechou adm/meio. */
+  embeddedInDescontos?: boolean
 }): {
   amount: number | null
   rate: number | null
   source: '8123' | 'motor' | null
-  /** Só preenchido quando o motor precisa abater (8123 zerado). */
+  /** Só preenchido quando o motor precisa abater (8123 zerado e não embutido). */
   motorExtra: number | null
 } {
   const from8123 = deductionMagnitude(args.adminFee8123)
@@ -203,7 +231,12 @@ export function resolveLineAdminFee(args: {
     return { amount: null, rate, source: null, motorExtra: null }
   }
   const amount = roundFolha(args.charged * rate, 4)
-  return { amount, rate, source: 'motor', motorExtra: amount }
+  return {
+    amount,
+    rate,
+    source: 'motor',
+    motorExtra: args.embeddedInDescontos ? null : amount,
+  }
 }
 
 export function buildFolhaDraftLine(
@@ -220,13 +253,25 @@ export function buildFolhaDraftLine(
   const meio_a_meio =
     assistantMag == null ? null : roundFolha(assistantMag * meioRate, 4)
 
+  const adminRatePreview = resolveGrossAdminFeeRate(panel, cargo, person)
+  const embeddedInDescontos = avecDescontosAlreadyNetsAdminMeio({
+    otherDiscounts: row.other_discounts,
+    charged: row.charged,
+    assistantDiscount: row.assistant_discount,
+    adminRate: adminRatePreview,
+    meioRate,
+  })
+
   const admin = resolveLineAdminFee({
     panel,
     cargo,
     charged: row.charged,
     adminFee8123: row.admin_fee,
     person,
+    embeddedInDescontos,
   })
+  /** Meio a meio no proposed_pay só se Avec ainda não neteou em `descontos`. */
+  const meioForProposedPay = embeddedInDescontos ? null : meio_a_meio
 
   let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,
@@ -339,7 +384,12 @@ export function buildFolhaDraftLine(
     flags.push('meta_quinzena_pendente')
   }
   if (person?.isRomeuAssistant) flags.push('assistente_romeu')
-  if (admin.source === 'motor') flags.push('taxa_adm_motor')
+  if (admin.source === 'motor' && admin.motorExtra != null) {
+    flags.push('taxa_adm_motor')
+  }
+  if (embeddedInDescontos && admin.amount != null) {
+    flags.push('taxa_adm_em_descontos')
+  }
 
   const fatLiquido = reconstructFatLiquidoFrom8123(row)
   const yPreview =
@@ -397,7 +447,7 @@ export function buildFolhaDraftLine(
     exception_id: person?.id ?? null,
     folha_extras,
     proposed_pay: roundFolha(
-      applyFolhaExtras(row.net_payable, folha_extras, meio_a_meio),
+      applyFolhaExtras(row.net_payable, folha_extras, meioForProposedPay),
       4,
     ),
     formula_y_preview: roundFolha(yPreview, 4),
