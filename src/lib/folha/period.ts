@@ -161,3 +161,33 @@ export function resolveFolhaQuinzena(opts?: {
   }
   return defaultFolhaQuinzena(today)
 }
+
+/** YYYY-MM-DD → dd/mm/yyyy (query Avec). */
+export function isoToBrDay(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) throw new Error(`dia ISO inválido: ${iso}`)
+  return `${m[3]}/${m[2]}/${m[1]}`
+}
+
+/**
+ * Fim do fetch 8123 da quinzena: não passa de `today` (quinzena em curso)
+ * nem do `to` (quinzena fechada).
+ */
+export function clampQuinzenaFetchEnd(quinzena: FolhaQuinzena, today: string): string {
+  if (today < quinzena.from) return quinzena.from
+  if (today <= quinzena.to) return today
+  return quinzena.to
+}
+
+/** Janela Avec (inicio/fim BR) da quinzena, cortada em `today`. */
+export function quinzenaAvecRangeBr(
+  quinzena: FolhaQuinzena,
+  today = todayIsoSaoPaulo(),
+): { inicio: string; fim: string; fimIso: string } {
+  const fimIso = clampQuinzenaFetchEnd(quinzena, today)
+  return {
+    inicio: isoToBrDay(quinzena.from),
+    fim: isoToBrDay(fimIso),
+    fimIso,
+  }
+}

@@ -1,5 +1,5 @@
 /**
- * Poll IMAP → parse DARF/DAS → aplica no período Folha aberto.
+ * Poll IMAP → parse DARF/DAS → aplica no período Folha aberto (próximo pagamento).
  */
 
 import type { RomPanelId } from '@/lib/brand'
@@ -9,7 +9,11 @@ import {
   readFolhaImapConfig,
   type FolhaImapMessage,
 } from '@/lib/folha/imap-client'
-import { quinzenaForDay, todayIsoSaoPaulo } from '@/lib/folha/period'
+import {
+  defaultFolhaQuinzena,
+  parseFolhaPeriodId,
+  todayIsoSaoPaulo,
+} from '@/lib/folha/period'
 import { ingestFolhaTaxEmail, loadOrCreateFolhaDraft } from '@/lib/folha/service'
 import { folhaTaxSourceExists, getFolhaPeriod } from '@/lib/folha/store'
 
@@ -54,7 +58,7 @@ async function processMessage(
 
 export async function pollFolhaImapInbox(
   panel: RomPanelId,
-  opts?: { day?: string; markSeen?: boolean },
+  opts?: { day?: string; periodId?: string; markSeen?: boolean },
 ): Promise<FolhaImapPollResult> {
   const cfg = readFolhaImapConfig()
   if (!cfg) {
@@ -70,10 +74,19 @@ export async function pollFolhaImapInbox(
     }
   }
 
-  const day = opts?.day ?? todayIsoSaoPaulo()
-  await loadOrCreateFolhaDraft(panel, { referenceDay: day, actor: 'imap-cron' })
-  const periodId = quinzenaForDay(day).id
-  const period = await getFolhaPeriod(periodId)
+  const today = opts?.day ?? todayIsoSaoPaulo()
+  // DARFs chegam para o olerite a pagar — não a quinzena civil de "hoje".
+  // Ex.: em 01/10 → aplica em 2026-09-q2 (paga 05/10), não em 2026-10-q1.
+  const quinzena =
+    (opts?.periodId ? parseFolhaPeriodId(opts.periodId) : null) ??
+    defaultFolhaQuinzena(today)
+
+  await loadOrCreateFolhaDraft(panel, {
+    periodId: quinzena.id,
+    actor: 'imap-cron',
+    today,
+  })
+  const period = await getFolhaPeriod(quinzena.id)
   if (!period) {
     return {
       configured: true,
@@ -83,7 +96,7 @@ export async function pollFolhaImapInbox(
       applied: 0,
       marked_seen: 0,
       errors: ['Período Folha ausente — rode refresh 8123'],
-      period_id: periodId,
+      period_id: quinzena.id,
     }
   }
 
@@ -99,7 +112,7 @@ export async function pollFolhaImapInbox(
       applied: 0,
       marked_seen: 0,
       errors: [e instanceof Error ? e.message : String(e)],
-      period_id: periodId,
+      period_id: quinzena.id,
     }
   }
 
@@ -108,7 +121,7 @@ export async function pollFolhaImapInbox(
   const seenUids: number[] = []
 
   for (const msg of messages) {
-    const r = await processMessage(panel, periodId, msg)
+    const r = await processMessage(panel, quinzena.id, msg)
     if (r.error) errors.push(`uid ${msg.uid}: ${r.error}`)
     if (r.ingested) ingested += 1
     if (r.applied) applied += 1
@@ -122,9 +135,7 @@ export async function pollFolhaImapInbox(
       await markFolhaTaxEmailsSeen(cfg, seenUids)
       marked = seenUids.length
     } catch (e) {
-      errors.push(
-        `markSeen: ${e instanceof Error ? e.message : String(e)}`,
-      )
+      errors.push(`markSeen: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -135,6 +146,6 @@ export async function pollFolhaImapInbox(
     applied,
     marked_seen: marked,
     errors,
-    period_id: periodId,
+    period_id: quinzena.id,
   }
 }

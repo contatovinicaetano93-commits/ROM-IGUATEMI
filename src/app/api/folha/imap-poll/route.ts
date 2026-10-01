@@ -21,8 +21,14 @@ export async function GET(req: NextRequest) {
     }
 
     const day = req.nextUrl.searchParams.get('day')?.trim()
+    const period = req.nextUrl.searchParams.get('period')?.trim()
     const referenceDay = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined
-    const result = await pollFolhaImapInbox(getRomPanelId(), { day: referenceDay })
+    const periodId =
+      period && /^\d{4}-\d{2}-q[12]$/.test(period) ? period : undefined
+    const result = await pollFolhaImapInbox(getRomPanelId(), {
+      day: referenceDay,
+      periodId,
+    })
     return ok(result)
   } catch (e) {
     return handleError(e)

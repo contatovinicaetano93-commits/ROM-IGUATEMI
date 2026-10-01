@@ -182,6 +182,10 @@ export default function FolhaPage() {
     })
     if (!data) return
     applyDraft(data.draft)
+    const range = data.avec_range as { inicio?: string; fim?: string } | null | undefined
+    const src = data.source === 'avec_window' ? 'janela Avec' : 'snapshot DB'
+    const rangeLabel =
+      range?.inicio && range?.fim ? `${range.inicio}–${range.fim}` : data.draft?.reference_day
     setStatus((prev) =>
       prev
         ? {
@@ -190,11 +194,11 @@ export default function FolhaPage() {
             period_id: data.period_id,
             selected_period_id: data.selected_period_id ?? prev.selected_period_id,
             pay_date: data.pay_date ?? prev.pay_date,
-            message: `Rascunho atualizado do 8123 (${data.draft?.reference_day ?? '—'}).`,
+            message: `Rascunho atualizado (${src}: ${rangeLabel ?? '—'}).`,
           }
         : prev,
     )
-    setActionMsg('8123 recarregado (extras preservados).')
+    setActionMsg(`8123 recarregado via ${src} (extras preservados).`)
   }
 
   async function onSaveExtras() {
@@ -253,7 +257,9 @@ export default function FolhaPage() {
     setActionMsg(null)
     setError(null)
     try {
-      const res = await fetch('/api/folha/imap-poll', {
+      const periodQs = selectedPeriod || status?.selected_period_id || ''
+      const q = periodQs ? `?period=${encodeURIComponent(periodQs)}` : ''
+      const res = await fetch(`/api/folha/imap-poll${q}`, {
         credentials: 'include',
         signal: AbortSignal.timeout(45_000),
       })
@@ -387,6 +393,22 @@ export default function FolhaPage() {
 
             {draft ? (
               <>
+                <label className="block text-xs max-w-lg">
+                  <span className="text-muted">Quinzena / data de pagamento</span>
+                  <select
+                    className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                    value={selectedPeriod}
+                    disabled={busy || (status.periods?.length ?? 0) === 0}
+                    onChange={(e) => void onChangePeriod(e.target.value)}
+                  >
+                    {(status.periods ?? []).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label} · paga {formatDayBr(p.pay_date)} · {statusLabel(p.status)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="rounded-md border border-border px-2 py-1 text-xs">
                     {statusLabel(periodStatus)}
@@ -396,7 +418,9 @@ export default function FolhaPage() {
                   <span className="text-muted">
                     {formatDayBr(draft.quinzena.from)} – {formatDayBr(draft.quinzena.to)}
                   </span>
-                  <span className="text-muted">8123 até {formatDayBr(draft.reference_day)}</span>
+                  <span className="text-muted">
+                    8123 {formatDayBr(draft.quinzena.from)}–{formatDayBr(draft.reference_day)}
+                  </span>
                   <span className="text-muted">
                     {visibleLines.length}/{draft.line_count} na lista
                   </span>

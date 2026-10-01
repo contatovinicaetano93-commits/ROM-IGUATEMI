@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  clampQuinzenaFetchEnd,
   defaultFolhaQuinzena,
   formatPayDateBr,
+  isoToBrDay,
   listRecentQuinzenas,
   parseFolhaPeriodId,
   payDateForHalf,
+  quinzenaAvecRangeBr,
   quinzenaForDay,
   resolveFolhaQuinzena,
 } from '@/lib/folha/period'
@@ -47,5 +50,22 @@ describe('folha period pay dates', () => {
       '2026-09-q1',
       '2026-08-q2',
     ])
+  })
+
+  it('janela Avec da quinzena corta no fim do período (fechada)', () => {
+    const q = quinzenaForDay('2026-09-30')
+    expect(clampQuinzenaFetchEnd(q, '2026-10-01')).toBe('2026-09-30')
+    expect(quinzenaAvecRangeBr(q, '2026-10-01')).toEqual({
+      inicio: '16/09/2026',
+      fim: '30/09/2026',
+      fimIso: '2026-09-30',
+    })
+    expect(isoToBrDay('2026-09-16')).toBe('16/09/2026')
+  })
+
+  it('janela Avec da quinzena em curso corta em hoje', () => {
+    const q = quinzenaForDay('2026-09-20')
+    expect(clampQuinzenaFetchEnd(q, '2026-09-22')).toBe('2026-09-22')
+    expect(quinzenaAvecRangeBr(q, '2026-09-22').fim).toBe('22/09/2026')
   })
 })
