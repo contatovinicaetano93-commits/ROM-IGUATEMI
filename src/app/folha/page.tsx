@@ -253,7 +253,9 @@ export default function FolhaPage() {
     setActionMsg(null)
     setError(null)
     try {
-      const res = await fetch('/api/folha/imap-poll', {
+      const period = selectedPeriod || status?.selected_period_id || ''
+      const q = period ? `?period=${encodeURIComponent(period)}` : ''
+      const res = await fetch(`/api/folha/imap-poll${q}`, {
         credentials: 'include',
         signal: AbortSignal.timeout(45_000),
       })

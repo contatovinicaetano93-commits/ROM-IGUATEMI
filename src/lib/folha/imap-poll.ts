@@ -9,7 +9,7 @@ import {
   readFolhaImapConfig,
   type FolhaImapMessage,
 } from '@/lib/folha/imap-client'
-import { quinzenaForDay, todayIsoSaoPaulo } from '@/lib/folha/period'
+import { resolveFolhaQuinzena, todayIsoSaoPaulo } from '@/lib/folha/period'
 import { ingestFolhaTaxEmail, loadOrCreateFolhaDraft } from '@/lib/folha/service'
 import { folhaTaxSourceExists, getFolhaPeriod } from '@/lib/folha/store'
 
@@ -54,7 +54,7 @@ async function processMessage(
 
 export async function pollFolhaImapInbox(
   panel: RomPanelId,
-  opts?: { day?: string; markSeen?: boolean },
+  opts?: { day?: string; periodId?: string; markSeen?: boolean },
 ): Promise<FolhaImapPollResult> {
   const cfg = readFolhaImapConfig()
   if (!cfg) {
@@ -71,8 +71,17 @@ export async function pollFolhaImapInbox(
   }
 
   const day = opts?.day ?? todayIsoSaoPaulo()
-  await loadOrCreateFolhaDraft(panel, { referenceDay: day, actor: 'imap-cron' })
-  const periodId = quinzenaForDay(day).id
+  const quinzena = resolveFolhaQuinzena({
+    periodId: opts?.periodId,
+    day,
+    today: day,
+  })
+  await loadOrCreateFolhaDraft(panel, {
+    periodId: quinzena.id,
+    actor: 'imap-cron',
+    today: day,
+  })
+  const periodId = quinzena.id
   const period = await getFolhaPeriod(periodId)
   if (!period) {
     return {

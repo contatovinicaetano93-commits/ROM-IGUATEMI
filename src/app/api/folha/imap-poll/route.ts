@@ -8,7 +8,8 @@ import { pollFolhaImapInbox } from '@/lib/folha/imap-poll'
 
 /**
  * GET — cron (CRON_SECRET) ou sessão com módulo folha.
- * Lê UNSEEN com DARF/DAS na caixa FOLHA_IMAP_* e aplica no período atual.
+ * Lê UNSEEN com DARF/DAS na caixa FOLHA_IMAP_* e aplica no período
+ * pedido (`period`) ou, sem ele, na quinzena do dia (`day` / hoje).
  */
 export async function GET(req: NextRequest) {
   try {
@@ -22,7 +23,11 @@ export async function GET(req: NextRequest) {
 
     const day = req.nextUrl.searchParams.get('day')?.trim()
     const referenceDay = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined
-    const result = await pollFolhaImapInbox(getRomPanelId(), { day: referenceDay })
+    const period = req.nextUrl.searchParams.get('period')?.trim()
+    const result = await pollFolhaImapInbox(getRomPanelId(), {
+      day: referenceDay,
+      periodId: period || undefined,
+    })
     return ok(result)
   } catch (e) {
     return handleError(e)
