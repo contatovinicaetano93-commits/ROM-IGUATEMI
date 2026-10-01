@@ -333,6 +333,48 @@ export default function FolhaPage() {
     setTaxBody('')
   }
 
+  async function onExportExcel() {
+    if (!periodId) {
+      setError('Selecione uma quinzena')
+      return
+    }
+    setBusy(true)
+    setActionMsg(null)
+    setError(null)
+    try {
+      const q = new URLSearchParams({ period: periodId })
+      if (onlyWithPay) q.set('only_with_pay', '1')
+      const res = await fetch(`/api/folha/export?${q}`, {
+        credentials: 'include',
+        signal: AbortSignal.timeout(30_000),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        setError(
+          typeof json === 'object' && json && 'error' in json
+            ? String((json as { error?: string }).error ?? 'Falha ao exportar Excel')
+            : 'Falha ao exportar Excel',
+        )
+        return
+      }
+      const blob = await res.blob()
+      const cd = res.headers.get('Content-Disposition')
+      const match = cd?.match(/filename="([^"]+)"/)
+      const filename = match?.[1] ?? `folha-${periodId}.xlsx`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+      setActionMsg(`Excel exportado: ${filename}`)
+    } catch {
+      setError('Falha ao exportar Excel')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function selectLine(line: FolhaDraftLine) {
     setSelectedName(line.name)
     setUInput(
@@ -452,6 +494,14 @@ export default function FolhaPage() {
                     className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
                   >
                     Atualizar do 8123
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || !draft.line_count}
+                    onClick={() => void onExportExcel()}
+                    className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    Exportar Excel
                   </button>
                   <button
                     type="button"
