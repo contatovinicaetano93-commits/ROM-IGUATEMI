@@ -7,7 +7,7 @@ import { getSql } from '@/lib/db'
 import type { FolhaDraft, FolhaDraftLine } from '@/lib/folha/draft-from-8123'
 import type { FolhaPeriodStatus } from '@/lib/folha/types'
 import type { FolhaTaxKind } from '@/lib/folha/tax-parse'
-import { asJsonArray } from '@/lib/sql-json'
+import { asJsonArray } from '@/lib/jsonb'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
 export type FolhaPeriodRow = {

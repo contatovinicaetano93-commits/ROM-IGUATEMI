@@ -15,7 +15,7 @@ function formatMoney(value: number | null | undefined): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function statusLabel(status: FolhaPeriodStatus | null): string {
+function statusLabel(status: FolhaPeriodStatus | null | undefined): string {
   switch (status) {
     case 'draft':
       return 'Rascunho'
@@ -28,6 +28,7 @@ function statusLabel(status: FolhaPeriodStatus | null): string {
     case 'awaiting_rules':
       return 'Aguardando regras'
     case null:
+    case undefined:
       return '—'
     default: {
       const _exhaustive: never = status
