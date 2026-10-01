@@ -60,6 +60,12 @@ function flagLabel(flag: FolhaDraftLine['flags'][number]): string {
       return 'Sem cargo'
     case 'assistente_com_desconto':
       return 'Desconto assistente'
+    case 'excecao_nomeada':
+      return 'Exceção nomeada'
+    case 'meta_quinzena_pendente':
+      return 'Meta quinzena (valor pendente RH)'
+    case 'assistente_romeu':
+      return 'Assistente do Romeu (faixas 30/40/50)'
     default: {
       const _exhaustive: never = flag
       return _exhaustive
@@ -765,6 +771,11 @@ export default function FolhaPage() {
               <li>
                 Assistente como pro: remessa {pct(rules.assistant_as_pro_remit_rate)}; ganho{' '}
                 {pct(rules.assistant_as_pro_earn_rate)} + meio a meio
+              </li>
+              <li>
+                Exceções: Pedro/Dayana meio a meio 5%; Romeu 50%; Walter assistente 30% /
+                Dani Rocha 35%; Brunna/Joah/Marcela taxa 5% (2%+3%); assistentes Romeu
+                30/40/50% no acumulado do mês
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
             </ul>

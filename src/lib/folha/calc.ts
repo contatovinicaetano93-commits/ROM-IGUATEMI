@@ -9,10 +9,14 @@
 
 import type { RomPanelId } from '@/lib/brand'
 import {
-  ASSISTANT_AS_PRO_REMIT_RATE,
+  resolveFolhaPersonRules,
+  resolveMeioAMeioRate,
+  resolveProfessionalServiceTaxRate,
+  resolveRemitRate,
+  type FolhaPersonRules,
+} from '@/lib/folha/exceptions'
+import {
   ESTETICISTA_BONUS_RATE,
-  MEIO_A_MEIO_RATE,
-  assistantServiceTaxRate,
   defaultAdminFeeRate,
   normalizeFolhaCargo,
   type FolhaCargo,
@@ -20,6 +24,8 @@ import {
 
 export type FolhaLineInput = {
   panel: RomPanelId
+  /** Nome do profissional — resolve exceções (Pedro/Walter/Brunna…). */
+  professionalName?: string | null
   cargo: string | null
   /** Faturado bruto (coluna C). */
   faturado: number | null
@@ -32,7 +38,7 @@ export type FolhaLineInput = {
   /** Override explícito de taxa adm; se omitido, usa default do cargo. */
   taxaAdministrativa: number | null | undefined
   descontoAssistente: number | null
-  /** Se null e há descontoAssistente, usa metade. */
+  /** Se null e há descontoAssistente, usa taxa nomeada / default 50%. */
   meioAMeio: number | null
   parc: number | null
   darf: number | null
@@ -48,7 +54,7 @@ export type FolhaLineInput = {
   servicosAssistenteComoPro: number | null
   /** Override de V (valor a pagar profissional). */
   valorAPagarProfissional: number | null
-  /** Override da alíquota V/U (ex.: Walter 30%). */
+  /** Override da alíquota V/U. */
   remitRateOverride: number | null
   /** Override de W. */
   taxaServicosOverride: number | null
@@ -98,23 +104,39 @@ function resolveAdminFee(input: FolhaLineInput, cargo: FolhaCargo): number | nul
   return input.faturado * rate
 }
 
-function resolveMeioAMeio(input: FolhaLineInput): number | null {
-  if (input.meioAMeio != null) return input.meioAMeio
-  if (input.descontoAssistente == null) return null
-  return input.descontoAssistente * MEIO_A_MEIO_RATE
+function personRules(input: FolhaLineInput): FolhaPersonRules | null {
+  return resolveFolhaPersonRules(input.professionalName)
 }
 
-function resolveValorAPagarPro(input: FolhaLineInput): number | null {
+function resolveMeioAMeio(
+  input: FolhaLineInput,
+  rules: FolhaPersonRules | null,
+): number | null {
+  if (input.meioAMeio != null) return input.meioAMeio
+  if (input.descontoAssistente == null) return null
+  return input.descontoAssistente * resolveMeioAMeioRate(rules)
+}
+
+function resolveValorAPagarPro(
+  input: FolhaLineInput,
+  rules: FolhaPersonRules | null,
+): number | null {
   if (input.valorAPagarProfissional != null) return input.valorAPagarProfissional
   if (input.servicosAssistenteComoPro == null) return null
-  const rate = input.remitRateOverride ?? ASSISTANT_AS_PRO_REMIT_RATE
+  const rate = input.remitRateOverride ?? resolveRemitRate(rules)
   return input.servicosAssistenteComoPro * rate
 }
 
-function resolveTaxaServicos(input: FolhaLineInput): number | null {
+function resolveTaxaServicos(
+  input: FolhaLineInput,
+  rules: FolhaPersonRules | null,
+): number | null {
   if (input.taxaServicosOverride != null) return input.taxaServicosOverride
   if (input.servicosAssistenteComoPro == null) return null
-  return input.servicosAssistenteComoPro * assistantServiceTaxRate(input.panel)
+  return (
+    input.servicosAssistenteComoPro *
+    resolveProfessionalServiceTaxRate(input.panel, rules)
+  )
 }
 
 /**
@@ -123,11 +145,12 @@ function resolveTaxaServicos(input: FolhaLineInput): number | null {
  */
 export function calculateFolhaLine(input: FolhaLineInput): FolhaLineResult {
   const cargo = normalizeFolhaCargo(input.cargo)
+  const rules = personRules(input)
   const fatLiquido = resolveFatLiquido(input)
   const taxaAdministrativa = resolveAdminFee(input, cargo)
-  const meioAMeio = resolveMeioAMeio(input)
-  const valorAPagarProfissional = resolveValorAPagarPro(input)
-  const taxaServicos = resolveTaxaServicos(input)
+  const meioAMeio = resolveMeioAMeio(input, rules)
+  const valorAPagarProfissional = resolveValorAPagarPro(input, rules)
+  const taxaServicos = resolveTaxaServicos(input, rules)
 
   const esteticistaBonus =
     cargo === 'esteticista' && input.faturado != null

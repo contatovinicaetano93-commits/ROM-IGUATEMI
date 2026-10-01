@@ -10,12 +10,13 @@
 
 import type { RomPanelId } from '@/lib/brand'
 import { calculateFolhaLine, roundFolha } from '@/lib/folha/calc'
-import { quinzenaForDay, todayIsoSaoPaulo, type FolhaQuinzena } from '@/lib/folha/period'
 import {
-  MEIO_A_MEIO_RATE,
-  normalizeFolhaCargo,
-  type FolhaCargo,
-} from '@/lib/folha/rules'
+  resolveAssistantAdminTaxRate,
+  resolveFolhaPersonRules,
+  resolveMeioAMeioRate,
+} from '@/lib/folha/exceptions'
+import { quinzenaForDay, todayIsoSaoPaulo, type FolhaQuinzena } from '@/lib/folha/period'
+import { normalizeFolhaCargo, type FolhaCargo } from '@/lib/folha/rules'
 import {
   getLatestSalonCommissionsDaily,
   getSalonCommissionsDailyNear,
@@ -33,6 +34,9 @@ export type FolhaDraftFlag =
   | 'sem_a_pagar'
   | 'sem_cargo'
   | 'assistente_com_desconto'
+  | 'excecao_nomeada'
+  | 'meta_quinzena_pendente'
+  | 'assistente_romeu'
 
 export type FolhaDraftLine = {
   name: string
@@ -54,6 +58,10 @@ export type FolhaDraftLine = {
   }
   /** Conferência Folha (derivado; não altera proposed_pay sozinho). */
   meio_a_meio: number | null
+  /** Taxa efetiva de meio a meio (0.05 Pedro/Dayana; 0.70 Walter; 0.5 default). */
+  meio_a_meio_rate: number
+  /** Id da exceção nomeada, se houver. */
+  exception_id: string | null
   /** Camadas Folha ainda não no 8123 — null até IMAP/RH/U. */
   folha_extras: {
     parc: number | null
@@ -66,6 +74,8 @@ export type FolhaDraftLine = {
     servicos_assistente_como_pro: number | null
     valor_a_pagar_profissional: number | null
     taxa_servicos: number | null
+    /** Taxa adm do assistente (IG 3% / Brunna 2%) sobre U — conferência. */
+    taxa_adm_assistente: number | null
     esteticista_bonus: number | null
   }
   /**
@@ -155,9 +165,11 @@ export function buildFolhaDraftLine(
 ): FolhaDraftLine {
   const applyTaxExtras = opts?.applyTaxExtras !== false
   const cargo = normalizeFolhaCargo(row.role)
+  const person = resolveFolhaPersonRules(row.name)
+  const meioRate = resolveMeioAMeioRate(person)
   const assistantMag = deductionMagnitude(row.assistant_discount)
   const meio_a_meio =
-    assistantMag == null ? null : roundFolha(assistantMag * MEIO_A_MEIO_RATE, 4)
+    assistantMag == null ? null : roundFolha(assistantMag * meioRate, 4)
 
   let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,
@@ -170,6 +182,7 @@ export function buildFolhaDraftLine(
     servicos_assistente_como_pro: extras?.servicos_assistente_como_pro ?? null,
     valor_a_pagar_profissional: extras?.valor_a_pagar_profissional ?? null,
     taxa_servicos: extras?.taxa_servicos ?? null,
+    taxa_adm_assistente: extras?.taxa_adm_assistente ?? null,
     esteticista_bonus: extras?.esteticista_bonus ?? null,
   }
   if (!applyTaxExtras) {
@@ -184,6 +197,7 @@ export function buildFolhaDraftLine(
   ) {
     const preview = calculateFolhaLine({
       panel,
+      professionalName: row.name,
       cargo: row.role,
       faturado: row.charged,
       pctSalao: null,
@@ -210,10 +224,12 @@ export function buildFolhaDraftLine(
     folha_extras.esteticista_bonus = preview.esteticistaBonus
   }
 
-  // Se U informado, deriva V/W via motor.
+  // Se U informado, deriva V/W (+ taxa adm assistente) via motor / exceções.
   if (folha_extras.servicos_assistente_como_pro != null) {
+    const u = folha_extras.servicos_assistente_como_pro
     const derived = calculateFolhaLine({
       panel,
+      professionalName: row.name,
       cargo: row.role,
       faturado: row.charged,
       pctSalao: null,
@@ -230,7 +246,7 @@ export function buildFolhaDraftLine(
       mensalidadeContabilidade: folha_extras.mensalidade_contabilidade,
       descontosDiversos: folha_extras.descontos_diversos,
       produtosBlack: folha_extras.produtos_black,
-      servicosAssistenteComoPro: folha_extras.servicos_assistente_como_pro,
+      servicosAssistenteComoPro: u,
       valorAPagarProfissional: folha_extras.valor_a_pagar_profissional,
       remitRateOverride: null,
       taxaServicosOverride: folha_extras.taxa_servicos,
@@ -243,6 +259,11 @@ export function buildFolhaDraftLine(
     if (folha_extras.taxa_servicos == null) {
       folha_extras.taxa_servicos = derived.taxaServicos
     }
+    if (folha_extras.taxa_adm_assistente == null) {
+      const assistTax = resolveAssistantAdminTaxRate(panel, person)
+      folha_extras.taxa_adm_assistente =
+        assistTax == null ? null : roundFolha(u * assistTax, 4)
+    }
   }
 
   const flags: FolhaDraftFlag[] = []
@@ -253,6 +274,11 @@ export function buildFolhaDraftLine(
   if (row.net_payable == null) flags.push('sem_a_pagar')
   if (!row.role?.trim()) flags.push('sem_cargo')
   if (assistantMag != null && assistantMag > 0) flags.push('assistente_com_desconto')
+  if (person) flags.push('excecao_nomeada')
+  if (person?.hasQuinzenaMeta && person.quinzenaMeta == null) {
+    flags.push('meta_quinzena_pendente')
+  }
+  if (person?.isRomeuAssistant) flags.push('assistente_romeu')
 
   const fatLiquido = reconstructFatLiquidoFrom8123(row)
   const yPreview =
@@ -260,6 +286,7 @@ export function buildFolhaDraftLine(
       ? null
       : calculateFolhaLine({
           panel,
+          professionalName: row.name,
           cargo: row.role,
           faturado: row.charged,
           pctSalao: null,
@@ -302,6 +329,8 @@ export function buildFolhaDraftLine(
       net_payable: row.net_payable,
     },
     meio_a_meio,
+    meio_a_meio_rate: meioRate,
+    exception_id: person?.id ?? null,
     folha_extras,
     proposed_pay: roundFolha(applyFolhaExtras(row.net_payable, folha_extras), 4),
     formula_y_preview: roundFolha(yPreview, 4),
