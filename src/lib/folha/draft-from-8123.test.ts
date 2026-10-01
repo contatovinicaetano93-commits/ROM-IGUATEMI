@@ -63,12 +63,27 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBe(6032.64)
     expect(line.meio_a_meio).toBe(75)
     expect(line.flags).toContain('assistente_com_desconto')
+    expect(line.flags).toContain('assistente_romeu')
+    expect(line.exception_id).toBe('romeu_assistant')
     expect(line.folha_extras.darf).toBeNull()
   })
 
   it('abate DARF/DAS em cima do a_pagar sem recalcular comissão', () => {
     const line = buildFolhaDraftLine('brasil', jefferson, { darf: 100, das: 86.05 })
     expect(line.proposed_pay).toBe(6032.64 - 100 - 86.05)
+  })
+
+  it('Q2 (paga dia 05) ignora DARF/DAS/mensalidade no proposed_pay', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      jefferson,
+      { darf: 100, das: 86.05, mensalidade_contabilidade: 120 },
+      { applyTaxExtras: false },
+    )
+    expect(line.folha_extras.darf).toBeNull()
+    expect(line.folha_extras.das).toBeNull()
+    expect(line.folha_extras.mensalidade_contabilidade).toBeNull()
+    expect(line.proposed_pay).toBe(6032.64)
   })
 
   it('manicure com taxa adm no 8123 → flag (caderno: sem taxa adm)', () => {
@@ -86,11 +101,12 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBe(6032.64 + 200 - 30)
   })
 
-  it('U no IG usa taxa 4%', () => {
+  it('U no IG usa taxa 4% (assistente Romeu: sem taxa adm 3% do assistente)', () => {
     const line = buildFolhaDraftLine('iguatemi', jefferson, {
       servicos_assistente_como_pro: 1000,
     })
     expect(line.folha_extras.taxa_servicos).toBe(40)
+    expect(line.folha_extras.taxa_adm_assistente).toBeNull()
   })
 
   it('sem a_pagar → proposed_pay null (não inventa 0)', () => {

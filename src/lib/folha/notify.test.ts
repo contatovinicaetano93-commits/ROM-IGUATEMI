@@ -36,6 +36,8 @@ const draft: FolhaDraft = {
         net_payable: 1000,
       },
       meio_a_meio: null,
+      meio_a_meio_rate: 0.5,
+      exception_id: null,
       folha_extras: {
         parc: null,
         darf: 10,
@@ -47,6 +49,7 @@ const draft: FolhaDraft = {
         servicos_assistente_como_pro: null,
         valor_a_pagar_profissional: null,
         taxa_servicos: null,
+        taxa_adm_assistente: null,
         esteticista_bonus: null,
       },
       proposed_pay: 985,

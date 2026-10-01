@@ -106,6 +106,55 @@ export type SyncCommissionsOpts = {
   anchorDay?: string
 }
 
+export type FetchCommissions8123RangeResult = {
+  professionals: CommissionProfessionalRow[]
+  truncated: boolean
+  inicio: string
+  fim: string
+  report_id: string
+}
+
+function resolveCommissions8123ReportId(): string | null {
+  const def = getDailyReports().find((r) => r.mapper === 'professionals_commissions')
+  return def ? resolveReportId(def) : null
+}
+
+/**
+ * Busca 8123 na janela Avec (inicio/fim dd/mm/yyyy) sem gravar em
+ * `salon_commissions_daily` — uso da Folha (quinzena), para não sobrescrever o MTD.
+ */
+export async function fetchCommissions8123ForRange(opts: {
+  inicioBr: string
+  fimBr: string
+  deadlineAt?: number | null
+}): Promise<FetchCommissions8123RangeResult> {
+  const reportId = resolveCommissions8123ReportId()
+  if (!reportId) {
+    throw new Error('Relatório 8123 não configurado no registry')
+  }
+  const params = withRequiredAvecReportParams(reportId, {
+    inicio: opts.inicioBr,
+    fim: opts.fimBr,
+    limit: 250,
+  })
+  const result = await fetchAllAvecReport(reportId, params, undefined, {
+    deadlineAt: opts.deadlineAt ?? null,
+  })
+  const rows = asRows(result)
+  const professionals: CommissionProfessionalRow[] = []
+  for (const row of rows) {
+    const parsed = normalizeCommission8123Row(row)
+    if (parsed) professionals.push(parsed)
+  }
+  return {
+    professionals,
+    truncated: result.truncated,
+    inicio: opts.inicioBr,
+    fim: opts.fimBr,
+    report_id: reportId,
+  }
+}
+
 /**
  * Sync 8123 → salon_commissions_daily (mês calendário MTD, igual P1).
  * Só no full/daily — não entra no fast KPI.
@@ -120,8 +169,7 @@ export async function syncCommissions8123(
     opts?.anchorDay && /^\d{4}-\d{2}-\d{2}$/.test(opts.anchorDay)
       ? opts.anchorDay
       : todayIsoLocal()
-  const def = getDailyReports().find((r) => r.mapper === 'professionals_commissions')
-  const reportId = def ? resolveReportId(def) : null
+  const reportId = resolveCommissions8123ReportId()
   if (!reportId) return
 
   if (isSyncBudgetExhausted()) {

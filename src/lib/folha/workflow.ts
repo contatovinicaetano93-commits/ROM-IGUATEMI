@@ -72,10 +72,15 @@ export function patchFolhaLineExtras(args: {
   line: FolhaDraftLine
   source: CommissionProfessionalRow | null
   extras: FolhaLineExtrasPatch
+  /** false na 2ª quinzena (paga dia 05) — ignora DARF/DAS/mensalidade. */
+  applyTaxExtras?: boolean
 }): FolhaDraftLine {
+  const applyTaxExtras = args.applyTaxExtras !== false
   const mergedExtras = { ...args.line.folha_extras, ...args.extras }
   if (args.source) {
-    return buildFolhaDraftLine(args.panel, args.source, mergedExtras)
+    return buildFolhaDraftLine(args.panel, args.source, mergedExtras, {
+      applyTaxExtras,
+    })
   }
   // Sem source: recalcula proposed_pay manualmente a partir do net_payable.
   const rebuilt = buildFolhaDraftLine(
@@ -97,6 +102,7 @@ export function patchFolhaLineExtras(args: {
       house_share: args.line.avec.house_share,
     },
     mergedExtras,
+    { applyTaxExtras },
   )
   return rebuilt
 }
@@ -107,6 +113,7 @@ export function applyExtrasToDraftLines(args: {
   sourceProfessionals: readonly CommissionProfessionalRow[]
   professionalName: string
   extras: FolhaLineExtrasPatch
+  applyTaxExtras?: boolean
 }): { lines: FolhaDraftLine[]; total: number | null; matched: boolean } {
   const key = occupancyMergeKey(args.professionalName)
   let matched = false
@@ -122,6 +129,7 @@ export function applyExtrasToDraftLines(args: {
       line,
       source,
       extras: args.extras,
+      applyTaxExtras: args.applyTaxExtras,
     })
   })
   return { lines, total: sumProposedPay(lines), matched }
@@ -158,6 +166,7 @@ export function refreshDraftPreservingExtras(args: {
       line,
       source,
       extras,
+      applyTaxExtras: base.quinzena.half === 1,
     })
   })
 

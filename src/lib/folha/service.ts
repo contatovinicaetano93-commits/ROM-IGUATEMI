@@ -3,12 +3,17 @@
  */
 
 import type { RomPanelId } from '@/lib/brand'
+import { isAvecConfigured, isAvecMock } from '@/lib/avec/client'
+import { fetchCommissions8123ForRange } from '@/lib/avec/sync-commissions'
 import {
   buildFolhaDraftFrom8123,
   type FolhaDraft,
 } from '@/lib/folha/draft-from-8123'
 import {
+  acceptsFolhaTaxExtras,
   listRecentQuinzenas,
+  parseFolhaPeriodId,
+  quinzenaAvecRangeBr,
   resolveFolhaQuinzena,
   todayIsoSaoPaulo,
   type FolhaQuinzena,
@@ -37,6 +42,7 @@ import {
   type FolhaLineExtrasPatch,
 } from '@/lib/folha/workflow'
 import { occupancyMergeKey } from '@/lib/director-report/match-pro'
+import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
 export type FolhaLoadOpts = {
   /** id `YYYY-MM-q1|q2` */
@@ -84,7 +90,8 @@ export async function listFolhaPeriodSummaries(
 
 /**
  * Carrega (ou cria) o rascunho da quinzena alvo.
- * Snapshot 8123: dia fim da quinzena (`q.to`) — MTD naquele dia.
+ * Leitura: período persistido, senão snapshot DB perto do fim da quinzena.
+ * Corte real inicio/fim vem de `refreshFolhaDraft` (live Avec).
  */
 export async function loadOrCreateFolhaDraft(
   panel: RomPanelId,
@@ -143,19 +150,71 @@ export async function loadOrCreateFolhaDraft(
   }
 }
 
+/**
+ * Atualiza o rascunho com 8123 na janela da quinzena (inicio→fim, cortado em hoje).
+ * Não grava em `salon_commissions_daily` (MTD do painel fica intacto).
+ * Fallback: snapshot DB se Avec falhar / não configurado.
+ */
 export async function refreshFolhaDraft(
   panel: RomPanelId,
   opts?: FolhaLoadOpts,
-): Promise<{ draft: FolhaDraft; period: FolhaPeriodRow; quinzena: FolhaQuinzena }> {
+): Promise<{
+  draft: FolhaDraft
+  period: FolhaPeriodRow
+  quinzena: FolhaQuinzena
+  source: 'avec_window' | 'db_snapshot'
+  avec_range: { inicio: string; fim: string } | null
+}> {
   const today = opts?.today ?? todayIsoSaoPaulo()
   const quinzena = resolveFolhaQuinzena({
     periodId: opts?.periodId,
     day: opts?.referenceDay,
     today,
   })
-  const snapshot = await getLatestSalonCommissionsNearOrLatest(quinzena.to)
-  if (!snapshot || snapshot.professionals.length === 0) {
-    throw new Error(`Sem snapshot 8123 até ${quinzena.to} para montar a Folha`)
+  const range = quinzenaAvecRangeBr(quinzena, today)
+
+  let professionals: CommissionProfessionalRow[] | null = null
+  let referenceDay = range.fimIso
+  let source: 'avec_window' | 'db_snapshot' = 'db_snapshot'
+  let avecRange: { inicio: string; fim: string } | null = null
+  let avecError: Error | null = null
+
+  // Mock fixtures não têm janela real — só Avec live (token/login).
+  if (isAvecConfigured() && !isAvecMock()) {
+    try {
+      const fetched = await fetchCommissions8123ForRange({
+        inicioBr: range.inicio,
+        fimBr: range.fim,
+      })
+      if (fetched.truncated) {
+        throw new Error(
+          `8123 truncado na janela ${range.inicio}–${range.fim} — aumente AVEC_SYNC_MAX_PAGES ou tente de novo`,
+        )
+      }
+      if (fetched.professionals.length > 0) {
+        professionals = fetched.professionals
+        referenceDay = range.fimIso
+        source = 'avec_window'
+        avecRange = { inicio: fetched.inicio, fim: fetched.fim }
+      }
+    } catch (e) {
+      avecError = e instanceof Error ? e : new Error(String(e))
+    }
+  }
+
+  if (!professionals) {
+    const snapshot = await getLatestSalonCommissionsNearOrLatest(quinzena.to)
+    if (!snapshot || snapshot.professionals.length === 0) {
+      throw (
+        avecError ??
+        new Error(
+          `Sem 8123 na janela ${range.inicio}–${range.fim} (nem snapshot DB até ${quinzena.to})`,
+        )
+      )
+    }
+    professionals = snapshot.professionals
+    referenceDay = snapshot.day
+    source = 'db_snapshot'
   }
 
   const existing = await getFolhaPeriod(quinzena.id)
@@ -163,8 +222,8 @@ export async function refreshFolhaDraft(
 
   const draft = refreshDraftPreservingExtras({
     panel,
-    referenceDay: snapshot.day,
-    professionals: snapshot.professionals,
+    referenceDay,
+    professionals,
     previousLines,
     quinzenaDay: quinzena.to,
   })
@@ -172,13 +231,19 @@ export async function refreshFolhaDraft(
 
   const period = await upsertFolhaPeriodFromDraft({
     draft,
-    sourceProfessionals: snapshot.professionals,
+    sourceProfessionals: professionals,
     updatedBy: opts?.actor ?? null,
     status: existing?.status ?? 'draft',
     forceStatus: false,
   })
 
-  return { draft: periodRowToDraft(panel, period), period, quinzena }
+  return {
+    draft: periodRowToDraft(panel, period),
+    period,
+    quinzena,
+    source,
+    avec_range: avecRange,
+  }
 }
 
 export async function patchFolhaLine(
@@ -194,12 +259,26 @@ export async function patchFolhaLine(
   if (!period) throw new Error('Período da Folha não encontrado')
   if (period.status === 'paid') throw new Error('Período já pago — reabra para editar')
 
+  const quinzena = parseFolhaPeriodId(period.id)
+  const applyTax = quinzena ? acceptsFolhaTaxExtras(quinzena.half) : period.half === 1
+  if (
+    !applyTax &&
+    (args.extras.darf != null ||
+      args.extras.das != null ||
+      args.extras.mensalidade_contabilidade != null)
+  ) {
+    throw new Error(
+      'DARF/DAS/mensalidade só entram no pagamento do dia 20 (1ª quinzena)',
+    )
+  }
+
   const result = applyExtrasToDraftLines({
     panel,
     lines: period.lines,
     sourceProfessionals: period.source_professionals,
     professionalName: args.professionalName,
     extras: args.extras,
+    applyTaxExtras: applyTax,
   })
   if (!result.matched) throw new Error('Profissional não encontrado no rascunho')
 
@@ -291,11 +370,14 @@ export async function ingestFolhaTaxEmail(
   let applied = false
   let current = period
   const extrasKey = taxKindToExtrasKey(parsed.kind)
+  const quinzena = parseFolhaPeriodId(args.periodId)
+  const applyTax = quinzena ? acceptsFolhaTaxExtras(quinzena.half) : period.half === 1
   if (
     args.applyToLine !== false &&
     extrasKey &&
     parsed.amount != null &&
-    parsed.professional_name
+    parsed.professional_name &&
+    applyTax
   ) {
     const key = occupancyMergeKey(parsed.professional_name)
     const hit = period.lines.find(

@@ -127,7 +127,7 @@ export function folhaRulesSummary(panel: RomPanelId): FolhaRulesSummary {
       esteticista:
         'Faturado − taxa adm − produto; ganha 10% do total faturado.',
       assistente:
-        'Faturado − produto (ou regra multiplicador/colorista). Pode atuar como profissional: 20% do valor faturado paga-se ao profissional; assistente pode ganhar 30% + meio a meio.',
+        'Faturado − produto. IG não-Romeu: ganho 30% com taxa adm 3%; profissional 4% sobre U + remessa V 20%. Assistentes do Romeu: faixas 30/40/50% no acumulado do mês (pago 05+20).',
       multiplicador:
         'Participação tipicamente 10–13% do faturado; taxa adm em geral só sobre serviços U quando aplicável.',
       colorista: 'Tratado como multiplicador/assistente na Fopag (sem taxa adm padrão sobre C).',

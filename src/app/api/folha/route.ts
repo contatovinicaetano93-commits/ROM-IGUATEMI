@@ -39,8 +39,8 @@ export async function GET(req: NextRequest) {
       shell_only: draft == null,
       rules_locked: true,
       message: draft
-        ? `${quinzena.label} · paga ${formatPayDateBr(quinzena.payDate)} · 8123 até ${draft.reference_day} · ${withPay}/${draft.line_count} com a_pagar.`
-        : `Sem snapshot 8123 até ${quinzena.to} (${quinzena.label}, paga ${formatPayDateBr(quinzena.payDate)}). Rode sync ou escolha outra quinzena.`,
+        ? `${quinzena.label} · paga ${formatPayDateBr(quinzena.payDate)} · 8123 ${quinzena.from}–${draft.reference_day} · ${withPay}/${draft.line_count} com a_pagar.`
+        : `Sem 8123 para ${quinzena.label} (${quinzena.from}–${quinzena.to}, paga ${formatPayDateBr(quinzena.payDate)}). Use Atualizar do 8123 ou outra quinzena.`,
       rules,
       draft,
       period_status: period?.status ?? null,

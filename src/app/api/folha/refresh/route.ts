@@ -31,9 +31,14 @@ export async function POST(req: NextRequest) {
       period_status: result.period.status,
       selected_period_id: result.quinzena.id,
       pay_date: result.quinzena.payDate,
+      source: result.source,
+      avec_range: result.avec_range,
     })
   } catch (e) {
-    if (e instanceof Error && /Sem snapshot 8123/i.test(e.message)) {
+    if (
+      e instanceof Error &&
+      (/Sem snapshot 8123/i.test(e.message) || /Sem 8123 na janela/i.test(e.message))
+    ) {
       return err(e.message, 404)
     }
     return handleError(e)
