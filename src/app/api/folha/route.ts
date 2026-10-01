@@ -3,8 +3,13 @@ import { err, handleError, ok } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { getRomPanelId } from '@/lib/brand'
 import { canAccessFolha } from '@/lib/folha/access'
+import { formatPayDateBr } from '@/lib/folha/period'
 import { folhaRulesSummary } from '@/lib/folha/rules'
-import { loadOrCreateFolhaDraft } from '@/lib/folha/service'
+import {
+  buildUpcomingPayments,
+  listFolhaPeriodSummaries,
+  loadOrCreateFolhaDraft,
+} from '@/lib/folha/service'
 import type { FolhaShellStatus } from '@/lib/folha/types'
 
 export async function GET(req: NextRequest) {
@@ -15,37 +20,35 @@ export async function GET(req: NextRequest) {
 
     const panel = getRomPanelId()
     const rules = folhaRulesSummary(panel)
+    const periodParam = req.nextUrl.searchParams.get('period')?.trim()
     const dayParam = req.nextUrl.searchParams.get('day')?.trim()
     const referenceDay =
       dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : undefined
 
-    const { draft, period } = await loadOrCreateFolhaDraft(panel, {
+    const { draft, period, quinzena } = await loadOrCreateFolhaDraft(panel, {
+      periodId: periodParam || undefined,
       referenceDay,
       actor: auth.session.user,
     })
+
+    const periods = await listFolhaPeriodSummaries()
+    const upcoming = buildUpcomingPayments()
+    const withPay = draft?.lines.filter((l) => l.proposed_pay != null).length ?? 0
 
     const payload: FolhaShellStatus = {
       shell_only: draft == null,
       rules_locked: true,
       message: draft
-        ? `Rascunho ${period?.status ?? 'draft'} · 8123 ${draft.reference_day}. Conferir extras (U/DARF/DAS) e liberar.`
-        : 'Regras travadas. Ainda sem snapshot 8123 — rode o sync full/daily ou aguarde o cron.',
+        ? `${quinzena.label} · paga ${formatPayDateBr(quinzena.payDate)} · 8123 até ${draft.reference_day} · ${withPay}/${draft.line_count} com a_pagar.`
+        : `Sem snapshot 8123 até ${quinzena.to} (${quinzena.label}, paga ${formatPayDateBr(quinzena.payDate)}). Rode sync ou escolha outra quinzena.`,
       rules,
       draft,
       period_status: period?.status ?? null,
-      period_id: period?.id ?? null,
-      periods: draft
-        ? [
-            {
-              id: draft.quinzena.id,
-              label: draft.quinzena.label,
-              status: period?.status ?? 'draft',
-              reference_day: draft.reference_day,
-              line_count: draft.line_count,
-              total_proposed_pay: draft.total_proposed_pay,
-            },
-          ]
-        : [],
+      period_id: period?.id ?? quinzena.id,
+      selected_period_id: quinzena.id,
+      pay_date: quinzena.payDate,
+      upcoming_payments: upcoming,
+      periods,
     }
     return ok(payload)
   } catch (e) {

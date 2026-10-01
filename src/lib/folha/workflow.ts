@@ -10,6 +10,7 @@ import {
   type FolhaDraftLine,
 } from '@/lib/folha/draft-from-8123'
 import { roundFolha } from '@/lib/folha/calc'
+import { quinzenaForYearMonthHalf } from '@/lib/folha/period'
 import type { FolhaPeriodStatus } from '@/lib/folha/types'
 import { occupancyMergeKey } from '@/lib/director-report/match-pro'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
@@ -184,17 +185,7 @@ export function periodRowToDraft(
   return {
     source: '8123',
     reference_day: row.reference_day ?? row.to_day,
-    quinzena: {
-      id: row.id,
-      label:
-        row.half === 1
-          ? `1ª quinzena ${row.year_month.slice(5)}/${row.year_month.slice(0, 4)}`
-          : `2ª quinzena ${row.year_month.slice(5)}/${row.year_month.slice(0, 4)}`,
-      from: row.from_day,
-      to: row.to_day,
-      half: row.half,
-      yearMonth: row.year_month,
-    },
+    quinzena: quinzenaForYearMonthHalf(row.year_month, row.half),
     panel,
     line_count: row.lines.length,
     lines: row.lines,

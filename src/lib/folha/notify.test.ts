@@ -12,6 +12,7 @@ const draft: FolhaDraft = {
     to: '2026-05-15',
     half: 1,
     yearMonth: '2026-05',
+    payDate: '2026-05-20',
   },
   panel: 'brasil',
   line_count: 1,

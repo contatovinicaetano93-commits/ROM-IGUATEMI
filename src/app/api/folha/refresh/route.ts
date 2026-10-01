@@ -11,16 +11,27 @@ export async function POST(req: NextRequest) {
     if (!auth.ok) return err(auth.message, auth.status)
     if (!canAccessFolha(auth.session)) return err('Acesso restrito à Folha de pagamento', 403)
 
-    const body = (await req.json().catch(() => ({}))) as { day?: string }
+    const body = (await req.json().catch(() => ({}))) as {
+      day?: string
+      period?: string
+    }
     const day = body.day?.trim()
+    const period = body.period?.trim()
     const referenceDay = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined
 
-    const { draft, period } = await refreshFolhaDraft(getRomPanelId(), {
+    const result = await refreshFolhaDraft(getRomPanelId(), {
+      periodId: period || undefined,
       referenceDay,
       actor: auth.session.user,
     })
 
-    return ok({ draft, period_id: period.id, period_status: period.status })
+    return ok({
+      draft: result.draft,
+      period_id: result.period.id,
+      period_status: result.period.status,
+      selected_period_id: result.quinzena.id,
+      pay_date: result.quinzena.payDate,
+    })
   } catch (e) {
     if (e instanceof Error && /Sem snapshot 8123/i.test(e.message)) {
       return err(e.message, 404)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { SectionCard } from '../_components/ui'
 import type { FolhaDraft, FolhaDraftLine } from '@/lib/folha/draft-from-8123'
@@ -13,6 +13,13 @@ function pct(rate: number): string {
 function formatMoney(value: number | null | undefined): string {
   if (value == null) return '—'
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function formatDayBr(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return iso
+  return `${m[3]}/${m[2]}/${m[1]}`
 }
 
 function statusLabel(status: FolhaPeriodStatus | null | undefined): string {
@@ -66,6 +73,8 @@ export default function FolhaPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('')
+  const [onlyWithPay, setOnlyWithPay] = useState(true)
   const [selectedName, setSelectedName] = useState('')
   const [uInput, setUInput] = useState('')
   const [darfInput, setDarfInput] = useState('')
@@ -82,16 +91,19 @@ export default function FolhaPage() {
             draft: draft ?? null,
             shell_only: draft == null,
             period_id: draft?.quinzena.id ?? prev.period_id,
+            selected_period_id: draft?.quinzena.id ?? prev.selected_period_id,
+            pay_date: draft?.quinzena.payDate ?? prev.pay_date,
           }
         : prev,
     )
   }, [])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (periodId?: string) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/folha', {
+      const q = periodId ? `?period=${encodeURIComponent(periodId)}` : ''
+      const res = await fetch(`/api/folha${q}`, {
         credentials: 'include',
         signal: AbortSignal.timeout(20_000),
       })
@@ -101,7 +113,9 @@ export default function FolhaPage() {
         setStatus(null)
         return
       }
-      setStatus(json.data ?? null)
+      const data = (json.data ?? null) as FolhaShellStatus | null
+      setStatus(data)
+      if (data?.selected_period_id) setSelectedPeriod(data.selected_period_id)
     } catch {
       setError('Falha ao carregar a Folha')
       setStatus(null)
@@ -116,9 +130,19 @@ export default function FolhaPage() {
 
   const rules = status?.rules
   const draft = status?.draft
-  const lines = draft?.lines ?? []
   const periodId = status?.period_id
   const periodStatus = status?.period_status
+  const lines = draft?.lines ?? []
+
+  const visibleLines = useMemo(() => {
+    if (!onlyWithPay) return lines
+    return lines.filter((l) => l.proposed_pay != null || l.avec.net_payable != null)
+  }, [lines, onlyWithPay])
+
+  const selectedLine = useMemo(
+    () => lines.find((l) => l.name === selectedName) ?? null,
+    [lines, selectedName],
+  )
 
   async function postJson(url: string, body: unknown, method = 'POST') {
     setBusy(true)
@@ -146,8 +170,16 @@ export default function FolhaPage() {
     }
   }
 
+  async function onChangePeriod(periodIdNext: string) {
+    setSelectedPeriod(periodIdNext)
+    setSelectedName('')
+    await load(periodIdNext)
+  }
+
   async function onRefresh() {
-    const data = await postJson('/api/folha/refresh', {})
+    const data = await postJson('/api/folha/refresh', {
+      period: selectedPeriod || status?.selected_period_id || undefined,
+    })
     if (!data) return
     applyDraft(data.draft)
     setStatus((prev) =>
@@ -156,6 +188,8 @@ export default function FolhaPage() {
             ...prev,
             period_status: data.period_status,
             period_id: data.period_id,
+            selected_period_id: data.selected_period_id ?? prev.selected_period_id,
+            pay_date: data.pay_date ?? prev.pay_date,
             message: `Rascunho atualizado do 8123 (${data.draft?.reference_day ?? '—'}).`,
           }
         : prev,
@@ -243,7 +277,7 @@ export default function FolhaPage() {
             d.errors?.length ? ` · erros: ${d.errors.join('; ')}` : ''
           }`,
         )
-        await load()
+        await load(selectedPeriod || undefined)
       }
     } catch {
       setError('Falha no IMAP')
@@ -287,33 +321,64 @@ export default function FolhaPage() {
     setDasInput(line.folha_extras.das != null ? String(line.folha_extras.das) : '')
   }
 
+  const upcoming = status?.upcoming_payments?.filter((p) => p.upcoming).slice(0, 2) ?? []
+
   return (
     <IntranetPage
       kicker="RH · Financeiro"
       title="Folha de pagamento"
-      subtitle="O sistema calcula a folha PJ; vocês conferem e liberam o pagamento."
+      subtitle="Quinzenas com pagamento nos dias 05 e 20. Conferir olerite e liberar."
     >
-      <SectionCard title="Regras travadas">
+      <SectionCard title="Agenda de pagamento">
         {loading ? <p className="text-sm text-muted">Carregando…</p> : null}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
-        {!loading && !error && rules ? (
-          <div className="space-y-2 text-sm">
-            <p className="text-muted">{rules.source}</p>
-            <ul className="list-disc space-y-1 pl-5 text-foreground">
-              <li>
-                Taxa serviços U: {pct(rules.assistant_service_tax_rate)} (≠ cartão)
-              </li>
-              <li>
-                Assistente como pro: remessa {pct(rules.assistant_as_pro_remit_rate)}; ganho{' '}
-                {pct(rules.assistant_as_pro_earn_rate)} + meio a meio
-              </li>
-              <li>Manicure sem taxa adm (exceto depilação)</li>
-            </ul>
+        {!loading && status ? (
+          <div className="space-y-3 text-sm">
+            <div className="flex flex-wrap gap-2">
+              {upcoming.length === 0 ? (
+                <p className="text-muted">Sem pagamentos futuros na janela listada.</p>
+              ) : (
+                upcoming.map((p) => (
+                  <button
+                    key={p.period_id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onChangePeriod(p.period_id)}
+                    className={`rounded-md border px-3 py-2 text-left text-xs ${
+                      selectedPeriod === p.period_id
+                        ? 'border-foreground bg-foreground/5'
+                        : 'border-border'
+                    }`}
+                  >
+                    <div className="font-medium text-foreground">Paga {formatDayBr(p.pay_date)}</div>
+                    <div className="text-muted">{p.label}</div>
+                    <div className="text-muted">
+                      {formatDayBr(p.from)} – {formatDayBr(p.to)}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+            <label className="block text-xs">
+              <span className="text-muted">Quinzena</span>
+              <select
+                className="mt-1 w-full max-w-md rounded-md border border-border bg-background px-2 py-1.5"
+                value={selectedPeriod}
+                disabled={busy || (status.periods?.length ?? 0) === 0}
+                onChange={(e) => void onChangePeriod(e.target.value)}
+              >
+                {(status.periods ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} · paga {formatDayBr(p.pay_date)} · {statusLabel(p.status)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         ) : null}
       </SectionCard>
 
-      <SectionCard title="Rascunho da quinzena">
+      <SectionCard title="Olerite da quinzena">
         {loading ? <p className="text-sm text-muted">Carregando…</p> : null}
         {!loading && status ? (
           <div className="space-y-4 text-sm">
@@ -326,12 +391,16 @@ export default function FolhaPage() {
                   <span className="rounded-md border border-border px-2 py-1 text-xs">
                     {statusLabel(periodStatus)}
                   </span>
+                  <span className="font-medium">Paga {formatDayBr(status.pay_date)}</span>
                   <span className="text-muted">{draft.quinzena.label}</span>
-                  <span className="text-muted">8123 {draft.reference_day}</span>
-                  <span className="text-muted">{draft.line_count} profissionais</span>
-                  <span className="font-medium">
-                    Total {formatMoney(draft.total_proposed_pay)}
+                  <span className="text-muted">
+                    {formatDayBr(draft.quinzena.from)} – {formatDayBr(draft.quinzena.to)}
                   </span>
+                  <span className="text-muted">8123 até {formatDayBr(draft.reference_day)}</span>
+                  <span className="text-muted">
+                    {visibleLines.length}/{draft.line_count} na lista
+                  </span>
+                  <span className="font-medium">Total {formatMoney(draft.total_proposed_pay)}</span>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -391,6 +460,14 @@ export default function FolhaPage() {
                       Reabrir rascunho
                     </button>
                   ) : null}
+                  <label className="ml-auto flex items-center gap-2 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={onlyWithPay}
+                      onChange={(e) => setOnlyWithPay(e.target.checked)}
+                    />
+                    Só quem tem a_pagar
+                  </label>
                 </div>
 
                 <div className="grid gap-3 rounded-lg border border-border p-3 md:grid-cols-4">
@@ -407,13 +484,25 @@ export default function FolhaPage() {
                       }}
                     >
                       <option value="">Selecionar…</option>
-                      {lines.map((l) => (
+                      {visibleLines.map((l) => (
                         <option key={l.name} value={l.name}>
-                          {l.name}
+                          {l.name} · {formatMoney(l.proposed_pay)}
                         </option>
                       ))}
                     </select>
                   </label>
+                  <div className="text-xs">
+                    <span className="text-muted">a_pagar 8123</span>
+                    <p className="mt-1 font-medium tabular-nums">
+                      {formatMoney(selectedLine?.avec.net_payable)}
+                    </p>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-muted">Proposto</span>
+                    <p className="mt-1 font-medium tabular-nums">
+                      {formatMoney(selectedLine?.proposed_pay)}
+                    </p>
+                  </div>
                   <label className="text-xs">
                     <span className="text-muted">U · serviços assist. como pro</span>
                     <input
@@ -476,9 +565,6 @@ export default function FolhaPage() {
                   >
                     Ler e aplicar se houver nome
                   </button>
-                  <p className="text-[11px] text-muted">
-                    IMAP automático entra depois (FOLHA_IMAP_*). Hoje é paste manual.
-                  </p>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -487,6 +573,7 @@ export default function FolhaPage() {
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                         <th className="py-2 pr-3 font-medium">Profissional</th>
                         <th className="py-2 pr-3 font-medium">Cargo</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Faturado</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">a_pagar</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">U</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">DARF</th>
@@ -496,7 +583,7 @@ export default function FolhaPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {lines.map((line) => (
+                      {visibleLines.map((line) => (
                         <tr
                           key={line.name}
                           className="cursor-pointer border-b border-border/60 hover:bg-background/80"
@@ -504,6 +591,9 @@ export default function FolhaPage() {
                         >
                           <td className="py-2 pr-3 text-foreground">{line.name}</td>
                           <td className="py-2 pr-3 text-muted">{line.cargo_raw ?? '—'}</td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.avec.charged)}
+                          </td>
                           <td className="py-2 pr-3 tabular-nums">
                             {formatMoney(line.avec.net_payable)}
                           </td>
@@ -528,21 +618,46 @@ export default function FolhaPage() {
                       ))}
                     </tbody>
                   </table>
+                  {visibleLines.length === 0 ? (
+                    <p className="mt-3 text-xs text-muted">
+                      Nenhuma linha com a_pagar nesta quinzena. Desmarque o filtro ou atualize o
+                      8123 após o sync do dia fim do período.
+                    </p>
+                  ) : null}
                 </div>
               </>
             ) : (
               <div className="space-y-2">
-                <p className="text-muted">Nenhuma quinzena com dados 8123 no momento.</p>
+                <p className="text-muted">Nenhum rascunho para esta quinzena ainda.</p>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void onRefresh()}
                   className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
                 >
-                  Tentar montar do 8123
+                  Montar do 8123
                 </button>
               </div>
             )}
+          </div>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard title="Regras do motor">
+        {!loading && !error && rules ? (
+          <div className="space-y-2 text-sm">
+            <p className="text-muted">{rules.source}</p>
+            <ul className="list-disc space-y-1 pl-5 text-foreground">
+              <li>Pagamentos: dia 05 (2ª quinzena anterior) e dia 20 (1ª quinzena)</li>
+              <li>
+                Taxa serviços U: {pct(rules.assistant_service_tax_rate)} (≠ cartão)
+              </li>
+              <li>
+                Assistente como pro: remessa {pct(rules.assistant_as_pro_remit_rate)}; ganho{' '}
+                {pct(rules.assistant_as_pro_earn_rate)} + meio a meio
+              </li>
+              <li>Manicure sem taxa adm (exceto depilação)</li>
+            </ul>
           </div>
         ) : null}
       </SectionCard>
