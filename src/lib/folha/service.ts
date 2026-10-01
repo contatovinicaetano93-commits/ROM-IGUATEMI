@@ -3,17 +3,20 @@
  */
 
 import type { RomPanelId } from '@/lib/brand'
-import { occupancyMergeKey } from '@/lib/director-report/match-pro'
 import {
   buildFolhaDraftFrom8123,
   type FolhaDraft,
 } from '@/lib/folha/draft-from-8123'
-import { quinzenaForDay, todayIsoSaoPaulo } from '@/lib/folha/period'
+import {
+  listRecentQuinzenas,
+  resolveFolhaQuinzena,
+  todayIsoSaoPaulo,
+  type FolhaQuinzena,
+} from '@/lib/folha/period'
 import { sendFolhaNotifyEmail } from '@/lib/folha/notify'
 import { insertFolhaTaxDocument } from '@/lib/folha/store'
 import {
   getFolhaPeriod,
-  getLatestFolhaPeriod,
   getLatestSalonCommissionsNearOrLatest,
   saveFolhaPeriodLines,
   updateFolhaPeriodStatus,
@@ -21,7 +24,11 @@ import {
   type FolhaPeriodRow,
 } from '@/lib/folha/store-facade'
 import { parseFolhaTaxEmail, taxKindToExtrasKey } from '@/lib/folha/tax-parse'
-import type { FolhaPeriodStatus } from '@/lib/folha/types'
+import type {
+  FolhaPeriodStatus,
+  FolhaPeriodSummary,
+  FolhaUpcomingPayment,
+} from '@/lib/folha/types'
 import {
   applyExtrasToDraftLines,
   canTransitionFolhaStatus,
@@ -29,35 +36,96 @@ import {
   refreshDraftPreservingExtras,
   type FolhaLineExtrasPatch,
 } from '@/lib/folha/workflow'
+import { occupancyMergeKey } from '@/lib/director-report/match-pro'
 
+export type FolhaLoadOpts = {
+  /** id `YYYY-MM-q1|q2` */
+  periodId?: string
+  /** Âncora YYYY-MM-DD (alternativa a periodId) */
+  referenceDay?: string
+  actor?: string | null
+  today?: string
+}
+
+export function buildUpcomingPayments(today = todayIsoSaoPaulo()): FolhaUpcomingPayment[] {
+  return listRecentQuinzenas({ today, count: 6 })
+    .map((q) => ({
+      period_id: q.id,
+      label: q.label,
+      pay_date: q.payDate,
+      from: q.from,
+      to: q.to,
+      upcoming: q.payDate >= today,
+    }))
+    .sort((a, b) => a.pay_date.localeCompare(b.pay_date))
+}
+
+export async function listFolhaPeriodSummaries(
+  today = todayIsoSaoPaulo(),
+): Promise<FolhaPeriodSummary[]> {
+  const recent = listRecentQuinzenas({ today, count: 6 })
+  const out: FolhaPeriodSummary[] = []
+  for (const q of recent) {
+    const row = await getFolhaPeriod(q.id)
+    out.push({
+      id: q.id,
+      label: q.label,
+      status: row?.status ?? 'draft',
+      reference_day: row?.reference_day ?? q.to,
+      line_count: row?.lines.length ?? null,
+      total_proposed_pay: row?.total_proposed_pay ?? null,
+      pay_date: q.payDate,
+      from: q.from,
+      to: q.to,
+    })
+  }
+  return out
+}
+
+/**
+ * Carrega (ou cria) o rascunho da quinzena alvo.
+ * Snapshot 8123: dia fim da quinzena (`q.to`) — MTD naquele dia.
+ */
 export async function loadOrCreateFolhaDraft(
   panel: RomPanelId,
-  opts?: { referenceDay?: string; actor?: string | null },
-): Promise<{ draft: FolhaDraft | null; period: FolhaPeriodRow | null }> {
-  const anchor = opts?.referenceDay ?? todayIsoSaoPaulo()
-  const quinzenaId = quinzenaForDay(anchor).id
-  const persisted =
-    (await getFolhaPeriod(quinzenaId)) ?? (await getLatestFolhaPeriod())
+  opts?: FolhaLoadOpts,
+): Promise<{
+  draft: FolhaDraft | null
+  period: FolhaPeriodRow | null
+  quinzena: FolhaQuinzena
+}> {
+  const today = opts?.today ?? todayIsoSaoPaulo()
+  const quinzena = resolveFolhaQuinzena({
+    periodId: opts?.periodId,
+    day: opts?.referenceDay,
+    today,
+  })
+  const persisted = await getFolhaPeriod(quinzena.id)
+  const snapshot = await getLatestSalonCommissionsNearOrLatest(quinzena.to)
 
-  const snapshot = await getLatestSalonCommissionsNearOrLatest(anchor)
-  if (!snapshot && !persisted) return { draft: null, period: null }
+  if (!snapshot && !persisted) {
+    return { draft: null, period: null, quinzena }
+  }
 
   if (persisted && !snapshot) {
     return {
       draft: periodRowToDraft(panel, persisted),
       period: persisted,
+      quinzena,
     }
   }
 
-  if (!snapshot) return { draft: null, period: persisted }
+  if (!snapshot) return { draft: null, period: persisted, quinzena }
 
   if (!persisted) {
     const draft = buildFolhaDraftFrom8123({
       panel,
       referenceDay: snapshot.day,
       professionals: snapshot.professionals,
-      quinzenaDay: anchor,
+      quinzenaDay: quinzena.to,
     })
+    // Garante id/label/payDate da quinzena pedida (não a do snapshot day).
+    draft.quinzena = quinzena
     const period = await upsertFolhaPeriodFromDraft({
       draft,
       status: 'draft',
@@ -65,26 +133,31 @@ export async function loadOrCreateFolhaDraft(
       updatedBy: opts?.actor ?? null,
       forceStatus: true,
     })
-    return { draft: periodRowToDraft(panel, period), period }
+    return { draft: periodRowToDraft(panel, period), period, quinzena }
   }
 
   return {
     draft: periodRowToDraft(panel, persisted),
     period: persisted,
+    quinzena,
   }
 }
 
 export async function refreshFolhaDraft(
   panel: RomPanelId,
-  opts?: { referenceDay?: string; actor?: string | null },
-): Promise<{ draft: FolhaDraft; period: FolhaPeriodRow }> {
-  const anchor = opts?.referenceDay ?? todayIsoSaoPaulo()
-  const snapshot = await getLatestSalonCommissionsNearOrLatest(anchor)
+  opts?: FolhaLoadOpts,
+): Promise<{ draft: FolhaDraft; period: FolhaPeriodRow; quinzena: FolhaQuinzena }> {
+  const today = opts?.today ?? todayIsoSaoPaulo()
+  const quinzena = resolveFolhaQuinzena({
+    periodId: opts?.periodId,
+    day: opts?.referenceDay,
+    today,
+  })
+  const snapshot = await getLatestSalonCommissionsNearOrLatest(quinzena.to)
   if (!snapshot || snapshot.professionals.length === 0) {
-    throw new Error('Sem snapshot 8123 para montar a Folha')
+    throw new Error(`Sem snapshot 8123 até ${quinzena.to} para montar a Folha`)
   }
 
-  const quinzena = quinzenaForDay(anchor)
   const existing = await getFolhaPeriod(quinzena.id)
   const previousLines = existing?.lines ?? []
 
@@ -93,8 +166,9 @@ export async function refreshFolhaDraft(
     referenceDay: snapshot.day,
     professionals: snapshot.professionals,
     previousLines,
-    quinzenaDay: anchor,
+    quinzenaDay: quinzena.to,
   })
+  draft.quinzena = quinzena
 
   const period = await upsertFolhaPeriodFromDraft({
     draft,
@@ -104,7 +178,7 @@ export async function refreshFolhaDraft(
     forceStatus: false,
   })
 
-  return { draft: periodRowToDraft(panel, period), period }
+  return { draft: periodRowToDraft(panel, period), period, quinzena }
 }
 
 export async function patchFolhaLine(

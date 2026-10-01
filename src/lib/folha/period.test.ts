@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest'
+import {
+  defaultFolhaQuinzena,
+  formatPayDateBr,
+  listRecentQuinzenas,
+  parseFolhaPeriodId,
+  payDateForHalf,
+  quinzenaForDay,
+  resolveFolhaQuinzena,
+} from '@/lib/folha/period'
+
+describe('folha period pay dates', () => {
+  it('Q1 paga dia 20 do mesmo mês', () => {
+    expect(payDateForHalf('2026-09', 1)).toBe('2026-09-20')
+    expect(quinzenaForDay('2026-09-10').payDate).toBe('2026-09-20')
+  })
+
+  it('Q2 paga dia 05 do mês seguinte', () => {
+    expect(payDateForHalf('2026-09', 2)).toBe('2026-10-05')
+    expect(quinzenaForDay('2026-09-30').payDate).toBe('2026-10-05')
+    expect(payDateForHalf('2026-12', 2)).toBe('2027-01-05')
+  })
+
+  it('default em 01/10 → Q2/09 (pagamento 05/10)', () => {
+    const q = defaultFolhaQuinzena('2026-10-01')
+    expect(q.id).toBe('2026-09-q2')
+    expect(q.payDate).toBe('2026-10-05')
+  })
+
+  it('default em 06/10 → Q1/10 (pagamento 20/10)', () => {
+    const q = defaultFolhaQuinzena('2026-10-06')
+    expect(q.id).toBe('2026-10-q1')
+    expect(q.payDate).toBe('2026-10-20')
+  })
+
+  it('parse e resolve period id', () => {
+    expect(parseFolhaPeriodId('2026-09-q2')?.from).toBe('2026-09-16')
+    expect(resolveFolhaQuinzena({ periodId: '2026-10-q1' }).payDate).toBe('2026-10-20')
+    expect(formatPayDateBr('2026-10-05')).toBe('05/10/2026')
+  })
+
+  it('lista recentes inclui mês passado', () => {
+    const list = listRecentQuinzenas({ today: '2026-10-01', count: 4 })
+    expect(list.map((q) => q.id)).toEqual([
+      '2026-10-q1',
+      '2026-09-q2',
+      '2026-09-q1',
+      '2026-08-q2',
+    ])
+  })
+})

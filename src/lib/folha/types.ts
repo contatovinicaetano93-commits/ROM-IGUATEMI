@@ -27,7 +27,23 @@ export type FolhaShellStatus = {
   /** Status do período persistido (quando houver). */
   period_status: FolhaPeriodStatus | null
   period_id: string | null
+  /** Quinzena selecionada (id `YYYY-MM-q1|q2`). */
+  selected_period_id: string | null
+  /** Data de pagamento da quinzena selecionada. */
+  pay_date: string | null
+  /** Próximos pagamentos (05 / 20). */
+  upcoming_payments: FolhaUpcomingPayment[]
   periods: FolhaPeriodSummary[]
+}
+
+export type FolhaUpcomingPayment = {
+  period_id: string
+  label: string
+  pay_date: string
+  from: string
+  to: string
+  /** true se pay_date >= hoje (SP). */
+  upcoming: boolean
 }
 
 export type FolhaPeriodSummary = {
@@ -37,4 +53,7 @@ export type FolhaPeriodSummary = {
   reference_day?: string | null
   line_count?: number | null
   total_proposed_pay?: number | null
+  pay_date?: string | null
+  from?: string | null
+  to?: string | null
 }
