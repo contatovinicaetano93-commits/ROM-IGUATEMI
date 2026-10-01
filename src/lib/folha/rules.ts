@@ -129,9 +129,9 @@ export function folhaRulesSummary(panel: RomPanelId): FolhaRulesSummary {
       esteticista:
         'Taxa adm 7% sobre faturado − produto; ganha 10% do total faturado.',
       assistente:
-        'Atuando como pro: ganho ~30% + taxa adm 3% sobre o serviço (todos, incl. Romeu). Romeu: faixas 30/40/50% no acumulado do mês. W sobre U: BR 3% / IG 4%; remessa V 20%.',
+        'Atuando como pro: ganho ~30% + taxa adm 3% sobre o serviço (todos, incl. Romeu). Romeu: faixas 30/40/50% no acumulado mês (soma U Q1+Q2); top-up (rate−30%) pago no dia 05. W sobre U: BR 3% / IG 4%; remessa V 20%.',
       multiplicador:
-        'Como assistente-como-pro: taxa adm 3% sobre o serviço executado. Romeu: faixas 30/40/50%. Sem taxa adm 7% sobre faturado C.',
+        'Como assistente-como-pro: taxa adm 3% sobre o serviço executado. Romeu: faixas 30/40/50% + top-up no dia 05. Sem taxa adm 7% sobre faturado C.',
       colorista:
         'Tratado como multiplicador/assistente (taxa adm 3% quando atua como pro; sem 7% sobre C).',
       outro: 'Sem default — exige contrato / exceção da planilha.',

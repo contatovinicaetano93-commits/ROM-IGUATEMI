@@ -8,7 +8,7 @@ import {
   resolveMeioAMeioRate,
   resolveProfessionalServiceTaxRate,
   romeuAssistantCommissionRate,
-  romeuAssistantPaySplit,
+  romeuAssistantMetaTopUp,
 } from '@/lib/folha/exceptions'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
@@ -87,10 +87,17 @@ describe('resolveFolhaPersonRules', () => {
     expect(jus?.quinzenaMeta).toBeNull()
   })
 
-  it('Jefferson é assistente do Romeu', () => {
-    expect(resolveFolhaPersonRules('JEFFERSON POLICARPO DOS SANTOS')?.isRomeuAssistant).toBe(
-      true,
-    )
+  it('Jefferson / Gabriela / Lucas / Nicole / Jonathan são assistentes do Romeu', () => {
+    for (const name of [
+      'JEFFERSON POLICARPO DOS SANTOS',
+      'GABRIELA DA SILVA SANTOS',
+      'LUCAS RODRIGUES DE SOUZA',
+      'NICOLE MOURA DE OLIVEIRA',
+      'JONATHAN DIAS DOS SANTOS',
+    ]) {
+      expect(resolveFolhaPersonRules(name)?.isRomeuAssistant).toBe(true)
+      expect(resolveFolhaPersonRules(name)?.id).toBe('romeu_assistant')
+    }
   })
 })
 
@@ -105,12 +112,50 @@ describe('romeuAssistantCommissionRate', () => {
     expect(romeuAssistantCommissionRate(30_000)).toBe(0.5)
     expect(romeuAssistantCommissionRate(40_000)).toBe(0.5)
   })
+})
 
-  it('parcela = metade do delta mensal (pagamentos 05 e 20)', () => {
-    const split = romeuAssistantPaySplit(15_000)
-    expect(split.rate).toBe(0.4)
-    expect(split.monthCommission).toBe(6000)
-    expect(split.parcel).toBe(3000)
+describe('romeuAssistantMetaTopUp — Bonus Sep/2026', () => {
+  it('topUp = monthTotal × (rate − 0.30); 30% já pago nas quinzenas', () => {
+    // Gabriela IG: Q1+Q2 = 10230.03 → faixa 40% → +10%
+    const gabi = romeuAssistantMetaTopUp(10_230.03)
+    expect(gabi.rate).toBe(0.4)
+    expect(gabi.topUp).toBeCloseTo(1023.003, 5)
+
+    // Lucas IG: 4980 → faixa 30% → top-up 0
+    expect(romeuAssistantMetaTopUp(4980)).toEqual({
+      rate: 0.3,
+      monthTotal: 4980,
+      topUp: 0,
+    })
+
+    // Jefferson IG: 1689.99 → faixa 30% → top-up 0
+    expect(romeuAssistantMetaTopUp(1689.99).topUp).toBe(0)
+
+    // Faixa 50%: 25000 → +20% = 5000
+    const band50 = romeuAssistantMetaTopUp(25_000)
+    expect(band50.rate).toBe(0.5)
+    expect(band50.topUp).toBe(5000)
+
+    // &lt; 1000 → null
+    expect(romeuAssistantMetaTopUp(999)).toEqual({
+      rate: null,
+      monthTotal: null,
+      topUp: null,
+    })
+  })
+
+  it('BR Sep: Jefferson 17958.05 → 10%; Gabriela band math 24700.03 → 20%', () => {
+    // Jefferson BR bate a planilha (10%)
+    expect(romeuAssistantMetaTopUp(17_958.05).topUp).toBeCloseTo(1795.805, 5)
+
+    // Gabriela BR: aba Bonus E14 mostra 2470 (10%), mas faixa 20k–30k = 50%
+    // → top-up canônico = +20% = 4940.006 (preferir band math)
+    const gabiBr = romeuAssistantMetaTopUp(24_700.03)
+    expect(gabiBr.rate).toBe(0.5)
+    expect(gabiBr.topUp).toBeCloseTo(4940.006, 5)
+
+    // Lucas BR: 5950 → 0
+    expect(romeuAssistantMetaTopUp(5950).topUp).toBe(0)
   })
 })
 

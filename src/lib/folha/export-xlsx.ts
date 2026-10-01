@@ -38,12 +38,16 @@ export const FOLHA_EXPORT_HEADERS = [
   'W (taxa serviços)',
   'Taxa adm assistente',
   'Esteticista bônus',
+  'Acumulado mês (U Romeu Q1+Q2)',
+  'Top-up meta Romeu',
   'Líquido a pagar',
   'Exceção',
   'Alertas',
 ] as const
 
-const MONEY_COLS = new Set([3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
+const MONEY_COLS = new Set([
+  3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+])
 
 export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | null)[] {
   const x = line.folha_extras
@@ -68,6 +72,8 @@ export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | n
     x.taxa_servicos,
     x.taxa_adm_assistente,
     x.esteticista_bonus,
+    x.acumulado_mes,
+    x.romeu_comissao_parcela,
     line.proposed_pay,
     line.exception_id,
     line.flags.length === 0 ? null : line.flags.join(', '),
@@ -130,17 +136,17 @@ export async function buildFolhaWorkbook(
     if (typeof pctCell.value === 'number') pctCell.numFmt = '0%'
   }
 
+  const liquidCol = FOLHA_EXPORT_HEADERS.indexOf('Líquido a pagar') + 1
   const total = ws.addRow([
     'TOTAL',
-    ...Array(17).fill(null),
+    ...Array(Math.max(liquidCol - 2, 0)).fill(null),
     draft.total_proposed_pay,
-    null,
-    null,
+    ...Array(Math.max(FOLHA_EXPORT_HEADERS.length - liquidCol, 0)).fill(null),
   ])
   total.getCell(1).font = { bold: true }
-  total.getCell(19).font = { bold: true }
-  if (typeof total.getCell(19).value === 'number') {
-    total.getCell(19).numFmt = '#,##0.00'
+  total.getCell(liquidCol).font = { bold: true }
+  if (typeof total.getCell(liquidCol).value === 'number') {
+    total.getCell(liquidCol).numFmt = '#,##0.00'
   }
 
   const arrBuf = await wb.xlsx.writeBuffer()

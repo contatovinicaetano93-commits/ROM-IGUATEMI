@@ -57,6 +57,8 @@ const sampleDraft: FolhaDraft = {
         taxa_adm_assistente: null,
         taxa_administrativa: null,
         esteticista_bonus: null,
+        acumulado_mes: null,
+        romeu_comissao_parcela: null,
       },
       proposed_pay: 6032.64,
       formula_y_preview: null,
@@ -101,6 +103,8 @@ const sampleDraft: FolhaDraft = {
         taxa_adm_assistente: null,
         taxa_administrativa: null,
         esteticista_bonus: null,
+        acumulado_mes: null,
+        romeu_comissao_parcela: null,
       },
       proposed_pay: null,
       formula_y_preview: null,
@@ -124,8 +128,10 @@ describe('folhaLineToExportRow', () => {
     expect(row[7]).toBe(150) // Assistente
     expect(row[8]).toBe(75) // Meio a meio
     expect(row[10]).toBe(707.19) // Outros (olerite)
-    expect(row[20]).toBe(6032.64) // Líquido
-    expect(row[21]).toBe('romeu_assistant')
+    expect(row[20]).toBeNull() // Acumulado mês (U Romeu Q1+Q2)
+    expect(row[21]).toBeNull() // Top-up meta Romeu
+    expect(row[22]).toBe(6032.64) // Líquido
+    expect(row[23]).toBe('romeu_assistant')
   })
 })
 

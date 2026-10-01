@@ -15,6 +15,10 @@
  * Profissional: `descontos` ≈ (adm − meio) + residual (Ana/Amauri).
  * Às vezes o 8123 embute W (taxa serviços 3%/4%) reduzindo o débito —
  * Daniel: 1116 ≈ 1181 − 65 (W). Continua embutido; shortfall compensa no pay.
+ *
+ * Quando meio > adm (ex.: Brunna 5%): `descontos` vem como **crédito**
+ * ≈ (meio − adm) + residual. Gildenice: +109.82 ≈ 2892.87 − 2783.06.
+ * Brunna: +2118.54 = 875.22 + 1243.32 (residual a estornar no pay).
  */
 
 import { roundFolha } from '@/lib/folha/calc'
@@ -40,6 +44,11 @@ export type OleriteDisaggregate = {
    * Magnitude do shortfall (para compensar ao aplicar taxa_servicos).
    */
   embeddedShortfall: number | null
+  /**
+   * Crédito residual em `descontos` além de (meio − adm). a_pagar já somou
+   * esse crédito — estornar no proposed_pay (Brunna).
+   */
+  embeddedCreditResidual: number | null
   /** Taxa adm para coluna (conferência olerite). */
   taxaAdm: number | null
   /** Meio a meio (crédito) para coluna. */
@@ -125,6 +134,7 @@ export function disaggregateOleriteDescontos(args: {
             embeddedAdminMeio: true,
             meioCreditedInNet: true,
             embeddedShortfall: null,
+            embeddedCreditResidual: null,
             taxaAdm: impliedAdm,
             meioAMeio,
             outrosResiduais: null,
@@ -143,6 +153,7 @@ export function disaggregateOleriteDescontos(args: {
           embeddedAdminMeio: false,
           meioCreditedInNet: true,
           embeddedShortfall: null,
+          embeddedCreditResidual: null,
           taxaAdm: expectedAdm,
           meioAMeio,
           outrosResiduais: null,
@@ -152,15 +163,24 @@ export function disaggregateOleriteDescontos(args: {
     }
 
     // B) descontos 0/ausente — adm = charged × 3% (Lucas Q2).
-    // Não aplicar se `descontos` tem outro valor material (evita falso positivo
-    // em linhas com descontos não relacionados à taxa adm).
+    // Só quando há desconto de assistente (fluxo assistente-como-pro com meio).
+    // Sem meio, `charged` é faturado de comissão própria — NÃO abater 3%
+    // (Amanda/Edijane etc.: liquido Avec já fechado; 3%×faturado era falso).
+    // Não aplicar se `descontos` tem outro valor material.
     const otherIsAbsentOrZero =
       signedOther == null || Math.abs(signedOther) <= 0.02
-    if (otherIsAbsentOrZero && expectedAdm != null && expectedAdm > 0.02) {
+    if (
+      otherIsAbsentOrZero &&
+      meioAMeio != null &&
+      meioAMeio > 0.02 &&
+      expectedAdm != null &&
+      expectedAdm > 0.02
+    ) {
       return {
         embeddedAdminMeio: false,
         meioCreditedInNet: false,
         embeddedShortfall: null,
+        embeddedCreditResidual: null,
         taxaAdm: expectedAdm,
         meioAMeio,
         outrosResiduais: null,
@@ -180,6 +200,56 @@ export function disaggregateOleriteDescontos(args: {
   const otherMag = signedOther == null ? null : Math.abs(signedOther)
   const admMinusMeio =
     taxaAdm != null && meioAMeio != null ? taxaAdm - meioAMeio : null
+  const meioMinusAdm =
+    taxaAdm != null && meioAMeio != null ? meioAMeio - taxaAdm : null
+
+  // Pro sem assistente: descontos ≈ taxa adm (cheia) → a_pagar já fechou adm
+  // (Rafaella / Célia Q2). Não reabater no proposed_pay.
+  if (
+    meioAMeio == null &&
+    taxaAdm != null &&
+    taxaAdm > 0.02 &&
+    otherMag != null &&
+    otherMag + 0.05 >= taxaAdm * 0.95
+  ) {
+    const residual = roundFolha(otherMag - taxaAdm, 4)
+    return {
+      embeddedAdminMeio: true,
+      meioCreditedInNet: true,
+      embeddedShortfall: null,
+      embeddedCreditResidual: null,
+      taxaAdm,
+      meioAMeio: null,
+      outrosResiduais:
+        residual != null && residual > 0.02 ? residual : null,
+      descontos8123Signed: signedOther,
+    }
+  }
+
+  // Crédito: meio > adm e descontos > 0 ≈ (meio − adm) + residual (Brunna/Gildenice).
+  // a_pagar já somou o crédito; não +meio/−adm de novo; residual → estornar no pay.
+  if (
+    meioMinusAdm != null &&
+    meioMinusAdm > 0.005 &&
+    signedOther != null &&
+    signedOther > 0.02
+  ) {
+    const residualCredit = roundFolha(signedOther - meioMinusAdm, 4)
+    if (signedOther + 0.05 >= meioMinusAdm * 0.85) {
+      return {
+        embeddedAdminMeio: true,
+        meioCreditedInNet: true,
+        embeddedShortfall: null,
+        embeddedCreditResidual:
+          residualCredit != null && residualCredit > 0.02 ? residualCredit : null,
+        taxaAdm,
+        meioAMeio,
+        outrosResiduais:
+          residualCredit != null && residualCredit > 0.02 ? residualCredit : null,
+        descontos8123Signed: signedOther,
+      }
+    }
+  }
 
   const shortfall =
     otherMag != null && admMinusMeio != null
@@ -223,6 +293,7 @@ export function disaggregateOleriteDescontos(args: {
     embeddedAdminMeio,
     meioCreditedInNet: embeddedAdminMeio,
     embeddedShortfall,
+    embeddedCreditResidual: null,
     taxaAdm,
     meioAMeio,
     outrosResiduais,

@@ -64,6 +64,8 @@ function flagLabel(flag: FolhaDraftLine['flags'][number]): string {
       return 'Exceção nomeada'
     case 'meta_quinzena_pendente':
       return 'Meta quinzena (valor pendente RH)'
+    case 'meta_romeu_pendente':
+      return 'Meta Romeu (acumulado mensal pendente RH)'
     case 'assistente_romeu':
       return 'Assistente do Romeu (faixas 30/40/50)'
     case 'taxa_adm_motor':
@@ -93,6 +95,7 @@ export default function FolhaPage() {
   const [onlyWithPay, setOnlyWithPay] = useState(true)
   const [selectedName, setSelectedName] = useState('')
   const [uInput, setUInput] = useState('')
+  const [acumuladoInput, setAcumuladoInput] = useState('')
   const [darfInput, setDarfInput] = useState('')
   const [dasInput, setDasInput] = useState('')
   const [taxSubject, setTaxSubject] = useState('')
@@ -226,6 +229,7 @@ export default function FolhaPage() {
     }
     const extras: Record<string, number | null> = {
       servicos_assistente_como_pro: parseOptionalNumber(uInput),
+      acumulado_mes: parseOptionalNumber(acumuladoInput),
     }
     if (taxExtrasAllowed) {
       extras.darf = parseOptionalNumber(darfInput)
@@ -384,6 +388,11 @@ export default function FolhaPage() {
     setUInput(
       line.folha_extras.servicos_assistente_como_pro != null
         ? String(line.folha_extras.servicos_assistente_como_pro)
+        : '',
+    )
+    setAcumuladoInput(
+      line.folha_extras.acumulado_mes != null
+        ? String(line.folha_extras.acumulado_mes)
         : '',
     )
     setDarfInput(line.folha_extras.darf != null ? String(line.folha_extras.darf) : '')
@@ -663,6 +672,23 @@ export default function FolhaPage() {
                       placeholder="ex. 1000"
                     />
                   </label>
+                  {selectedLine?.flags.includes('assistente_romeu') ? (
+                    <label className="text-xs">
+                      <span className="text-muted">
+                        Acumulado mês (soma U Romeu Q1+Q2)
+                        {selectedLine.folha_extras.romeu_comissao_parcela != null
+                          ? ` · top-up meta ${formatMoney(selectedLine.folha_extras.romeu_comissao_parcela)}`
+                          : ''}
+                      </span>
+                      <input
+                        className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                        value={acumuladoInput}
+                        onChange={(e) => setAcumuladoInput(e.target.value)}
+                        inputMode="decimal"
+                        placeholder="ex. 10230.03"
+                      />
+                    </label>
+                  ) : null}
                   {taxExtrasAllowed ? (
                     <>
                       <label className="text-xs">

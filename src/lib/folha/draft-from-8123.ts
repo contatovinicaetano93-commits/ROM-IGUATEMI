@@ -15,6 +15,7 @@ import {
   resolveGrossAdminFeeRate,
   resolveMeioAMeioRate,
   resolveProfessionalServiceTaxRate,
+  romeuAssistantMetaTopUp,
   type FolhaPersonRules,
 } from '@/lib/folha/exceptions'
 import {
@@ -42,6 +43,7 @@ export type FolhaDraftFlag =
   | 'assistente_com_desconto'
   | 'excecao_nomeada'
   | 'meta_quinzena_pendente'
+  | 'meta_romeu_pendente'
   | 'assistente_romeu'
   | 'taxa_adm_motor'
   /** Taxa adm (e meio) já no 8123 `descontos` — só conferência na coluna. */
@@ -110,6 +112,17 @@ export type FolhaDraftLine = {
      */
     taxa_administrativa: number | null
     esteticista_bonus: number | null
+    /**
+     * Acumulado mês = soma U Romeu Q1+Q2 (Serviços 30%), não faturado bruto.
+     * Define faixa 30/40/50. KPI ausente = null (não inventa 0).
+     */
+    acumulado_mes: number | null
+    /**
+     * Top-up de meta Romeu (adic. além dos 30% já pagos nas quinzenas).
+     * Só creditado no Q2 (dia 05); null no Q1 ou se acumulado ausente/&lt;1000.
+     * 0 é valor real quando mês ficou na faixa 30%.
+     */
+    romeu_comissao_parcela: number | null
   }
   /**
    * a_pagar 8123 ± extras Folha.
@@ -189,7 +202,8 @@ function applyFolhaExtras(
     n(meioAMeio) +
     n(extras.valor_a_pagar_profissional) -
     n(extras.taxa_servicos) +
-    n(extras.esteticista_bonus)
+    n(extras.esteticista_bonus) +
+    n(extras.romeu_comissao_parcela)
   )
 }
 
@@ -325,6 +339,22 @@ export function buildFolhaDraftLine(
       ? extras.taxa_administrativa
       : null
 
+  const isAssistantLike =
+    cargo === 'assistente' || cargo === 'multiplicador' || cargo === 'colorista'
+
+  /**
+   * Romeu: acumulado mês → top-up de meta só no Q2 (applyTaxExtras false / dia 05).
+   * Q1: null — os 30% base já estão no Avec / Serviços 30%.
+   */
+  const romeuMeta =
+    person?.isRomeuAssistant && extras?.acumulado_mes != null
+      ? romeuAssistantMetaTopUp(extras.acumulado_mes)
+      : null
+  const romeuParcela =
+    !applyTaxExtras && romeuMeta?.topUp != null
+      ? roundFolha(romeuMeta.topUp, 4)
+      : null
+
   let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,
     darf: extras?.darf ?? null,
@@ -339,6 +369,8 @@ export function buildFolhaDraftLine(
     taxa_adm_assistente: extras?.taxa_adm_assistente ?? null,
     taxa_administrativa: rhTaxaAdm ?? taxaAdmMotorExtra,
     esteticista_bonus: extras?.esteticista_bonus ?? null,
+    acumulado_mes: extras?.acumulado_mes ?? null,
+    romeu_comissao_parcela: romeuParcela,
   }
   if (!applyTaxExtras) {
     folha_extras = stripFolhaTaxExtras(folha_extras)
@@ -425,19 +457,48 @@ export function buildFolhaDraftLine(
    * 8123 às vezes embute W reduzindo `descontos` (Daniel: shortfall ≈ W).
    * a_pagar fica alto demais em W; ao abater taxa_servicos no pay, compensar.
    * Coluna W (taxa_servicos) permanece o valor verdadeiro U×alíquota.
+   *
+   * Crédito residual (Brunna): descontos ≈ (meio − adm) + residual — a_pagar
+   * já somou o residual; estornar via descontos_diversos no pay.
+   *
+   * Assistente/multiplicador: U/V/W na Fopag são conferência / repasse ao
+   * profissional — não entram no líquido do assistente (só no pro).
    */
-  const extrasForProposedPay =
-    folha_extras.taxa_servicos != null &&
+  let extrasForProposedPay: FolhaDraftLine['folha_extras'] = isAssistantLike
+    ? {
+        ...folha_extras,
+        valor_a_pagar_profissional: null,
+        taxa_servicos: null,
+      }
+    : { ...folha_extras }
+
+  if (
+    extrasForProposedPay.taxa_servicos != null &&
     olerite.embeddedShortfall != null &&
     olerite.embeddedShortfall > 0.02
-      ? {
-          ...folha_extras,
-          taxa_servicos: roundFolha(
-            folha_extras.taxa_servicos + olerite.embeddedShortfall,
-            4,
-          ),
-        }
-      : folha_extras
+  ) {
+    extrasForProposedPay = {
+      ...extrasForProposedPay,
+      taxa_servicos: roundFolha(
+        extrasForProposedPay.taxa_servicos + olerite.embeddedShortfall,
+        4,
+      ),
+    }
+  }
+
+  if (
+    olerite.embeddedCreditResidual != null &&
+    olerite.embeddedCreditResidual > 0.02
+  ) {
+    extrasForProposedPay = {
+      ...extrasForProposedPay,
+      descontos_diversos: roundFolha(
+        (extrasForProposedPay.descontos_diversos ?? 0) +
+          olerite.embeddedCreditResidual,
+        4,
+      ),
+    }
+  }
 
   const flags: FolhaDraftFlag[] = []
   if (cargo === 'manicure' && admin.amount != null && admin.amount > 0) {
@@ -451,6 +512,9 @@ export function buildFolhaDraftLine(
     flags.push('meta_quinzena_pendente')
   }
   if (person?.isRomeuAssistant) flags.push('assistente_romeu')
+  if (person?.isRomeuAssistant && folha_extras.acumulado_mes == null) {
+    flags.push('meta_romeu_pendente')
+  }
   if (
     (admin.source === 'motor' && admin.motorExtra != null) ||
     assistantAdmMotorExtra != null
