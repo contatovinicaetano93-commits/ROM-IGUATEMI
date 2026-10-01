@@ -1,7 +1,8 @@
 /**
- * Tipos do shell da Folha PJ.
- * Motor de cálculo / DARF entram depois das regras confirmadas pelo RH.
+ * Tipos da Folha PJ (shell + motor de regras).
  */
+
+import type { FolhaRulesSummary } from '@/lib/folha/rules'
 
 export type FolhaPeriodStatus =
   | 'awaiting_rules'
@@ -11,9 +12,15 @@ export type FolhaPeriodStatus =
   | 'paid'
 
 export type FolhaShellStatus = {
-  /** Shell sem motor — true até regras + cálculo existirem. */
+  /**
+   * true enquanto não há rascunho de quinzena a partir do 8123.
+   * Regras de cálculo já estão travadas (`rules_locked`).
+   */
   shell_only: boolean
+  /** Regras do motor confirmadas (caderno + Fopag + RH). */
+  rules_locked: boolean
   message: string
+  rules: FolhaRulesSummary
   periods: FolhaPeriodSummary[]
 }
 
