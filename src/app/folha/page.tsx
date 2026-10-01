@@ -878,13 +878,14 @@ export default function FolhaPage() {
                 {pct(rules.assistant_as_pro_earn_rate)} + meio a meio
               </li>
               <li>
-                Taxa adm profissional: 7% sobre faturado bruto (BR e IG) — só
+                Taxa adm profissional: BR 5% / IG 7% sobre faturado bruto — no IG,
                 Brunna/Joah/Marcela ficam em 5%
               </li>
               <li>
                 Exceções: Pedro/Dayana meio a meio 5%; Romeu 50%; Walter assistente 30% /
-                Dani Rocha 35%; Brunna/Joah/Marcela taxa U 5% (2%+3%); assistentes Romeu
-                30/40/50% no acumulado do mês
+                Dani Rocha 35%; Brunna/Joah/Marcela taxa U 5% (2%+3%); assistentes Romeu:
+                30% já nas quinzenas; no dia 05 top-up +10% (10–20k) / +20% (acima de 20k)
+                sobre o acumulado U do mês
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
               <li>
