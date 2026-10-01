@@ -3,10 +3,33 @@
 import { useCallback, useEffect, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { SectionCard } from '../_components/ui'
+import type { FolhaDraftLine } from '@/lib/folha/draft-from-8123'
 import type { FolhaShellStatus } from '@/lib/folha/types'
 
 function pct(rate: number): string {
   return `${(rate * 100).toFixed(0)}%`
+}
+
+function formatMoney(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function flagLabel(flag: FolhaDraftLine['flags'][number]): string {
+  switch (flag) {
+    case 'manicure_com_taxa_adm':
+      return 'Manicure com taxa adm no 8123'
+    case 'sem_a_pagar':
+      return 'Sem a_pagar'
+    case 'sem_cargo':
+      return 'Sem cargo'
+    case 'assistente_com_desconto':
+      return 'Desconto assistente'
+    default: {
+      const _exhaustive: never = flag
+      return _exhaustive
+    }
+  }
 }
 
 export default function FolhaPage() {
@@ -20,7 +43,7 @@ export default function FolhaPage() {
     try {
       const res = await fetch('/api/folha', {
         credentials: 'include',
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(20_000),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -42,6 +65,8 @@ export default function FolhaPage() {
   }, [load])
 
   const rules = status?.rules
+  const draft = status?.draft
+  const lines = draft?.lines ?? []
 
   return (
     <IntranetPage
@@ -51,7 +76,7 @@ export default function FolhaPage() {
     >
       <SectionCard title="Como vai funcionar">
         <ol className="list-decimal space-y-2 pl-5 text-sm text-muted">
-          <li>O sistema monta o rascunho da quinzena (comissões, taxas e impostos).</li>
+          <li>O sistema monta o rascunho da quinzena a partir do 8123 Avec.</li>
           <li>RH e Financeiro conferem os valores na tela.</li>
           <li>Depois da conferência, liberam o pagamento.</li>
         </ol>
@@ -86,18 +111,68 @@ export default function FolhaPage() {
         ) : null}
       </SectionCard>
 
-      <SectionCard title="Status">
+      <SectionCard title="Rascunho da quinzena">
         {loading ? <p className="text-sm text-muted">Carregando…</p> : null}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {!loading && !error && status ? (
-          <div className="space-y-2 text-sm">
+          <div className="space-y-4 text-sm">
             <p className="text-foreground">{status.message}</p>
-            {status.rules_locked ? (
-              <p className="text-muted">Motor de regras ativo. Aguardando rascunho 8123.</p>
-            ) : null}
-            {status.periods.length === 0 ? (
-              <p className="text-muted">Nenhuma quinzena aberta no momento.</p>
-            ) : null}
+            {draft ? (
+              <>
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-muted">
+                  <span>Quinzena: {draft.quinzena.label}</span>
+                  <span>Ref. 8123: {draft.reference_day}</span>
+                  <span>{draft.line_count} profissionais</span>
+                  <span>Total proposto: {formatMoney(draft.total_proposed_pay)}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                        <th className="py-2 pr-3 font-medium">Profissional</th>
+                        <th className="py-2 pr-3 font-medium">Cargo</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Faturado</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">a_pagar 8123</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Meio a meio</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Proposto</th>
+                        <th className="py-2 font-medium">Alertas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((line) => (
+                        <tr key={line.name} className="border-b border-border/60">
+                          <td className="py-2 pr-3 text-foreground">{line.name}</td>
+                          <td className="py-2 pr-3 text-muted">{line.cargo_raw ?? '—'}</td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.avec.charged)}
+                          </td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.avec.net_payable)}
+                          </td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.meio_a_meio)}
+                          </td>
+                          <td className="py-2 pr-3 tabular-nums font-medium text-foreground">
+                            {formatMoney(line.proposed_pay)}
+                          </td>
+                          <td className="py-2 text-xs text-muted">
+                            {line.flags.length === 0
+                              ? '—'
+                              : line.flags.map(flagLabel).join(' · ')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-muted">
+                  proposed_pay = a_pagar do 8123 ± extras Folha (DARF/DAS/U). Comissão % não é
+                  recalculada.
+                </p>
+              </>
+            ) : (
+              <p className="text-muted">Nenhuma quinzena com dados 8123 no momento.</p>
+            )}
           </div>
         ) : null}
       </SectionCard>
