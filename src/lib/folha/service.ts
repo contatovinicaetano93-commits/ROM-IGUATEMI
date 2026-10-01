@@ -3,7 +3,7 @@
  */
 
 import type { RomPanelId } from '@/lib/brand'
-import { isAvecConfigured } from '@/lib/avec/client'
+import { isAvecConfigured, isAvecMock } from '@/lib/avec/client'
 import { fetchCommissions8123ForRange } from '@/lib/avec/sync-commissions'
 import {
   buildFolhaDraftFrom8123,
@@ -179,7 +179,8 @@ export async function refreshFolhaDraft(
   let avecRange: { inicio: string; fim: string } | null = null
   let avecError: Error | null = null
 
-  if (isAvecConfigured()) {
+  // Mock fixtures não têm janela real — só Avec live (token/login).
+  if (isAvecConfigured() && !isAvecMock()) {
     try {
       const fetched = await fetchCommissions8123ForRange({
         inicioBr: range.inicio,

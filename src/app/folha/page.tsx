@@ -15,6 +15,12 @@ function formatMoney(value: number | null | undefined): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+/** Magnitude de abatimento Avec (8123 guarda negativo). */
+function formatDeduction(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return formatMoney(Math.abs(value))
+}
+
 function formatDayBr(iso: string | null | undefined): string {
   if (!iso) return '—'
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
@@ -520,17 +526,55 @@ export default function FolhaPage() {
                       ))}
                     </select>
                   </label>
-                  <div className="text-xs">
-                    <span className="text-muted">a_pagar 8123</span>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {formatMoney(selectedLine?.avec.net_payable)}
-                    </p>
-                  </div>
-                  <div className="text-xs">
-                    <span className="text-muted">Proposto</span>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {formatMoney(selectedLine?.proposed_pay)}
-                    </p>
+                  <div className="text-xs md:col-span-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <div>
+                      <span className="text-muted">Faturado</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatMoney(selectedLine?.avec.charged)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">Taxa cartão</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatDeduction(selectedLine?.avec.card_fee)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">Produto</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatDeduction(selectedLine?.avec.product_spend)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">Taxa adm</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatDeduction(selectedLine?.avec.admin_fee)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">Assistente</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatDeduction(selectedLine?.avec.assistant_discount)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">Meio a meio</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatMoney(selectedLine?.meio_a_meio)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">a_pagar 8123</span>
+                      <p className="mt-1 font-medium tabular-nums">
+                        {formatMoney(selectedLine?.avec.net_payable)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">Líquido a pagar</span>
+                      <p className="mt-1 font-medium tabular-nums">
+                        {formatMoney(selectedLine?.proposed_pay)}
+                      </p>
+                    </div>
                   </div>
                   <label className="text-xs">
                     <span className="text-muted">U · serviços assist. como pro</span>
@@ -614,17 +658,24 @@ export default function FolhaPage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                  <table className="w-full min-w-[960px] border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                         <th className="py-2 pr-3 font-medium">Profissional</th>
                         <th className="py-2 pr-3 font-medium">Cargo</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Faturado</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">a_pagar</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">U</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">DARF</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">DAS</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Proposto</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Tx cartão</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Produto</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Tx adm</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Assistente</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Meio a meio</th>
+                        {taxExtrasAllowed ? (
+                          <>
+                            <th className="py-2 pr-3 font-medium tabular-nums">DARF</th>
+                            <th className="py-2 pr-3 font-medium tabular-nums">DAS</th>
+                          </>
+                        ) : null}
+                        <th className="py-2 pr-3 font-medium tabular-nums">Líquido</th>
                         <th className="py-2 font-medium">Alertas</th>
                       </tr>
                     </thead>
@@ -641,17 +692,30 @@ export default function FolhaPage() {
                             {formatMoney(line.avec.charged)}
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.avec.net_payable)}
+                            {formatDeduction(line.avec.card_fee)}
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.folha_extras.servicos_assistente_como_pro)}
+                            {formatDeduction(line.avec.product_spend)}
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.folha_extras.darf)}
+                            {formatDeduction(line.avec.admin_fee)}
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.folha_extras.das)}
+                            {formatDeduction(line.avec.assistant_discount)}
                           </td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.meio_a_meio)}
+                          </td>
+                          {taxExtrasAllowed ? (
+                            <>
+                              <td className="py-2 pr-3 tabular-nums">
+                                {formatMoney(line.folha_extras.darf)}
+                              </td>
+                              <td className="py-2 pr-3 tabular-nums">
+                                {formatMoney(line.folha_extras.das)}
+                              </td>
+                            </>
+                          ) : null}
                           <td className="py-2 pr-3 tabular-nums font-medium">
                             {formatMoney(line.proposed_pay)}
                           </td>
