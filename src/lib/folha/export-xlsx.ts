@@ -38,12 +38,16 @@ export const FOLHA_EXPORT_HEADERS = [
   'W (taxa serviços)',
   'Taxa adm assistente',
   'Esteticista bônus',
+  'Acumulado mês Romeu',
+  'Parcela Romeu',
   'Líquido a pagar',
   'Exceção',
   'Alertas',
 ] as const
 
-const MONEY_COLS = new Set([3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
+const MONEY_COLS = new Set([
+  3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+])
 
 export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | null)[] {
   const x = line.folha_extras
@@ -68,6 +72,8 @@ export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | n
     x.taxa_servicos,
     x.taxa_adm_assistente,
     x.esteticista_bonus,
+    x.acumulado_mes,
+    x.romeu_comissao_parcela,
     line.proposed_pay,
     line.exception_id,
     line.flags.length === 0 ? null : line.flags.join(', '),

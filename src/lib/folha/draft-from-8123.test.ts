@@ -206,13 +206,14 @@ describe('buildFolhaDraftLine', () => {
     expect(line.cargo).toBe('manicure')
   })
 
-  it('U informado deriva V 20% e W 3% BR', () => {
+  it('U informado deriva V 20% e W 3% BR (conferência; assistente não soma V−W no líquido)', () => {
     const line = buildFolhaDraftLine('brasil', jefferson, {
       servicos_assistente_como_pro: 1000,
     })
     expect(line.folha_extras.valor_a_pagar_profissional).toBe(200)
     expect(line.folha_extras.taxa_servicos).toBe(30)
-    expect(line.proposed_pay).toBe(6032.64 + 75 + 200 - 30)
+    // Fopag: U/V/W no assistente são repasse ao pro — líquido = a_pagar + meio
+    expect(line.proposed_pay).toBe(6032.64 + 75)
   })
 
   it('U no IG: W 4% e taxa adm assistente 3% (incl. Romeu)', () => {
@@ -315,6 +316,7 @@ describe('buildFolhaDraftLine', () => {
       { applyTaxExtras: false },
     )
     expect(line.flags).toContain('assistente_romeu')
+    expect(line.flags).toContain('meta_romeu_pendente')
     expect(line.taxa_administrativa).toBeCloseTo(81.9, 2)
     expect(line.taxa_administrativa_rate).toBe(0.03)
     expect(line.taxa_administrativa_source).toBe('motor')
@@ -322,6 +324,81 @@ describe('buildFolhaDraftLine', () => {
     // 748.96 + 110.5 − 81.90 = 777.56
     expect(line.proposed_pay).toBeCloseTo(777.56, 2)
     expect(line.flags).not.toContain('taxa_adm_em_descontos')
+  })
+
+  it('Brunna Q2 Fopag: crédito (meio−adm)+residual → estorna residual; +V −W −Baru = 68976.53', () => {
+    const row = {
+      name: 'BRUNNA FABRICIO DA SILVA',
+      role: 'Cabeleireiro',
+      charged: 125630,
+      service_share: 87941,
+      product_share: 0,
+      other_share: 0,
+      tip: 0,
+      product_spend: -4693.53,
+      card_fee: -3451.49,
+      admin_fee: 0,
+      assistant_discount: -14313.44,
+      other_discounts: 2118.54,
+      // a_pagar já inclui crédito descontos 2118.54
+      net_payable: 68636.492,
+      house_share: 37700,
+    }
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      row,
+      {
+        servicos_assistente_como_pro: 10500.02,
+        descontos_diversos: 201.68, // Consumo Baru
+      },
+      { applyTaxExtras: false },
+    )
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.taxa_administrativa).toBeCloseTo(6281.5, 1)
+    expect(line.meio_a_meio).toBeCloseTo(7156.72, 2)
+    expect(line.outros_descontos).toBeCloseTo(1243.32, 2)
+    expect(line.folha_extras.valor_a_pagar_profissional).toBeCloseTo(2100.004, 2)
+    expect(line.folha_extras.taxa_servicos).toBeCloseTo(315.0006, 3)
+    // 68636.492 − 1243.32 + 2100.004 − 315.0006 − 201.68 ≈ 68976.50
+    expect(line.proposed_pay).toBeCloseTo(68976.53, 1)
+  })
+
+  it('Romeu: acumulado_mes → parcela progressiva no líquido; U não altera pay do assistente', () => {
+    const base = {
+      name: 'GABRIELA DA SILVA SANTOS',
+      role: 'MULTIPLICADOR',
+      charged: 5676,
+      service_share: 1557,
+      product_share: 7.3,
+      other_share: null,
+      tip: 0,
+      product_spend: -86.63,
+      card_fee: 0,
+      admin_fee: 0,
+      assistant_discount: -430,
+      other_discounts: 67.1,
+      net_payable: 1114.77,
+      house_share: 3589.7,
+    }
+    const withU = buildFolhaDraftLine(
+      'iguatemi',
+      base,
+      { servicos_assistente_como_pro: 4930.04 },
+      { applyTaxExtras: false },
+    )
+    // U/V/W ficam na conferência, mas não entram no líquido do assistente
+    expect(withU.folha_extras.valor_a_pagar_profissional).toBeCloseTo(986.008, 2)
+    expect(withU.proposed_pay).toBeCloseTo(1114.77, 2)
+
+    const withMeta = buildFolhaDraftLine(
+      'iguatemi',
+      base,
+      { servicos_assistente_como_pro: 4930.04, acumulado_mes: 15_000 },
+      { applyTaxExtras: false },
+    )
+    expect(withMeta.flags).not.toContain('meta_romeu_pendente')
+    expect(withMeta.folha_extras.romeu_comissao_parcela).toBe(3000)
+    expect(withMeta.proposed_pay).toBeCloseTo(4114.77, 2)
   })
 
   it('sem a_pagar → proposed_pay null (não inventa 0)', () => {

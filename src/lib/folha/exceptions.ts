@@ -212,10 +212,13 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     aliases: [
       'jefferson policarpo dos santos',
       'jefferson policarpo',
+      'jeferson policarto',
       'gabriela da silva santos',
       'gabriela santos',
       'lucas rodrigues de souza',
       'lucas rodrigues',
+      'nicole moura de oliveira',
+      'nicole moura',
       'pedro henrique sousa cardi',
       'pedro cardi',
     ],

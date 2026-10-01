@@ -103,6 +103,39 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.taxaAdm).toBeCloseTo(67.5, 2)
     expect(d.meioAMeio).toBeCloseTo(42.5, 2)
   })
+
+  it('Brunna: crédito descontos ≈ (meio − adm 5%) + residual', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 125630,
+      adminFee8123: 0,
+      assistantDiscount: -14313.44,
+      otherDiscounts: 2118.54,
+      adminRate: 0.05,
+      meioRate: 0.5,
+      serviceTaxRate: 0.03,
+    })
+    expect(d.embeddedAdminMeio).toBe(true)
+    expect(d.meioCreditedInNet).toBe(true)
+    expect(d.taxaAdm).toBeCloseTo(6281.5, 1)
+    expect(d.meioAMeio).toBeCloseTo(7156.72, 2)
+    // 2118.54 − (7156.72 − 6281.5) = 1243.32
+    expect(d.embeddedCreditResidual).toBeCloseTo(1243.32, 2)
+  })
+
+  it('Gildenice: crédito descontos ≈ meio − adm (sem residual material)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 39758,
+      adminFee8123: 0,
+      assistantDiscount: -5785.75,
+      otherDiscounts: 109.815,
+      adminRate: 0.07,
+      meioRate: 0.5,
+    })
+    expect(d.embeddedAdminMeio).toBe(true)
+    expect(d.embeddedCreditResidual).toBeNull()
+    expect(d.taxaAdm).toBeCloseTo(2783.06, 1)
+    expect(d.meioAMeio).toBeCloseTo(2892.875, 2)
+  })
 })
 
 describe('rateioAposCartao', () => {
@@ -179,6 +212,8 @@ describe('rehydrateFolhaDraftFromPeriod', () => {
         taxa_servicos: null,
         produtos_black: null,
         esteticista_bonus: null,
+        acumulado_mes: null,
+        romeu_comissao_parcela: null,
         descontos_diversos: null,
         mensalidade_contabilidade: null,
         valor_a_pagar_profissional: null,
@@ -237,6 +272,8 @@ describe('rehydrateFolhaDraftFromPeriod', () => {
         taxa_servicos: null,
         produtos_black: null,
         esteticista_bonus: null,
+        acumulado_mes: null,
+        romeu_comissao_parcela: null,
         descontos_diversos: null,
         mensalidade_contabilidade: null,
         valor_a_pagar_profissional: null,

@@ -20,6 +20,9 @@ const extrasSchema = z.object({
   taxa_adm_assistente: z.number().nullable().optional(),
   taxa_administrativa: z.number().nullable().optional(),
   esteticista_bonus: z.number().nullable().optional(),
+  /** Acumulado mensal assistente Romeu → faixa 30/40/50. */
+  acumulado_mes: z.number().nullable().optional(),
+  romeu_comissao_parcela: z.number().nullable().optional(),
 })
 
 const bodySchema = z.object({

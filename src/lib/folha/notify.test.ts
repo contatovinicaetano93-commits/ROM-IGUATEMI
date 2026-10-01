@@ -57,6 +57,8 @@ const draft: FolhaDraft = {
         taxa_adm_assistente: null,
         taxa_administrativa: null,
         esteticista_bonus: null,
+        acumulado_mes: null,
+        romeu_comissao_parcela: null,
       },
       proposed_pay: 985,
       formula_y_preview: null,

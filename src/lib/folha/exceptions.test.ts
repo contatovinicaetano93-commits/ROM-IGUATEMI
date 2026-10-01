@@ -87,10 +87,16 @@ describe('resolveFolhaPersonRules', () => {
     expect(jus?.quinzenaMeta).toBeNull()
   })
 
-  it('Jefferson é assistente do Romeu', () => {
-    expect(resolveFolhaPersonRules('JEFFERSON POLICARPO DOS SANTOS')?.isRomeuAssistant).toBe(
-      true,
-    )
+  it('Jefferson / Gabriela / Lucas / Nicole são assistentes do Romeu', () => {
+    for (const name of [
+      'JEFFERSON POLICARPO DOS SANTOS',
+      'GABRIELA DA SILVA SANTOS',
+      'LUCAS RODRIGUES DE SOUZA',
+      'NICOLE MOURA DE OLIVEIRA',
+    ]) {
+      expect(resolveFolhaPersonRules(name)?.isRomeuAssistant).toBe(true)
+      expect(resolveFolhaPersonRules(name)?.id).toBe('romeu_assistant')
+    }
   })
 })
 
