@@ -68,6 +68,8 @@ function flagLabel(flag: FolhaDraftLine['flags'][number]): string {
       return 'Assistente do Romeu (faixas 30/40/50)'
     case 'taxa_adm_motor':
       return 'Taxa adm pelo motor (8123 zerado)'
+    case 'taxa_adm_em_descontos':
+      return 'Taxa adm já no descontos 8123 (só conferência)'
     default: {
       const _exhaustive: never = flag
       return _exhaustive

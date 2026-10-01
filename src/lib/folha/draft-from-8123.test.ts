@@ -87,7 +87,8 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBe(6032.64 + 75)
   })
 
-  it('IG cabeleireiro: taxa adm motor 7% sobre faturado quando 8123 veio 0', () => {
+  it('IG: taxa_adm=0 mas descontos já neteiam adm−meio → exibe 7%, não reabate', () => {
+    // Carina-shaped: other = adm − meio (560.56 = 1511.58 − 951.02)
     const carina = {
       name: 'CARINA FERNANDA DE FREITAS FERREIRA',
       role: 'Cabeleireiro',
@@ -110,9 +111,40 @@ describe('buildFolhaDraftLine', () => {
     expect(line.taxa_administrativa).toBe(1511.58)
     expect(line.taxa_administrativa_rate).toBe(0.07)
     expect(line.taxa_administrativa_source).toBe('motor')
-    expect(line.flags).toContain('taxa_adm_motor')
-    // 6599.6981 + 951.02 − 1511.58
-    expect(line.proposed_pay).toBeCloseTo(6039.1381, 3)
+    expect(line.meio_a_meio).toBeCloseTo(951.02, 2)
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.flags).not.toContain('taxa_adm_motor')
+    // a_pagar Avec já fechado — não +meio nem −adm de novo
+    expect(line.proposed_pay).toBeCloseTo(6599.6981, 3)
+  })
+
+  it('Ana Matsumoto IG: recibo 9472 com adm embutida em descontos', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'ANA CRISTINA MATSUMOTO',
+        role: 'Cabeleireiro',
+        charged: 29216.2,
+        service_share: 14608.1,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: -840.13,
+        card_fee: -412.9,
+        admin_fee: 0,
+        assistant_discount: -2901.62,
+        // 387.08 (BARU) + 2045.13 (adm) − 1450.81 (meio)
+        other_discounts: -981.4,
+        net_payable: 9472.05,
+        house_share: 14608.1,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.taxa_administrativa).toBeCloseTo(2045.134, 2)
+    expect(line.meio_a_meio).toBeCloseTo(1450.81, 2)
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.proposed_pay).toBeCloseTo(9472.05, 2)
   })
 
   it('BR cabeleireiro: taxa adm motor 7% quando 8123 veio 0', () => {
