@@ -163,11 +163,19 @@ export function disaggregateOleriteDescontos(args: {
     }
 
     // B) descontos 0/ausente — adm = charged × 3% (Lucas Q2).
-    // Não aplicar se `descontos` tem outro valor material (evita falso positivo
-    // em linhas com descontos não relacionados à taxa adm).
+    // Só quando há desconto de assistente (fluxo assistente-como-pro com meio).
+    // Sem meio, `charged` é faturado de comissão própria — NÃO abater 3%
+    // (Amanda/Edijane etc.: liquido Avec já fechado; 3%×faturado era falso).
+    // Não aplicar se `descontos` tem outro valor material.
     const otherIsAbsentOrZero =
       signedOther == null || Math.abs(signedOther) <= 0.02
-    if (otherIsAbsentOrZero && expectedAdm != null && expectedAdm > 0.02) {
+    if (
+      otherIsAbsentOrZero &&
+      meioAMeio != null &&
+      meioAMeio > 0.02 &&
+      expectedAdm != null &&
+      expectedAdm > 0.02
+    ) {
       return {
         embeddedAdminMeio: false,
         meioCreditedInNet: false,
@@ -194,6 +202,29 @@ export function disaggregateOleriteDescontos(args: {
     taxaAdm != null && meioAMeio != null ? taxaAdm - meioAMeio : null
   const meioMinusAdm =
     taxaAdm != null && meioAMeio != null ? meioAMeio - taxaAdm : null
+
+  // Pro sem assistente: descontos ≈ taxa adm (cheia) → a_pagar já fechou adm
+  // (Rafaella / Célia Q2). Não reabater no proposed_pay.
+  if (
+    meioAMeio == null &&
+    taxaAdm != null &&
+    taxaAdm > 0.02 &&
+    otherMag != null &&
+    otherMag + 0.05 >= taxaAdm * 0.95
+  ) {
+    const residual = roundFolha(otherMag - taxaAdm, 4)
+    return {
+      embeddedAdminMeio: true,
+      meioCreditedInNet: true,
+      embeddedShortfall: null,
+      embeddedCreditResidual: null,
+      taxaAdm,
+      meioAMeio: null,
+      outrosResiduais:
+        residual != null && residual > 0.02 ? residual : null,
+      descontos8123Signed: signedOther,
+    }
+  }
 
   // Crédito: meio > adm e descontos > 0 ≈ (meio − adm) + residual (Brunna/Gildenice).
   // a_pagar já somou o crédito; não +meio/−adm de novo; residual → estornar no pay.

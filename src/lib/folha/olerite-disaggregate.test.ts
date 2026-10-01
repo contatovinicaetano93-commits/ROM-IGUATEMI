@@ -88,6 +88,36 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.meioAMeio).toBeCloseTo(110.5, 2)
   })
 
+  it('assistente sem meio (Amanda): descontos=0 NÃO inventa adm 3%×faturado', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 20761.5,
+      adminFee8123: 0,
+      assistantDiscount: null,
+      otherDiscounts: 0,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.03,
+    })
+    expect(d.taxaAdm).toBeNull()
+    expect(d.embeddedAdminMeio).toBe(false)
+    expect(d.meioCreditedInNet).toBe(false)
+  })
+
+  it('pro sem assistente: descontos ≈ taxa adm → embutido (Rafaella)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 17112,
+      adminFee8123: 0,
+      assistantDiscount: null,
+      otherDiscounts: -1197.84,
+      adminRate: 0.07,
+      meioRate: 0.5,
+      serviceTaxRate: 0.04,
+    })
+    expect(d.embeddedAdminMeio).toBe(true)
+    expect(d.taxaAdm).toBeCloseTo(1197.84, 1)
+    expect(d.meioAMeio).toBeNull()
+  })
+
   it('Lucas Q1: descontos ≈ +meio → meio já no a_pagar; adm = charged × 3%', () => {
     const d = disaggregateOleriteDescontos({
       charged: 2250,

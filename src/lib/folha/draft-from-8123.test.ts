@@ -326,6 +326,59 @@ describe('buildFolhaDraftLine', () => {
     expect(line.flags).not.toContain('taxa_adm_em_descontos')
   })
 
+  it('Amanda (assistente sem meio): NÃO abate 3%×faturado; proposed = a_pagar', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'AMANDA DOS SANTOS ARAUJO',
+        role: 'MULTIPLICADOR',
+        charged: 20761.5,
+        service_share: 2025.75,
+        product_share: null,
+        other_share: null,
+        tip: 0,
+        product_spend: -12.3,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: null,
+        other_discounts: 0,
+        net_payable: 2013.45,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.taxa_administrativa).toBeNull()
+    expect(line.flags).not.toContain('taxa_adm_motor')
+    expect(line.proposed_pay).toBeCloseTo(2013.45, 2)
+  })
+
+  it('Rafaella (pro sem assistente): descontos ≈ adm → não reabate 7%', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'Rafaella Edwiges Bernardo Nunes',
+        role: 'Cabeleireiro',
+        charged: 17112,
+        service_share: null,
+        product_share: null,
+        other_share: null,
+        tip: 0,
+        product_spend: -20.34,
+        card_fee: null,
+        admin_fee: 0,
+        assistant_discount: null,
+        other_discounts: -1197.84,
+        net_payable: 8787.75,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.proposed_pay).toBeCloseTo(8787.75, 2)
+  })
+
   it('Brunna Q2 Fopag: crédito (meio−adm)+residual → estorna residual; +V −W −Baru = 68976.53', () => {
     const row = {
       name: 'BRUNNA FABRICIO DA SILVA',
