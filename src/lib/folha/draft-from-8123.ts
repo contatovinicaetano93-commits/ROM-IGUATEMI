@@ -183,6 +183,7 @@ export function aPagarAlreadyNetsAdminMeio(args: {
       args.taxaAdm,
     4,
   )
+  if (expected == null) return false
   return Math.abs(args.netPayable - expected) <= (args.tol ?? 1)
 }
 
