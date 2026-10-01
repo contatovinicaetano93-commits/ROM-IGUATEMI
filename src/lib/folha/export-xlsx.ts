@@ -22,11 +22,13 @@ export const FOLHA_EXPORT_HEADERS = [
   'Cargo',
   'Faturado',
   'Taxa cartão',
+  'Rateio após cartão',
   'Produto',
   'Taxa adm',
   'Assistente',
   'Meio a meio',
   'Meio a meio %',
+  'Outros (olerite)',
   'a_pagar 8123',
   'DARF',
   'DAS',
@@ -41,7 +43,7 @@ export const FOLHA_EXPORT_HEADERS = [
   'Alertas',
 ] as const
 
-const MONEY_COLS = new Set([3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+const MONEY_COLS = new Set([3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
 
 export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | null)[] {
   const x = line.folha_extras
@@ -50,11 +52,13 @@ export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | n
     line.cargo_raw ?? line.cargo,
     line.avec.charged,
     exportMagnitude(line.avec.card_fee),
+    line.rateio_apos_cartao,
     exportMagnitude(line.avec.product_spend),
     line.taxa_administrativa ?? exportMagnitude(line.avec.admin_fee),
     exportMagnitude(line.avec.assistant_discount),
     line.meio_a_meio,
     line.meio_a_meio_rate,
+    line.outros_descontos,
     line.avec.net_payable,
     x.darf,
     x.das,

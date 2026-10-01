@@ -178,6 +178,60 @@ export function refreshDraftPreservingExtras(args: {
   }
 }
 
+/**
+ * Reaplica o motor atual sobre o 8123 persistido (preserva extras RH).
+ * Necessário após deploy: rascunhos antigos não têm taxa_adm/outros desmembrados.
+ */
+export function rehydrateFolhaDraftFromPeriod(
+  panel: RomPanelId,
+  row: {
+    half: 1 | 2
+    to_day: string
+    reference_day: string | null
+    lines: FolhaDraftLine[]
+    source_professionals?: readonly CommissionProfessionalRow[]
+  },
+): { lines: FolhaDraftLine[]; total: number | null } {
+  const source = row.source_professionals ?? []
+  if (source.length > 0) {
+    const draft = refreshDraftPreservingExtras({
+      panel,
+      referenceDay: row.reference_day ?? row.to_day,
+      professionals: source,
+      previousLines: row.lines,
+      quinzenaDay: row.to_day,
+    })
+    return { lines: draft.lines, total: draft.total_proposed_pay }
+  }
+  // Sem source: reconstrói a partir do espelho avec em cada linha.
+  const applyTaxExtras = row.half === 1
+  const lines = row.lines.map((line) =>
+    patchFolhaLineExtras({
+      panel,
+      line,
+      source: {
+        name: line.name,
+        role: line.cargo_raw,
+        charged: line.avec.charged,
+        service_share: line.avec.service_share,
+        product_share: line.avec.product_share,
+        other_share: null,
+        tip: line.avec.tip,
+        product_spend: line.avec.product_spend,
+        card_fee: line.avec.card_fee,
+        admin_fee: line.avec.admin_fee,
+        assistant_discount: line.avec.assistant_discount,
+        other_discounts: line.avec.other_discounts,
+        net_payable: line.avec.net_payable,
+        house_share: line.avec.house_share,
+      },
+      extras: line.folha_extras,
+      applyTaxExtras,
+    }),
+  )
+  return { lines, total: sumProposedPay(lines) }
+}
+
 export function periodRowToDraft(
   panel: RomPanelId,
   row: {
@@ -189,15 +243,17 @@ export function periodRowToDraft(
     reference_day: string | null
     lines: FolhaDraftLine[]
     total_proposed_pay: number | null
+    source_professionals?: readonly CommissionProfessionalRow[]
   },
 ): FolhaDraft {
+  const { lines, total } = rehydrateFolhaDraftFromPeriod(panel, row)
   return {
     source: '8123',
     reference_day: row.reference_day ?? row.to_day,
     quinzena: quinzenaForYearMonthHalf(row.year_month, row.half),
     panel,
-    line_count: row.lines.length,
-    lines: row.lines,
-    total_proposed_pay: row.total_proposed_pay,
+    line_count: lines.length,
+    lines,
+    total_proposed_pay: total,
   }
 }
