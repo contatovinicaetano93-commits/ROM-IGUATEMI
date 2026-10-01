@@ -2,8 +2,9 @@
  * Desmembra o quadro Descontos e Bônus do olerite Avec a partir do 8123.
  *
  * Profissional (cabeleireiro etc.): `descontos` costuma embutir
- *   (TAXA ADM 7% − MEIO A MEIO) + outros (CONSUMO BARU, …)
- *   Ex. Ana: 981.40 = 2045.13 − 1450.81 + 387.08
+ *   (TAXA ADM − MEIO A MEIO) + outros (CONSUMO BARU, …)
+ *   IG 7% / BR 5%. Ex. Ana IG: 981.40 = 2045.13 − 1450.81 + 387.08
+ *   BR às vezes zera `descontos` e já neteia adm/meio no `a_pagar` (Alison).
  *
  * Assistente / multiplicador atuando como pro:
  *   A) `descontos` ≈ meio − adm 3% (crédito) — Gabriela: +67.10 = 215 − 147.90
