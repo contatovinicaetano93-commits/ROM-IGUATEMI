@@ -215,12 +215,113 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBe(6032.64 + 75 + 200 - 30)
   })
 
-  it('U no IG usa taxa 4% (assistente Romeu: sem taxa adm 3% do assistente)', () => {
+  it('U no IG: W 4% e taxa adm assistente 3% (incl. Romeu)', () => {
     const line = buildFolhaDraftLine('iguatemi', jefferson, {
       servicos_assistente_como_pro: 1000,
     })
     expect(line.folha_extras.taxa_servicos).toBe(40)
-    expect(line.folha_extras.taxa_adm_assistente).toBeNull()
+    expect(line.folha_extras.taxa_adm_assistente).toBe(30)
+  })
+
+  it('Gabriela Romeu: descontos = meio − adm 3%; líquido = a_pagar (sem recreditar meio)', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'GABRIELA DA SILVA SANTOS',
+        role: 'MULTIPLICADOR',
+        charged: 5076,
+        service_share: 1557,
+        product_share: 7.3,
+        other_share: null,
+        tip: 0,
+        product_spend: -86.63,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: -430,
+        // +67.10 = 215 (meio) − 147.90 (taxa adm 3%)
+        other_discounts: 67.1,
+        net_payable: 1114.77,
+        house_share: 3589.7,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.flags).toContain('assistente_romeu')
+    expect(line.taxa_administrativa).toBeCloseTo(147.9, 1)
+    expect(line.taxa_administrativa_rate).toBe(0.03)
+    expect(line.meio_a_meio).toBeCloseTo(215, 1)
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.proposed_pay).toBeCloseTo(1114.77, 2)
+  })
+
+  it('Daniel: descontos shortfall W → Tx adm 7% embutida; líquido = a_pagar; com U bate olerite', () => {
+    const row = {
+      name: 'DANIEL CHABARIBERY',
+      role: 'Cabeleireiro',
+      charged: 50480.0000038147,
+      service_share: 25240.00000190735,
+      product_share: 0,
+      other_share: 0,
+      tip: 0,
+      product_spend: -1317.4000057578087,
+      card_fee: -688.0939008593559,
+      admin_fee: 0,
+      assistant_discount: -4704.110007047653,
+      other_discounts: -1116.1701164245605,
+      net_payable: 17414.22597181797,
+      house_share: 25240.00000190735,
+    }
+    const line = buildFolhaDraftLine('iguatemi', row, undefined, {
+      applyTaxExtras: false,
+    })
+    expect(line.taxa_administrativa).toBeCloseTo(3533.6, 1)
+    expect(line.meio_a_meio).toBeCloseTo(2352.055, 2)
+    expect(line.rateio_apos_cartao).toBeCloseTo(24551.91, 1)
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.proposed_pay).toBeCloseTo(17414.23, 2)
+
+    // U = Dailza 420 + Evandro 1220.01 → V 328 − W 65.6 − shortfall ≈ PDF 17611.26
+    const withU = buildFolhaDraftLine(
+      'iguatemi',
+      row,
+      { servicos_assistente_como_pro: 1640.01 },
+      { applyTaxExtras: false },
+    )
+    expect(withU.folha_extras.valor_a_pagar_profissional).toBeCloseTo(328.002, 2)
+    expect(withU.folha_extras.taxa_servicos).toBeCloseTo(65.6, 1)
+    expect(withU.proposed_pay).toBeCloseTo(17611.26, 1)
+  })
+
+  it('Lucas Romeu: descontos=0 → Tx adm 81.90 (3% de 2730); proposed = a_pagar + meio − adm', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'LUCAS RODRIGUES DE SOUZA',
+        role: 'MULTIPLICADOR',
+        charged: 2730,
+        service_share: 1044.0000014305115,
+        product_share: 0,
+        other_share: 0,
+        tip: 0,
+        product_spend: -74.04000253975391,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: -221,
+        other_discounts: 0,
+        net_payable: 748.9599988907576,
+        house_share: 1911,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.flags).toContain('assistente_romeu')
+    expect(line.taxa_administrativa).toBeCloseTo(81.9, 2)
+    expect(line.taxa_administrativa_rate).toBe(0.03)
+    expect(line.taxa_administrativa_source).toBe('motor')
+    expect(line.meio_a_meio).toBeCloseTo(110.5, 2)
+    // 748.96 + 110.5 − 81.90 = 777.56
+    expect(line.proposed_pay).toBeCloseTo(777.56, 2)
+    expect(line.flags).not.toContain('taxa_adm_em_descontos')
   })
 
   it('sem a_pagar → proposed_pay null (não inventa 0)', () => {

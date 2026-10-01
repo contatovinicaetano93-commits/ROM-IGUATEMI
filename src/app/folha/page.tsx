@@ -862,9 +862,10 @@ export default function FolhaPage() {
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
               <li>
-                Olerite: se o 8123 zera taxa_adm e embute (adm − meio + outros) em
-                descontos, a Folha desmembra nas colunas Tx adm / Meio a meio / Outros.
-                Rateio − cartão espelha o “Total Rateio” do recibo Avec.
+                Olerite: se o 8123 zera taxa_adm e embute adm↔meio em descontos, a Folha
+                desmembra (Tx adm / Meio / Outros). Assistente-como-pro (todos, incl.
+                Romeu): taxa adm 3% sobre o serviço. Rateio − cartão ≈ comissão/rateio do
+                recibo (produto ≠ cartão).
               </li>
             </ul>
           </div>
