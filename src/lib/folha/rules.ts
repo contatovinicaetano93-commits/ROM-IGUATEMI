@@ -129,10 +129,11 @@ export function folhaRulesSummary(panel: RomPanelId): FolhaRulesSummary {
       esteticista:
         'Taxa adm 7% sobre faturado − produto; ganha 10% do total faturado.',
       assistente:
-        'Faturado − produto. IG não-Romeu: ganho 30% com taxa adm 3%; profissional 4% sobre U + remessa V 20%. Assistentes do Romeu: faixas 30/40/50% no acumulado do mês (pago 05+20).',
+        'Atuando como pro: ganho ~30% + taxa adm 3% sobre o serviço (todos, incl. Romeu). Romeu: faixas 30/40/50% no acumulado do mês. W sobre U: BR 3% / IG 4%; remessa V 20%.',
       multiplicador:
-        'Participação tipicamente 10–13% do faturado; taxa adm em geral só sobre serviços U quando aplicável.',
-      colorista: 'Tratado como multiplicador/assistente na Fopag (sem taxa adm padrão sobre C).',
+        'Como assistente-como-pro: taxa adm 3% sobre o serviço executado. Romeu: faixas 30/40/50%. Sem taxa adm 7% sobre faturado C.',
+      colorista:
+        'Tratado como multiplicador/assistente (taxa adm 3% quando atua como pro; sem 7% sobre C).',
       outro: 'Sem default — exige contrato / exceção da planilha.',
     },
   }

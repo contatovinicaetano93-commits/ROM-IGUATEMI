@@ -124,7 +124,7 @@ describe('IG não-Romeu — taxa adm assistente 3%', () => {
     expect(line.folha_extras.valor_a_pagar_profissional).toBe(200)
   })
 
-  it('assistente Romeu no IG: sem taxa adm assistente 3%', () => {
+  it('assistente Romeu no IG: também taxa adm 3% sobre U', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',
       row('Jefferson Policarpo Dos Santos', { role: 'MULTIPLICADOR' }),
@@ -132,7 +132,13 @@ describe('IG não-Romeu — taxa adm assistente 3%', () => {
     )
     expect(line.flags).toContain('assistente_romeu')
     expect(line.folha_extras.taxa_servicos).toBe(40)
-    expect(line.folha_extras.taxa_adm_assistente).toBeNull()
+    expect(line.folha_extras.taxa_adm_assistente).toBe(30)
+    expect(
+      resolveAssistantAdminTaxRate(
+        'iguatemi',
+        resolveFolhaPersonRules('Gabriela Da Silva Santos'),
+      ),
+    ).toBe(0.03)
   })
 })
 

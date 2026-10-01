@@ -53,8 +53,9 @@ describe('applyExtrasToDraftLines', () => {
     expect(result.matched).toBe(true)
     expect(result.lines[0]?.folha_extras.valor_a_pagar_profissional).toBe(200)
     expect(result.lines[0]?.folha_extras.taxa_servicos).toBe(30)
-    // + meio a meio 100 (desconto assistente 200)
-    expect(result.lines[0]?.proposed_pay).toBe(5000 + 100 + 200 - 30 - 50)
+    // + meio 100 − adm 3% de 12000 (360) + V 200 − W 30 − DARF 50
+    expect(result.lines[0]?.proposed_pay).toBe(5000 + 100 + 200 - 30 - 50 - 360)
+    expect(result.lines[0]?.taxa_administrativa).toBeCloseTo(360, 2)
   })
 })
 
@@ -69,6 +70,7 @@ describe('refreshDraftPreservingExtras', () => {
     })
     expect(refreshed.lines[0]?.folha_extras.darf).toBe(99)
     expect(refreshed.lines[0]?.avec.net_payable).toBe(5100)
-    expect(refreshed.lines[0]?.proposed_pay).toBe(5100 + 100 - 99)
+    // + meio 100 − adm 3% (360) − DARF 99
+    expect(refreshed.lines[0]?.proposed_pay).toBe(5100 + 100 - 99 - 360)
   })
 })

@@ -215,12 +215,75 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBe(6032.64 + 75 + 200 - 30)
   })
 
-  it('U no IG usa taxa 4% (assistente Romeu: sem taxa adm 3% do assistente)', () => {
+  it('U no IG: W 4% e taxa adm assistente 3% (incl. Romeu)', () => {
     const line = buildFolhaDraftLine('iguatemi', jefferson, {
       servicos_assistente_como_pro: 1000,
     })
     expect(line.folha_extras.taxa_servicos).toBe(40)
-    expect(line.folha_extras.taxa_adm_assistente).toBeNull()
+    expect(line.folha_extras.taxa_adm_assistente).toBe(30)
+  })
+
+  it('Gabriela Romeu: descontos = meio − adm 3%; líquido = a_pagar (sem recreditar meio)', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'GABRIELA DA SILVA SANTOS',
+        role: 'MULTIPLICADOR',
+        charged: 5076,
+        service_share: 1557,
+        product_share: 7.3,
+        other_share: null,
+        tip: 0,
+        product_spend: -86.63,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: -430,
+        // +67.10 = 215 (meio) − 147.90 (taxa adm 3%)
+        other_discounts: 67.1,
+        net_payable: 1114.77,
+        house_share: 3589.7,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.flags).toContain('assistente_romeu')
+    expect(line.taxa_administrativa).toBeCloseTo(147.9, 1)
+    expect(line.taxa_administrativa_rate).toBe(0.03)
+    expect(line.meio_a_meio).toBeCloseTo(215, 1)
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.proposed_pay).toBeCloseTo(1114.77, 2)
+  })
+
+  it('Lucas Romeu: descontos=0 → Tx adm 81.90 (3% de 2730); proposed = a_pagar + meio − adm', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'LUCAS RODRIGUES DE SOUZA',
+        role: 'MULTIPLICADOR',
+        charged: 2730,
+        service_share: 1044.0000014305115,
+        product_share: 0,
+        other_share: 0,
+        tip: 0,
+        product_spend: -74.04000253975391,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: -221,
+        other_discounts: 0,
+        net_payable: 748.9599988907576,
+        house_share: 1911,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.flags).toContain('assistente_romeu')
+    expect(line.taxa_administrativa).toBeCloseTo(81.9, 2)
+    expect(line.taxa_administrativa_rate).toBe(0.03)
+    expect(line.taxa_administrativa_source).toBe('motor')
+    expect(line.meio_a_meio).toBeCloseTo(110.5, 2)
+    // 748.96 + 110.5 − 81.90 = 777.56
+    expect(line.proposed_pay).toBeCloseTo(777.56, 2)
+    expect(line.flags).not.toContain('taxa_adm_em_descontos')
   })
 
   it('sem a_pagar → proposed_pay null (não inventa 0)', () => {

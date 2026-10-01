@@ -241,8 +241,14 @@ export const ROMEU_ASSISTANT_BANDS: readonly {
   { minInclusive: 20_001, maxInclusive: 30_000, rate: 0.5 },
 ]
 
-/** IG não-Romeu: taxa adm do assistente sobre o ganho 30%. */
-export const IG_NON_ROMEU_ASSISTANT_ADMIN_TAX = 0.03
+/**
+ * Taxa adm quando o assistente atua como profissional (sobre o valor do serviço).
+ * Vale para **todos** os assistentes (incl. Romeu) — BR e IG.
+ */
+export const ASSISTANT_AS_PRO_ADMIN_TAX = 0.03
+
+/** @deprecated use ASSISTANT_AS_PRO_ADMIN_TAX — mantido como alias. */
+export const IG_NON_ROMEU_ASSISTANT_ADMIN_TAX = ASSISTANT_AS_PRO_ADMIN_TAX
 
 function aliasKeys(aliases: readonly string[]): string[] {
   return aliases.map((a) => occupancyMergeKey(a)).filter(Boolean)
@@ -319,17 +325,15 @@ export function resolveProfessionalServiceTaxRate(
 }
 
 /**
- * Alíquota adm do assistente sobre o montante do serviço que ele executou.
- * Brunna trio: 2%. IG não-Romeu: 3%. BR default / Romeu assistants: null (sem essa camada).
+ * Alíquota adm do assistente sobre o montante do serviço que ele executou como pro.
+ * Brunna trio: 2% (split). Demais assistentes (incl. Romeu), BR e IG: **3%**.
  */
 export function resolveAssistantAdminTaxRate(
-  panel: RomPanelId,
+  _panel: RomPanelId,
   rules: FolhaPersonRules | null,
 ): number | null {
   if (rules?.serviceTaxSplit) return rules.serviceTaxSplit.assistant
-  if (rules?.isRomeuAssistant) return null
-  if (panel === 'iguatemi') return IG_NON_ROMEU_ASSISTANT_ADMIN_TAX
-  return null
+  return ASSISTANT_AS_PRO_ADMIN_TAX
 }
 
 /**

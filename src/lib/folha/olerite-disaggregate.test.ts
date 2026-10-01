@@ -36,6 +36,55 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.meioAMeio).toBeCloseTo(188.5, 2)
     expect(d.outrosResiduais).toBeNull()
   })
+
+  it('Gabriela Santos: descontos crédito = meio − adm 3%', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 5076,
+      adminFee8123: 0,
+      assistantDiscount: -430,
+      otherDiscounts: 67.1,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.03,
+    })
+    expect(d.embeddedAdminMeio).toBe(true)
+    expect(d.meioCreditedInNet).toBe(true)
+    expect(d.taxaAdm).toBeCloseTo(147.9, 1)
+    expect(d.meioAMeio).toBeCloseTo(215, 1)
+    expect(d.outrosResiduais).toBeNull()
+  })
+
+  it('Lucas Rodrigues: descontos=0 → adm = charged × 3% (não embutido)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 2730,
+      adminFee8123: 0,
+      assistantDiscount: -221,
+      otherDiscounts: 0,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.03,
+    })
+    expect(d.embeddedAdminMeio).toBe(false)
+    expect(d.meioCreditedInNet).toBe(false)
+    expect(d.taxaAdm).toBeCloseTo(81.9, 2)
+    expect(d.meioAMeio).toBeCloseTo(110.5, 2)
+  })
+
+  it('Lucas Q1: descontos ≈ +meio → meio já no a_pagar; adm = charged × 3%', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 2250,
+      adminFee8123: 0,
+      assistantDiscount: -85,
+      otherDiscounts: 42.5,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.03,
+    })
+    expect(d.embeddedAdminMeio).toBe(false)
+    expect(d.meioCreditedInNet).toBe(true)
+    expect(d.taxaAdm).toBeCloseTo(67.5, 2)
+    expect(d.meioAMeio).toBeCloseTo(42.5, 2)
+  })
 })
 
 describe('rateioAposCartao', () => {
