@@ -287,7 +287,15 @@
       ]
     },
     {
-      "id": "036_comanda_spans",
+      "id": "036_p3_presence_flags",
+      "file": "delta-p3-presence-flags.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
+    },
+    {
+      "id": "037_comanda_spans",
       "file": "delta-comanda-spans.sql",
       "panels": [
         "brasil",
@@ -295,7 +303,7 @@
       ]
     },
     {
-      "id": "037_ativacoes",
+      "id": "038_ativacoes",
       "file": "delta-ativacoes.sql",
       "panels": [
         "brasil",
@@ -303,16 +311,8 @@
       ]
     },
     {
-      "id": "038_ativacoes_v2",
+      "id": "039_ativacoes_v2",
       "file": "delta-ativacoes-v2.sql",
-      "panels": [
-        "brasil",
-        "iguatemi"
-      ]
-    },
-    {
-      "id": "039_p3_presence_flags",
-      "file": "delta-p3-presence-flags.sql",
       "panels": [
         "brasil",
         "iguatemi"
@@ -337,6 +337,14 @@
     {
       "id": "042_nullable_month_metrics",
       "file": "delta-nullable-month-metrics.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
+    },
+    {
+      "id": "043_folha",
+      "file": "delta-folha.sql",
       "panels": [
         "brasil",
         "iguatemi"

@@ -1,0 +1,342 @@
+/**
+ * Rascunho da Folha a partir do snapshot 8123 (salon_commissions_daily).
+ *
+ * O 8123 é espelho do fechamento Avec — não recalculamos % de comissão.
+ * `proposed_pay` começa em `a_pagar` (net_payable) e só abate/acresce
+ * camadas exclusivas da Folha (DARF, DAS, mensalidade, U/V/W) quando informadas.
+ *
+ * Meio a meio e flags de cargo são para conferência (caderno + Fopag).
+ */
+
+import type { RomPanelId } from '@/lib/brand'
+import { calculateFolhaLine, roundFolha } from '@/lib/folha/calc'
+import { quinzenaForDay, todayIsoSaoPaulo, type FolhaQuinzena } from '@/lib/folha/period'
+import {
+  MEIO_A_MEIO_RATE,
+  normalizeFolhaCargo,
+  type FolhaCargo,
+} from '@/lib/folha/rules'
+import {
+  getLatestSalonCommissionsDaily,
+  getSalonCommissionsDailyNear,
+  type CommissionProfessionalRow,
+} from '@/lib/salon/commission-metrics'
+
+/** Magnitude de abatimento Avec (8123 guarda negativos). Ausente → null. */
+export function deductionMagnitude(value: number | null | undefined): number | null {
+  if (value == null || Number.isNaN(value)) return null
+  return Math.abs(value)
+}
+
+export type FolhaDraftFlag =
+  | 'manicure_com_taxa_adm'
+  | 'sem_a_pagar'
+  | 'sem_cargo'
+  | 'assistente_com_desconto'
+
+export type FolhaDraftLine = {
+  name: string
+  cargo_raw: string | null
+  cargo: FolhaCargo
+  /** Espelho 8123 — ausente = null. */
+  avec: {
+    charged: number | null
+    service_share: number | null
+    product_share: number | null
+    house_share: number | null
+    card_fee: number | null
+    admin_fee: number | null
+    assistant_discount: number | null
+    product_spend: number | null
+    other_discounts: number | null
+    tip: number | null
+    net_payable: number | null
+  }
+  /** Conferência Folha (derivado; não altera proposed_pay sozinho). */
+  meio_a_meio: number | null
+  /** Camadas Folha ainda não no 8123 — null até IMAP/RH/U. */
+  folha_extras: {
+    parc: number | null
+    darf: number | null
+    das: number | null
+    div_ativa: number | null
+    mensalidade_contabilidade: number | null
+    descontos_diversos: number | null
+    produtos_black: number | null
+    servicos_assistente_como_pro: number | null
+    valor_a_pagar_profissional: number | null
+    taxa_servicos: number | null
+    esteticista_bonus: number | null
+  }
+  /**
+   * a_pagar 8123 ± extras Folha.
+   * null se 8123 não trouxe a_pagar (não inventa 0).
+   */
+  proposed_pay: number | null
+  /**
+   * Preview da fórmula Y quando dá para remontar fat. líquido a partir do 8123.
+   * Só conferência — proposed_pay manda no pagamento.
+   */
+  formula_y_preview: number | null
+  flags: FolhaDraftFlag[]
+}
+
+export type FolhaDraft = {
+  source: '8123'
+  reference_day: string
+  quinzena: FolhaQuinzena
+  panel: RomPanelId
+  line_count: number
+  lines: FolhaDraftLine[]
+  /** Soma dos proposed_pay presentes; null se nenhum. */
+  total_proposed_pay: number | null
+}
+
+function n(v: number | null | undefined): number {
+  return v == null || Number.isNaN(v) ? 0 : v
+}
+
+/**
+ * Remonta um fat. líquido aproximado para preview Y:
+ * a_pagar + magnitudes dos abatimentos 8123 (produto, adm, assistente, outros, cartão).
+ * Não usa meio a meio aqui — o calc reaplica M = L/2.
+ */
+export function reconstructFatLiquidoFrom8123(
+  row: CommissionProfessionalRow,
+): number | null {
+  if (row.net_payable == null) return null
+  return (
+    row.net_payable +
+    n(deductionMagnitude(row.product_spend)) +
+    n(deductionMagnitude(row.admin_fee)) +
+    n(deductionMagnitude(row.assistant_discount)) +
+    n(deductionMagnitude(row.other_discounts)) +
+    n(deductionMagnitude(row.card_fee))
+  )
+}
+
+function applyFolhaExtras(
+  netPayable: number | null,
+  extras: FolhaDraftLine['folha_extras'],
+): number | null {
+  if (netPayable == null) return null
+  return (
+    netPayable -
+    n(extras.parc) -
+    n(extras.darf) -
+    n(extras.das) -
+    n(extras.div_ativa) -
+    n(extras.mensalidade_contabilidade) -
+    n(extras.descontos_diversos) -
+    n(extras.produtos_black) +
+    n(extras.valor_a_pagar_profissional) -
+    n(extras.taxa_servicos) +
+    n(extras.esteticista_bonus)
+  )
+}
+
+export function buildFolhaDraftLine(
+  panel: RomPanelId,
+  row: CommissionProfessionalRow,
+  extras?: Partial<FolhaDraftLine['folha_extras']>,
+): FolhaDraftLine {
+  const cargo = normalizeFolhaCargo(row.role)
+  const assistantMag = deductionMagnitude(row.assistant_discount)
+  const meio_a_meio =
+    assistantMag == null ? null : roundFolha(assistantMag * MEIO_A_MEIO_RATE, 4)
+
+  const folha_extras: FolhaDraftLine['folha_extras'] = {
+    parc: extras?.parc ?? null,
+    darf: extras?.darf ?? null,
+    das: extras?.das ?? null,
+    div_ativa: extras?.div_ativa ?? null,
+    mensalidade_contabilidade: extras?.mensalidade_contabilidade ?? null,
+    descontos_diversos: extras?.descontos_diversos ?? null,
+    produtos_black: extras?.produtos_black ?? null,
+    servicos_assistente_como_pro: extras?.servicos_assistente_como_pro ?? null,
+    valor_a_pagar_profissional: extras?.valor_a_pagar_profissional ?? null,
+    taxa_servicos: extras?.taxa_servicos ?? null,
+    esteticista_bonus: extras?.esteticista_bonus ?? null,
+  }
+
+  // Esteticista: bônus 10% do faturado (caderno) — só se charged presente e extras não override.
+  if (
+    cargo === 'esteticista' &&
+    folha_extras.esteticista_bonus == null &&
+    row.charged != null
+  ) {
+    const preview = calculateFolhaLine({
+      panel,
+      cargo: row.role,
+      faturado: row.charged,
+      pctSalao: null,
+      fatLiquido: reconstructFatLiquidoFrom8123(row),
+      taxaCartaoPix: deductionMagnitude(row.card_fee),
+      produto: deductionMagnitude(row.product_spend),
+      taxaAdministrativa: deductionMagnitude(row.admin_fee),
+      descontoAssistente: assistantMag,
+      meioAMeio: meio_a_meio,
+      parc: null,
+      darf: null,
+      das: null,
+      divAtiva: null,
+      mensalidadeContabilidade: null,
+      descontosDiversos: deductionMagnitude(row.other_discounts),
+      produtosBlack: null,
+      servicosAssistenteComoPro: folha_extras.servicos_assistente_como_pro,
+      valorAPagarProfissional: folha_extras.valor_a_pagar_profissional,
+      remitRateOverride: null,
+      taxaServicosOverride: folha_extras.taxa_servicos,
+      hasDepilacao: false,
+      waiveAdminFee: false,
+    })
+    folha_extras.esteticista_bonus = preview.esteticistaBonus
+  }
+
+  // Se U informado, deriva V/W via motor.
+  if (folha_extras.servicos_assistente_como_pro != null) {
+    const derived = calculateFolhaLine({
+      panel,
+      cargo: row.role,
+      faturado: row.charged,
+      pctSalao: null,
+      fatLiquido: reconstructFatLiquidoFrom8123(row),
+      taxaCartaoPix: deductionMagnitude(row.card_fee),
+      produto: deductionMagnitude(row.product_spend),
+      taxaAdministrativa: deductionMagnitude(row.admin_fee),
+      descontoAssistente: assistantMag,
+      meioAMeio: meio_a_meio,
+      parc: folha_extras.parc,
+      darf: folha_extras.darf,
+      das: folha_extras.das,
+      divAtiva: folha_extras.div_ativa,
+      mensalidadeContabilidade: folha_extras.mensalidade_contabilidade,
+      descontosDiversos: folha_extras.descontos_diversos,
+      produtosBlack: folha_extras.produtos_black,
+      servicosAssistenteComoPro: folha_extras.servicos_assistente_como_pro,
+      valorAPagarProfissional: folha_extras.valor_a_pagar_profissional,
+      remitRateOverride: null,
+      taxaServicosOverride: folha_extras.taxa_servicos,
+      hasDepilacao: false,
+      waiveAdminFee: false,
+    })
+    if (folha_extras.valor_a_pagar_profissional == null) {
+      folha_extras.valor_a_pagar_profissional = derived.valorAPagarProfissional
+    }
+    if (folha_extras.taxa_servicos == null) {
+      folha_extras.taxa_servicos = derived.taxaServicos
+    }
+  }
+
+  const flags: FolhaDraftFlag[] = []
+  if (cargo === 'manicure' && deductionMagnitude(row.admin_fee) != null) {
+    const adm = deductionMagnitude(row.admin_fee)
+    if (adm != null && adm > 0) flags.push('manicure_com_taxa_adm')
+  }
+  if (row.net_payable == null) flags.push('sem_a_pagar')
+  if (!row.role?.trim()) flags.push('sem_cargo')
+  if (assistantMag != null && assistantMag > 0) flags.push('assistente_com_desconto')
+
+  const fatLiquido = reconstructFatLiquidoFrom8123(row)
+  const yPreview =
+    fatLiquido == null
+      ? null
+      : calculateFolhaLine({
+          panel,
+          cargo: row.role,
+          faturado: row.charged,
+          pctSalao: null,
+          fatLiquido,
+          taxaCartaoPix: deductionMagnitude(row.card_fee),
+          produto: deductionMagnitude(row.product_spend),
+          taxaAdministrativa: deductionMagnitude(row.admin_fee),
+          descontoAssistente: assistantMag,
+          meioAMeio: meio_a_meio,
+          parc: folha_extras.parc,
+          darf: folha_extras.darf,
+          das: folha_extras.das,
+          divAtiva: folha_extras.div_ativa,
+          mensalidadeContabilidade: folha_extras.mensalidade_contabilidade,
+          descontosDiversos: folha_extras.descontos_diversos,
+          produtosBlack: folha_extras.produtos_black,
+          servicosAssistenteComoPro: folha_extras.servicos_assistente_como_pro,
+          valorAPagarProfissional: folha_extras.valor_a_pagar_profissional,
+          remitRateOverride: null,
+          taxaServicosOverride: folha_extras.taxa_servicos,
+          hasDepilacao: false,
+          waiveAdminFee: cargo === 'manicure',
+        }).valorLiquido
+
+  return {
+    name: row.name,
+    cargo_raw: row.role,
+    cargo,
+    avec: {
+      charged: row.charged,
+      service_share: row.service_share,
+      product_share: row.product_share,
+      house_share: row.house_share,
+      card_fee: row.card_fee,
+      admin_fee: row.admin_fee,
+      assistant_discount: row.assistant_discount,
+      product_spend: row.product_spend,
+      other_discounts: row.other_discounts,
+      tip: row.tip,
+      net_payable: row.net_payable,
+    },
+    meio_a_meio,
+    folha_extras,
+    proposed_pay: roundFolha(applyFolhaExtras(row.net_payable, folha_extras), 4),
+    formula_y_preview: roundFolha(yPreview, 4),
+    flags,
+  }
+}
+
+export function buildFolhaDraftFrom8123(args: {
+  panel: RomPanelId
+  referenceDay: string
+  professionals: readonly CommissionProfessionalRow[]
+  /** Âncora da quinzena; default = referenceDay. */
+  quinzenaDay?: string
+}): FolhaDraft {
+  const lines = args.professionals
+    .filter((p) => Boolean(p.name?.trim()))
+    .map((p) => buildFolhaDraftLine(args.panel, p))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+
+  let total: number | null = null
+  for (const line of lines) {
+    if (line.proposed_pay == null) continue
+    total = (total ?? 0) + line.proposed_pay
+  }
+
+  return {
+    source: '8123',
+    reference_day: args.referenceDay,
+    quinzena: quinzenaForDay(args.quinzenaDay ?? args.referenceDay),
+    panel: args.panel,
+    line_count: lines.length,
+    lines,
+    total_proposed_pay: roundFolha(total, 2),
+  }
+}
+
+/** Carrega rascunho a partir do snapshot 8123 mais recente (ou null se vazio). */
+export async function loadFolhaDraftFromLatest8123(
+  panel: RomPanelId,
+  opts?: { referenceDay?: string },
+): Promise<FolhaDraft | null> {
+  const anchor = opts?.referenceDay ?? todayIsoSaoPaulo()
+  const snapshot =
+    (await getSalonCommissionsDailyNear(anchor, { maxSkewDays: 45 })) ??
+    (await getLatestSalonCommissionsDaily())
+
+  if (!snapshot || snapshot.professionals.length === 0) return null
+
+  return buildFolhaDraftFrom8123({
+    panel,
+    referenceDay: snapshot.day,
+    professionals: snapshot.professionals,
+    quinzenaDay: anchor,
+  })
+}
