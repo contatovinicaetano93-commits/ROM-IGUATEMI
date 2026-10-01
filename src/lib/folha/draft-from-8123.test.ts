@@ -475,6 +475,38 @@ describe('buildFolhaDraftLine', () => {
     expect(lucas.proposed_pay).toBeCloseTo(1114.77, 2)
   })
 
+  it('Liria descarta bônus esteticista já gravado nos extras', () => {
+    const liria: CommissionProfessionalRow = {
+      name: 'Liria Pereira Colman',
+      role: 'Esteticista',
+      charged: 5968,
+      service_share: null,
+      product_share: null,
+      other_share: null,
+      tip: null,
+      product_spend: null,
+      card_fee: null,
+      admin_fee: -417.76,
+      assistant_discount: null,
+      other_discounts: null,
+      net_payable: 2598.12,
+      house_share: null,
+    }
+    const staleBonus = 596.8
+    const line = buildFolhaDraftLine('iguatemi', liria, {
+      esteticista_bonus: staleBonus,
+    })
+    expect(line.folha_extras.esteticista_bonus).toBeNull()
+    expect(line.proposed_pay).toBeCloseTo(2598.12, 2)
+
+    const kept = buildFolhaDraftLine(
+      'iguatemi',
+      { ...liria, name: 'Esteticista Teste' },
+      { esteticista_bonus: staleBonus },
+    )
+    expect(kept.folha_extras.esteticista_bonus).toBe(staleBonus)
+  })
+
   it('sem a_pagar → proposed_pay null (não inventa 0)', () => {
     const line = buildFolhaDraftLine('brasil', {
       ...jefferson,

@@ -369,7 +369,10 @@ export function buildFolhaDraftLine(
     taxa_servicos: extras?.taxa_servicos ?? null,
     taxa_adm_assistente: extras?.taxa_adm_assistente ?? null,
     taxa_administrativa: rhTaxaAdm ?? taxaAdmMotorExtra,
-    esteticista_bonus: extras?.esteticista_bonus ?? null,
+    // Liria suprime o bônus mesmo se o rascunho antigo já gravou os 10%.
+    esteticista_bonus: person?.suppressEsteticistaBonus
+      ? null
+      : (extras?.esteticista_bonus ?? null),
     acumulado_mes: extras?.acumulado_mes ?? null,
     romeu_comissao_parcela: romeuParcela,
   }
