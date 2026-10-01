@@ -21,6 +21,9 @@ type ExtrasPatch = Partial<FolhaDraftLine['folha_extras']>
 
 function numOrNull(v: unknown): number | null {
   if (v == null || v === '') return null
+  if (typeof v === 'object' && v && 'result' in v) {
+    return numOrNull((v as { result: unknown }).result)
+  }
   if (typeof v === 'number') {
     if (!Number.isFinite(v)) return null
     return Math.abs(v) < 1e-9 ? null : Math.round(v * 100) / 100
