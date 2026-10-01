@@ -10,6 +10,8 @@ import {
   ASSISTANT_AS_PRO_REMIT_RATE,
   MEIO_A_MEIO_RATE,
   assistantServiceTaxRate,
+  defaultAdminFeeRate,
+  type FolhaCargo,
 } from '@/lib/folha/rules'
 import type { RomPanelId } from '@/lib/brand'
 
@@ -54,6 +56,11 @@ export type FolhaPersonRules = {
   /** Rateio especial da taxa sobre U (Brunna / Joanides / Marcela). */
   serviceTaxSplit: FolhaServiceTaxSplit | null
   /**
+   * Override da taxa adm sobre faturado bruto (coluna C).
+   * Default geral = 7% (BR e IG); Brunna/Joanides/Marcela = 5%. null = default do cargo.
+   */
+  adminFeeRate: number | null
+  /**
    * Meta de faturamento para isentar 2ª quinzena + devolver 1ª (dia 05).
    * null = regra existe mas valor ainda não confirmado pelo RH.
    */
@@ -81,6 +88,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: null,
+    adminFeeRate: null,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
@@ -92,6 +100,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: null,
+    adminFeeRate: null,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
@@ -103,6 +112,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: null,
+    adminFeeRate: null,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
@@ -119,6 +129,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: 0.3,
     proCommissionRate: 0.6,
     serviceTaxSplit: null,
+    adminFeeRate: null,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
@@ -130,6 +141,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: 0.35,
     proCommissionRate: 0.55,
     serviceTaxSplit: null,
+    adminFeeRate: null,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
@@ -141,6 +153,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: BRUNNA_TAX_SPLIT,
+    adminFeeRate: 0.05,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
@@ -152,6 +165,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: BRUNNA_TAX_SPLIT,
+    adminFeeRate: 0.05,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
@@ -163,6 +177,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: BRUNNA_TAX_SPLIT,
+    adminFeeRate: 0.05,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
@@ -174,6 +189,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: null,
+    adminFeeRate: null,
     // Meta existe (pagamento dia 05); valor numérico ainda pendente de conferência RH.
     quinzenaMeta: null,
     hasQuinzenaMeta: true,
@@ -186,6 +202,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: null,
+    adminFeeRate: null,
     quinzenaMeta: null,
     hasQuinzenaMeta: true,
     isRomeuAssistant: false,
@@ -206,6 +223,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     assistantRemitRate: null,
     proCommissionRate: null,
     serviceTaxSplit: null,
+    adminFeeRate: null,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: true,
@@ -272,6 +290,19 @@ export function resolveMeioAMeioRate(rules: FolhaPersonRules | null): number {
   }
   if (rules?.meioAMeioRate != null) return rules.meioAMeioRate
   return MEIO_A_MEIO_RATE
+}
+
+/**
+ * Taxa adm sobre faturado bruto (C).
+ * Regra geral BR + IG: 7%. Únicas a 5%: Brunna / Joanides / Marcela.
+ */
+export function resolveGrossAdminFeeRate(
+  panel: RomPanelId,
+  cargo: FolhaCargo,
+  rules: FolhaPersonRules | null,
+): number | null {
+  if (rules?.adminFeeRate != null) return rules.adminFeeRate
+  return defaultAdminFeeRate(panel, cargo)
 }
 
 /**

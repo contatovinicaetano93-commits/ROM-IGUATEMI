@@ -51,7 +51,7 @@ export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | n
     line.avec.charged,
     exportMagnitude(line.avec.card_fee),
     exportMagnitude(line.avec.product_spend),
-    exportMagnitude(line.avec.admin_fee),
+    line.taxa_administrativa ?? exportMagnitude(line.avec.admin_fee),
     exportMagnitude(line.avec.assistant_discount),
     line.meio_a_meio,
     line.meio_a_meio_rate,

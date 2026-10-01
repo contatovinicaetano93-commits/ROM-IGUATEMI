@@ -66,6 +66,8 @@ function flagLabel(flag: FolhaDraftLine['flags'][number]): string {
       return 'Meta quinzena (valor pendente RH)'
     case 'assistente_romeu':
       return 'Assistente do Romeu (faixas 30/40/50)'
+    case 'taxa_adm_motor':
+      return 'Taxa adm pelo motor (8123 zerado)'
     default: {
       const _exhaustive: never = flag
       return _exhaustive
@@ -602,9 +604,14 @@ export default function FolhaPage() {
                       </p>
                     </div>
                     <div>
-                      <span className="text-muted">Taxa adm</span>
+                      <span className="text-muted">
+                        Taxa adm
+                        {selectedLine?.taxa_administrativa_rate != null
+                          ? ` ${pct(selectedLine.taxa_administrativa_rate)}`
+                          : ''}
+                      </span>
                       <p className="mt-1 tabular-nums">
-                        {formatDeduction(selectedLine?.avec.admin_fee)}
+                        {formatMoney(selectedLine?.taxa_administrativa)}
                       </p>
                     </div>
                     <div>
@@ -754,7 +761,7 @@ export default function FolhaPage() {
                             {formatDeduction(line.avec.product_spend)}
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
-                            {formatDeduction(line.avec.admin_fee)}
+                            {formatMoney(line.taxa_administrativa)}
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
                             {formatDeduction(line.avec.assistant_discount)}
@@ -823,8 +830,12 @@ export default function FolhaPage() {
                 {pct(rules.assistant_as_pro_earn_rate)} + meio a meio
               </li>
               <li>
+                Taxa adm profissional: 7% sobre faturado bruto (BR e IG) — só
+                Brunna/Joah/Marcela ficam em 5%
+              </li>
+              <li>
                 Exceções: Pedro/Dayana meio a meio 5%; Romeu 50%; Walter assistente 30% /
-                Dani Rocha 35%; Brunna/Joah/Marcela taxa 5% (2%+3%); assistentes Romeu
+                Dani Rocha 35%; Brunna/Joah/Marcela taxa U 5% (2%+3%); assistentes Romeu
                 30/40/50% no acumulado do mês
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
