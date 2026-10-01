@@ -830,8 +830,8 @@ export default function FolhaPage() {
                 {pct(rules.assistant_as_pro_earn_rate)} + meio a meio
               </li>
               <li>
-                Taxa adm profissional (unitária): IG 7% / BR 5% sobre faturado bruto — só
-                Brunna/Joah/Marcela ficam em 5% no IG
+                Taxa adm profissional: 7% sobre faturado bruto (BR e IG) — só
+                Brunna/Joah/Marcela ficam em 5%
               </li>
               <li>
                 Exceções: Pedro/Dayana meio a meio 5%; Romeu 50%; Walter assistente 30% /

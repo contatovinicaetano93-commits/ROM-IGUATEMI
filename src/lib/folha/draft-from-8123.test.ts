@@ -115,6 +115,33 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(6039.1381, 3)
   })
 
+  it('BR cabeleireiro: taxa adm motor 7% quando 8123 veio 0', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      {
+        name: 'Profissional BR Teste',
+        role: 'Cabeleireiro',
+        charged: 10000,
+        service_share: null,
+        product_share: null,
+        other_share: null,
+        tip: null,
+        product_spend: null,
+        card_fee: null,
+        admin_fee: 0,
+        assistant_discount: null,
+        other_discounts: null,
+        net_payable: 5000,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.taxa_administrativa).toBe(700)
+    expect(line.taxa_administrativa_rate).toBe(0.07)
+    expect(line.proposed_pay).toBe(4300)
+  })
+
   it('Brunna IG: taxa adm 5% (exceção), não 7%', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',
