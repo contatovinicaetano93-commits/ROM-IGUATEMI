@@ -1,5 +1,5 @@
 /**
- * Tipos da Folha PJ (shell + motor + rascunho 8123).
+ * Tipos da Folha PJ (shell + motor + rascunho 8123 + workflow).
  */
 
 import type { FolhaDraft } from '@/lib/folha/draft-from-8123'
@@ -14,7 +14,7 @@ export type FolhaPeriodStatus =
 
 export type FolhaShellStatus = {
   /**
-   * true enquanto não há linhas do 8123 para montar rascunho.
+   * true enquanto não há linhas do 8123/período persistido.
    * Regras travadas independente disso (`rules_locked`).
    */
   shell_only: boolean
@@ -22,8 +22,11 @@ export type FolhaShellStatus = {
   rules_locked: boolean
   message: string
   rules: FolhaRulesSummary
-  /** Rascunho atual a partir do 8123; null se ainda não há snapshot. */
+  /** Rascunho atual; null se ainda não há dados. */
   draft: FolhaDraft | null
+  /** Status do período persistido (quando houver). */
+  period_status: FolhaPeriodStatus | null
+  period_id: string | null
   periods: FolhaPeriodSummary[]
 }
 

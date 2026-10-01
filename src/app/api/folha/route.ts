@@ -3,8 +3,8 @@ import { err, handleError, ok } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { getRomPanelId } from '@/lib/brand'
 import { canAccessFolha } from '@/lib/folha/access'
-import { loadFolhaDraftFromLatest8123 } from '@/lib/folha/draft-from-8123'
 import { folhaRulesSummary } from '@/lib/folha/rules'
+import { loadOrCreateFolhaDraft } from '@/lib/folha/service'
 import type { FolhaShellStatus } from '@/lib/folha/types'
 
 export async function GET(req: NextRequest) {
@@ -19,22 +19,27 @@ export async function GET(req: NextRequest) {
     const referenceDay =
       dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : undefined
 
-    const draft = await loadFolhaDraftFromLatest8123(panel, { referenceDay })
+    const { draft, period } = await loadOrCreateFolhaDraft(panel, {
+      referenceDay,
+      actor: auth.session.user,
+    })
 
     const payload: FolhaShellStatus = {
       shell_only: draft == null,
       rules_locked: true,
       message: draft
-        ? `Rascunho montado a partir do 8123 (${draft.reference_day}). Conferir e liberar.`
+        ? `Rascunho ${period?.status ?? 'draft'} · 8123 ${draft.reference_day}. Conferir extras (U/DARF/DAS) e liberar.`
         : 'Regras travadas. Ainda sem snapshot 8123 — rode o sync full/daily ou aguarde o cron.',
       rules,
       draft,
+      period_status: period?.status ?? null,
+      period_id: period?.id ?? null,
       periods: draft
         ? [
             {
               id: draft.quinzena.id,
               label: draft.quinzena.label,
-              status: 'draft',
+              status: period?.status ?? 'draft',
               reference_day: draft.reference_day,
               line_count: draft.line_count,
               total_proposed_pay: draft.total_proposed_pay,
