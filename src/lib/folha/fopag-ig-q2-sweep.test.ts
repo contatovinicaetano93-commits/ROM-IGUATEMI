@@ -1,8 +1,10 @@
 /**
  * Full Fopag IG Q2 sweep — vitest harness (avoids server-only via db).
- * Writes /opt/cursor/artifacts/fopag-ig-q2-full-sweep.json
+ * Fixture versionada em `fixtures/`; opcionalmente grava artifact local.
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { buildFolhaDraftLine } from '@/lib/folha/draft-from-8123'
 import {
@@ -45,9 +47,14 @@ type BonusRow = {
   adic_10: number
 }
 
-const parsed = JSON.parse(
-  readFileSync('/opt/cursor/artifacts/fopag-ig-q2-parsed.json', 'utf8'),
-) as { fopag_ig_q2: FopagRow[]; bonus_romeu_ig: BonusRow[] }
+const FIXTURE = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'fixtures/fopag-ig-q2-parsed.json',
+)
+const parsed = JSON.parse(readFileSync(FIXTURE, 'utf8')) as {
+  fopag_ig_q2: FopagRow[]
+  bonus_romeu_ig: BonusRow[]
+}
 
 function approx(a: number, b: number, tol = 0.05): boolean {
   return Math.abs(a - b) <= tol
@@ -379,10 +386,18 @@ describe('Fopag IG Q2 full sweep', () => {
       })),
       people,
     }
-    writeFileSync(
-      '/opt/cursor/artifacts/fopag-ig-q2-full-sweep.json',
-      JSON.stringify(out, null, 2),
-    )
+    const artifactDir = '/opt/cursor/artifacts'
+    if (existsSync(artifactDir) || existsSync('/opt/cursor')) {
+      try {
+        mkdirSync(artifactDir, { recursive: true })
+        writeFileSync(
+          join(artifactDir, 'fopag-ig-q2-full-sweep.json'),
+          JSON.stringify(out, null, 2),
+        )
+      } catch {
+        // CI / ambientes sem /opt/cursor — fixture + asserts bastam.
+      }
+    }
 
     // Key people must match (deterministic patterns)
     const by = (substr: string) =>
