@@ -2,10 +2,9 @@
  * Rascunho da Folha a partir do snapshot 8123 (salon_commissions_daily).
  *
  * O 8123 é espelho do fechamento Avec — não recalculamos % de comissão.
- * `proposed_pay` começa em `a_pagar` (net_payable) e só abate/acresce
- * camadas exclusivas da Folha (DARF, DAS, mensalidade, U/V/W) quando informadas.
- *
- * Meio a meio e flags de cargo são para conferência (caderno + Fopag).
+ * `proposed_pay` começa em `a_pagar` (net_payable) e abate/acresce camadas Folha:
+ * DARF/DAS/mensalidade (Q1), U/V/W, meio a meio, taxa adm motor (quando 8123
+ * veio zerado — ex.: IG 7% sobre faturado bruto).
  */
 
 import type { RomPanelId } from '@/lib/brand'
@@ -13,7 +12,9 @@ import { calculateFolhaLine, roundFolha } from '@/lib/folha/calc'
 import {
   resolveAssistantAdminTaxRate,
   resolveFolhaPersonRules,
+  resolveGrossAdminFeeRate,
   resolveMeioAMeioRate,
+  type FolhaPersonRules,
 } from '@/lib/folha/exceptions'
 import { quinzenaForDay, todayIsoSaoPaulo, type FolhaQuinzena } from '@/lib/folha/period'
 import { normalizeFolhaCargo, type FolhaCargo } from '@/lib/folha/rules'
@@ -37,6 +38,7 @@ export type FolhaDraftFlag =
   | 'excecao_nomeada'
   | 'meta_quinzena_pendente'
   | 'assistente_romeu'
+  | 'taxa_adm_motor'
 
 export type FolhaDraftLine = {
   name: string
@@ -56,10 +58,19 @@ export type FolhaDraftLine = {
     tip: number | null
     net_payable: number | null
   }
-  /** Conferência Folha (derivado; não altera proposed_pay sozinho). */
+  /** Meio a meio (crédito) — entra no proposed_pay. */
   meio_a_meio: number | null
   /** Taxa efetiva de meio a meio (0.05 Pedro/Dayana; 0.70 Walter; 0.5 default). */
   meio_a_meio_rate: number
+  /**
+   * Taxa adm efetiva para a tabela (8123 se > 0; senão motor × faturado).
+   * KPI ausente = null (não vira 0 falso na UI — usamos "—" ).
+   */
+  taxa_administrativa: number | null
+  /** Alíquota usada (0.07 IG / 0.05 Brunna trio ou BR). */
+  taxa_administrativa_rate: number | null
+  /** Origem do valor exibido/abatido. */
+  taxa_administrativa_source: '8123' | 'motor' | null
   /** Id da exceção nomeada, se houver. */
   exception_id: string | null
   /** Camadas Folha ainda não no 8123 — null até IMAP/RH/U. */
@@ -76,6 +87,11 @@ export type FolhaDraftLine = {
     taxa_servicos: number | null
     /** Taxa adm do assistente (IG 3% / Brunna 2%) sobre U — conferência. */
     taxa_adm_assistente: number | null
+    /**
+     * Taxa adm profissional calculada pelo motor (quando 8123 veio 0/null).
+     * Abate no proposed_pay; não duplica se source=8123.
+     */
+    taxa_administrativa: number | null
     esteticista_bonus: number | null
   }
   /**
@@ -140,6 +156,7 @@ export function stripFolhaTaxExtras(
 function applyFolhaExtras(
   netPayable: number | null,
   extras: FolhaDraftLine['folha_extras'],
+  meioAMeio: number | null,
 ): number | null {
   if (netPayable == null) return null
   return (
@@ -150,11 +167,43 @@ function applyFolhaExtras(
     n(extras.div_ativa) -
     n(extras.mensalidade_contabilidade) -
     n(extras.descontos_diversos) -
-    n(extras.produtos_black) +
+    n(extras.produtos_black) -
+    n(extras.taxa_administrativa) +
+    n(meioAMeio) +
     n(extras.valor_a_pagar_profissional) -
     n(extras.taxa_servicos) +
     n(extras.esteticista_bonus)
   )
+}
+
+/**
+ * Resolve taxa adm para exibição e abatimento.
+ * 8123 com valor > 0 manda; senão motor aplica alíquota × faturado bruto.
+ */
+export function resolveLineAdminFee(args: {
+  panel: RomPanelId
+  cargo: FolhaCargo
+  charged: number | null
+  adminFee8123: number | null | undefined
+  person: FolhaPersonRules | null
+}): {
+  amount: number | null
+  rate: number | null
+  source: '8123' | 'motor' | null
+  /** Só preenchido quando o motor precisa abater (8123 zerado). */
+  motorExtra: number | null
+} {
+  const from8123 = deductionMagnitude(args.adminFee8123)
+  if (from8123 != null && from8123 > 0) {
+    const rate = resolveGrossAdminFeeRate(args.panel, args.cargo, args.person)
+    return { amount: from8123, rate, source: '8123', motorExtra: null }
+  }
+  const rate = resolveGrossAdminFeeRate(args.panel, args.cargo, args.person)
+  if (rate == null || args.charged == null) {
+    return { amount: null, rate, source: null, motorExtra: null }
+  }
+  const amount = roundFolha(args.charged * rate, 4)
+  return { amount, rate, source: 'motor', motorExtra: amount }
 }
 
 export function buildFolhaDraftLine(
@@ -171,6 +220,14 @@ export function buildFolhaDraftLine(
   const meio_a_meio =
     assistantMag == null ? null : roundFolha(assistantMag * meioRate, 4)
 
+  const admin = resolveLineAdminFee({
+    panel,
+    cargo,
+    charged: row.charged,
+    adminFee8123: row.admin_fee,
+    person,
+  })
+
   let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,
     darf: extras?.darf ?? null,
@@ -183,6 +240,10 @@ export function buildFolhaDraftLine(
     valor_a_pagar_profissional: extras?.valor_a_pagar_profissional ?? null,
     taxa_servicos: extras?.taxa_servicos ?? null,
     taxa_adm_assistente: extras?.taxa_adm_assistente ?? null,
+    taxa_administrativa:
+      extras?.taxa_administrativa !== undefined
+        ? extras.taxa_administrativa
+        : admin.motorExtra,
     esteticista_bonus: extras?.esteticista_bonus ?? null,
   }
   if (!applyTaxExtras) {
@@ -204,7 +265,7 @@ export function buildFolhaDraftLine(
       fatLiquido: reconstructFatLiquidoFrom8123(row),
       taxaCartaoPix: deductionMagnitude(row.card_fee),
       produto: deductionMagnitude(row.product_spend),
-      taxaAdministrativa: deductionMagnitude(row.admin_fee),
+      taxaAdministrativa: admin.amount,
       descontoAssistente: assistantMag,
       meioAMeio: meio_a_meio,
       parc: null,
@@ -236,7 +297,7 @@ export function buildFolhaDraftLine(
       fatLiquido: reconstructFatLiquidoFrom8123(row),
       taxaCartaoPix: deductionMagnitude(row.card_fee),
       produto: deductionMagnitude(row.product_spend),
-      taxaAdministrativa: deductionMagnitude(row.admin_fee),
+      taxaAdministrativa: admin.amount,
       descontoAssistente: assistantMag,
       meioAMeio: meio_a_meio,
       parc: folha_extras.parc,
@@ -267,9 +328,8 @@ export function buildFolhaDraftLine(
   }
 
   const flags: FolhaDraftFlag[] = []
-  if (cargo === 'manicure' && deductionMagnitude(row.admin_fee) != null) {
-    const adm = deductionMagnitude(row.admin_fee)
-    if (adm != null && adm > 0) flags.push('manicure_com_taxa_adm')
+  if (cargo === 'manicure' && admin.amount != null && admin.amount > 0) {
+    flags.push('manicure_com_taxa_adm')
   }
   if (row.net_payable == null) flags.push('sem_a_pagar')
   if (!row.role?.trim()) flags.push('sem_cargo')
@@ -279,6 +339,7 @@ export function buildFolhaDraftLine(
     flags.push('meta_quinzena_pendente')
   }
   if (person?.isRomeuAssistant) flags.push('assistente_romeu')
+  if (admin.source === 'motor') flags.push('taxa_adm_motor')
 
   const fatLiquido = reconstructFatLiquidoFrom8123(row)
   const yPreview =
@@ -293,7 +354,7 @@ export function buildFolhaDraftLine(
           fatLiquido,
           taxaCartaoPix: deductionMagnitude(row.card_fee),
           produto: deductionMagnitude(row.product_spend),
-          taxaAdministrativa: deductionMagnitude(row.admin_fee),
+          taxaAdministrativa: admin.amount,
           descontoAssistente: assistantMag,
           meioAMeio: meio_a_meio,
           parc: folha_extras.parc,
@@ -330,9 +391,15 @@ export function buildFolhaDraftLine(
     },
     meio_a_meio,
     meio_a_meio_rate: meioRate,
+    taxa_administrativa: admin.amount,
+    taxa_administrativa_rate: admin.rate,
+    taxa_administrativa_source: admin.source,
     exception_id: person?.id ?? null,
     folha_extras,
-    proposed_pay: roundFolha(applyFolhaExtras(row.net_payable, folha_extras), 4),
+    proposed_pay: roundFolha(
+      applyFolhaExtras(row.net_payable, folha_extras, meio_a_meio),
+      4,
+    ),
     formula_y_preview: roundFolha(yPreview, 4),
     flags,
   }

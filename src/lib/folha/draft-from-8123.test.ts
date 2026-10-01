@@ -58,9 +58,10 @@ describe('quinzenaForDay', () => {
 })
 
 describe('buildFolhaDraftLine', () => {
-  it('proposed_pay = a_pagar 8123 quando sem extras', () => {
+  it('proposed_pay = a_pagar 8123 + meio a meio quando sem extras fiscais', () => {
     const line = buildFolhaDraftLine('brasil', jefferson)
-    expect(line.proposed_pay).toBe(6032.64)
+    // multiplicador: sem taxa adm sobre C; soma meio a meio
+    expect(line.proposed_pay).toBe(6032.64 + 75)
     expect(line.meio_a_meio).toBe(75)
     expect(line.flags).toContain('assistente_com_desconto')
     expect(line.flags).toContain('assistente_romeu')
@@ -70,7 +71,7 @@ describe('buildFolhaDraftLine', () => {
 
   it('abate DARF/DAS em cima do a_pagar sem recalcular comissão', () => {
     const line = buildFolhaDraftLine('brasil', jefferson, { darf: 100, das: 86.05 })
-    expect(line.proposed_pay).toBe(6032.64 - 100 - 86.05)
+    expect(line.proposed_pay).toBe(6032.64 + 75 - 100 - 86.05)
   })
 
   it('Q2 (paga dia 05) ignora DARF/DAS/mensalidade no proposed_pay', () => {
@@ -83,7 +84,61 @@ describe('buildFolhaDraftLine', () => {
     expect(line.folha_extras.darf).toBeNull()
     expect(line.folha_extras.das).toBeNull()
     expect(line.folha_extras.mensalidade_contabilidade).toBeNull()
-    expect(line.proposed_pay).toBe(6032.64)
+    expect(line.proposed_pay).toBe(6032.64 + 75)
+  })
+
+  it('IG cabeleireiro: taxa adm motor 7% sobre faturado quando 8123 veio 0', () => {
+    const carina = {
+      name: 'CARINA FERNANDA DE FREITAS FERREIRA',
+      role: 'Cabeleireiro',
+      charged: 21594,
+      service_share: null,
+      product_share: null,
+      other_share: null,
+      tip: null,
+      product_spend: -1195.62,
+      card_fee: -256.48,
+      admin_fee: 0,
+      assistant_discount: -1902.04,
+      other_discounts: -560.56,
+      net_payable: 6599.6981,
+      house_share: null,
+    }
+    const line = buildFolhaDraftLine('iguatemi', carina, undefined, {
+      applyTaxExtras: false,
+    })
+    expect(line.taxa_administrativa).toBe(1511.58)
+    expect(line.taxa_administrativa_rate).toBe(0.07)
+    expect(line.taxa_administrativa_source).toBe('motor')
+    expect(line.flags).toContain('taxa_adm_motor')
+    // 6599.6981 + 951.02 − 1511.58
+    expect(line.proposed_pay).toBeCloseTo(6039.1381, 3)
+  })
+
+  it('Brunna IG: taxa adm 5% (exceção), não 7%', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'Brunna Fabricio Da Silva',
+        role: 'Cabeleireiro',
+        charged: 10000,
+        service_share: null,
+        product_share: null,
+        other_share: null,
+        tip: null,
+        product_spend: null,
+        card_fee: null,
+        admin_fee: 0,
+        assistant_discount: null,
+        other_discounts: null,
+        net_payable: 5000,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.taxa_administrativa).toBe(500)
+    expect(line.taxa_administrativa_rate).toBe(0.05)
   })
 
   it('manicure com taxa adm no 8123 → flag (caderno: sem taxa adm)', () => {
@@ -98,7 +153,7 @@ describe('buildFolhaDraftLine', () => {
     })
     expect(line.folha_extras.valor_a_pagar_profissional).toBe(200)
     expect(line.folha_extras.taxa_servicos).toBe(30)
-    expect(line.proposed_pay).toBe(6032.64 + 200 - 30)
+    expect(line.proposed_pay).toBe(6032.64 + 75 + 200 - 30)
   })
 
   it('U no IG usa taxa 4% (assistente Romeu: sem taxa adm 3% do assistente)', () => {
@@ -129,7 +184,8 @@ describe('buildFolhaDraftFrom8123', () => {
     expect(draft.source).toBe('8123')
     expect(draft.line_count).toBe(2)
     expect(draft.quinzena.half).toBe(1)
-    expect(draft.total_proposed_pay).toBe(6032.64 + 2350)
+    // jefferson: +meio a meio 75; manicure: admin_fee 8123 −50 → taxa adm 50 (source 8123)
+    expect(draft.total_proposed_pay).toBe(6032.64 + 75 + 2350)
     expect(draft.lines[0].name <= draft.lines[1].name).toBe(true)
   })
 })

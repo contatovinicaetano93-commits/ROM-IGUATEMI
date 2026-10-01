@@ -68,6 +68,8 @@ export function defaultAdminFeeRate(
     case 'profissional':
     case 'cabeleireiro':
     case 'esteticista':
+      // IG (unitário): 7% sobre faturado bruto. BR: 5%.
+      // Exceções nomeadas (Brunna/Joanides/Marcela = 5%) em exceptions.ts.
       return panel === 'iguatemi' ? 0.07 : 0.05
     case 'outro':
       return null
@@ -118,14 +120,14 @@ export function folhaRulesSummary(panel: RomPanelId): FolhaRulesSummary {
       'Taxa cartão/PIX é coluna aparte (débito ~2% / crédito ~3%). Não confundir com a taxa 3%/4% sobre serviços U.',
     cargo_notes: {
       profissional:
-        'Faturado − taxa adm − assistente − produto; 50% do desconto assistente volta (meio a meio).',
+        'IG: taxa adm 7% sobre faturado bruto (unitário; Brunna/Joah/Marcela 5%). BR: 5%. Meio a meio + abatimentos.',
       cabeleireiro:
-        'Faturado − taxa adm − assistente − produto; 50% do desconto assistente volta (meio a meio).',
-      maquiador: 'Faturado − taxa adm − produto.',
+        'IG: taxa adm 7% sobre faturado bruto (unitário; Brunna/Joah/Marcela 5%). BR: 5%. Meio a meio + abatimentos.',
+      maquiador: 'Taxa adm unitária sobre faturado − produto.',
       manicure:
         'Faturado − produto. Sem taxa adm — exceto quem tem depilação.',
       esteticista:
-        'Faturado − taxa adm − produto; ganha 10% do total faturado.',
+        'Taxa adm unitária sobre faturado − produto; ganha 10% do total faturado.',
       assistente:
         'Faturado − produto. IG não-Romeu: ganho 30% com taxa adm 3%; profissional 4% sobre U + remessa V 20%. Assistentes do Romeu: faixas 30/40/50% no acumulado do mês (pago 05+20).',
       multiplicador:

@@ -58,7 +58,7 @@ describe('resolveFolhaPersonRules', () => {
     expect(resolveFolhaPersonRules('Walter Junior')).toBeNull()
   })
 
-  it('Brunna / Joanides / Marcela com split 2%+3%', () => {
+  it('Brunna / Joanides / Marcela com split 2%+3% e taxa adm bruta 5%', () => {
     for (const name of [
       'Brunna Fabricio',
       'Joanides Mendes Pontes Junior',
@@ -70,6 +70,7 @@ describe('resolveFolhaPersonRules', () => {
         assistant: 0.02,
         professional: 0.03,
       })
+      expect(r?.adminFeeRate).toBe(0.05)
       expect(resolveProfessionalServiceTaxRate('iguatemi', r)).toBe(0.03)
       expect(resolveAssistantAdminTaxRate('iguatemi', r)).toBe(0.02)
     }

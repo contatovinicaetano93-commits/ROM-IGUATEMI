@@ -18,6 +18,7 @@ const extrasSchema = z.object({
   valor_a_pagar_profissional: z.number().nullable().optional(),
   taxa_servicos: z.number().nullable().optional(),
   taxa_adm_assistente: z.number().nullable().optional(),
+  taxa_administrativa: z.number().nullable().optional(),
   esteticista_bonus: z.number().nullable().optional(),
 })
 

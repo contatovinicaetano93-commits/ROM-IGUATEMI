@@ -37,6 +37,9 @@ const draft: FolhaDraft = {
       },
       meio_a_meio: null,
       meio_a_meio_rate: 0.5,
+      taxa_administrativa: null,
+      taxa_administrativa_rate: null,
+      taxa_administrativa_source: null,
       exception_id: null,
       folha_extras: {
         parc: null,
@@ -50,6 +53,7 @@ const draft: FolhaDraft = {
         valor_a_pagar_profissional: null,
         taxa_servicos: null,
         taxa_adm_assistente: null,
+        taxa_administrativa: null,
         esteticista_bonus: null,
       },
       proposed_pay: 985,
