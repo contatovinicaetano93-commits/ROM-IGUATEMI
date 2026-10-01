@@ -50,6 +50,12 @@ const OPERACAO: IntranetSystem[] = [
 
 const GESTAO: IntranetSystem[] = [
   { href: '/financeiro', label: 'Financeiro', description: 'Despesas e Omie.', group: 'gestao' },
+  {
+    href: '/folha',
+    label: 'Folha de pagamento',
+    description: 'Folha PJ: cálculo, conferência e liberação de pagamento.',
+    group: 'gestao',
+  },
   { href: '/estoque', label: 'Estoque', description: 'Produtos e alertas.', group: 'gestao' },
   { href: '/dashboard', label: 'Visão analítica', description: 'KPIs do mês e fechamento em Relatórios.', group: 'gestao' },
   { href: '/relatorios', label: 'Relatórios', description: 'Fechamento oficial do mês.', group: 'gestao' },

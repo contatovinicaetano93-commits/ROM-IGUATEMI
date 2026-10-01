@@ -24,6 +24,7 @@ const PREVIEW_ORDER = [
   '/hoje',
   '/meu-faturamento',
   '/financeiro',
+  '/folha',
   '/estoque',
   '/dashboard',
   '/relatorios',

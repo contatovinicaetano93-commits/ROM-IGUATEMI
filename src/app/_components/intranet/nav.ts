@@ -7,6 +7,7 @@ export const INTRANET_NAV = [
   { href: '/resumo-do-dia', label: 'Resumo do dia', short: 'Dia' },
   { href: '/meu-faturamento', label: 'Meu faturamento', short: 'Faturamento' },
   { href: '/financeiro', label: 'Financeiro', short: 'Financeiro' },
+  { href: '/folha', label: 'Folha de pagamento', short: 'Folha' },
   { href: '/estoque', label: 'Estoque', short: 'Estoque' },
   { href: '/pipeline', label: 'Agenda do dia', short: 'Agenda' },
   { href: '/ativacoes', label: 'Ativações', short: 'Ativações' },

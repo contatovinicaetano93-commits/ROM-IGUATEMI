@@ -27,6 +27,8 @@ function isProtectedPage(pathname: string) {
     pathname.startsWith('/relatorios/') ||
     pathname === '/financeiro' ||
     pathname.startsWith('/financeiro/') ||
+    pathname === '/folha' ||
+    pathname.startsWith('/folha/') ||
     pathname === '/estoque' ||
     pathname.startsWith('/estoque/') ||
     pathname === '/onboarding' ||
@@ -141,6 +143,8 @@ export const config = {
     '/relatorios/:path*',
     '/financeiro',
     '/financeiro/:path*',
+    '/folha',
+    '/folha/:path*',
     '/estoque',
     '/estoque/:path*',
     '/onboarding',

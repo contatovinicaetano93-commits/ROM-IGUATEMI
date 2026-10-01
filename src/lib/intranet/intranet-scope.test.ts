@@ -34,6 +34,7 @@ describe('intranet top bar', () => {
       'Resumo do dia',
       'Meu faturamento',
       'Financeiro',
+      'Folha de pagamento',
       'Estoque',
       'Agenda do dia',
       'Ativações',
@@ -48,6 +49,7 @@ describe('intranet top bar', () => {
       'Dia',
       'Faturamento',
       'Financeiro',
+      'Folha',
       'Estoque',
       'Agenda',
       'Ativações',
@@ -59,6 +61,7 @@ describe('intranet top bar', () => {
     expect(INTRANET_NAV.find((item) => item.label === 'Ativações')?.href).toBe('/ativacoes')
     expect(INTRANET_NAV.find((item) => item.label === 'Visão analítica')?.href).toBe('/dashboard')
     expect(INTRANET_NAV.find((item) => item.label === 'Meu faturamento')?.href).toBe('/meu-faturamento')
+    expect(INTRANET_NAV.find((item) => item.label === 'Folha de pagamento')?.href).toBe('/folha')
     const navHrefs = INTRANET_NAV.map((item) => item.href as string)
     expect(navHrefs).not.toContain('/recepcao')
     expect(navHrefs).not.toContain('/pos-venda')
