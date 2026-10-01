@@ -71,6 +71,19 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBe(6032.64 - 100 - 86.05)
   })
 
+  it('Q2 (paga dia 05) ignora DARF/DAS/mensalidade no proposed_pay', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      jefferson,
+      { darf: 100, das: 86.05, mensalidade_contabilidade: 120 },
+      { applyTaxExtras: false },
+    )
+    expect(line.folha_extras.darf).toBeNull()
+    expect(line.folha_extras.das).toBeNull()
+    expect(line.folha_extras.mensalidade_contabilidade).toBeNull()
+    expect(line.proposed_pay).toBe(6032.64)
+  })
+
   it('manicure com taxa adm no 8123 → flag (caderno: sem taxa adm)', () => {
     const line = buildFolhaDraftLine('brasil', manicureComAdm)
     expect(line.flags).toContain('manicure_com_taxa_adm')

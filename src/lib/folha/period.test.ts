@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  acceptsFolhaTaxExtras,
   clampQuinzenaFetchEnd,
   defaultFolhaQuinzena,
+  defaultFolhaTaxQuinzena,
   formatPayDateBr,
   isoToBrDay,
   listRecentQuinzenas,
@@ -67,5 +69,13 @@ describe('folha period pay dates', () => {
     const q = quinzenaForDay('2026-09-20')
     expect(clampQuinzenaFetchEnd(q, '2026-09-22')).toBe('2026-09-22')
     expect(quinzenaAvecRangeBr(q, '2026-09-22').fim).toBe('22/09/2026')
+  })
+
+  it('DARF/DAS/mensalidade só na Q1 (pagamento dia 20)', () => {
+    expect(acceptsFolhaTaxExtras(1)).toBe(true)
+    expect(acceptsFolhaTaxExtras(2)).toBe(false)
+    expect(defaultFolhaTaxQuinzena('2026-10-01').id).toBe('2026-10-q1')
+    expect(defaultFolhaTaxQuinzena('2026-10-15').payDate).toBe('2026-10-20')
+    expect(defaultFolhaTaxQuinzena('2026-10-21').id).toBe('2026-11-q1')
   })
 })

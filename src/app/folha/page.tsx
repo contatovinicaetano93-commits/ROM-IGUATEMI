@@ -133,6 +133,8 @@ export default function FolhaPage() {
   const periodId = status?.period_id
   const periodStatus = status?.period_status
   const lines = draft?.lines ?? []
+  /** DARF/DAS/mensalidade só no pagamento do dia 20 (1ª quinzena). */
+  const taxExtrasAllowed = draft?.quinzena.half === 1
 
   const visibleLines = useMemo(() => {
     if (!onlyWithPay) return lines
@@ -206,16 +208,19 @@ export default function FolhaPage() {
       setError('Selecione um profissional')
       return
     }
+    const extras: Record<string, number | null> = {
+      servicos_assistente_como_pro: parseOptionalNumber(uInput),
+    }
+    if (taxExtrasAllowed) {
+      extras.darf = parseOptionalNumber(darfInput)
+      extras.das = parseOptionalNumber(dasInput)
+    }
     const data = await postJson(
       '/api/folha/lines',
       {
         period_id: periodId,
         professional_name: selectedName.trim(),
-        extras: {
-          servicos_assistente_como_pro: parseOptionalNumber(uInput),
-          darf: parseOptionalNumber(darfInput),
-          das: parseOptionalNumber(dasInput),
-        },
+        extras,
       },
       'PATCH',
     )
@@ -537,24 +542,33 @@ export default function FolhaPage() {
                       placeholder="ex. 1000"
                     />
                   </label>
-                  <label className="text-xs">
-                    <span className="text-muted">DARF</span>
-                    <input
-                      className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
-                      value={darfInput}
-                      onChange={(e) => setDarfInput(e.target.value)}
-                      inputMode="decimal"
-                    />
-                  </label>
-                  <label className="text-xs">
-                    <span className="text-muted">DAS</span>
-                    <input
-                      className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
-                      value={dasInput}
-                      onChange={(e) => setDasInput(e.target.value)}
-                      inputMode="decimal"
-                    />
-                  </label>
+                  {taxExtrasAllowed ? (
+                    <>
+                      <label className="text-xs">
+                        <span className="text-muted">DARF</span>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          value={darfInput}
+                          onChange={(e) => setDarfInput(e.target.value)}
+                          inputMode="decimal"
+                        />
+                      </label>
+                      <label className="text-xs">
+                        <span className="text-muted">DAS</span>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          value={dasInput}
+                          onChange={(e) => setDasInput(e.target.value)}
+                          inputMode="decimal"
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted md:col-span-2">
+                      DARF/DAS/mensalidade só no pagamento do dia 20 (1ª quinzena). Nesta Folha
+                      (dia 05) não entram como abatimento.
+                    </p>
+                  )}
                   <div className="md:col-span-4">
                     <button
                       type="button"
@@ -569,21 +583,29 @@ export default function FolhaPage() {
 
                 <div className="space-y-2 rounded-lg border border-border p-3">
                   <p className="text-xs font-medium text-foreground">Colar e-mail fiscal (DARF/DAS)</p>
+                  {!taxExtrasAllowed ? (
+                    <p className="text-xs text-muted">
+                      Abre a 1ª quinzena (paga dia 20) para colar/aplicar impostos — e-mails até o
+                      dia 15.
+                    </p>
+                  ) : null}
                   <input
                     className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
                     placeholder="Assunto (opcional)"
                     value={taxSubject}
                     onChange={(e) => setTaxSubject(e.target.value)}
+                    disabled={!taxExtrasAllowed}
                   />
                   <textarea
                     className="min-h-[80px] w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
                     placeholder="Corpo do e-mail…"
                     value={taxBody}
                     onChange={(e) => setTaxBody(e.target.value)}
+                    disabled={!taxExtrasAllowed}
                   />
                   <button
                     type="button"
-                    disabled={busy || !taxBody.trim()}
+                    disabled={busy || !taxBody.trim() || !taxExtrasAllowed}
                     onClick={() => void onTaxIngest()}
                     className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
                   >

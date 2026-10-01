@@ -191,3 +191,30 @@ export function quinzenaAvecRangeBr(
     fimIso,
   }
 }
+
+/**
+ * DARF / DAS / mensalidade só abatem no pagamento do dia 20 (1ª quinzena).
+ * E-mails fiscais chegam até o dia 15 do respectivo período.
+ */
+export function acceptsFolhaTaxExtras(half: 1 | 2): boolean {
+  return half === 1
+}
+
+/**
+ * Quinzena alvo do IMAP/colar fiscal: sempre a Q1 cujo pagamento (dia 20)
+ * ainda não passou — ou a próxima Q1 se já passou o dia 20.
+ *
+ * Ex.: 01–20/10 → 2026-10-q1 (paga 20/10); 21/10 → 2026-11-q1 (paga 20/11).
+ */
+export function defaultFolhaTaxQuinzena(today = todayIsoSaoPaulo()): FolhaQuinzena {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(today)
+  if (!m) return quinzenaForYearMonthHalf(today.slice(0, 7), 1)
+  const year = Number(m[1])
+  const month = Number(m[2])
+  const day = Number(m[3])
+  if (day <= 20) {
+    return quinzenaForYearMonthHalf(`${year}-${pad2(month)}`, 1)
+  }
+  const next = addMonths(year, month, 1)
+  return quinzenaForYearMonthHalf(`${next.year}-${pad2(next.month)}`, 1)
+}

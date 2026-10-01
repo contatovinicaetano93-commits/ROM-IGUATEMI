@@ -115,6 +115,18 @@ export function reconstructFatLiquidoFrom8123(
   )
 }
 
+/** Campos fiscais que só entram no pagamento do dia 20 (Q1). */
+export function stripFolhaTaxExtras(
+  extras: FolhaDraftLine['folha_extras'],
+): FolhaDraftLine['folha_extras'] {
+  return {
+    ...extras,
+    darf: null,
+    das: null,
+    mensalidade_contabilidade: null,
+  }
+}
+
 function applyFolhaExtras(
   netPayable: number | null,
   extras: FolhaDraftLine['folha_extras'],
@@ -139,13 +151,15 @@ export function buildFolhaDraftLine(
   panel: RomPanelId,
   row: CommissionProfessionalRow,
   extras?: Partial<FolhaDraftLine['folha_extras']>,
+  opts?: { applyTaxExtras?: boolean },
 ): FolhaDraftLine {
+  const applyTaxExtras = opts?.applyTaxExtras !== false
   const cargo = normalizeFolhaCargo(row.role)
   const assistantMag = deductionMagnitude(row.assistant_discount)
   const meio_a_meio =
     assistantMag == null ? null : roundFolha(assistantMag * MEIO_A_MEIO_RATE, 4)
 
-  const folha_extras: FolhaDraftLine['folha_extras'] = {
+  let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,
     darf: extras?.darf ?? null,
     das: extras?.das ?? null,
@@ -157,6 +171,9 @@ export function buildFolhaDraftLine(
     valor_a_pagar_profissional: extras?.valor_a_pagar_profissional ?? null,
     taxa_servicos: extras?.taxa_servicos ?? null,
     esteticista_bonus: extras?.esteticista_bonus ?? null,
+  }
+  if (!applyTaxExtras) {
+    folha_extras = stripFolhaTaxExtras(folha_extras)
   }
 
   // Esteticista: bônus 10% do faturado (caderno) — só se charged presente e extras não override.
@@ -299,9 +316,11 @@ export function buildFolhaDraftFrom8123(args: {
   /** Âncora da quinzena; default = referenceDay. */
   quinzenaDay?: string
 }): FolhaDraft {
+  const quinzena = quinzenaForDay(args.quinzenaDay ?? args.referenceDay)
+  const applyTaxExtras = quinzena.half === 1
   const lines = args.professionals
     .filter((p) => Boolean(p.name?.trim()))
-    .map((p) => buildFolhaDraftLine(args.panel, p))
+    .map((p) => buildFolhaDraftLine(args.panel, p, undefined, { applyTaxExtras }))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
 
   let total: number | null = null
@@ -313,7 +332,7 @@ export function buildFolhaDraftFrom8123(args: {
   return {
     source: '8123',
     reference_day: args.referenceDay,
-    quinzena: quinzenaForDay(args.quinzenaDay ?? args.referenceDay),
+    quinzena,
     panel: args.panel,
     line_count: lines.length,
     lines,

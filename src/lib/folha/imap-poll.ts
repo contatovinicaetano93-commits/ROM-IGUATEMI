@@ -10,7 +10,8 @@ import {
   type FolhaImapMessage,
 } from '@/lib/folha/imap-client'
 import {
-  defaultFolhaQuinzena,
+  acceptsFolhaTaxExtras,
+  defaultFolhaTaxQuinzena,
   parseFolhaPeriodId,
   todayIsoSaoPaulo,
 } from '@/lib/folha/period'
@@ -75,11 +76,14 @@ export async function pollFolhaImapInbox(
   }
 
   const today = opts?.day ?? todayIsoSaoPaulo()
-  // DARFs chegam para o olerite a pagar — não a quinzena civil de "hoje".
-  // Ex.: em 01/10 → aplica em 2026-09-q2 (paga 05/10), não em 2026-10-q1.
-  const quinzena =
+  // DARF/DAS/mensalidade só abatem no pagamento do dia 20 (Q1).
+  // E-mails até o dia 15 → alvo = Q1 do mês (ou próxima Q1 após o dia 20).
+  let quinzena =
     (opts?.periodId ? parseFolhaPeriodId(opts.periodId) : null) ??
-    defaultFolhaQuinzena(today)
+    defaultFolhaTaxQuinzena(today)
+  if (!acceptsFolhaTaxExtras(quinzena.half)) {
+    quinzena = defaultFolhaTaxQuinzena(today)
+  }
 
   await loadOrCreateFolhaDraft(panel, {
     periodId: quinzena.id,
@@ -95,7 +99,7 @@ export async function pollFolhaImapInbox(
       ingested: 0,
       applied: 0,
       marked_seen: 0,
-      errors: ['Período Folha ausente — rode refresh 8123'],
+      errors: ['Período Folha Q1 (dia 20) ausente — rode refresh 8123'],
       period_id: quinzena.id,
     }
   }

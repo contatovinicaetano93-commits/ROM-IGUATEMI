@@ -10,7 +10,9 @@ import {
   type FolhaDraft,
 } from '@/lib/folha/draft-from-8123'
 import {
+  acceptsFolhaTaxExtras,
   listRecentQuinzenas,
+  parseFolhaPeriodId,
   quinzenaAvecRangeBr,
   resolveFolhaQuinzena,
   todayIsoSaoPaulo,
@@ -256,12 +258,26 @@ export async function patchFolhaLine(
   if (!period) throw new Error('Período da Folha não encontrado')
   if (period.status === 'paid') throw new Error('Período já pago — reabra para editar')
 
+  const quinzena = parseFolhaPeriodId(period.id)
+  const applyTax = quinzena ? acceptsFolhaTaxExtras(quinzena.half) : period.half === 1
+  if (
+    !applyTax &&
+    (args.extras.darf != null ||
+      args.extras.das != null ||
+      args.extras.mensalidade_contabilidade != null)
+  ) {
+    throw new Error(
+      'DARF/DAS/mensalidade só entram no pagamento do dia 20 (1ª quinzena)',
+    )
+  }
+
   const result = applyExtrasToDraftLines({
     panel,
     lines: period.lines,
     sourceProfessionals: period.source_professionals,
     professionalName: args.professionalName,
     extras: args.extras,
+    applyTaxExtras: applyTax,
   })
   if (!result.matched) throw new Error('Profissional não encontrado no rascunho')
 
@@ -353,11 +369,14 @@ export async function ingestFolhaTaxEmail(
   let applied = false
   let current = period
   const extrasKey = taxKindToExtrasKey(parsed.kind)
+  const quinzena = parseFolhaPeriodId(args.periodId)
+  const applyTax = quinzena ? acceptsFolhaTaxExtras(quinzena.half) : period.half === 1
   if (
     args.applyToLine !== false &&
     extrasKey &&
     parsed.amount != null &&
-    parsed.professional_name
+    parsed.professional_name &&
+    applyTax
   ) {
     const key = occupancyMergeKey(parsed.professional_name)
     const hit = period.lines.find(
