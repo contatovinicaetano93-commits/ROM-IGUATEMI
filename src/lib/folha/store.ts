@@ -249,6 +249,21 @@ export async function saveFolhaPeriodLines(args: {
   return getFolhaPeriod(args.id)
 }
 
+export async function folhaTaxSourceExists(source: string): Promise<boolean> {
+  await ensureFolhaTables()
+  const sql = getSql()
+  try {
+    const rows = (await sql`
+      select 1 as ok from folha_tax_documents
+      where source = ${source}
+      limit 1
+    `) as { ok: number }[]
+    return rows.length > 0
+  } catch {
+    return false
+  }
+}
+
 export async function insertFolhaTaxDocument(args: {
   periodId: string | null
   kind: FolhaTaxKind

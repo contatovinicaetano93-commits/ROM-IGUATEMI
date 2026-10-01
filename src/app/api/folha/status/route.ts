@@ -9,6 +9,7 @@ import { transitionFolhaPeriod } from '@/lib/folha/service'
 const bodySchema = z.object({
   period_id: z.string().min(1),
   status: z.enum(['draft', 'ready_for_review', 'approved', 'paid']),
+  notify: z.boolean().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -20,14 +21,20 @@ export async function POST(req: NextRequest) {
     const parsed = bodySchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return err(parsed.error.issues.map((i) => i.message).join(', '), 422)
 
-    const { draft, period } = await transitionFolhaPeriod({
+    const { draft, period, notify } = await transitionFolhaPeriod({
       panel: getRomPanelId(),
       periodId: parsed.data.period_id,
       status: parsed.data.status,
       actor: auth.session.user,
+      notifyOnApprove: parsed.data.notify,
     })
 
-    return ok({ draft, period_id: period.id, period_status: period.status })
+    return ok({
+      draft,
+      period_id: period.id,
+      period_status: period.status,
+      notify,
+    })
   } catch (e) {
     if (e instanceof Error && /Transição inválida|não encontrado|vazio/i.test(e.message)) {
       return err(e.message, 400)

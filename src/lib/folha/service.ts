@@ -9,6 +9,7 @@ import {
   type FolhaDraft,
 } from '@/lib/folha/draft-from-8123'
 import { quinzenaForDay, todayIsoSaoPaulo } from '@/lib/folha/period'
+import { sendFolhaNotifyEmail } from '@/lib/folha/notify'
 import { insertFolhaTaxDocument } from '@/lib/folha/store'
 import {
   getFolhaPeriod,
@@ -143,7 +144,13 @@ export async function transitionFolhaPeriod(args: {
   periodId: string
   status: FolhaPeriodStatus
   actor?: string | null
-}): Promise<{ draft: FolhaDraft; period: FolhaPeriodRow }> {
+  /** default true — e-mail ops ao aprovar */
+  notifyOnApprove?: boolean
+}): Promise<{
+  draft: FolhaDraft
+  period: FolhaPeriodRow
+  notify: Awaited<ReturnType<typeof sendFolhaNotifyEmail>> | null
+}> {
   const period = await getFolhaPeriod(args.periodId)
   if (!period) throw new Error('Período da Folha não encontrado')
   if (!canTransitionFolhaStatus(period.status, args.status)) {
@@ -162,7 +169,18 @@ export async function transitionFolhaPeriod(args: {
     actor: args.actor ?? null,
   })
   if (!updated) throw new Error('Falha ao atualizar status')
-  return { draft: periodRowToDraft(args.panel, updated), period: updated }
+  const draft = periodRowToDraft(args.panel, updated)
+
+  let notify: Awaited<ReturnType<typeof sendFolhaNotifyEmail>> | null = null
+  if (args.status === 'approved' && args.notifyOnApprove !== false) {
+    notify = await sendFolhaNotifyEmail({
+      draft,
+      status: args.status,
+      actor: args.actor,
+    })
+  }
+
+  return { draft, period: updated, notify }
 }
 
 export async function ingestFolhaTaxEmail(

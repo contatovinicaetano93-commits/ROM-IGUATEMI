@@ -196,7 +196,59 @@ export default function FolhaPage() {
     setStatus((prev) =>
       prev ? { ...prev, period_status: data.period_status, period_id: data.period_id } : prev,
     )
-    setActionMsg(`Status → ${statusLabel(next)}`)
+    const notify = data.notify as
+      | { ok?: boolean; skipped?: string; to?: string[]; error?: string }
+      | null
+      | undefined
+    if (next === 'approved' && notify) {
+      if (notify.ok) {
+        setActionMsg(`Aprovado · e-mail enviado a ${(notify.to ?? []).join(', ')}`)
+      } else if (notify.skipped === 'not_configured') {
+        setActionMsg('Aprovado · e-mail não configurado (FOLHA_NOTIFY_EMAIL)')
+      } else {
+        setActionMsg(`Aprovado · falha no e-mail: ${notify.error ?? 'erro'}`)
+      }
+    } else {
+      setActionMsg(`Status → ${statusLabel(next)}`)
+    }
+  }
+
+  async function onImapPoll() {
+    setBusy(true)
+    setActionMsg(null)
+    setError(null)
+    try {
+      const res = await fetch('/api/folha/imap-poll', {
+        credentials: 'include',
+        signal: AbortSignal.timeout(45_000),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error ?? 'Falha no IMAP')
+        return
+      }
+      const d = json.data as {
+        skipped?: string
+        fetched?: number
+        ingested?: number
+        applied?: number
+        errors?: string[]
+      }
+      if (d.skipped === 'not_configured') {
+        setActionMsg('IMAP não configurado (FOLHA_IMAP_HOST/USER/PASS)')
+      } else {
+        setActionMsg(
+          `IMAP: ${d.fetched ?? 0} lidos · ${d.ingested ?? 0} gravados · ${d.applied ?? 0} aplicados${
+            d.errors?.length ? ` · erros: ${d.errors.join('; ')}` : ''
+          }`,
+        )
+        await load()
+      }
+    } catch {
+      setError('Falha no IMAP')
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function onTaxIngest() {
@@ -289,6 +341,14 @@ export default function FolhaPage() {
                     className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
                   >
                     Atualizar do 8123
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onImapPoll()}
+                    className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    Buscar DARF/DAS (IMAP)
                   </button>
                   {periodStatus === 'draft' || periodStatus === 'ready_for_review' ? (
                     <button
