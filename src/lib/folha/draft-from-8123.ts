@@ -11,6 +11,7 @@ import type { RomPanelId } from '@/lib/brand'
 import { calculateFolhaLine, roundFolha } from '@/lib/folha/calc'
 import {
   resolveAssistantAdminTaxRate,
+  resolveEsteticistaBonusRate,
   resolveFolhaPersonRules,
   resolveGrossAdminFeeRate,
   resolveMeioAMeioRate,
@@ -376,9 +377,10 @@ export function buildFolhaDraftLine(
     folha_extras = stripFolhaTaxExtras(folha_extras)
   }
 
-  // Esteticista: bônus 10% do faturado (caderno) — só se charged presente e extras não override.
+  // Esteticista: bônus 10% do faturado (caderno) — só se charged presente,
+  // extras não override e pessoa não suprime (Liria).
   if (
-    cargo === 'esteticista' &&
+    resolveEsteticistaBonusRate(cargo, person) != null &&
     folha_extras.esteticista_bonus == null &&
     row.charged != null
   ) {

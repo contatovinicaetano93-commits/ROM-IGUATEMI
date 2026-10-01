@@ -9,6 +9,7 @@
 
 import type { RomPanelId } from '@/lib/brand'
 import {
+  resolveEsteticistaBonusRate,
   resolveFolhaPersonRules,
   resolveMeioAMeioRate,
   resolveProfessionalServiceTaxRate,
@@ -16,7 +17,6 @@ import {
   type FolhaPersonRules,
 } from '@/lib/folha/exceptions'
 import {
-  ESTETICISTA_BONUS_RATE,
   defaultAdminFeeRate,
   normalizeFolhaCargo,
   type FolhaCargo,
@@ -152,9 +152,10 @@ export function calculateFolhaLine(input: FolhaLineInput): FolhaLineResult {
   const valorAPagarProfissional = resolveValorAPagarPro(input, rules)
   const taxaServicos = resolveTaxaServicos(input, rules)
 
+  const esteticistaBonusRate = resolveEsteticistaBonusRate(cargo, rules)
   const esteticistaBonus =
-    cargo === 'esteticista' && input.faturado != null
-      ? input.faturado * ESTETICISTA_BONUS_RATE
+    esteticistaBonusRate != null && input.faturado != null
+      ? input.faturado * esteticistaBonusRate
       : null
 
   if (fatLiquido == null) {

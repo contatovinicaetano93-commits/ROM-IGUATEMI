@@ -8,6 +8,7 @@ import { occupancyMergeKey } from '@/lib/director-report/match-pro'
 import {
   ASSISTANT_AS_PRO_EARN_RATE,
   ASSISTANT_AS_PRO_REMIT_RATE,
+  ESTETICISTA_BONUS_RATE,
   MEIO_A_MEIO_RATE,
   assistantServiceTaxRate,
   defaultAdminFeeRate,
@@ -21,6 +22,7 @@ export type FolhaExceptionId =
   | 'romeu'
   | 'walter_leal'
   | 'dani_rocha'
+  | 'liria'
   | 'brunna'
   | 'joanides'
   | 'marcela'
@@ -68,6 +70,11 @@ export type FolhaPersonRules = {
   hasQuinzenaMeta: boolean
   /** Assistente do Romeu — faixas progressivas 30/40/50. */
   isRomeuAssistant: boolean
+  /**
+   * Sem bônus 10% de esteticista (Liria: usa sala de estética com taxa adm 7%,
+   * sem bônus — perfil de manicure/depilação na sala).
+   */
+  suppressEsteticistaBonus: boolean
 }
 
 const BRUNNA_TAX_SPLIT: FolhaServiceTaxSplit = {
@@ -82,6 +89,10 @@ const BRUNNA_TAX_SPLIT: FolhaServiceTaxSplit = {
  */
 export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
   {
+    // Salão sempre 5%; pro recebe de volta 5% do desc. assistente.
+    // Se a comissão do assistente > 10%, o pro arca o excedente (Avec já desconta
+    // o valor cheio); o salão não passa de 5%. Fopag às vezes formula meio=50% —
+    // ignorar a coluna e usar esta alíquota.
     id: 'pedro_diello',
     aliases: ['pedro diello', 'pedro e f diello'],
     meioAMeioRate: 0.05,
@@ -92,8 +103,10 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
   },
   {
+    // Mesma lógica Diello: meio a meio 5% (5% salão + 5% profissional).
     id: 'dayana',
     aliases: ['dayana marques silva pinto', 'dayana marques', 'dayana'],
     meioAMeioRate: 0.05,
@@ -104,6 +117,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
   },
   {
     id: 'romeu',
@@ -116,6 +130,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
   },
   {
     id: 'walter_leal',
@@ -133,18 +148,36 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
   },
   {
+    // 55% = comissão do contrato (pct_salao / Avec). Meio a meio = 50% padrão.
+    // NÃO confundir com Walter (assistente 30% → meio 70%).
     id: 'dani_rocha',
     aliases: ['daniela machado rocha', 'dani rocha', 'dani machado rocha'],
     meioAMeioRate: null,
-    assistantRemitRate: 0.35,
+    assistantRemitRate: null,
     proCommissionRate: 0.55,
     serviceTaxSplit: null,
     adminFeeRate: null,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+  },
+  {
+    // Usa sala de esteticista: taxa adm 7%, sem bônus 10% (perfil manicure/depilação).
+    id: 'liria',
+    aliases: ['liria pereira colman', 'liria pereira', 'liria colman', 'liria'],
+    meioAMeioRate: null,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: null,
+    adminFeeRate: 0.07,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: true,
   },
   {
     id: 'brunna',
@@ -157,6 +190,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
   },
   {
     id: 'joanides',
@@ -169,6 +203,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
   },
   {
     id: 'marcela',
@@ -181,6 +216,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
   },
   {
     id: 'lucas_campos',
@@ -194,6 +230,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: true,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
   },
   {
     id: 'juscelino',
@@ -206,6 +243,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: true,
     isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
   },
   {
     id: 'romeu_assistant',
@@ -232,6 +270,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: true,
+    suppressEsteticistaBonus: false,
   },
 ]
 
@@ -301,6 +340,24 @@ export function resolveMeioAMeioRate(rules: FolhaPersonRules | null): number {
   }
   if (rules?.meioAMeioRate != null) return rules.meioAMeioRate
   return MEIO_A_MEIO_RATE
+}
+
+/**
+ * Bônus esteticista (10% do faturado). null = não aplica
+ * (cargo ≠ esteticista, ou Liria / suppress).
+ */
+export function resolveEsteticistaBonusRate(
+  cargo: FolhaCargo,
+  rules: FolhaPersonRules | null,
+): number | null {
+  if (rules?.suppressEsteticistaBonus) return null
+  if (cargo !== 'esteticista') return null
+  return ESTETICISTA_BONUS_RATE
+}
+
+/** Pedro/Dayana: Fopag formula meio=50% genérica — motor manda. */
+export function usesNamedMeioOverride(rules: FolhaPersonRules | null): boolean {
+  return rules?.id === 'pedro_diello' || rules?.id === 'dayana'
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   resolveFolhaPersonRules,
   resolveGrossAdminFeeRate,
   resolveMeioAMeioRate,
+  usesNamedMeioOverride,
 } from '@/lib/folha/exceptions'
 import { normalizeFolhaCargo } from '@/lib/folha/rules'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
@@ -220,27 +221,36 @@ function synthesize(f: FopagRow): {
   }
 
   if (pattern === 'pro_embedded_debit') {
-    const admMinusMeio = f.taxa_adm - f.meio_a_meio
     const shortfall = f.W > 0.02 ? f.W : 0
     if (shortfall > 0) notes.push('W_embedded_shortfall')
+    let effectiveMeio = f.meio_a_meio
     if (person && f.desc_assistente > 0.02) {
       const motorMeio = resolveMeioAMeioRate(person) * f.desc_assistente
       if (Math.abs(motorMeio - f.meio_a_meio) > 1) {
-        notes.push(
-          `meio_rate_mismatch motor=${motorMeio.toFixed(2)} fopag=${f.meio_a_meio}`,
-        )
+        if (usesNamedMeioOverride(person)) {
+          // Diello/Dayana: Fopag coluna meio=50% genérica; RH confirma 5%.
+          effectiveMeio = motorMeio
+          notes.push(
+            `meio_fopag_corrected_to_motor=${motorMeio.toFixed(2)}`,
+          )
+        } else {
+          notes.push(
+            `meio_rate_mismatch motor=${motorMeio.toFixed(2)} fopag=${f.meio_a_meio}`,
+          )
+        }
       }
     }
+    const admMinusMeio = f.taxa_adm - effectiveMeio
     const descontosMag = admMinusMeio + f.baru - shortfall
     base.other_discounts = -Math.round(descontosMag * 10000) / 10000
+    // Se corrigimos o meio, o líquido Fopag também precisa do ajuste.
+    const liqBase = f.liquido - f.meio_a_meio + effectiveMeio
     if (shortfall > 0.02) {
       base.net_payable =
-        Math.round(
-          (f.liquido - f.V + 2 * f.W + rhDebitRestore) * 10000,
-        ) / 10000
+        Math.round((liqBase - f.V + 2 * f.W + rhDebitRestore) * 10000) / 10000
     } else {
       base.net_payable =
-        Math.round((f.liquido - f.V + f.W + rhDebitRestore) * 10000) / 10000
+        Math.round((liqBase - f.V + f.W + rhDebitRestore) * 10000) / 10000
     }
     notes.push(`descontosMag=${descontosMag.toFixed(2)}`)
     return { row: base, extras, pattern, notes, rhExtras }
@@ -296,13 +306,25 @@ describe('Fopag IG Q2 full sweep', () => {
       const bonus = bonusFor(f.name)
       const person = resolveFolhaPersonRules(f.name)
       let target = f.liquido
+      // Diello/Dayana: líquido Fopag usou meio=50%; alvo = líquido com meio do motor (5%).
+      if (
+        usesNamedMeioOverride(person) &&
+        f.desc_assistente > 0.02 &&
+        person
+      ) {
+        const motorMeio = resolveMeioAMeioRate(person) * f.desc_assistente
+        if (Math.abs(motorMeio - f.meio_a_meio) > 1) {
+          target = f.liquido - f.meio_a_meio + motorMeio
+          syn.notes.push(`target_meio_corrected=${target.toFixed(2)}`)
+        }
+      }
       if (
         person?.isRomeuAssistant &&
         bonus &&
         bonus.adic_10 > 0.005 &&
         syn.extras?.acumulado_mes != null
       ) {
-        target = f.liquido + bonus.adic_10
+        target = target + bonus.adic_10
         syn.notes.push(`target_includes_topup +${bonus.adic_10}`)
       }
       const line = buildFolhaDraftLine('iguatemi', syn.row, syn.extras, {
@@ -316,14 +338,6 @@ describe('Fopag IG Q2 full sweep', () => {
         syn.notes.some((n) => n.startsWith('meio_rate_mismatch')) ||
         syn.pattern === 'unknown'
       ) {
-        status = 'needs_rh_input'
-      } else if (
-        proposed != null &&
-        line.folha_extras.esteticista_bonus != null &&
-        Math.abs((diff ?? 0) - line.folha_extras.esteticista_bonus) <= 0.5
-      ) {
-        // Caderno +10% esteticista; Fopag IG Q2 (Liria) não inclui → RH
-        syn.notes.push('esteticista_bonus_not_in_fopag')
         status = 'needs_rh_input'
       } else if (proposed != null && Math.abs(diff!) <= 3) {
         // ruído W curto (Vitor ±2.80)
@@ -350,12 +364,15 @@ describe('Fopag IG Q2 full sweep', () => {
     const highlightKeys = [
       'brunna fabricio',
       'daniel chabaribery',
+      'daniela machado rocha',
       'gabriela da silva santos',
       'lucas rodrigues',
       'maykon',
       'joanides',
       'gildenice',
       'romeu felipe',
+      'pedro e f diello',
+      'liria pereira',
     ]
     const highlight = people.filter((p) =>
       highlightKeys.some((h) => p.name.toLowerCase().includes(h)),
@@ -405,6 +422,7 @@ describe('Fopag IG Q2 full sweep', () => {
 
     expect(by('brunna')?.motor_proposed).toBeCloseTo(68976.53, 0)
     expect(by('daniel chabaribery')?.motor_proposed).toBeCloseTo(17611.26, 0)
+    expect(by('daniela machado')?.motor_proposed).toBeCloseTo(19755.805, 0)
     expect(by('gabriela da silva santos')?.motor_proposed).toBeCloseTo(
       1114.77 + 1023.003,
       0,
@@ -414,8 +432,18 @@ describe('Fopag IG Q2 full sweep', () => {
     expect(by('joanides')?.motor_proposed).toBeCloseTo(47658.4, 0)
     expect(by('gildenice')?.motor_proposed).toBeCloseTo(12253.7, 0)
     expect(by('romeu felipe')?.motor_proposed).toBeCloseTo(542.1, 0)
+    // Diello: Fopag meio 50% → corrigido para 5% (11599.01 − 2127.3 + 212.73)
+    expect(by('diello')?.motor_proposed).toBeCloseTo(
+      11599.01 - 2127.3 + 212.73,
+      0,
+    )
+    expect(by('liria')?.motor_proposed).toBeCloseTo(2598.12, 0)
+    expect(by('daniela machado')?.status).toBe('match')
+    expect(by('diello')?.status).toBe('match')
+    expect(by('liria')?.status).toBe('match')
 
-    // Soft floor: ≥90% match; remaining = RH meio-rate conflict / noise
-    expect(matches.length / people.length).toBeGreaterThanOrEqual(0.9)
+    // Soft floor: ≥95% após Dani/Diello/Liria
+    expect(matches.length / people.length).toBeGreaterThanOrEqual(0.95)
+    expect(rh.length).toBe(0)
   })
 })
