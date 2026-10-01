@@ -136,17 +136,17 @@ export async function buildFolhaWorkbook(
     if (typeof pctCell.value === 'number') pctCell.numFmt = '0%'
   }
 
+  const liquidCol = FOLHA_EXPORT_HEADERS.indexOf('Líquido a pagar') + 1
   const total = ws.addRow([
     'TOTAL',
-    ...Array(17).fill(null),
+    ...Array(Math.max(liquidCol - 2, 0)).fill(null),
     draft.total_proposed_pay,
-    null,
-    null,
+    ...Array(Math.max(FOLHA_EXPORT_HEADERS.length - liquidCol, 0)).fill(null),
   ])
   total.getCell(1).font = { bold: true }
-  total.getCell(19).font = { bold: true }
-  if (typeof total.getCell(19).value === 'number') {
-    total.getCell(19).numFmt = '#,##0.00'
+  total.getCell(liquidCol).font = { bold: true }
+  if (typeof total.getCell(liquidCol).value === 'number') {
+    total.getCell(liquidCol).numFmt = '#,##0.00'
   }
 
   const arrBuf = await wb.xlsx.writeBuffer()
