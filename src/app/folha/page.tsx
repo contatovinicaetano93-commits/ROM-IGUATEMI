@@ -901,11 +901,15 @@ export default function FolhaPage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+                  <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                        <th className="py-2 pr-3 font-medium">Profissional</th>
+                        <th className="sticky left-0 z-20 bg-card py-2 pr-3 font-medium shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                          Profissional
+                        </th>
                         <th className="py-2 pr-3 font-medium">Cargo</th>
+                        {/* Líquido cedo: a tabela é larga e a coluna no fim sumia da tela. */}
+                        <th className="py-2 pr-3 font-medium tabular-nums">Líquido</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Faturado</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Tx cartão</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Rateio − cartão</th>
@@ -923,7 +927,6 @@ export default function FolhaPage() {
                             <th className="py-2 pr-3 font-medium tabular-nums">DAS</th>
                           </>
                         ) : null}
-                        <th className="py-2 pr-3 font-medium tabular-nums">Líquido</th>
                         <th className="py-2 font-medium">Alertas</th>
                       </tr>
                     </thead>
@@ -931,11 +934,16 @@ export default function FolhaPage() {
                       {visibleLines.map((line) => (
                         <tr
                           key={line.name}
-                          className="cursor-pointer border-b border-border/60 hover:bg-background/80"
+                          className="group cursor-pointer border-b border-border/60 hover:bg-background/80"
                           onClick={() => selectLine(line)}
                         >
-                          <td className="py-2 pr-3 text-foreground">{line.name}</td>
+                          <td className="sticky left-0 z-10 bg-card py-2 pr-3 text-foreground shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] group-hover:bg-background">
+                            {line.name}
+                          </td>
                           <td className="py-2 pr-3 text-muted">{line.cargo_raw ?? '—'}</td>
+                          <td className="py-2 pr-3 tabular-nums font-medium">
+                            {formatMoney(line.proposed_pay)}
+                          </td>
                           <td className="py-2 pr-3 tabular-nums">
                             {formatMoney(line.avec.charged)}
                           </td>
@@ -979,9 +987,6 @@ export default function FolhaPage() {
                               </td>
                             </>
                           ) : null}
-                          <td className="py-2 pr-3 tabular-nums font-medium">
-                            {formatMoney(line.proposed_pay)}
-                          </td>
                           <td className="py-2 text-xs text-muted">
                             {line.flags.length === 0
                               ? '—'
