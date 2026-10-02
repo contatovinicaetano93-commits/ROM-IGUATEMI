@@ -394,10 +394,13 @@ export const ROMEU_ASSISTANT_BANDS: readonly {
 ]
 
 /**
- * Taxa adm quando o assistente atua como profissional (sobre o valor do serviço).
- * Vale para **todos** os assistentes (incl. Romeu) — BR e IG.
+ * Taxa adm default IG quando o assistente atua como profissional (sobre U).
+ * BR usa 2% — ver {@link resolveAssistantAdminTaxRate}.
  */
 export const ASSISTANT_AS_PRO_ADMIN_TAX = 0.03
+
+/** Taxa adm default BR sobre U (Fopag Av. Brasil: J = T×2%). */
+export const BR_ASSISTANT_AS_PRO_ADMIN_TAX = 0.02
 
 /** @deprecated use ASSISTANT_AS_PRO_ADMIN_TAX — mantido como alias. */
 export const IG_NON_ROMEU_ASSISTANT_ADMIN_TAX = ASSISTANT_AS_PRO_ADMIN_TAX
@@ -500,14 +503,17 @@ export function resolveProfessionalServiceTaxRate(
 }
 
 /**
- * Alíquota adm do assistente sobre o montante do serviço que ele executou como pro.
- * Brunna trio: 2% (split). Demais assistentes (incl. Romeu), BR e IG: **3%**.
+ * Alíquota adm do assistente sobre o montante do serviço que ele executou como pro (U).
+ * - Brunna trio / time: 2% (split).
+ * - BR (Fopag Av. Brasil): **2%** sobre U (fórmula J = T×2%).
+ * - IG default (incl. Romeu): **3%** sobre U.
  */
 export function resolveAssistantAdminTaxRate(
-  _panel: RomPanelId,
+  panel: RomPanelId,
   rules: FolhaPersonRules | null,
 ): number | null {
   if (rules?.serviceTaxSplit) return rules.serviceTaxSplit.assistant
+  if (panel === 'brasil') return BR_ASSISTANT_AS_PRO_ADMIN_TAX
   return ASSISTANT_AS_PRO_ADMIN_TAX
 }
 

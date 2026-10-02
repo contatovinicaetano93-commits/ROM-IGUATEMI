@@ -186,10 +186,16 @@ export function disaggregateOleriteDescontos(args: {
   adminRate: number | null
   meioRate: number
   /**
-   * Alíquota adm do assistente sobre serviços que executou como pro (sempre 3%,
-   * incl. Romeu). null = não aplicar caminho assistente.
+   * Alíquota adm do assistente sobre U (BR 2% / IG 3%, ou split Brunna).
+   * null = não aplicar caminho assistente.
    */
   assistantAdminRate?: number | null
+  /**
+   * Base da taxa adm assistente (coluna U / Serviços 30%).
+   * Quando omitida, cai em `charged` — só é seguro se charged já for o
+   * montante U (Lucas IG). Faturado C de multiplicador BR NÃO serve.
+   */
+  assistantAdminBase?: number | null
   /**
    * Alíquota W do profissional sobre U (BR 3% / IG 4%). Usada só para tolerar
    * shortfall em `descontos` ≈ (adm − meio) − W.
@@ -214,10 +220,24 @@ export function disaggregateOleriteDescontos(args: {
     args.adminRate == null &&
     from8123Adm == null
   ) {
+    const admBase =
+      args.assistantAdminBase != null && args.assistantAdminBase > 0.02
+        ? args.assistantAdminBase
+        : args.charged
     const expectedAdm =
-      args.charged != null
-        ? roundFolha(args.charged * args.assistantAdminRate, 4)
+      admBase != null
+        ? roundFolha(admBase * args.assistantAdminRate, 4)
         : null
+    /**
+     * Guarda: se a base foi o faturado C (multiplicador BR ~30k) e não o U,
+     * charged×2%/3% explode vs o desconto de assistente. Só aceita path B/C
+     * quando adm ≤ ~3× |desconto assistente| (Lucas: 81.9 ≤ 221×3).
+     */
+    const admPlausibleVsAssist =
+      expectedAdm != null &&
+      assist != null &&
+      assist > 0.02 &&
+      expectedAdm <= assist * 3 + 1
 
     // A) descontos ≈ meio − adm 3% (Gabriela: crédito +67 = 215 − 148).
     // Exige meio material e descontos como crédito (≥0): débito com meio=0
@@ -245,13 +265,14 @@ export function disaggregateOleriteDescontos(args: {
         }
       }
 
-      // C) descontos ≈ +meio — meio já no a_pagar; adm = charged × 3%.
+      // C) descontos ≈ +meio — meio já no a_pagar; adm = base U × alíquota.
       // Exige meio material: descontos=0 e meio=0 NÃO é “crédito de meio”
       // (Amanda/Edijane: inventava 3%×faturado falso).
       if (
         meioAMeio > 0.02 &&
         expectedAdm != null &&
         expectedAdm > 0.02 &&
+        admPlausibleVsAssist &&
         Math.abs(signedOther - meioAMeio) <= 0.05
       ) {
         return {
@@ -267,11 +288,11 @@ export function disaggregateOleriteDescontos(args: {
       }
     }
 
-    // B) descontos 0/ausente — adm = charged × 3% (Lucas Q2).
+    // B) descontos 0/ausente — adm = U × alíquota (Lucas Q2: charged=U).
     // Só quando há desconto de assistente (fluxo assistente-como-pro com meio).
-    // Sem meio, `charged` é faturado de comissão própria — NÃO abater 3%
-    // (Amanda/Edijane etc.: liquido Avec já fechado; 3%×faturado era falso).
-    // Não aplicar se `descontos` tem outro valor material.
+    // Sem meio, `charged` é faturado de comissão própria — NÃO abater %.
+    // Sem U e com charged = faturado C (Marcelo/Islay BR) a guarda
+    // admPlausibleVsAssist bloqueia o falso charged×2%/3%.
     const otherIsAbsentOrZero =
       signedOther == null || Math.abs(signedOther) <= 0.02
     if (
@@ -279,7 +300,8 @@ export function disaggregateOleriteDescontos(args: {
       meioAMeio != null &&
       meioAMeio > 0.02 &&
       expectedAdm != null &&
-      expectedAdm > 0.02
+      expectedAdm > 0.02 &&
+      admPlausibleVsAssist
     ) {
       return {
         embeddedAdminMeio: false,

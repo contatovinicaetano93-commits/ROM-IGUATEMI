@@ -1151,7 +1151,8 @@ describe('buildFolhaDraftLine', () => {
         card_fee: 0,
         admin_fee: 0,
         assistant_discount: 0,
-        other_discounts: 0,
+        // a_pagar já neteia J = U×2% (other ≈ adm)
+        other_discounts: -(21_290.03 * 0.02),
         net_payable: 3000,
         house_share: 15000,
       },
@@ -1159,8 +1160,9 @@ describe('buildFolhaDraftLine', () => {
       { applyTaxExtras: false },
     )
     expect(gabi.folha_extras.romeu_comissao_parcela).toBeCloseTo(4940.006, 5)
-    // U/V/W conferência (W BR=3%); líquido = a_pagar + top-up
+    // U/V/W conferência (W BR=3%); J embutido; líquido = a_pagar + top-up
     expect(gabi.folha_extras.taxa_servicos).toBeCloseTo(21_290.03 * 0.03, 2)
+    expect(gabi.folha_extras.taxa_adm_assistente).toBeCloseTo(21_290.03 * 0.02, 2)
     expect(gabi.proposed_pay).toBeCloseTo(3000 + 4940.006, 2)
   })
 

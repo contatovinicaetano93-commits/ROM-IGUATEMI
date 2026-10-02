@@ -443,6 +443,11 @@ export function buildFolhaDraftLine(
   const sheetMeioRate = usesNamedMeioOverride(person) ? 0.5 : meioRate
   const sheetMeio =
     assistantMag == null ? null : roundFolha(assistantMag * sheetMeioRate, 4)
+  const assistantAdminBase =
+    extras?.servicos_assistente_como_pro != null &&
+    extras.servicos_assistente_como_pro > 0.02
+      ? extras.servicos_assistente_como_pro
+      : null
   const oleriteMotor = disaggregateOleriteDescontos({
     charged: row.charged,
     adminFee8123: row.admin_fee,
@@ -451,6 +456,7 @@ export function buildFolhaDraftLine(
     adminRate: adminRatePreview,
     meioRate,
     assistantAdminRate,
+    assistantAdminBase,
     serviceTaxRate,
   })
   const oleriteSheet =
@@ -463,6 +469,7 @@ export function buildFolhaDraftLine(
           adminRate: adminRatePreview,
           meioRate: sheetMeioRate,
           assistantAdminRate,
+          assistantAdminBase,
           serviceTaxRate,
         })
       : oleriteMotor
@@ -805,6 +812,47 @@ export function buildFolhaDraftLine(
       folha_extras.taxa_adm_assistente =
         assistTax == null ? null : roundFolha(u * assistTax, 4)
     }
+    /**
+     * Assistente/multiplicador: coluna J = U×alíquota (BR 2% / IG 3%).
+     * Abate no pay só no fluxo path-B (meio presente, descontos vazios,
+     * a_pagar ainda sem adm) — nunca quando other já embute J/Baru.
+     */
+    if (
+      isAssistantLike &&
+      folha_extras.taxa_adm_assistente != null &&
+      folha_extras.taxa_adm_assistente > 0.02
+    ) {
+      const admU = folha_extras.taxa_adm_assistente
+      const falseChargedAdm =
+        row.charged != null &&
+        assistantAdminRate != null &&
+        taxaAdmDisplay != null &&
+        Math.abs(taxaAdmDisplay - row.charged * assistantAdminRate) <= 1
+      if (taxaAdmDisplay == null || falseChargedAdm) {
+        taxaAdmDisplay = admU
+      }
+      /**
+       * Abate J = U×alíquota quando a_pagar ainda não fechou:
+       * - com meio (path B clássico Lucas/Islay), ou
+       * - BR sem meio: Fopag ainda faz Y = G − J (Alberto/Alcides/Eliseu).
+       * Não abater se other já embute J/Baru (Gabriela Martins) nem se
+       * olerite fechou.
+       */
+      const shouldAbateAdmU =
+        !embeddedInDescontos &&
+        !assistantOleriteClosed &&
+        !meioCreditedInNet &&
+        (otherDiscountsMag == null || otherDiscountsMag <= 0.02) &&
+        ((meio_a_meio != null && meio_a_meio > 0.02) ||
+          (panel === 'brasil' && admU > 0.02))
+      if (shouldAbateAdmU) {
+        if (folha_extras.taxa_administrativa == null || falseChargedAdm) {
+          folha_extras.taxa_administrativa = admU
+        }
+      } else if (falseChargedAdm) {
+        folha_extras.taxa_administrativa = null
+      }
+    }
   }
 
   /**
@@ -1028,7 +1076,7 @@ export function buildFolhaDraftLine(
       ? olerite.outrosResiduais
       : baruSplit.outrosDescontos
 
-  // Fopag J no assistente muitas vezes é taxa_adm_assistente (U×2%/3%).
+  // Fopag J no assistente muitas vezes é taxa_adm_assistente (U×2% BR / 3% IG).
   // Não espelhar no pro (Romeu tem U de remessa — J dele é 0 / sobre C).
   if (
     isAssistantLike &&
@@ -1038,6 +1086,16 @@ export function buildFolhaDraftLine(
   ) {
     taxaAdmDisplay = folha_extras.taxa_adm_assistente
   }
+  // Rate display: assistente-like com U usa alíquota sobre U, não gross C.
+  const taxaAdmRateDisplay =
+    isAssistantLike &&
+    folha_extras.taxa_adm_assistente != null &&
+    assistantAdminRate != null
+      ? assistantAdminRate
+      : admin.rate ??
+        (taxaAdmDisplay != null && assistantAdminRate != null
+          ? assistantAdminRate
+          : null)
 
   const flags: FolhaDraftFlag[] = []
   if (cargo === 'manicure' && taxaAdmDisplay != null && taxaAdmDisplay > 0) {
@@ -1121,9 +1179,7 @@ export function buildFolhaDraftLine(
     meio_a_meio,
     meio_a_meio_rate: meioRate,
     taxa_administrativa: taxaAdmDisplay,
-    taxa_administrativa_rate:
-      admin.rate ??
-      (taxaAdmDisplay != null && assistantAdminRate != null ? assistantAdminRate : null),
+    taxa_administrativa_rate: taxaAdmRateDisplay,
     taxa_administrativa_source:
       admin.source ??
       (taxaAdmDisplay != null && assistantAdminRate != null ? 'motor' : null),
