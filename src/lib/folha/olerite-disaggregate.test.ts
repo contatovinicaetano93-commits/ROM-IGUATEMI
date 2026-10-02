@@ -73,7 +73,7 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.outrosResiduais).toBeNull()
   })
 
-  it('Lucas Rodrigues: descontos=0 → adm = charged × 3% (não embutido)', () => {
+  it('Lucas Rodrigues: descontos=0 → adm = U × 3% (não embutido)', () => {
     const d = disaggregateOleriteDescontos({
       charged: 2730,
       adminFee8123: 0,
@@ -82,11 +82,47 @@ describe('disaggregateOleriteDescontos', () => {
       adminRate: null,
       meioRate: 0.5,
       assistantAdminRate: 0.03,
+      assistantAdminBase: 2730,
     })
     expect(d.embeddedAdminMeio).toBe(false)
     expect(d.meioCreditedInNet).toBe(false)
     expect(d.taxaAdm).toBeCloseTo(81.9, 2)
     expect(d.meioAMeio).toBeCloseTo(110.5, 2)
+  })
+
+  it('Islay BR: descontos=0 sem U NÃO embute meio como adm nem inventa charged×2%', () => {
+    // Recibo Avec 16–30/09: meio 40, adm 2% sobre U=1800 (=36). Sem U no
+    // input, path A antigo fazia impliedAdm=meio e marcava embutido.
+    const d = disaggregateOleriteDescontos({
+      charged: 2404,
+      adminFee8123: 0,
+      assistantDiscount: -80,
+      otherDiscounts: 0,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.02,
+    })
+    expect(d.embeddedAdminMeio).toBe(false)
+    expect(d.meioCreditedInNet).toBe(false)
+    expect(d.taxaAdm).toBeNull()
+    expect(d.meioAMeio).toBeCloseTo(40, 2)
+  })
+
+  it('Islay BR: descontos=0 com U=1800 → adm=36 (recibo Taxa adm 2%)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 31276,
+      adminFee8123: 0,
+      assistantDiscount: -80,
+      otherDiscounts: 0,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.02,
+      assistantAdminBase: 1800,
+    })
+    expect(d.embeddedAdminMeio).toBe(false)
+    expect(d.meioCreditedInNet).toBe(false)
+    expect(d.taxaAdm).toBeCloseTo(36, 2)
+    expect(d.meioAMeio).toBeCloseTo(40, 2)
   })
 
   it('assistente sem meio (Amanda): descontos=0 NÃO inventa adm 3%×faturado', () => {
@@ -146,7 +182,7 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.meioAMeio).toBeNull()
   })
 
-  it('Lucas Q1: descontos ≈ +meio → meio já no a_pagar; adm = charged × 3%', () => {
+  it('Lucas Q1: descontos ≈ +meio → meio já no a_pagar; adm = U × 3%', () => {
     const d = disaggregateOleriteDescontos({
       charged: 2250,
       adminFee8123: 0,
@@ -155,6 +191,7 @@ describe('disaggregateOleriteDescontos', () => {
       adminRate: null,
       meioRate: 0.5,
       assistantAdminRate: 0.03,
+      assistantAdminBase: 2250,
     })
     expect(d.embeddedAdminMeio).toBe(false)
     expect(d.meioCreditedInNet).toBe(true)
