@@ -81,6 +81,85 @@ export function rateioAposCartao(args: {
   return roundFolha(args.charged / 2 - card, 4)
 }
 
+/**
+ * Quando o residual olerite (após adm↔meio) já é o Consumo Baru do 8123,
+ * a coluna Baru é só conferência — não reabater no proposed_pay nem
+ * duplicar em Outros.
+ *
+ * Alison BR (descontos=0, a_pagar já neteou adm/meio): residual null →
+ * Baru do RH/Zig ainda abate.
+ */
+export function resolveBaruVsOleriteResidual(args: {
+  /** Residual após desmembrar adm↔meio (coluna Outros bruta). */
+  outrosResiduais: number | null
+  /** Consumo Baru informado (RH / Zig / Fopag). */
+  consumoBaru: number | null | undefined
+  /**
+   * True se `descontos` já neteou adm↔meio (a_pagar fechou o residual).
+   * Sem isso, residual/Baru ainda precisa abater.
+   */
+  residualAlreadyInNet: boolean
+}): {
+  /** Coluna Outros (null se residual = Baru). */
+  outrosDescontos: number | null
+  /** Coluna / extras Consumo Baru. */
+  consumoBaru: number | null
+  /** True → não subtrair consumo_baru de novo no proposed_pay. */
+  baruAlreadyInNet: boolean
+} {
+  const residual =
+    args.outrosResiduais != null && args.outrosResiduais > 0.02
+      ? args.outrosResiduais
+      : null
+  const baru =
+    args.consumoBaru != null &&
+    !Number.isNaN(args.consumoBaru) &&
+    args.consumoBaru > 0.02
+      ? args.consumoBaru
+      : null
+
+  if (baru == null) {
+    return {
+      outrosDescontos: residual,
+      consumoBaru: null,
+      baruAlreadyInNet: false,
+    }
+  }
+
+  if (
+    args.residualAlreadyInNet &&
+    residual != null &&
+    Math.abs(residual - baru) <= 2
+  ) {
+    return {
+      outrosDescontos: null,
+      consumoBaru: roundFolha(baru, 4),
+      baruAlreadyInNet: true,
+    }
+  }
+
+  if (
+    args.residualAlreadyInNet &&
+    residual != null &&
+    baru + 0.02 < residual
+  ) {
+    const leftover = roundFolha(residual - baru, 4)
+    return {
+      outrosDescontos:
+        leftover != null && leftover > 0.02 ? leftover : null,
+      consumoBaru: roundFolha(baru, 4),
+      baruAlreadyInNet: true,
+    }
+  }
+
+  // Baru além do residual (ou sem residual) — abate no pay (Alison).
+  return {
+    outrosDescontos: residual,
+    consumoBaru: roundFolha(baru, 4),
+    baruAlreadyInNet: false,
+  }
+}
+
 export function disaggregateOleriteDescontos(args: {
   charged: number | null
   adminFee8123: number | null | undefined

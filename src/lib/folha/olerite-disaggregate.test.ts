@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   disaggregateOleriteDescontos,
   rateioAposCartao,
+  resolveBaruVsOleriteResidual,
 } from '@/lib/folha/olerite-disaggregate'
 import { buildFolhaDraftLine } from '@/lib/folha/draft-from-8123'
 import { rehydrateFolhaDraftFromPeriod } from '@/lib/folha/workflow'
@@ -177,6 +178,30 @@ describe('rateioAposCartao', () => {
         cardFee: -412.9,
       }),
     ).toBeCloseTo(14195.2, 2)
+  })
+})
+
+describe('resolveBaruVsOleriteResidual', () => {
+  it('Ana: residual = Baru → coluna Baru, Outros null, sem reabater', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 387.08,
+      consumoBaru: 387.08,
+      residualAlreadyInNet: true,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(387.08, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('Alison: sem residual → Baru ainda abate', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: null,
+      consumoBaru: 324.65,
+      residualAlreadyInNet: true,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(324.65, 2)
+    expect(r.baruAlreadyInNet).toBe(false)
   })
 })
 

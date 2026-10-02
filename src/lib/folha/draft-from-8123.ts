@@ -22,6 +22,7 @@ import {
 import {
   disaggregateOleriteDescontos,
   rateioAposCartao,
+  resolveBaruVsOleriteResidual,
 } from '@/lib/folha/olerite-disaggregate'
 import { quinzenaForDay, todayIsoSaoPaulo, type FolhaQuinzena } from '@/lib/folha/period'
 import { normalizeFolhaCargo, type FolhaCargo } from '@/lib/folha/rules'
@@ -562,6 +563,40 @@ export function buildFolhaDraftLine(
     }
   }
 
+  /**
+   * Baru vs residual olerite (Fopag: colunas separadas).
+   * Débito residual ≈ Baru embutido no a_pagar → coluna Baru, Outros null,
+   * sem reabater. Crédito residual (Brunna) NÃO é Baru — fica em Outros e
+   * já é estornado via descontos_diversos; Baru do RH ainda abate.
+   */
+  const debitResidualForBaru =
+    olerite.embeddedCreditResidual != null ? null : olerite.outrosResiduais
+  const baruSplit = resolveBaruVsOleriteResidual({
+    outrosResiduais: debitResidualForBaru,
+    consumoBaru: folha_extras.consumo_baru,
+    residualAlreadyInNet:
+      embeddedInDescontos && olerite.embeddedCreditResidual == null,
+  })
+  folha_extras = {
+    ...folha_extras,
+    consumo_baru: baruSplit.consumoBaru,
+  }
+  if (baruSplit.baruAlreadyInNet) {
+    extrasForProposedPay = {
+      ...extrasForProposedPay,
+      consumo_baru: null,
+    }
+  } else {
+    extrasForProposedPay = {
+      ...extrasForProposedPay,
+      consumo_baru: baruSplit.consumoBaru,
+    }
+  }
+  const outrosDescontosDisplay =
+    olerite.embeddedCreditResidual != null
+      ? olerite.outrosResiduais
+      : baruSplit.outrosDescontos
+
   const flags: FolhaDraftFlag[] = []
   if (cargo === 'manicure' && admin.amount != null && admin.amount > 0) {
     flags.push('manicure_com_taxa_adm')
@@ -645,7 +680,7 @@ export function buildFolhaDraftLine(
     taxa_administrativa_source:
       admin.source ??
       (taxaAdmDisplay != null && assistantAdminRate != null ? 'motor' : null),
-    outros_descontos: olerite.outrosResiduais,
+    outros_descontos: outrosDescontosDisplay,
     rateio_apos_cartao,
     exception_id: person?.id ?? null,
     folha_extras,
