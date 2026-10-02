@@ -25,6 +25,7 @@ const extrasSchema = z.object({
   acumulado_mes: z.number().nullable().optional(),
   romeu_comissao_parcela: z.number().nullable().optional(),
   liquido_referencia: z.number().nullable().optional(),
+  fat_liquido_referencia: z.number().nullable().optional(),
   produto_referencia: z.number().nullable().optional(),
 })
 

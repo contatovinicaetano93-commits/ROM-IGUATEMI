@@ -23,6 +23,7 @@ type FopagRow = {
   U: number
   baru: number
   liquido: number
+  fat_liquido?: number
   produto?: number
 }
 
@@ -126,6 +127,9 @@ async function main() {
         // Alana: a_pagar ≈ Y → Baru só coluna (ver liquidoReferencia no motor).
         if (f.liquido > 0.005) {
           extras.liquido_referencia = f.liquido
+        }
+        if (f.fat_liquido > 0.005) {
+          extras.fat_liquido_referencia = f.fat_liquido
         }
         if (f.produto != null && f.produto > 0.005) {
           extras.produto_referencia = f.produto

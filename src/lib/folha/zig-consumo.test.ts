@@ -127,6 +127,7 @@ describe('planZigConsumoBaruExtras', () => {
       acumulado_mes: null,
       romeu_comissao_parcela: null,
         liquido_referencia: null,
+        fat_liquido_referencia: null,
         produto_referencia: null,
     },
     proposed_pay: 800,

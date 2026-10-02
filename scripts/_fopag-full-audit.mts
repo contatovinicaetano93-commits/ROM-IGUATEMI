@@ -281,12 +281,14 @@ async function main() {
     if (f.desc_diversos_02 > 0.005) extras.descontos_diversos = f.desc_diversos_02
     if (f.produto > 0.005) extras.produto_referencia = f.produto
     if (f.liquido > 0.005) extras.liquido_referencia = f.liquido
+    if (f.fat_liquido > 0.005) extras.fat_liquido_referencia = f.fat_liquido
     if (bonus) extras.acumulado_mes = bonus.total
 
     const line = buildFolhaDraftLine('iguatemi', src, extras, {
       applyTaxExtras: false,
       // Alana: a_pagar ≈ Y → Baru só coluna; Monique: a_pagar > Y → abate.
       liquidoReferencia: f.liquido,
+      fatLiquidoReferencia: f.fat_liquido,
     })
     const prop = line.proposed_pay
     const diff = prop == null ? null : prop - target
@@ -306,7 +308,21 @@ async function main() {
       notes,
       cols: {
         fopag_adm: f.taxa_adm,
-        motor_adm: line.taxa_administrativa,
+        // Fopag J no assistente = taxa_adm_assistente (U×2%/3%); no pro é C×%.
+        motor_adm: (() => {
+          const cargo = normalizeFolhaCargo(f.cargo)
+          const assistLike =
+            cargo === 'assistente' ||
+            cargo === 'multiplicador' ||
+            cargo === 'colorista'
+          if (assistLike) {
+            return (
+              line.taxa_administrativa ??
+              line.folha_extras.taxa_adm_assistente
+            )
+          }
+          return line.taxa_administrativa
+        })(),
         fopag_meio: f.meio_a_meio,
         motor_meio: line.meio_a_meio,
         fopag_baru: f.baru,

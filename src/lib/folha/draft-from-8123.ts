@@ -26,7 +26,11 @@ import {
   resolveBaruVsOleriteResidual,
 } from '@/lib/folha/olerite-disaggregate'
 import { quinzenaForDay, todayIsoSaoPaulo, type FolhaQuinzena } from '@/lib/folha/period'
-import { normalizeFolhaCargo, type FolhaCargo } from '@/lib/folha/rules'
+import {
+  defaultAdminFeeRate,
+  normalizeFolhaCargo,
+  type FolhaCargo,
+} from '@/lib/folha/rules'
 import {
   getLatestSalonCommissionsDaily,
   getSalonCommissionsDailyNear,
@@ -37,6 +41,47 @@ import {
 export function deductionMagnitude(value: number | null | undefined): number | null {
   if (value == null || Number.isNaN(value)) return null
   return Math.abs(value)
+}
+
+/**
+ * Manicure com depilação: Fopag J = base×7% (IG) / 5% (BR), embutido no
+ * `other_discounts` 8123. Distingue de other≈Baru (Gisele/Deise).
+ */
+export function resolveManicureEmbeddedAdminFee(args: {
+  panel: RomPanelId
+  charged: number | null | undefined
+  otherDiscountsMag: number | null
+  consumoBaru: number | null | undefined
+}): number | null {
+  const { charged, otherDiscountsMag } = args
+  if (
+    charged == null ||
+    Number.isNaN(charged) ||
+    charged <= 0.02 ||
+    otherDiscountsMag == null ||
+    otherDiscountsMag <= 0.02
+  ) {
+    return null
+  }
+  const baru =
+    args.consumoBaru != null &&
+    !Number.isNaN(args.consumoBaru) &&
+    args.consumoBaru > 0.02
+      ? args.consumoBaru
+      : null
+  if (baru != null && Math.abs(otherDiscountsMag - baru) <= 2) return null
+  const rate = defaultAdminFeeRate(args.panel, 'cabeleireiro')
+  if (rate == null) return null
+  const full = charged * rate
+  if (Math.abs(otherDiscountsMag - full) <= 2) {
+    return roundFolha(otherDiscountsMag, 4)
+  }
+  // Base parcial de depilação (Maria Aux / Viviane / Vilma).
+  const impliedBase = otherDiscountsMag / rate
+  if (impliedBase > 50 && impliedBase <= charged + 1) {
+    return roundFolha(otherDiscountsMag, 4)
+  }
+  return null
 }
 
 export type FolhaDraftFlag =
@@ -136,6 +181,12 @@ export type FolhaDraftLine = {
      * Baru, a coluna Baru é só conferência (Alana). Interno — não exporta.
      */
     liquido_referencia: number | null
+    /**
+     * Fat líquido G Fopag. Quando G ≈ a_pagar + Baru, a planilha embute Baru
+     * em G e Y = a_pagar (Alana). Quando G ≈ a_pagar, Baru ainda abate
+     * (Monique). Interno — não exporta.
+     */
+    fat_liquido_referencia: number | null
     /**
      * Produto (H) Fopag. Se Avec reportou menos, o delta abate no pay
      * (Diana: Avec 9.50 vs Fopag 42.68). Interno — não exporta.
@@ -336,9 +387,15 @@ export function buildFolhaDraftLine(
     /**
      * Líquido Fopag (Y) de referência. Quando ≈ a_pagar e há Baru, a coluna
      * Baru é só conferência (Alana: G Fopag já embute Baru; Y=a_pagar).
-     * Sem referência (só Zig), Baru ainda abate (Monique).
+     * Sem referência (só Zig), Baru ainda abate (Monique) — Avec credit+Baru
+     * sozinho não distingue os dois (mesmo shape 8123).
      */
     liquidoReferencia?: number | null
+    /**
+     * Fat líquido G Fopag. G ≈ a_pagar + Baru → Baru só coluna (Alana).
+     * G ≈ a_pagar → ainda abate (Monique).
+     */
+    fatLiquidoReferencia?: number | null
   },
 ): FolhaDraftLine {
   const applyTaxExtras = opts?.applyTaxExtras !== false
@@ -455,7 +512,7 @@ export function buildFolhaDraftLine(
     meioForProposedPay = roundFolha(meio_a_meio - sheetMeio, 4)
   }
   /** Exibição: adm do 8123/motor, ou adm 3% (desmembrada ou charged×3%). */
-  const taxaAdmDisplay = admin.amount ?? olerite.taxaAdm
+  let taxaAdmDisplay = admin.amount ?? olerite.taxaAdm
   /**
    * Abate no proposed_pay: motor BR 5%/IG 7% (pro) ou adm 3% assistente quando
    * a_pagar ainda não fechou a taxa (Lucas: descontos=0).
@@ -495,6 +552,19 @@ export function buildFolhaDraftLine(
       : row.other_discounts
   const otherDiscountsMag =
     otherDiscountsSigned == null ? null : Math.abs(otherDiscountsSigned)
+  const manicureEmbeddedAdm =
+    cargo === 'manicure' && taxaAdmDisplay == null
+      ? resolveManicureEmbeddedAdminFee({
+          panel,
+          charged: row.charged,
+          otherDiscountsMag,
+          consumoBaru: extras?.consumo_baru,
+        })
+      : null
+  if (manicureEmbeddedAdm != null) {
+    taxaAdmDisplay = manicureEmbeddedAdm
+  }
+  const hasDepilacao = manicureEmbeddedAdm != null
   const baruForClose =
     extras?.consumo_baru != null &&
     !Number.isNaN(extras.consumo_baru) &&
@@ -546,18 +616,27 @@ export function buildFolhaDraftLine(
       assistantOleriteClosed = true
     }
   }
-  // Alana: a_pagar ≈ Y Fopag com Baru na planilha → não reabater (G já embute).
+  // Alana vs Monique (mesmo shape 8123 crédito+Baru Zig): só a Fopag decide.
+  // Y ≈ a_pagar → Baru só coluna. G ≈ a_pagar + Baru → idem (G embute S).
+  // G ≈ a_pagar (Monique) → Baru ainda abate.
   const liquidoRef =
     opts?.liquidoReferencia ?? extras?.liquido_referencia ?? null
+  const fatLiquidoRef =
+    opts?.fatLiquidoReferencia ?? extras?.fat_liquido_referencia ?? null
   if (
     !assistantOleriteClosed &&
     isOleriteClosedCargo &&
     baruForClose != null &&
-    liquidoRef != null &&
-    row.net_payable != null &&
-    Math.abs(row.net_payable - liquidoRef) <= 1
+    row.net_payable != null
   ) {
-    assistantOleriteClosed = true
+    if (liquidoRef != null && Math.abs(row.net_payable - liquidoRef) <= 1) {
+      assistantOleriteClosed = true
+    } else if (
+      fatLiquidoRef != null &&
+      Math.abs(row.net_payable + baruForClose - fatLiquidoRef) <= 1
+    ) {
+      assistantOleriteClosed = true
+    }
   }
 
   /**
@@ -594,6 +673,7 @@ export function buildFolhaDraftLine(
     acumulado_mes: extras?.acumulado_mes ?? null,
     romeu_comissao_parcela: romeuParcela,
     liquido_referencia: extras?.liquido_referencia ?? null,
+    fat_liquido_referencia: extras?.fat_liquido_referencia ?? null,
     produto_referencia: extras?.produto_referencia ?? null,
   }
   if (!applyTaxExtras) {
@@ -630,7 +710,7 @@ export function buildFolhaDraftLine(
       valorAPagarProfissional: folha_extras.valor_a_pagar_profissional,
       remitRateOverride: null,
       taxaServicosOverride: folha_extras.taxa_servicos,
-      hasDepilacao: false,
+      hasDepilacao,
       waiveAdminFee: false,
     })
     folha_extras.esteticista_bonus = preview.esteticistaBonus
@@ -663,7 +743,7 @@ export function buildFolhaDraftLine(
       valorAPagarProfissional: folha_extras.valor_a_pagar_profissional,
       remitRateOverride: null,
       taxaServicosOverride: folha_extras.taxa_servicos,
-      hasDepilacao: false,
+      hasDepilacao,
       waiveAdminFee: false,
     })
     if (folha_extras.valor_a_pagar_profissional == null) {
@@ -865,8 +945,19 @@ export function buildFolhaDraftLine(
       ? olerite.outrosResiduais
       : baruSplit.outrosDescontos
 
+  // Fopag J no assistente muitas vezes é taxa_adm_assistente (U×2%/3%).
+  // Não espelhar no pro (Romeu tem U de remessa — J dele é 0 / sobre C).
+  if (
+    isAssistantLike &&
+    taxaAdmDisplay == null &&
+    folha_extras.taxa_adm_assistente != null &&
+    folha_extras.taxa_adm_assistente > 0.02
+  ) {
+    taxaAdmDisplay = folha_extras.taxa_adm_assistente
+  }
+
   const flags: FolhaDraftFlag[] = []
-  if (cargo === 'manicure' && admin.amount != null && admin.amount > 0) {
+  if (cargo === 'manicure' && taxaAdmDisplay != null && taxaAdmDisplay > 0) {
     flags.push('manicure_com_taxa_adm')
   }
   if (row.net_payable == null) flags.push('sem_a_pagar')
@@ -918,8 +1009,8 @@ export function buildFolhaDraftLine(
           valorAPagarProfissional: folha_extras.valor_a_pagar_profissional,
           remitRateOverride: null,
           taxaServicosOverride: folha_extras.taxa_servicos,
-          hasDepilacao: false,
-          waiveAdminFee: cargo === 'manicure',
+          hasDepilacao,
+          waiveAdminFee: cargo === 'manicure' && !hasDepilacao,
         }).valorLiquido
 
   return {

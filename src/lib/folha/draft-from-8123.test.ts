@@ -774,20 +774,87 @@ describe('buildFolhaDraftLine', () => {
       { consumo_baru: 91.76 },
       { applyTaxExtras: false },
     )
-    // Sem referência Fopag, Baru do Zig ainda abate (padrão econômico).
+    // Sem referência Fopag, Baru do Zig ainda abate (Monique/Alana indistinguíveis no 8123).
     expect(withoutHint.proposed_pay).toBeCloseTo(2383.69, 1)
 
-    const withHint = buildFolhaDraftLine(
+    const withY = buildFolhaDraftLine(
       'iguatemi',
       row,
       { consumo_baru: 91.76 },
       { applyTaxExtras: false, liquidoReferencia: 2475.44 },
     )
-    expect(withHint.folha_extras.consumo_baru).toBeCloseTo(91.76, 2)
-    expect(withHint.proposed_pay).toBeCloseTo(2475.45, 1)
+    expect(withY.folha_extras.consumo_baru).toBeCloseTo(91.76, 2)
+    expect(withY.proposed_pay).toBeCloseTo(2475.45, 1)
+
+    // G Fopag = a_pagar + Baru → mesmo racional (Baru embutido em G).
+    const withG = buildFolhaDraftLine(
+      'iguatemi',
+      row,
+      { consumo_baru: 91.76 },
+      { applyTaxExtras: false, fatLiquidoReferencia: 2567.2 },
+    )
+    expect(withG.proposed_pay).toBeCloseTo(2475.45, 1)
   })
 
-  it('Gabriela Martins: other=adm < Baru → ainda abate Baru', () => {
+  it('Monique: G Fopag ≈ a_pagar → Baru do Zig ainda abate', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        tip: 0,
+        name: 'MONIQUE EVELYN CORDEIRO GOMES',
+        role: 'Assistente',
+        charged: 0,
+        service_share: 2021.8325,
+        product_share: 0,
+        other_share: 0,
+        product_spend: -0.37,
+        card_fee: -8.585,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: 85.86,
+        net_payable: 2098.7375,
+        house_share: 0,
+      },
+      { consumo_baru: 51.84 },
+      {
+        applyTaxExtras: false,
+        liquidoReferencia: 2046.9,
+        fatLiquidoReferencia: 2099.11,
+      },
+    )
+    expect(line.folha_extras.consumo_baru).toBeCloseTo(51.84, 2)
+    // 2098.74 − 51.84 ≈ 2046.9 (Y Fopag)
+    expect(line.proposed_pay).toBeCloseTo(2046.9, 1)
+  })
+
+  it('Diana manicure: other≈C×7% → coluna adm (depilação) sem reabater pay', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'DIANA DOS SANTOS CAVALCANTI BELEZA DAS MÃOS',
+        role: 'Manicure',
+        charged: 17430,
+        service_share: 10458,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: -252.53,
+        card_fee: -290.71,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: -1220.1,
+        net_payable: 8694.66,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.taxa_administrativa).toBeCloseTo(1220.1, 1)
+    expect(line.flags).toContain('manicure_com_taxa_adm')
+    expect(line.proposed_pay).toBeCloseTo(8694.66, 1)
+  })
+
+  it('Gabriela Martins: split 2%+3% (W=U×3%) e Baru ainda abate', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',
       {
@@ -806,10 +873,16 @@ describe('buildFolhaDraftLine', () => {
         net_payable: 3609.11,
         house_share: null,
       },
-      { consumo_baru: 188.3 },
+      {
+        consumo_baru: 188.3,
+        servicos_assistente_como_pro: 5000.02,
+      },
       { applyTaxExtras: false },
     )
-    expect(line.folha_extras.consumo_baru).toBeCloseTo(188.3, 2)
+    expect(line.exception_id).toBe('gabriela_martins')
+    expect(line.folha_extras.taxa_servicos).toBeCloseTo(150.0006, 2)
+    expect(line.folha_extras.taxa_adm_assistente).toBeCloseTo(100.0004, 2)
+    expect(line.taxa_administrativa).toBeCloseTo(100.0004, 2)
     expect(line.proposed_pay).toBeCloseTo(3420.81, 1)
   })
 

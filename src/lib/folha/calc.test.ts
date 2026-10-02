@@ -131,12 +131,8 @@ describe('calculateFolhaLine — manicure', () => {
       hasDepilacao: true,
       waiveAdminFee: false,
     })
-    // Manicure+depilação: usa default cabeleireiro? Caderno diz "paga taxa de adm"
-    // mas defaultAdminFeeRate(manicure) é null — apply via hasDepilacao using panel rate on C.
-    // Current resolveAdminFee: manicure && !hasDepilacao → null; with hasDepilacao falls through
-    // to defaultAdminFeeRate(manicure) which is still null.
-    // Fix needed: when hasDepilacao, use panel default for profissional.
-    expect(result.taxaAdministrativa).not.toBeNull()
+    // hasDepilacao → alíquota do cabeleireiro do painel sobre C (BR 5% / IG 7%).
+    expect(result.taxaAdministrativa).toBeCloseTo(50, 5)
   })
 })
 
