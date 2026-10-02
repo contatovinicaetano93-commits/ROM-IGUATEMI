@@ -389,11 +389,10 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
   {
     // Base Folha BR Q2: Y = G − J + V − W − diversos, com V = U×30% (earn).
     // Diferente de Eliseu/Marcelo (U/V/W só conferência). Paridade de catálogo.
+    // Sem apelido de primeiro nome: IG "Auricaliane Dantas Da Silva" é outra
+    // pessoa e o match por prefixo herdaria assistantEarnInPay.
     id: 'auricaliane',
-    aliases: [
-      'auricaliane da silva dantas',
-      'auricaliane',
-    ],
+    aliases: ['auricaliane da silva dantas'],
     meioAMeioRate: null,
     assistantRemitRate: null,
     proCommissionRate: null,
