@@ -827,6 +827,113 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(2046.9, 1)
   })
 
+  it('Camila Ornelas: charged×2% → coluna adm; pay já neteia (other≈J+Baru)', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        tip: 0,
+        name: 'CAMILA ORNELAS SANTOS',
+        role: 'Colorista',
+        charged: 2000,
+        card_fee: 0,
+        admin_fee: 0,
+        house_share: 1400,
+        net_payable: 2629.57,
+        other_share: 0,
+        product_share: 0,
+        product_spend: -33.44,
+        service_share: 2947.02,
+        other_discounts: -284.01,
+        assistant_discount: 0,
+      },
+      { consumo_baru: 244.01 },
+      { applyTaxExtras: false },
+    )
+    expect(line.exception_id).toBe('camila_ornelas')
+    expect(line.folha_extras.taxa_adm_assistente).toBeCloseTo(40, 2)
+    expect(line.taxa_administrativa).toBeCloseTo(40, 2)
+    expect(line.proposed_pay).toBeCloseTo(2629.57, 1)
+  })
+
+  it('Tatiana Moura: charged×2% = other → coluna adm sem reabater', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        tip: 0,
+        name: 'TATIANA CRISTINA DOS SANTOS MOURA',
+        role: 'MULTIPLICADOR',
+        charged: 650,
+        card_fee: 0,
+        admin_fee: 0,
+        house_share: 455,
+        net_payable: 2932.35,
+        other_share: 0,
+        product_share: 0,
+        product_spend: -29.05,
+        service_share: 2974.4,
+        other_discounts: -13,
+        assistant_discount: 0,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.exception_id).toBe('tatiana_moura')
+    expect(line.taxa_administrativa).toBeCloseTo(13, 2)
+    expect(line.proposed_pay).toBeCloseTo(2932.35, 1)
+  })
+
+  it('Francyele: V=850 sem U → coluna conferência; pay = a_pagar', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        tip: 0,
+        name: 'FRANCYELE DE SOUZA OLIVEIRA SANTOS',
+        role: 'Assistente',
+        charged: 1452,
+        card_fee: 0,
+        admin_fee: 0,
+        house_share: 1166.9,
+        net_payable: 2153.52,
+        other_share: 0,
+        product_share: 30.1,
+        product_spend: -46.78,
+        service_share: 2170.2,
+        other_discounts: 0,
+        assistant_discount: 0,
+      },
+      { valor_a_pagar_profissional: 850 },
+      { applyTaxExtras: false },
+    )
+    expect(line.folha_extras.valor_a_pagar_profissional).toBe(850)
+    expect(line.proposed_pay).toBeCloseTo(2153.52, 1)
+  })
+
+  it('Dailza: taxa_adm_assistente da Fopag (420×3%) só coluna', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        tip: 0,
+        name: 'DAILZA MAGALHAES DOS SANTOS',
+        role: 'Assistente',
+        charged: 706,
+        card_fee: -68.86,
+        admin_fee: 0,
+        house_share: 565.7,
+        net_payable: 3111.52,
+        other_share: 0,
+        product_share: 14.3,
+        product_spend: 0,
+        service_share: 2511,
+        other_discounts: 655.08,
+        assistant_discount: 0,
+      },
+      { taxa_adm_assistente: 12.6 },
+      { applyTaxExtras: false },
+    )
+    expect(line.taxa_administrativa).toBeCloseTo(12.6, 2)
+    expect(line.proposed_pay).toBeCloseTo(3111.52, 1)
+  })
+
   it('Diana manicure: other≈C×7% → coluna adm (depilação) sem reabater pay', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',

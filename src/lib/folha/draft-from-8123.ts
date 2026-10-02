@@ -760,6 +760,41 @@ export function buildFolhaDraftLine(
   }
 
   /**
+   * Assistente/colorista/multiplicador sem U na linha, mas com charged 8123
+   * = base do serviço como pro (Camila 2000, Tatiana 650):
+   * J Fopag = charged × alíquota assist (2% Brunna / 3% default).
+   * Só coluna — a_pagar já neteia (Tatiana other≈J; Camila other≈J+Baru).
+   */
+  if (
+    isAssistantLike &&
+    folha_extras.taxa_adm_assistente == null &&
+    folha_extras.servicos_assistente_como_pro == null &&
+    row.charged != null &&
+    row.charged > 0.02 &&
+    assistantAdminRate != null
+  ) {
+    const expectedAdm = roundFolha(row.charged * assistantAdminRate, 4)
+    // Tatiana: other ≈ charged×2%. Não usar other≈adm+Baru — Luziene other=Baru
+    // com charged×3% residual (1.89) gerava falsa coluna.
+    const otherMatchesAdm =
+      otherDiscountsSigned != null &&
+      otherDiscountsSigned < -0.02 &&
+      expectedAdm != null &&
+      expectedAdm >= 5 &&
+      Math.abs(otherDiscountsMag! - expectedAdm) <= 1
+    // Camila/Tatiana (split Brunna): J = charged×2% mesmo se other mistura Baru.
+    const namedAssistAdmOnCharged =
+      person?.serviceTaxSplit != null && person.adminFeeRate == null
+    if (
+      expectedAdm != null &&
+      expectedAdm > 0.02 &&
+      (otherMatchesAdm || namedAssistAdmOnCharged)
+    ) {
+      folha_extras.taxa_adm_assistente = expectedAdm
+    }
+  }
+
+  /**
    * 8123 às vezes embute W reduzindo `descontos` (Daniel: shortfall ≈ W).
    * a_pagar fica alto demais em W; ao abater taxa_servicos no pay, compensar.
    * Coluna W (taxa_servicos) permanece o valor verdadeiro U×alíquota.

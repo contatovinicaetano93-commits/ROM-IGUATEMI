@@ -275,6 +275,21 @@ async function main() {
 
     const extras: Record<string, number> = {}
     if (f.U > 0.005) extras.servicos_assistente_como_pro = f.U
+    // Francyele: Excel U(=motor V) literal sem T(=motor U).
+    if (f.V > 0.005 && !(f.U > 0.005)) {
+      extras.valor_a_pagar_profissional = f.V
+    }
+    // Camila/Tatiana/Dailza: J sem U → taxa_adm_assistente (coluna; pay já neteia).
+    const cargoNorm = normalizeFolhaCargo(f.cargo)
+    if (
+      f.taxa_adm > 0.005 &&
+      !(f.U > 0.005) &&
+      (cargoNorm === 'assistente' ||
+        cargoNorm === 'multiplicador' ||
+        cargoNorm === 'colorista')
+    ) {
+      extras.taxa_adm_assistente = f.taxa_adm
+    }
     if (f.baru > 0.005) extras.consumo_baru = f.baru
     if (f.parc > 0.005) extras.parc = f.parc
     if (f.div_ativa > 0.005) extras.div_ativa = f.div_ativa

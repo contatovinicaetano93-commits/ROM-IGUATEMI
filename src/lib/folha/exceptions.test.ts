@@ -108,10 +108,12 @@ describe('resolveFolhaPersonRules', () => {
     }
   })
 
-  it('Gabriela Martins / Graciele: split 2%+3% sem adm 5% sobre C', () => {
+  it('Gabriela Martins / Graciele / Camila / Tatiana: split 2%+3% sem adm 5% sobre C', () => {
     for (const [name, id] of [
       ['GABRIELA MARTINS DA SILVA', 'gabriela_martins'],
       ['GRACIELE DA SILVA SANTOS', 'graciele'],
+      ['CAMILA ORNELAS SANTOS', 'camila_ornelas'],
+      ['TATIANA CRISTINA DOS SANTOS MOURA', 'tatiana_moura'],
     ] as const) {
       const r = resolveFolhaPersonRules(name)
       expect(r?.id).toBe(id)
