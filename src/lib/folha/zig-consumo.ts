@@ -129,15 +129,20 @@ export function matchZigSpendToFolhaName(
 
 /**
  * Baru já embutido no 8123 aparece como residual em `outros_descontos`
- * e o a_pagar já neteou — não reabater via consumo_baru.
+ * (antes do promote para a coluna Baru) e o a_pagar já neteou.
+ * Ainda preenchemos `consumo_baru` para a coluna Fopag; o motor não reabate
+ * quando residual ≈ Baru (`resolveBaruVsOleriteResidual`).
  */
 export function zigBaruAlreadyEmbeddedIn8123(
   line: FolhaDraftLine,
   zigReais: number,
 ): boolean {
+  if (zigReais <= 0.02) return false
   const outros = line.outros_descontos
-  if (outros == null || zigReais <= 0.02) return false
-  return Math.abs(outros - zigReais) <= 2
+  if (outros != null && Math.abs(outros - zigReais) <= 2) return true
+  const baru = line.folha_extras.consumo_baru
+  if (baru != null && Math.abs(baru - zigReais) <= 2) return true
+  return false
 }
 
 export type ApplyZigConsumoResult = {
@@ -184,21 +189,23 @@ export function planZigConsumoBaruExtras(
       report.skipped_manual.push(line.name)
       continue
     }
-    if (zigBaruAlreadyEmbeddedIn8123(line, spend.paidReais)) {
-      report.skipped_embedded.push(line.name)
-      continue
-    }
     const amount = roundFolha(spend.paidReais, 2)
     if (amount == null) continue
+    const embedded = zigBaruAlreadyEmbeddedIn8123(line, spend.paidReais)
     patches.push({
       professionalName: line.name,
       extras: { consumo_baru: amount },
     })
-    report.applied.push({
-      name: line.name,
-      consumo_baru: amount,
-      zig_key: spend.key,
-    })
+    if (embedded) {
+      // Coluna Baru (conferência); proposed_pay não reabate.
+      report.skipped_embedded.push(line.name)
+    } else {
+      report.applied.push({
+        name: line.name,
+        consumo_baru: amount,
+        zig_key: spend.key,
+      })
+    }
   }
 
   for (const s of spends) {

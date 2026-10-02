@@ -26,6 +26,10 @@ export type FolhaExceptionId =
   | 'brunna'
   | 'joanides'
   | 'marcela'
+  | 'gabriela_martins'
+  | 'graciele'
+  | 'camila_ornelas'
+  | 'tatiana_moura'
   | 'lucas_campos'
   | 'juscelino'
   | 'romeu_assistant'
@@ -213,6 +217,77 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     proCommissionRate: null,
     serviceTaxSplit: BRUNNA_TAX_SPLIT,
     adminFeeRate: 0.05,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+  },
+  {
+    // Fopag IG: J = U×2%, W = U×3% (mesmo split Brunna), sem adm 5% sobre C.
+    // U/V/W no assistente são conferência — líquido do assistente omite +V−W.
+    id: 'gabriela_martins',
+    aliases: [
+      'gabriela martins da silva',
+      'gabriela martins',
+    ],
+    meioAMeioRate: null,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: BRUNNA_TAX_SPLIT,
+    adminFeeRate: null,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+  },
+  {
+    // Mesmo split 2%+3% da Gabriela Martins (Fopag IG Q2).
+    id: 'graciele',
+    aliases: [
+      'graciele da silva santos',
+      'graciele da silva',
+      'graciele santos',
+      'graciele',
+    ],
+    meioAMeioRate: null,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: BRUNNA_TAX_SPLIT,
+    adminFeeRate: null,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+  },
+  {
+    // Time Brunna: J = charged_8123×2% (Fopag `2000*2%`), sem U na linha.
+    // Coluna adm = taxa_adm_assistente; pay já neteia (não reabate).
+    id: 'camila_ornelas',
+    aliases: ['camila ornelas santos', 'camila ornelas'],
+    meioAMeioRate: null,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: BRUNNA_TAX_SPLIT,
+    adminFeeRate: null,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+  },
+  {
+    // Time Brunna: J = charged_8123×2% (Fopag `650*2%`).
+    id: 'tatiana_moura',
+    aliases: [
+      'tatiana cristina dos santos moura',
+      'tatiana cristina dos santos',
+      'tatiana moura',
+      'tatiana cristina',
+    ],
+    meioAMeioRate: null,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: BRUNNA_TAX_SPLIT,
+    adminFeeRate: null,
     quinzenaMeta: null,
     hasQuinzenaMeta: false,
     isRomeuAssistant: false,

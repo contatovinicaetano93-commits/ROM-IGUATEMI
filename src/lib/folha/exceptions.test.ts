@@ -107,6 +107,30 @@ describe('resolveFolhaPersonRules', () => {
       expect(resolveFolhaPersonRules(name)?.id).toBe('romeu_assistant')
     }
   })
+
+  it('Gabriela Martins / Graciele / Camila / Tatiana: split 2%+3% sem adm 5% sobre C', () => {
+    for (const [name, id] of [
+      ['GABRIELA MARTINS DA SILVA', 'gabriela_martins'],
+      ['GRACIELE DA SILVA SANTOS', 'graciele'],
+      ['CAMILA ORNELAS SANTOS', 'camila_ornelas'],
+      ['TATIANA CRISTINA DOS SANTOS MOURA', 'tatiana_moura'],
+    ] as const) {
+      const r = resolveFolhaPersonRules(name)
+      expect(r?.id).toBe(id)
+      expect(r?.serviceTaxSplit).toEqual({
+        total: 0.05,
+        assistant: 0.02,
+        professional: 0.03,
+      })
+      expect(r?.adminFeeRate).toBeNull()
+      expect(resolveProfessionalServiceTaxRate('iguatemi', r)).toBe(0.03)
+      expect(resolveAssistantAdminTaxRate('iguatemi', r)).toBe(0.02)
+    }
+    // Não confundir com Gabriela Santos (Romeu).
+    expect(resolveFolhaPersonRules('GABRIELA DA SILVA SANTOS')?.id).toBe(
+      'romeu_assistant',
+    )
+  })
 })
 
 describe('romeuAssistantCommissionRate', () => {

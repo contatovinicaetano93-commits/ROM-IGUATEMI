@@ -695,6 +695,26 @@ export default function FolhaPage() {
                       </p>
                     </div>
                     <div>
+                      <span className="text-muted">Consumo Baru</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatMoney(selectedLine?.folha_extras.consumo_baru)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">U · serv. assist. como pro</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatMoney(
+                          selectedLine?.folha_extras.servicos_assistente_como_pro,
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">W · taxa serviços</span>
+                      <p className="mt-1 tabular-nums">
+                        {formatMoney(selectedLine?.folha_extras.taxa_servicos)}
+                      </p>
+                    </div>
+                    <div>
                       <span className="text-muted">a_pagar 8123</span>
                       <p className="mt-1 font-medium tabular-nums">
                         {formatMoney(selectedLine?.avec.net_payable)}
@@ -830,6 +850,8 @@ export default function FolhaPage() {
                         <th className="py-2 pr-3 font-medium tabular-nums">Meio a meio</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Outros</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Consumo Baru</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">U</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">W</th>
                         {taxExtrasAllowed ? (
                           <>
                             <th className="py-2 pr-3 font-medium tabular-nums">DARF</th>
@@ -875,6 +897,12 @@ export default function FolhaPage() {
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
                             {formatMoney(line.folha_extras.consumo_baru)}
+                          </td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.folha_extras.servicos_assistente_como_pro)}
+                          </td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.folha_extras.taxa_servicos)}
                           </td>
                           {taxExtrasAllowed ? (
                             <>
@@ -950,8 +978,9 @@ export default function FolhaPage() {
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
               <li>
-                Olerite: se o 8123 zera taxa_adm e embute adm↔meio em descontos, a Folha
-                desmembra (Tx adm / Meio / Outros). Assistente-como-pro (todos, incl.
+                Olerite: se o 8123 zera taxa_adm e embute adm↔meio (+Baru) em descontos,
+                a Folha desmembra colunas Fopag (Tx adm / Meio / Outros / Baru / U / W)
+                sem reabater o que já está no a_pagar. Assistente-como-pro (todos, incl.
                 Romeu): taxa adm 3% sobre o serviço. Rateio − cartão ≈ comissão/rateio do
                 recibo (produto ≠ cartão).
               </li>

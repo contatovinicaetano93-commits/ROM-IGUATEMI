@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   disaggregateOleriteDescontos,
   rateioAposCartao,
+  resolveBaruVsOleriteResidual,
 } from '@/lib/folha/olerite-disaggregate'
 import { buildFolhaDraftLine } from '@/lib/folha/draft-from-8123'
 import { rehydrateFolhaDraftFromPeriod } from '@/lib/folha/workflow'
@@ -103,6 +104,33 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.meioCreditedInNet).toBe(false)
   })
 
+  it('multiplicador assist=0 e descontos=0: NÃO path-C (Edijane 3% falso)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 2165,
+      adminFee8123: 0,
+      assistantDiscount: 0,
+      otherDiscounts: 0,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.03,
+    })
+    expect(d.taxaAdm).toBeNull()
+    expect(d.embeddedCreditResidual).toBeNull()
+  })
+
+  it('assistente crédito em descontos NÃO vira órfão a estornar (Dailza)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 706,
+      adminFee8123: 0,
+      assistantDiscount: 0,
+      otherDiscounts: 655.08,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.03,
+    })
+    expect(d.embeddedCreditResidual).toBeNull()
+  })
+
   it('pro sem assistente: descontos ≈ taxa adm → embutido (Rafaella)', () => {
     const d = disaggregateOleriteDescontos({
       charged: 17112,
@@ -166,6 +194,37 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.taxaAdm).toBeCloseTo(2783.06, 1)
     expect(d.meioAMeio).toBeCloseTo(2892.875, 2)
   })
+
+  it('Joanides: crédito parcial (meio−adm)−Baru → embutido, residual=Baru', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 105021.8,
+      adminFee8123: 0,
+      assistantDiscount: -11626.73,
+      otherDiscounts: 363.18,
+      adminRate: 0.05,
+      meioRate: 0.5,
+    })
+    expect(d.embeddedAdminMeio).toBe(true)
+    expect(d.embeddedCreditResidual).toBeNull()
+    expect(d.taxaAdm).toBeCloseTo(5251.09, 1)
+    expect(d.meioAMeio).toBeCloseTo(5813.365, 2)
+    // 5813.365 − 5251.09 − 363.18 ≈ 199.1 (Baru)
+    expect(d.outrosResiduais).toBeCloseTo(199.1, 0)
+  })
+
+  it('Romeu: crédito órfão em descontos → estornar (embeddedCreditResidual)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 0,
+      adminFee8123: 0,
+      assistantDiscount: 0,
+      otherDiscounts: 1444.01,
+      adminRate: 0.05,
+      meioRate: 0.5,
+    })
+    expect(d.embeddedCreditResidual).toBeCloseTo(1444.01, 2)
+    expect(d.outrosResiduais).toBeCloseTo(1444.01, 2)
+    expect(d.embeddedAdminMeio).toBe(false)
+  })
 })
 
 describe('rateioAposCartao', () => {
@@ -177,6 +236,83 @@ describe('rateioAposCartao', () => {
         cardFee: -412.9,
       }),
     ).toBeCloseTo(14195.2, 2)
+  })
+})
+
+describe('resolveBaruVsOleriteResidual', () => {
+  it('Ana: residual = Baru → coluna Baru, Outros null, sem reabater', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 387.08,
+      consumoBaru: 387.08,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(387.08, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('descontos só Baru (sem embed adm↔meio) também já está no a_pagar', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 208.71,
+      consumoBaru: 208.71,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(208.71, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('Baru menor que o residual embutido: sobra em Outros, sem reabater', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 500,
+      consumoBaru: 200,
+      residualAlreadyInNet: true,
+    })
+    expect(r.outrosDescontos).toBeCloseTo(300, 2)
+    expect(r.consumoBaru).toBeCloseTo(200, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('Alison: sem residual → Baru ainda abate', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: null,
+      consumoBaru: 324.65,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(324.65, 2)
+    expect(r.baruAlreadyInNet).toBe(false)
+  })
+
+  it('manicure: residual = Baru sem adm↔meio → não reabate', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 219.24,
+      consumoBaru: 219.24,
+      residualAlreadyInNet: false,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(219.24, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('Baru menor que o residual, sem adm embutido, ainda abate', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 400,
+      consumoBaru: 219.24,
+      residualAlreadyInNet: false,
+    })
+    expect(r.baruAlreadyInNet).toBe(false)
+    expect(r.outrosDescontos).toBe(400)
+    expect(r.consumoBaru).toBeCloseTo(219.24, 2)
+  })
+
+  it('assistente olerite fechado: Baru só coluna, sem reabater', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 386.21,
+      consumoBaru: 386.21,
+      residualAlreadyInNet: false,
+      assistantOleriteClosed: true,
+    })
+    expect(r.baruAlreadyInNet).toBe(true)
+    expect(r.consumoBaru).toBeCloseTo(386.21, 2)
+    expect(r.outrosDescontos).toBeNull()
   })
 })
 
@@ -244,6 +380,9 @@ describe('rehydrateFolhaDraftFromPeriod', () => {
         esteticista_bonus: null,
         acumulado_mes: null,
         romeu_comissao_parcela: null,
+        liquido_referencia: null,
+        fat_liquido_referencia: null,
+        produto_referencia: null,
         descontos_diversos: null,
         consumo_baru: null,
         mensalidade_contabilidade: null,
@@ -305,6 +444,9 @@ describe('rehydrateFolhaDraftFromPeriod', () => {
         esteticista_bonus: null,
         acumulado_mes: null,
         romeu_comissao_parcela: null,
+        liquido_referencia: null,
+        fat_liquido_referencia: null,
+        produto_referencia: null,
         descontos_diversos: null,
         consumo_baru: null,
         mensalidade_contabilidade: null,

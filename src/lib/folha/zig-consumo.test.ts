@@ -126,6 +126,9 @@ describe('planZigConsumoBaruExtras', () => {
       esteticista_bonus: null,
       acumulado_mes: null,
       romeu_comissao_parcela: null,
+        liquido_referencia: null,
+        fat_liquido_referencia: null,
+        produto_referencia: null,
     },
     proposed_pay: 800,
     formula_y_preview: null,
@@ -157,8 +160,11 @@ describe('planZigConsumoBaruExtras', () => {
       outros_descontos: 219.24,
     }
     expect(zigBaruAlreadyEmbeddedIn8123(embedded, 219.24)).toBe(true)
-    const skipEmb = planZigConsumoBaruExtras([embedded], spends)
-    expect(skipEmb.report.skipped_embedded).toContain(baseLine.name)
+    const embPlan = planZigConsumoBaruExtras([embedded], spends)
+    // Preenche coluna Baru mesmo embutido; motor não reabate no rebuild.
+    expect(embPlan.patches[0]?.extras.consumo_baru).toBe(219.24)
+    expect(embPlan.report.skipped_embedded).toContain(baseLine.name)
+    expect(embPlan.report.applied).toHaveLength(0)
   })
 })
 
