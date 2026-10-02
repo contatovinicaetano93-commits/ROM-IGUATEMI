@@ -2,7 +2,7 @@
  * Motor puro da Folha PJ — espelha a fórmula Y da Fopag:
  * Y = fatLiquido − produto − taxaAdm − descAssist + meioAMeio
  *     − parc − darf − das − divAtiva − mensalidade − descontosDiversos
- *     − produtosBlack + valorAPagarPro − taxaServicosU
+ *     − consumoBaru − produtosBlack + valorAPagarPro − taxaServicosU
  *
  * KPI ausente = null (não vira 0 falso). Só entra na conta quando informado.
  */
@@ -46,6 +46,8 @@ export type FolhaLineInput = {
   divAtiva: number | null
   mensalidadeContabilidade: number | null
   descontosDiversos: number | null
+  /** Consumo Baru (RH) — abate no Y. */
+  consumoBaru?: number | null
   produtosBlack: number | null
   /**
    * Montante de serviços do fluxo assistente-como-pro (coluna U).
@@ -183,6 +185,7 @@ export function calculateFolhaLine(input: FolhaLineInput): FolhaLineResult {
     n(input.divAtiva) -
     n(input.mensalidadeContabilidade) -
     n(input.descontosDiversos) -
+    n(input.consumoBaru) -
     n(input.produtosBlack) +
     n(valorAPagarProfissional) -
     n(taxaServicos) +

@@ -95,6 +95,7 @@ export default function FolhaPage() {
   const [onlyWithPay, setOnlyWithPay] = useState(true)
   const [selectedName, setSelectedName] = useState('')
   const [uInput, setUInput] = useState('')
+  const [baruInput, setBaruInput] = useState('')
   const [acumuladoInput, setAcumuladoInput] = useState('')
   const [darfInput, setDarfInput] = useState('')
   const [dasInput, setDasInput] = useState('')
@@ -229,6 +230,7 @@ export default function FolhaPage() {
     }
     const extras: Record<string, number | null> = {
       servicos_assistente_como_pro: parseOptionalNumber(uInput),
+      consumo_baru: parseOptionalNumber(baruInput),
       acumulado_mes: parseOptionalNumber(acumuladoInput),
     }
     if (taxExtrasAllowed) {
@@ -388,6 +390,11 @@ export default function FolhaPage() {
     setUInput(
       line.folha_extras.servicos_assistente_como_pro != null
         ? String(line.folha_extras.servicos_assistente_como_pro)
+        : '',
+    )
+    setBaruInput(
+      line.folha_extras.consumo_baru != null
+        ? String(line.folha_extras.consumo_baru)
         : '',
     )
     setAcumuladoInput(
@@ -672,6 +679,16 @@ export default function FolhaPage() {
                       placeholder="ex. 1000"
                     />
                   </label>
+                  <label className="text-xs">
+                    <span className="text-muted">Consumo Baru</span>
+                    <input
+                      className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                      value={baruInput}
+                      onChange={(e) => setBaruInput(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="ex. 201.68"
+                    />
+                  </label>
                   {selectedLine?.flags.includes('assistente_romeu') ? (
                     <label className="text-xs">
                       <span className="text-muted">
@@ -761,7 +778,7 @@ export default function FolhaPage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+                  <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                         <th className="py-2 pr-3 font-medium">Profissional</th>
@@ -774,6 +791,7 @@ export default function FolhaPage() {
                         <th className="py-2 pr-3 font-medium tabular-nums">Assistente</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Meio a meio</th>
                         <th className="py-2 pr-3 font-medium tabular-nums">Outros</th>
+                        <th className="py-2 pr-3 font-medium tabular-nums">Consumo Baru</th>
                         {taxExtrasAllowed ? (
                           <>
                             <th className="py-2 pr-3 font-medium tabular-nums">DARF</th>
@@ -816,6 +834,9 @@ export default function FolhaPage() {
                           </td>
                           <td className="py-2 pr-3 tabular-nums">
                             {formatMoney(line.outros_descontos)}
+                          </td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {formatMoney(line.folha_extras.consumo_baru)}
                           </td>
                           {taxExtrasAllowed ? (
                             <>

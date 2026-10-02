@@ -180,7 +180,7 @@ function synthesize(f: FopagRow): {
           (f.liquido - f.meio_a_meio + f.taxa_adm + rhDebitRestore) * 10000,
         ) / 10000
     } else if (f.baru > 0.005) {
-      extras.descontos_diversos = (extras.descontos_diversos ?? 0) + f.baru
+      extras.consumo_baru = (extras.consumo_baru ?? 0) + f.baru
       rhExtras.push('baru')
       base.net_payable =
         Math.round((f.liquido + f.baru + rhDebitRestore) * 10000) / 10000
@@ -212,7 +212,7 @@ function synthesize(f: FopagRow): {
     base.other_discounts =
       Math.round((meioMinusAdm + residual) * 10000) / 10000
     if (f.baru > 0.005) {
-      extras.descontos_diversos = (extras.descontos_diversos ?? 0) + f.baru
+      extras.consumo_baru = (extras.consumo_baru ?? 0) + f.baru
       rhExtras.push('baru')
     }
     base.net_payable =
@@ -271,7 +271,7 @@ function synthesize(f: FopagRow): {
   }
 
   if (f.baru > 0.005) {
-    extras.descontos_diversos = (extras.descontos_diversos ?? 0) + f.baru
+    extras.consumo_baru = (extras.consumo_baru ?? 0) + f.baru
     rhExtras.push('baru')
     base.net_payable =
       Math.round((f.liquido + f.baru + rhDebitRestore) * 10000) / 10000

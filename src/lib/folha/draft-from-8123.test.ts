@@ -205,9 +205,10 @@ describe('buildFolhaDraftLine', () => {
     const withBaru = buildFolhaDraftLine(
       'brasil',
       row,
-      { descontos_diversos: 324.65 },
+      { consumo_baru: 324.65 },
       { applyTaxExtras: false },
     )
+    expect(withBaru.folha_extras.consumo_baru).toBe(324.65)
     expect(withBaru.proposed_pay).toBeCloseTo(14258.6, 0)
   })
 
@@ -439,7 +440,7 @@ describe('buildFolhaDraftLine', () => {
       row,
       {
         servicos_assistente_como_pro: 10500.02,
-        descontos_diversos: 201.68, // Consumo Baru
+        consumo_baru: 201.68,
       },
       { applyTaxExtras: false },
     )

@@ -50,6 +50,7 @@ const sampleDraft: FolhaDraft = {
         div_ativa: null,
         mensalidade_contabilidade: null,
         descontos_diversos: null,
+        consumo_baru: null,
         produtos_black: null,
         servicos_assistente_como_pro: null,
         valor_a_pagar_profissional: null,
@@ -96,6 +97,7 @@ const sampleDraft: FolhaDraft = {
         div_ativa: null,
         mensalidade_contabilidade: null,
         descontos_diversos: null,
+        consumo_baru: null,
         produtos_black: null,
         servicos_assistente_como_pro: null,
         valor_a_pagar_profissional: null,
@@ -128,10 +130,11 @@ describe('folhaLineToExportRow', () => {
     expect(row[7]).toBe(150) // Assistente
     expect(row[8]).toBe(75) // Meio a meio
     expect(row[10]).toBe(707.19) // Outros (olerite)
-    expect(row[20]).toBeNull() // Acumulado mês (U Romeu Q1+Q2)
-    expect(row[21]).toBeNull() // Top-up meta Romeu
-    expect(row[22]).toBe(6032.64) // Líquido
-    expect(row[23]).toBe('romeu_assistant')
+    expect(row[11]).toBeNull() // Consumo Baru
+    expect(row[21]).toBeNull() // Acumulado mês (U Romeu Q1+Q2)
+    expect(row[22]).toBeNull() // Top-up meta Romeu
+    expect(row[23]).toBe(6032.64) // Líquido
+    expect(row[24]).toBe('romeu_assistant')
   })
 })
 
