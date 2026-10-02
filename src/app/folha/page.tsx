@@ -914,12 +914,12 @@ export default function FolhaPage() {
                   </button>
                 </div>
 
-                <div className="w-full">
+                <div className="w-full overflow-x-auto">
                   <p className="mb-1.5 text-[10px] text-muted">
-                    Valores em R$ (sem símbolo na grade). Passe o mouse no cabeçalho para o nome
-                    completo.
+                    Valores em R$ (sem símbolo na grade). Hover no cabeçalho = nome completo.
+                    Em telas largas tudo cabe; se apertar, role só o mínimo.
                   </p>
-                  <table className="w-full table-fixed border-collapse text-left text-[11px] leading-tight">
+                  <table className="w-full min-w-0 table-fixed border-collapse text-left text-[11px] leading-tight">
                     <colgroup>
                       <col className="w-[14%]" />
                       <col className="w-[8%]" />
