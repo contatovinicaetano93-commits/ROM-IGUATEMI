@@ -26,7 +26,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 2475.44,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 5,
@@ -54,7 +54,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 2013.45,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 6,
@@ -82,7 +82,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 3482.29,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 7,
@@ -110,7 +110,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 9472.046,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 8,
@@ -138,7 +138,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 4173.72,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 9,
@@ -158,7 +158,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": null,
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 208.71,
       "U": 0.0,
@@ -166,7 +166,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 3021.51,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 10,
@@ -194,7 +194,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 3522.48,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 11,
@@ -222,7 +222,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 2541.79,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 13,
@@ -250,7 +250,7 @@
       "W": 0.0,
       "desc_diversos_02": 1250.0,
       "liquido": 10353.378,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 14,
@@ -278,7 +278,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 768.15,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 15,
@@ -306,7 +306,7 @@
       "W": 315.0006,
       "desc_diversos_02": 0.0,
       "liquido": 68976.5334,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 16,
@@ -334,7 +334,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 1870.51,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 18,
@@ -362,22 +362,22 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 2629.57,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 20,
       "name": "CARINA FERNANDA DE FREITAS FERREIRA",
       "cargo": "Cabeleireiro",
-      "faturado": 21594.0,
+      "faturado": 21124.0,
       "pct_salao": 0.5,
-      "retencao": 10797.0,
+      "retencao": 10562.0,
       "taxa_cartao": 529.91,
-      "fat_liquido": 10257.93,
+      "fat_liquido": 10029.98,
       "produto": 1195.62,
       "pacote": 0.0,
-      "taxa_adm": 1511.58,
-      "desc_assistente": 1902.04,
-      "meio_a_meio": 951.02,
+      "taxa_adm": 1478.68,
+      "desc_assistente": 1855.04,
+      "meio_a_meio": 927.52,
       "parc": 0.0,
       "darf": 0.0,
       "das": 0.0,
@@ -389,8 +389,8 @@
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 6127.23,
-      "status": "Validado Avec "
+      "liquido": 5955.68,
+      "status": "Validado Avec"
     },
     {
       "row": 21,
@@ -418,7 +418,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 1518.17,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 22,
@@ -446,7 +446,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 7906.11,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 23,
@@ -474,7 +474,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 7989.41,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 24,
@@ -502,7 +502,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 1724.68,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 25,
@@ -530,7 +530,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 9722.23,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 26,
@@ -558,7 +558,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 4481.76,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 27,
@@ -586,7 +586,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 3111.52,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 28,
@@ -614,7 +614,7 @@
       "W": 65.6004,
       "desc_diversos_02": 0.0,
       "liquido": 17611.2566,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 29,
@@ -642,7 +642,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 2397.36,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 30,
@@ -726,7 +726,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 5776.38,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 33,
@@ -774,7 +774,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 156.0,
       "U": 0.0,
@@ -810,7 +810,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": -246.5,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 36,
@@ -821,7 +821,7 @@
       "retencao": 4005.0,
       "taxa_cartao": 174.0,
       "fat_liquido": 3900.6,
-      "produto": 42.68,
+      "produto": 9.5,
       "pacote": 0.0,
       "taxa_adm": 0.0,
       "desc_assistente": 0.0,
@@ -837,7 +837,7 @@
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 3857.92,
+      "liquido": 3891.1,
       "status": "Validado Avec"
     },
     {
@@ -894,7 +894,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 5616.25,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 40,
@@ -922,7 +922,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 2629.37,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 41,
@@ -970,7 +970,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 243.16,
       "U": 1220.01,
@@ -1016,7 +1016,7 @@
       "pct_salao": 0.5,
       "retencao": 2016.55,
       "taxa_cartao": 115.15,
-      "fat_liquido": 2206.14,
+      "fat_liquido": 2671.64,
       "produto": 0.74,
       "pacote": 0.0,
       "taxa_adm": 0.0,
@@ -1033,7 +1033,7 @@
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 1993.88,
+      "liquido": 2459.38,
       "status": "Validado Avec"
     },
     {
@@ -1054,7 +1054,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 142.28,
       "U": 0.0,
@@ -1103,21 +1103,21 @@
       "fat_liquido": 2200.3,
       "produto": 46.78,
       "pacote": 0.0,
-      "taxa_adm": 0.0,
+      "taxa_adm": 25.5,
       "desc_assistente": 0.0,
       "meio_a_meio": 0.0,
       "parc": 0.0,
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 0.0,
       "V": 850.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 2153.52,
+      "liquido": 2128.02,
       "status": "Validado no Avec"
     },
     {
@@ -1138,7 +1138,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 0.0,
@@ -1184,7 +1184,7 @@
       "pct_salao": 0.13,
       "retencao": 737.88,
       "taxa_cartao": 0.0,
-      "fat_liquido": 1564.3,
+      "fat_liquido": 2587.3,
       "produto": 86.63,
       "pacote": 0.0,
       "taxa_adm": 147.9012,
@@ -1194,14 +1194,14 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 4930.04,
       "V": 986.008,
       "W": 197.2016,
       "desc_diversos_02": 0.0,
-      "liquido": 1114.7688,
+      "liquido": 2137.7688,
       "status": "Validado no Avec"
     },
     {
@@ -1258,7 +1258,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 8563.59,
-      "status": "Validado "
+      "status": "Validado"
     },
     {
       "row": 58,
@@ -1286,7 +1286,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 12253.695,
-      "status": "Validado "
+      "status": "Validado"
     },
     {
       "row": 59,
@@ -1314,7 +1314,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 4343.295,
-      "status": "Validado "
+      "status": "Validado"
     },
     {
       "row": 61,
@@ -1362,7 +1362,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 161.16,
       "U": 2850.0,
@@ -1393,12 +1393,12 @@
       "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 9.12,
-      "U": 0.0,
-      "V": 0.0,
-      "W": 0.0,
+      "U": 850.0,
+      "V": 170.0,
+      "W": 34.0,
       "desc_diversos_02": 0.0,
-      "liquido": 7468.68,
-      "status": "Validado "
+      "liquido": 7604.68,
+      "status": "Validado"
     },
     {
       "row": 65,
@@ -1408,7 +1408,7 @@
       "pct_salao": 0.1,
       "retencao": 1351.5,
       "taxa_cartao": 0.0,
-      "fat_liquido": 1339.0,
+      "fat_liquido": 1292.0,
       "produto": 63.0,
       "pacote": 0.0,
       "taxa_adm": 0.0,
@@ -1418,14 +1418,14 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 89.54,
       "U": 0.0,
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 1186.46,
+      "liquido": 1139.46,
       "status": "Validado no Avec"
     },
     {
@@ -1454,7 +1454,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 4248.21,
-      "status": "Validado "
+      "status": "Validado"
     },
     {
       "row": 67,
@@ -1586,7 +1586,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 129.06,
       "U": 0.0,
@@ -1734,7 +1734,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 47658.405,
-      "status": "Validado "
+      "status": "Validado"
     },
     {
       "row": 85,
@@ -1744,7 +1744,7 @@
       "pct_salao": 0.5,
       "retencao": 3837.75,
       "taxa_cartao": 185.9,
-      "fat_liquido": 3945.15,
+      "fat_liquido": 4441.95,
       "produto": 16.0,
       "pacote": 0.0,
       "taxa_adm": 0.0,
@@ -1754,14 +1754,14 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 39.0,
       "U": 0.0,
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 3890.15,
+      "liquido": 4386.95,
       "status": "Validado no Avec"
     },
     {
@@ -1790,7 +1790,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 32575.49,
-      "status": "Validado "
+      "status": "Validado"
     },
     {
       "row": 89,
@@ -1818,7 +1818,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 6666.22,
-      "status": "Validado "
+      "status": "Validado"
     },
     {
       "row": 91,
@@ -1866,7 +1866,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 44.06,
       "U": 0.0,
@@ -1902,7 +1902,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 19489.67,
-      "status": "Validado "
+      "status": "Validado"
     },
     {
       "row": 94,
@@ -1950,7 +1950,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 334.38,
       "U": 0.0,
@@ -2014,7 +2014,7 @@
       "W": 0.0,
       "desc_diversos_02": 0.0,
       "liquido": 2598.12,
-      "status": "Validado Avec "
+      "status": "Validado Avec"
     },
     {
       "row": 99,
@@ -2062,7 +2062,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 83.06,
       "U": 0.0,
@@ -2090,7 +2090,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Assistec",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 190.3,
       "U": 0.0,
@@ -2118,7 +2118,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 525.45,
       "U": 0.0,
@@ -2146,7 +2146,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 39.0,
       "U": 0.0,
@@ -2174,7 +2174,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 0.0,
@@ -2192,7 +2192,7 @@
       "pct_salao": 0.5,
       "retencao": 2403.0,
       "taxa_cartao": 106.49,
-      "fat_liquido": 2413.55,
+      "fat_liquido": 2511.05,
       "produto": 118.08,
       "pacote": 0.0,
       "taxa_adm": 0.0,
@@ -2209,7 +2209,7 @@
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 2279.32,
+      "liquido": 2376.82,
       "status": "Validado no Avec"
     },
     {
@@ -2258,7 +2258,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 23.8,
       "U": 0.0,
@@ -2286,7 +2286,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 332.98,
       "U": 0.0,
@@ -2370,7 +2370,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Yamada",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 228.54,
       "U": 0.0,
@@ -2398,7 +2398,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 51.84,
       "U": 0.0,
@@ -2426,7 +2426,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 0.0,
@@ -2454,14 +2454,14 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
-      "baru": 51.84,
+      "baru": 158.79,
       "U": 0.0,
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 5635.36,
+      "liquido": 5528.41,
       "status": "Validado no Avec"
     },
     {
@@ -2482,7 +2482,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Primeiro Assessoria Nibo",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 443.14,
       "U": 0.0,
@@ -2510,7 +2510,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 0.0,
@@ -2528,7 +2528,7 @@
       "pct_salao": 0.5,
       "retencao": 18475.0,
       "taxa_cartao": 1036.92,
-      "fat_liquido": 17855.29,
+      "fat_liquido": 18327.79,
       "produto": 1012.96,
       "pacote": 0.0,
       "taxa_adm": 2586.5,
@@ -2538,14 +2538,14 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 529.52,
       "U": 0.0,
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 11599.01,
+      "liquido": 12071.51,
       "status": "Validado no Avec"
     },
     {
@@ -2566,7 +2566,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 144.45,
       "U": 0.0,
@@ -2594,7 +2594,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 0.0,
@@ -2622,7 +2622,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 194.88,
       "U": 0.0,
@@ -2650,7 +2650,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 0.0,
@@ -2678,7 +2678,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 7660.04,
@@ -2706,7 +2706,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 0.0,
       "U": 0.0,
@@ -2762,7 +2762,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "-",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 122.06,
       "U": 0.0,
@@ -2836,7 +2836,7 @@
       "pct_salao": 0.5,
       "retencao": 1832.0,
       "taxa_cartao": 92.21,
-      "fat_liquido": 1785.9,
+      "fat_liquido": 1830.9,
       "produto": 2.3,
       "pacote": 0.0,
       "taxa_adm": 0.0,
@@ -2853,7 +2853,7 @@
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 1744.6,
+      "liquido": 1789.6,
       "status": "Validado no Avec"
     },
     {
@@ -2902,7 +2902,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 255.98,
       "U": 0.0,
@@ -2958,7 +2958,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 432.95,
       "U": 0.0,
@@ -3098,7 +3098,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 102.24,
       "U": 0.0,
@@ -3126,7 +3126,7 @@
       "darf": 0.0,
       "das": 0.0,
       "div_ativa": 0.0,
-      "contabilidade": "Contbell",
+      "contabilidade": 0.0,
       "mensalidade": 0.0,
       "baru": 254.38,
       "U": 70.0,
@@ -3144,7 +3144,7 @@
       "pct_salao": 0.13,
       "retencao": 3517.8,
       "taxa_cartao": 0.0,
-      "fat_liquido": 3517.8,
+      "fat_liquido": 3693.3,
       "produto": 0.0,
       "pacote": 0.0,
       "taxa_adm": 0.0,
@@ -3161,7 +3161,7 @@
       "V": 0.0,
       "W": 0.0,
       "desc_diversos_02": 0.0,
-      "liquido": 3239.42,
+      "liquido": 3414.92,
       "status": "Validado no Avec"
     },
     {
@@ -3320,5 +3320,6 @@
       "total": 0.0,
       "adic_10": 0.0
     }
-  ]
+  ],
+  "source": "Fopag_16.09___30.09.2026_2___1__e539.xlsx"
 }

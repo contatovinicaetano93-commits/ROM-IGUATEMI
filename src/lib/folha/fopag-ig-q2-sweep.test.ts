@@ -61,6 +61,10 @@ function approx(a: number, b: number, tol = 0.05): boolean {
   return Math.abs(a - b) <= tol
 }
 
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000
+}
+
 function bonusFor(name: string): BonusRow | null {
   const key = name.toLowerCase()
   for (const b of parsed.bonus_romeu_ig) {
@@ -221,8 +225,6 @@ function synthesize(f: FopagRow): {
   }
 
   if (pattern === 'pro_embedded_debit') {
-    const shortfall = f.W > 0.02 ? f.W : 0
-    if (shortfall > 0) notes.push('W_embedded_shortfall')
     let effectiveMeio = f.meio_a_meio
     if (person && f.desc_assistente > 0.02) {
       const motorMeio = resolveMeioAMeioRate(person) * f.desc_assistente
@@ -241,10 +243,40 @@ function synthesize(f: FopagRow): {
       }
     }
     const admMinusMeio = f.taxa_adm - effectiveMeio
+    const liqBase = f.liquido - f.meio_a_meio + effectiveMeio
+    /**
+     * Remessa real na Fopag (serviços×20% / taxa serviços×4% IG): não é
+     * shortfall de olerite. Ex.: Gustavo — Y já faz +valor a pagar − taxa
+     * serviços; Baru abate à parte.
+     */
+    const looksLikeRemitUw =
+      f.U > 0.02 &&
+      approx(f.V, f.U * 0.2, 0.5) &&
+      approx(f.W, f.U * 0.04, 0.5)
+    if (looksLikeRemitUw) {
+      const descontosMag = admMinusMeio
+      base.other_discounts = -round4(descontosMag)
+      if (f.baru > 0.005) {
+        extras.consumo_baru = (extras.consumo_baru ?? 0) + f.baru
+        rhExtras.push('baru')
+      }
+      base.net_payable = round4(
+        liqBase -
+          f.V +
+          f.W +
+          (f.baru > 0.005 ? f.baru : 0) +
+          rhDebitRestore,
+      )
+      notes.push('UW_remit_not_olerite_shortfall')
+      notes.push(`descontosMag=${descontosMag.toFixed(2)}`)
+      return { row: base, extras, pattern, notes, rhExtras }
+    }
+
+    const shortfall = f.W > 0.02 ? f.W : 0
+    if (shortfall > 0) notes.push('W_embedded_shortfall')
     const descontosMag = admMinusMeio + f.baru - shortfall
     base.other_discounts = -Math.round(descontosMag * 10000) / 10000
     // Se corrigimos o meio, o líquido Fopag também precisa do ajuste.
-    const liqBase = f.liquido - f.meio_a_meio + effectiveMeio
     if (shortfall > 0.02) {
       base.net_payable =
         Math.round((liqBase - f.V + 2 * f.W + rhDebitRestore) * 10000) / 10000
@@ -318,14 +350,43 @@ describe('Fopag IG Q2 full sweep', () => {
           syn.notes.push(`target_meio_corrected=${target.toFixed(2)}`)
         }
       }
+      /**
+       * Top-up Romeu (dia 05): a Fopag às vezes já embute no líquido (Y),
+       * às vezes não. Detecta: se a_pagar sintético = Y e o motor soma o
+       * top-up, proposed ≈ Y+topup → Y ainda sem top-up (somar no alvo).
+       * Se Y já tem top-up, tira do a_pagar e o alvo fica = Y.
+       */
       if (
         person?.isRomeuAssistant &&
         bonus &&
         bonus.adic_10 > 0.005 &&
-        syn.extras?.acumulado_mes != null
+        syn.extras?.acumulado_mes != null &&
+        syn.row.net_payable != null
       ) {
-        target = target + bonus.adic_10
-        syn.notes.push(`target_includes_topup +${bonus.adic_10}`)
+        const probe = buildFolhaDraftLine('iguatemi', syn.row, syn.extras, {
+          applyTaxExtras: false,
+        })
+        const probePay = probe.proposed_pay
+        const yHasTopup =
+          probePay != null &&
+          Math.abs(probePay - (f.liquido + bonus.adic_10)) <= 1 &&
+          Math.abs(probePay - f.liquido) > 1
+        if (yHasTopup) {
+          // Y já inclui top-up — a_pagar sintético veio alto demais em adic_10.
+          syn.row = {
+            ...syn.row,
+            net_payable: round4(
+              (syn.row.net_payable ?? 0) - bonus.adic_10,
+            ),
+          }
+          syn.notes.push(
+            `fopag_y_already_has_topup strip=${bonus.adic_10}`,
+          )
+          // target permanece f.liquido (já final)
+        } else {
+          target = target + bonus.adic_10
+          syn.notes.push(`target_includes_topup +${bonus.adic_10}`)
+        }
       }
       const line = buildFolhaDraftLine('iguatemi', syn.row, syn.extras, {
         applyTaxExtras: false,
@@ -423,10 +484,12 @@ describe('Fopag IG Q2 full sweep', () => {
     expect(by('brunna')?.motor_proposed).toBeCloseTo(68976.53, 0)
     expect(by('daniel chabaribery')?.motor_proposed).toBeCloseTo(17611.26, 0)
     expect(by('daniela machado')?.motor_proposed).toBeCloseTo(19755.805, 0)
+    // Fopag atual: Y já embute top-up Romeu (2137.77).
     expect(by('gabriela da silva santos')?.motor_proposed).toBeCloseTo(
-      1114.77 + 1023.003,
+      2137.77,
       0,
     )
+    expect(by('gabriela da silva santos')?.status).toBe('match')
     expect(by('lucas rodrigues')?.motor_proposed).toBeCloseTo(777.56, 0)
     expect(by('maykon')?.motor_proposed).toBeCloseTo(22723.17, 0)
     expect(by('joanides')?.motor_proposed).toBeCloseTo(47658.4, 0)
@@ -437,9 +500,9 @@ describe('Fopag IG Q2 full sweep', () => {
     )
     expect(by('gildenice')?.status).toBe('match')
     expect(by('romeu felipe')?.motor_proposed).toBeCloseTo(542.1, 0)
-    // Diello: Fopag meio 50% → corrigido para 5% (11599.01 − 2127.3 + 212.73)
+    // Diello: Fopag meio 50% → corrigido para 5% (Y atualizado na planilha)
     expect(by('diello')?.motor_proposed).toBeCloseTo(
-      11599.01 - 2127.3 + 212.73,
+      12071.51 - 2127.3 + 212.73,
       0,
     )
     expect(by('liria')?.motor_proposed).toBeCloseTo(2598.12, 0)
