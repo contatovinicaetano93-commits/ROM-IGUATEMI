@@ -167,6 +167,37 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.taxaAdm).toBeCloseTo(2783.06, 1)
     expect(d.meioAMeio).toBeCloseTo(2892.875, 2)
   })
+
+  it('Joanides: crédito parcial (meio−adm)−Baru → embutido, residual=Baru', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 105021.8,
+      adminFee8123: 0,
+      assistantDiscount: -11626.73,
+      otherDiscounts: 363.18,
+      adminRate: 0.05,
+      meioRate: 0.5,
+    })
+    expect(d.embeddedAdminMeio).toBe(true)
+    expect(d.embeddedCreditResidual).toBeNull()
+    expect(d.taxaAdm).toBeCloseTo(5251.09, 1)
+    expect(d.meioAMeio).toBeCloseTo(5813.365, 2)
+    // 5813.365 − 5251.09 − 363.18 ≈ 199.1 (Baru)
+    expect(d.outrosResiduais).toBeCloseTo(199.1, 0)
+  })
+
+  it('Romeu: crédito órfão em descontos → estornar (embeddedCreditResidual)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 0,
+      adminFee8123: 0,
+      assistantDiscount: 0,
+      otherDiscounts: 1444.01,
+      adminRate: 0.05,
+      meioRate: 0.5,
+    })
+    expect(d.embeddedCreditResidual).toBeCloseTo(1444.01, 2)
+    expect(d.outrosResiduais).toBeCloseTo(1444.01, 2)
+    expect(d.embeddedAdminMeio).toBe(false)
+  })
 })
 
 describe('rateioAposCartao', () => {

@@ -306,8 +306,9 @@ export function disaggregateOleriteDescontos(args: {
     }
   }
 
-  // Crédito: meio > adm e descontos > 0 ≈ (meio − adm) + residual (Brunna/Gildenice).
-  // a_pagar já somou o crédito; não +meio/−adm de novo; residual → estornar no pay.
+  // Crédito: meio > adm e descontos > 0.
+  // A) ≈ (meio − adm) + residual → Brunna/Gildenice (estornar residual).
+  // B) ≈ (meio − adm) − Baru → Joanides (crédito menor; Baru já no a_pagar).
   if (
     meioMinusAdm != null &&
     meioMinusAdm > 0.005 &&
@@ -328,6 +329,47 @@ export function disaggregateOleriteDescontos(args: {
           residualCredit != null && residualCredit > 0.02 ? residualCredit : null,
         descontos8123Signed: signedOther,
       }
+    }
+    // B) crédito parcial: shortfall ≈ CONSUMO BARU embutido no net
+    const creditShortfall = roundFolha(meioMinusAdm - signedOther, 4)
+    const maxBaruShort =
+      args.charged != null
+        ? Math.max(args.charged * 0.03, 500)
+        : 500
+    if (
+      creditShortfall != null &&
+      creditShortfall > 0.02 &&
+      creditShortfall <= maxBaruShort
+    ) {
+      return {
+        embeddedAdminMeio: true,
+        meioCreditedInNet: true,
+        embeddedShortfall: null,
+        embeddedCreditResidual: null,
+        taxaAdm,
+        meioAMeio,
+        outrosResiduais: creditShortfall,
+        descontos8123Signed: signedOther,
+      }
+    }
+  }
+
+  // Crédito órfão (sem meio/adm): Romeu Q2 descontos=+1444 já no a_pagar → estornar.
+  if (
+    signedOther != null &&
+    signedOther > 0.02 &&
+    (meioAMeio == null || meioAMeio <= 0.02) &&
+    (taxaAdm == null || taxaAdm <= 0.02)
+  ) {
+    return {
+      embeddedAdminMeio: false,
+      meioCreditedInNet: false,
+      embeddedShortfall: null,
+      embeddedCreditResidual: roundFolha(signedOther, 4),
+      taxaAdm: taxaAdm != null && taxaAdm > 0.02 ? taxaAdm : null,
+      meioAMeio: null,
+      outrosResiduais: roundFolha(signedOther, 4),
+      descontos8123Signed: signedOther,
     }
   }
 

@@ -10,7 +10,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import postgres from 'postgres'
-import { occupancyMergeKey } from '../src/lib/director-report/match-pro'
+import {
+  firstAndLastTokenKey,
+  occupancyMergeKey,
+} from '../src/lib/director-report/match-pro'
 import { rehydrateFolhaDraftFromPeriod } from '../src/lib/folha/workflow'
 import type { FolhaDraftLine } from '../src/lib/folha/draft-from-8123'
 import type { RomPanelId } from '../src/lib/brand'
@@ -25,6 +28,30 @@ type FopagRow = {
 type BonusRow = {
   name: string
   total: number
+}
+
+function lookupByNameKey<T>(
+  map: Map<string, T>,
+  name: string,
+): T | null {
+  const key = occupancyMergeKey(name)
+  if (key && map.has(key)) return map.get(key) ?? null
+  const fl = firstAndLastTokenKey(key ?? '')
+  const hits: T[] = []
+  for (const [k, v] of map) {
+    if (fl && firstAndLastTokenKey(k) === fl) hits.push(v)
+    else if (
+      key &&
+      (key === k ||
+        key.startsWith(k + ' ') ||
+        k.startsWith(key + ' '))
+    ) {
+      hits.push(v)
+    }
+  }
+  // dedupe by identity
+  const uniq = [...new Set(hits)]
+  return uniq.length === 1 ? uniq[0]! : null
 }
 
 async function main() {
@@ -79,9 +106,8 @@ async function main() {
     let patchedBonus = 0
 
     const withExtras = lines.map((line) => {
-      const key = occupancyMergeKey(line.name)
-      const f = key ? fopagByKey.get(key) : null
-      const bonus = key ? bonusByKey.get(key) : null
+      const f = lookupByNameKey(fopagByKey, line.name)
+      const bonus = lookupByNameKey(bonusByKey, line.name)
       const extras = { ...line.folha_extras }
       if (f) {
         if (f.U > 0.005) {

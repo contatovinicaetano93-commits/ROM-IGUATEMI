@@ -17,6 +17,7 @@ import {
   resolveMeioAMeioRate,
   resolveProfessionalServiceTaxRate,
   romeuAssistantMetaTopUp,
+  usesNamedMeioOverride,
   type FolhaPersonRules,
 } from '@/lib/folha/exceptions'
 import {
@@ -171,6 +172,8 @@ export function aPagarAlreadyNetsAdminMeio(args: {
   assistantDiscount: number | null | undefined
   meioAMeio: number | null
   taxaAdm: number | null
+  /** Baru já no a_pagar (Joanides/Diello). */
+  consumoBaru?: number | null
   /** Tolerância em R$ (ruído de centavos Avec). */
   tol?: number
 }): boolean {
@@ -187,7 +190,8 @@ export function aPagarAlreadyNetsAdminMeio(args: {
       n(deductionMagnitude(args.productSpend)) -
       n(deductionMagnitude(args.assistantDiscount)) +
       n(args.meioAMeio) -
-      args.taxaAdm,
+      args.taxaAdm -
+      n(args.consumoBaru),
     4,
   )
   if (expected == null) return false
@@ -302,6 +306,9 @@ export function resolveLineAdminFee(args: {
     return { amount: null, rate, source: null, motorExtra: null }
   }
   const amount = roundFolha(args.charged * rate, 4)
+  if (amount == null || amount <= 0.02) {
+    return { amount: null, rate, source: 'motor', motorExtra: null }
+  }
   return {
     amount,
     rate,
@@ -330,7 +337,15 @@ export function buildFolhaDraftLine(
       ? resolveAssistantAdminTaxRate(panel, person)
       : null
   const serviceTaxRate = resolveProfessionalServiceTaxRate(panel, person)
-  const olerite = disaggregateOleriteDescontos({
+  /**
+   * Diello/Dayana: 8123 real embute meio a 50% (Fopag); motor RH é 5%.
+   * Se o a_pagar casar com a forma 50%, desmembra nela e aplica delta no pay.
+   * Se o 8123 já veio no formato motor (5%), não reaplica o delta.
+   */
+  const sheetMeioRate = usesNamedMeioOverride(person) ? 0.5 : meioRate
+  const sheetMeio =
+    assistantMag == null ? null : roundFolha(assistantMag * sheetMeioRate, 4)
+  const oleriteMotor = disaggregateOleriteDescontos({
     charged: row.charged,
     adminFee8123: row.admin_fee,
     assistantDiscount: row.assistant_discount,
@@ -340,24 +355,60 @@ export function buildFolhaDraftLine(
     assistantAdminRate,
     serviceTaxRate,
   })
+  const oleriteSheet =
+    usesNamedMeioOverride(person) && sheetMeioRate !== meioRate
+      ? disaggregateOleriteDescontos({
+          charged: row.charged,
+          adminFee8123: row.admin_fee,
+          assistantDiscount: row.assistant_discount,
+          otherDiscounts: row.other_discounts,
+          adminRate: adminRatePreview,
+          meioRate: sheetMeioRate,
+          assistantAdminRate,
+          serviceTaxRate,
+        })
+      : oleriteMotor
   const rateio_apos_cartao = rateioAposCartao({
     charged: row.charged,
     serviceShare: row.service_share,
     cardFee: row.card_fee,
   })
   const taxaAdmPreview =
-    olerite.taxaAdm ??
+    oleriteSheet.taxaAdm ??
+    oleriteMotor.taxaAdm ??
     (adminRatePreview != null && row.charged != null
       ? roundFolha(row.charged * adminRatePreview, 4)
       : null)
-  const aPagarNetsAdminMeio = aPagarAlreadyNetsAdminMeio({
+  const aPagarArgs = {
     netPayable: row.net_payable,
     rateioAposCartao: rateio_apos_cartao,
     productSpend: row.product_spend,
     assistantDiscount: row.assistant_discount,
-    meioAMeio: meio_a_meio,
     taxaAdm: taxaAdmPreview,
-  })
+  }
+  /** Tenta sem Baru (Alison) e com Baru (Joanides — Baru já no a_pagar). */
+  const netsWith = (meio: number | null, baru: number | null | undefined) =>
+    aPagarAlreadyNetsAdminMeio({
+      ...aPagarArgs,
+      meioAMeio: meio,
+      consumoBaru: baru,
+    })
+  const aPagarNetsSheet =
+    usesNamedMeioOverride(person) && sheetMeio != null
+      ? netsWith(sheetMeio, null) || netsWith(sheetMeio, extras?.consumo_baru)
+      : false
+  const aPagarNetsMotor =
+    netsWith(meio_a_meio, null) ||
+    netsWith(meio_a_meio, extras?.consumo_baru)
+  /** 8123 real Fopag (meio 50% no a_pagar) → usar olerite da planilha + delta. */
+  const useSheetMeioShape =
+    usesNamedMeioOverride(person) &&
+    (aPagarNetsSheet ||
+      (oleriteSheet.embeddedAdminMeio && !oleriteMotor.embeddedAdminMeio))
+  const olerite = useSheetMeioShape ? oleriteSheet : oleriteMotor
+  const aPagarNetsAdminMeio = useSheetMeioShape
+    ? aPagarNetsSheet || aPagarNetsMotor
+    : aPagarNetsMotor
   const embeddedInDescontos = olerite.embeddedAdminMeio || aPagarNetsAdminMeio
   const meioCreditedInNet = olerite.meioCreditedInNet || aPagarNetsAdminMeio
 
@@ -373,9 +424,18 @@ export function buildFolhaDraftLine(
    * Meio no proposed_pay só se a_pagar ainda não creditou
    * (nem via descontos ≈ meio−adm, nem via descontos ≈ +meio,
    * nem via a_pagar já fechado com adm/meio e descontos=0).
+   * Diello/Dayana com a_pagar na forma 50%: delta (motor 5% − planilha 50%).
    */
-  const meioForProposedPay =
+  let meioForProposedPay: number | null =
     embeddedInDescontos || meioCreditedInNet ? null : meio_a_meio
+  if (
+    useSheetMeioShape &&
+    (embeddedInDescontos || meioCreditedInNet) &&
+    meio_a_meio != null &&
+    sheetMeio != null
+  ) {
+    meioForProposedPay = roundFolha(meio_a_meio - sheetMeio, 4)
+  }
   /** Exibição: adm do 8123/motor, ou adm 3% (desmembrada ou charged×3%). */
   const taxaAdmDisplay = admin.amount ?? olerite.taxaAdm
   /**
@@ -391,8 +451,15 @@ export function buildFolhaDraftLine(
       ? olerite.taxaAdm
       : null
   const taxaAdmMotorExtra = admin.motorExtra ?? assistantAdmMotorExtra
+  /**
+   * extras.taxa_administrativa só abate no pay quando o motor precisa
+   * (8123 não embutiu). Rascunhos antigos guardam o valor do motor aqui —
+   * se agora detectamos embutido, zerar para não reabater (Joanides/Diello).
+   */
   const rhTaxaAdm =
-    typeof extras?.taxa_administrativa === 'number'
+    !embeddedInDescontos &&
+    typeof extras?.taxa_administrativa === 'number' &&
+    extras.taxa_administrativa > 0.02
       ? extras.taxa_administrativa
       : null
 
