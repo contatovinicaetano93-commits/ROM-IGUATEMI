@@ -15,10 +15,24 @@ function formatMoney(value: number | null | undefined): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+/** Valor compacto na grade (sem R$) — cabe mais colunas sem scroll. */
+function formatMoneyCompact(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
 /** Magnitude de abatimento Avec (8123 guarda negativo). */
 function formatDeduction(value: number | null | undefined): string {
   if (value == null) return '—'
   return formatMoney(Math.abs(value))
+}
+
+function formatDeductionCompact(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return formatMoneyCompact(Math.abs(value))
 }
 
 function formatDayBr(iso: string | null | undefined): string {
@@ -900,100 +914,176 @@ export default function FolhaPage() {
                   </button>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
+                <div className="w-full">
+                  <p className="mb-1.5 text-[10px] text-muted">
+                    Valores em R$ (sem símbolo na grade). Passe o mouse no cabeçalho para o nome
+                    completo.
+                  </p>
+                  <table className="w-full table-fixed border-collapse text-left text-[11px] leading-tight">
+                    <colgroup>
+                      <col className="w-[14%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[6.5%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[6%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[5.5%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[5%]" />
+                      {taxExtrasAllowed ? (
+                        <>
+                          <col className="w-[4.5%]" />
+                          <col className="w-[4.5%]" />
+                        </>
+                      ) : null}
+                      <col className="w-[5%]" />
+                    </colgroup>
                     <thead>
-                      <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                        <th className="sticky left-0 z-20 bg-card py-2 pr-3 font-medium shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                          Profissional
+                      <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
+                        <th className="py-1 pr-1 font-medium">Profissional</th>
+                        <th className="py-1 pr-1 font-medium" title="Cargo">
+                          Cargo
                         </th>
-                        <th className="py-2 pr-3 font-medium">Cargo</th>
-                        {/* Líquido cedo: a tabela é larga e a coluna no fim sumia da tela. */}
-                        <th className="py-2 pr-3 font-medium tabular-nums">Líquido</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Faturado</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Tx cartão</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Rateio − cartão</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Produto</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Tx adm</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Assistente</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Meio a meio</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Outros</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">Consumo Baru</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">U</th>
-                        <th className="py-2 pr-3 font-medium tabular-nums">W</th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Líquido a pagar">
+                          Líquido
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Faturado">
+                          Fat.
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Taxa cartão">
+                          Cartão
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Rateio − cartão">
+                          Rateio
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Produto">
+                          Prod.
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Taxa administrativa">
+                          Adm
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Desconto assistente">
+                          Assist.
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Meio a meio">
+                          Meio
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Outros descontos">
+                          Outros
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Consumo Baru">
+                          Baru
+                        </th>
+                        <th
+                          className="py-1 pr-1 text-right font-medium"
+                          title="Serviços assistente como pro (U)"
+                        >
+                          U
+                        </th>
+                        <th className="py-1 pr-1 text-right font-medium" title="Taxa serviços (W)">
+                          W
+                        </th>
                         {taxExtrasAllowed ? (
                           <>
-                            <th className="py-2 pr-3 font-medium tabular-nums">DARF</th>
-                            <th className="py-2 pr-3 font-medium tabular-nums">DAS</th>
+                            <th className="py-1 pr-1 text-right font-medium" title="DARF">
+                              DARF
+                            </th>
+                            <th className="py-1 pr-1 text-right font-medium" title="DAS">
+                              DAS
+                            </th>
                           </>
                         ) : null}
-                        <th className="py-2 font-medium">Alertas</th>
+                        <th className="py-1 font-medium" title="Alertas">
+                          !
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {visibleLines.map((line) => (
-                        <tr
-                          key={line.name}
-                          className="group cursor-pointer border-b border-border/60 hover:bg-background/80"
-                          onClick={() => selectLine(line)}
-                        >
-                          <td className="sticky left-0 z-10 bg-card py-2 pr-3 text-foreground shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] group-hover:bg-background">
-                            {line.name}
-                          </td>
-                          <td className="py-2 pr-3 text-muted">{line.cargo_raw ?? '—'}</td>
-                          <td className="py-2 pr-3 tabular-nums font-medium">
-                            {formatMoney(line.proposed_pay)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.avec.charged)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatDeduction(line.avec.card_fee)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.rateio_apos_cartao)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatDeduction(line.avec.product_spend)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.taxa_administrativa)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatDeduction(line.avec.assistant_discount)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.meio_a_meio)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.outros_descontos)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.folha_extras.consumo_baru)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.folha_extras.servicos_assistente_como_pro)}
-                          </td>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {formatMoney(line.folha_extras.taxa_servicos)}
-                          </td>
-                          {taxExtrasAllowed ? (
-                            <>
-                              <td className="py-2 pr-3 tabular-nums">
-                                {formatMoney(line.folha_extras.darf)}
-                              </td>
-                              <td className="py-2 pr-3 tabular-nums">
-                                {formatMoney(line.folha_extras.das)}
-                              </td>
-                            </>
-                          ) : null}
-                          <td className="py-2 text-xs text-muted">
-                            {line.flags.length === 0
-                              ? '—'
-                              : line.flags.map(flagLabel).join(' · ')}
-                          </td>
-                        </tr>
-                      ))}
+                      {visibleLines.map((line) => {
+                        const alertText =
+                          line.flags.length === 0
+                            ? ''
+                            : line.flags.map(flagLabel).join(' · ')
+                        return (
+                          <tr
+                            key={line.name}
+                            className="cursor-pointer border-b border-border/60 hover:bg-background/80"
+                            onClick={() => selectLine(line)}
+                          >
+                            <td
+                              className="truncate py-1 pr-1 text-foreground"
+                              title={line.name}
+                            >
+                              {line.name}
+                            </td>
+                            <td
+                              className="truncate py-1 pr-1 text-muted"
+                              title={line.cargo_raw ?? undefined}
+                            >
+                              {line.cargo_raw ?? '—'}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums font-semibold">
+                              {formatMoneyCompact(line.proposed_pay)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatMoneyCompact(line.avec.charged)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatDeductionCompact(line.avec.card_fee)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatMoneyCompact(line.rateio_apos_cartao)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatDeductionCompact(line.avec.product_spend)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatMoneyCompact(line.taxa_administrativa)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatDeductionCompact(line.avec.assistant_discount)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatMoneyCompact(line.meio_a_meio)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatMoneyCompact(line.outros_descontos)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatMoneyCompact(line.folha_extras.consumo_baru)}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatMoneyCompact(
+                                line.folha_extras.servicos_assistente_como_pro,
+                              )}
+                            </td>
+                            <td className="py-1 pr-1 text-right tabular-nums">
+                              {formatMoneyCompact(line.folha_extras.taxa_servicos)}
+                            </td>
+                            {taxExtrasAllowed ? (
+                              <>
+                                <td className="py-1 pr-1 text-right tabular-nums">
+                                  {formatMoneyCompact(line.folha_extras.darf)}
+                                </td>
+                                <td className="py-1 pr-1 text-right tabular-nums">
+                                  {formatMoneyCompact(line.folha_extras.das)}
+                                </td>
+                              </>
+                            ) : null}
+                            <td
+                              className="py-1 text-center text-muted"
+                              title={alertText || undefined}
+                            >
+                              {line.flags.length === 0 ? '—' : String(line.flags.length)}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                   {visibleLines.length === 0 ? (
