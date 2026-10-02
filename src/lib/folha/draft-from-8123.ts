@@ -154,6 +154,41 @@ function n(v: number | null | undefined): number {
 }
 
 /**
+ * BR (e às vezes IG): 8123 zera `taxa_adm` e `descontos`, mas `a_pagar` já
+ * neteia rateio − produto − assistente + meio − adm. Sem esse cheque o motor
+ * reacreditava meio e reabatia adm (Alison BR Q2).
+ */
+export function aPagarAlreadyNetsAdminMeio(args: {
+  netPayable: number | null | undefined
+  rateioAposCartao: number | null
+  productSpend: number | null | undefined
+  assistantDiscount: number | null | undefined
+  meioAMeio: number | null
+  taxaAdm: number | null
+  /** Tolerância em R$ (ruído de centavos Avec). */
+  tol?: number
+}): boolean {
+  if (
+    args.netPayable == null ||
+    args.rateioAposCartao == null ||
+    args.taxaAdm == null ||
+    args.taxaAdm <= 0.02
+  ) {
+    return false
+  }
+  const expected = roundFolha(
+    args.rateioAposCartao -
+      n(deductionMagnitude(args.productSpend)) -
+      n(deductionMagnitude(args.assistantDiscount)) +
+      n(args.meioAMeio) -
+      args.taxaAdm,
+    4,
+  )
+  if (expected == null) return false
+  return Math.abs(args.netPayable - expected) <= (args.tol ?? 1)
+}
+
+/**
  * Remonta um fat. líquido aproximado para preview Y:
  * a_pagar + magnitudes dos abatimentos 8123 (produto, adm, assistente, outros, cartão).
  * Não usa meio a meio aqui — o calc reaplica M = L/2.
@@ -298,8 +333,26 @@ export function buildFolhaDraftLine(
     assistantAdminRate,
     serviceTaxRate,
   })
-  const embeddedInDescontos = olerite.embeddedAdminMeio
-  const meioCreditedInNet = olerite.meioCreditedInNet
+  const rateio_apos_cartao = rateioAposCartao({
+    charged: row.charged,
+    serviceShare: row.service_share,
+    cardFee: row.card_fee,
+  })
+  const taxaAdmPreview =
+    olerite.taxaAdm ??
+    (adminRatePreview != null && row.charged != null
+      ? roundFolha(row.charged * adminRatePreview, 4)
+      : null)
+  const aPagarNetsAdminMeio = aPagarAlreadyNetsAdminMeio({
+    netPayable: row.net_payable,
+    rateioAposCartao: rateio_apos_cartao,
+    productSpend: row.product_spend,
+    assistantDiscount: row.assistant_discount,
+    meioAMeio: meio_a_meio,
+    taxaAdm: taxaAdmPreview,
+  })
+  const embeddedInDescontos = olerite.embeddedAdminMeio || aPagarNetsAdminMeio
+  const meioCreditedInNet = olerite.meioCreditedInNet || aPagarNetsAdminMeio
 
   const admin = resolveLineAdminFee({
     panel,
@@ -311,19 +364,15 @@ export function buildFolhaDraftLine(
   })
   /**
    * Meio no proposed_pay só se a_pagar ainda não creditou
-   * (nem via descontos ≈ meio−adm, nem via descontos ≈ +meio).
+   * (nem via descontos ≈ meio−adm, nem via descontos ≈ +meio,
+   * nem via a_pagar já fechado com adm/meio e descontos=0).
    */
   const meioForProposedPay =
     embeddedInDescontos || meioCreditedInNet ? null : meio_a_meio
-  const rateio_apos_cartao = rateioAposCartao({
-    charged: row.charged,
-    serviceShare: row.service_share,
-    cardFee: row.card_fee,
-  })
   /** Exibição: adm do 8123/motor, ou adm 3% (desmembrada ou charged×3%). */
   const taxaAdmDisplay = admin.amount ?? olerite.taxaAdm
   /**
-   * Abate no proposed_pay: motor 7% (pro) ou adm 3% assistente quando
+   * Abate no proposed_pay: motor BR 5%/IG 7% (pro) ou adm 3% assistente quando
    * a_pagar ainda não fechou a taxa (Lucas: descontos=0).
    * null explícito em extras antigos NÃO sobrescreve o motor.
    */

@@ -59,7 +59,7 @@ export type FolhaPersonRules = {
   serviceTaxSplit: FolhaServiceTaxSplit | null
   /**
    * Override da taxa adm sobre faturado bruto (coluna C).
-   * Default geral = 7% (BR e IG); Brunna/Joanides/Marcela = 5%. null = default do cargo.
+   * Default: BR 5% / IG 7%. Brunna/Joanides/Marcela = 5% no IG. null = default do cargo.
    */
   adminFeeRate: number | null
   /**
@@ -362,7 +362,7 @@ export function usesNamedMeioOverride(rules: FolhaPersonRules | null): boolean {
 
 /**
  * Taxa adm sobre faturado bruto (C).
- * Regra geral BR + IG: 7%. Únicas a 5%: Brunna / Joanides / Marcela.
+ * BR 5% / IG 7%. Únicas IG a 5%: Brunna / Joanides / Marcela.
  */
 export function resolveGrossAdminFeeRate(
   panel: RomPanelId,

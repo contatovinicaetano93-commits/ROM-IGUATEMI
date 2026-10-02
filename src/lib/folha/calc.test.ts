@@ -14,9 +14,9 @@ describe('folha rules', () => {
     expect(assistantServiceTaxRate('iguatemi')).toBe(0.04)
   })
 
-  it('manicure sem taxa adm; cabeleireiro default 7% BR e IG', () => {
+  it('manicure sem taxa adm; cabeleireiro BR 5% / IG 7%', () => {
     expect(defaultAdminFeeRate('brasil', 'manicure')).toBeNull()
-    expect(defaultAdminFeeRate('brasil', 'cabeleireiro')).toBe(0.07)
+    expect(defaultAdminFeeRate('brasil', 'cabeleireiro')).toBe(0.05)
     expect(defaultAdminFeeRate('iguatemi', 'cabeleireiro')).toBe(0.07)
   })
 

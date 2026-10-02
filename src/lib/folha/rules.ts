@@ -68,9 +68,9 @@ export function defaultAdminFeeRate(
     case 'profissional':
     case 'cabeleireiro':
     case 'esteticista':
-      // Regra geral (BR e IG): 7% sobre faturado bruto.
-      // Únicas exceções a 5%: Brunna / Joanides / Marcela (exceptions.ts).
-      return 0.07
+      // IG: 7% sobre faturado bruto. BR: 5% (Fopag Av. Brasil + olerite Avec).
+      // Exceções IG a 5%: Brunna / Joanides / Marcela (exceptions.ts).
+      return panel === 'iguatemi' ? 0.07 : 0.05
     case 'outro':
       return null
     default: {
@@ -120,14 +120,15 @@ export function folhaRulesSummary(panel: RomPanelId): FolhaRulesSummary {
       'Taxa cartão/PIX é coluna aparte (débito ~2% / crédito ~3%). Não confundir com a taxa 3%/4% sobre serviços U.',
     cargo_notes: {
       profissional:
-        'Taxa adm 7% sobre faturado bruto (BR e IG). Só Brunna/Joah/Marcela = 5%. Meio a meio + abatimentos.',
+        'Taxa adm: BR 5% / IG 7% sobre faturado bruto. IG Brunna/Joah/Marcela = 5%. Meio a meio + abatimentos.',
       cabeleireiro:
-        'Taxa adm 7% sobre faturado bruto (BR e IG). Só Brunna/Joah/Marcela = 5%. Meio a meio + abatimentos.',
-      maquiador: 'Taxa adm 7% sobre faturado − produto (exceção Brunna/Joah/Marcela 5%).',
+        'Taxa adm: BR 5% / IG 7% sobre faturado bruto. IG Brunna/Joah/Marcela = 5%. Meio a meio + abatimentos.',
+      maquiador:
+        'Taxa adm: BR 5% / IG 7% sobre faturado − produto (IG Brunna/Joah/Marcela 5%).',
       manicure:
         'Faturado − produto. Sem taxa adm — exceto quem tem depilação.',
       esteticista:
-        'Taxa adm 7% sobre faturado − produto; ganha 10% do total faturado (exceto Liria: 7% sem bônus — sala de estética como manicure/depilação).',
+        'Taxa adm: BR 5% / IG 7% sobre faturado − produto; ganha 10% do total faturado (exceto Liria: 7% sem bônus — sala de estética como manicure/depilação).',
       assistente:
         'Atuando como pro: ganho ~30% + taxa adm 3% sobre o serviço (todos, incl. Romeu). Romeu: faixas 30/40/50% no acumulado mês (soma U Q1+Q2); top-up (rate−30%) pago no dia 05. W sobre U: BR 3% / IG 4%; remessa V 20%.',
       multiplicador:
