@@ -10,12 +10,15 @@
 import type { RomPanelId } from '@/lib/brand'
 import { calculateFolhaLine, roundFolha } from '@/lib/folha/calc'
 import {
+  lucasCamposAdminRefundQ2,
+  quinzenaMetaHit,
   resolveAssistantAdminTaxRate,
   resolveEsteticistaBonusRate,
   resolveFolhaPersonRules,
   resolveGrossAdminFeeRate,
   resolveMeioAMeioRate,
   resolveProfessionalServiceTaxRate,
+  resolveQuinzenaMetaTarget,
   romeuAssistantMetaTopUp,
   usesNamedMeioOverride,
   type FolhaPersonRules,
@@ -177,6 +180,25 @@ export type FolhaDraftLine = {
      */
     romeu_comissao_parcela: number | null
     /**
+     * Lucas Campos: faturado do mesmo mês no ano anterior (base da meta +14%).
+     */
+    faturado_ano_anterior_mes: number | null
+    /**
+     * Lucas Campos: faturado do mês corrente (soma Q1+Q2) para bater a meta.
+     */
+    faturado_mes: number | null
+    /**
+     * Lucas Campos: taxa adm cobrada na Q1 — devolvemos na Q2 se bater a meta.
+     */
+    taxa_adm_q1: number | null
+    /** Lucas Campos: alvo = ano_anterior × 1,14 (derivado). */
+    meta_quinzena_alvo: number | null
+    /**
+     * Lucas Campos: crédito na Q2 = taxa_adm_q1 quando meta bate.
+     * 0 não se usa — null se não aplicável.
+     */
+    devolucao_taxa_adm_q1: number | null
+    /**
      * Líquido Y Fopag de referência (import/reenrich). Quando ≈ a_pagar e há
      * Baru, a coluna Baru é só conferência (Alana). Interno — não exporta.
      */
@@ -311,7 +333,8 @@ function applyFolhaExtras(
     n(extras.valor_a_pagar_profissional) -
     n(extras.taxa_servicos) +
     n(extras.esteticista_bonus) +
-    n(extras.romeu_comissao_parcela)
+    n(extras.romeu_comissao_parcela) +
+    n(extras.devolucao_taxa_adm_q1)
   )
 }
 
@@ -652,6 +675,23 @@ export function buildFolhaDraftLine(
       ? roundFolha(romeuMeta.topUp, 4)
       : null
 
+  /** Q2 = pagamento dia 05 (applyTaxExtras false), mesmo eixo do top-up Romeu. */
+  const isQ2 = !applyTaxExtras
+  const faturadoAnoAnteriorMes = extras?.faturado_ano_anterior_mes ?? null
+  const faturadoMes = extras?.faturado_mes ?? null
+  const taxaAdmQ1 = extras?.taxa_adm_q1 ?? null
+  const metaAlvo = resolveQuinzenaMetaTarget(person, faturadoAnoAnteriorMes)
+  const metaHit = quinzenaMetaHit(person, faturadoMes, faturadoAnoAnteriorMes)
+  const devolucaoTaxaAdmQ1 = lucasCamposAdminRefundQ2({
+    rules: person,
+    isQ2,
+    metaHit,
+    taxaAdmQ1,
+  })
+  /** Meta batida na Q2: não cobra taxa adm desta quinzena. */
+  const waiveQ2AdminForMeta =
+    person?.id === 'lucas_campos' && isQ2 && metaHit === true
+
   let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,
     darf: extras?.darf ?? null,
@@ -665,7 +705,9 @@ export function buildFolhaDraftLine(
     valor_a_pagar_profissional: extras?.valor_a_pagar_profissional ?? null,
     taxa_servicos: extras?.taxa_servicos ?? null,
     taxa_adm_assistente: extras?.taxa_adm_assistente ?? null,
-    taxa_administrativa: rhTaxaAdm ?? taxaAdmMotorExtra,
+    taxa_administrativa: waiveQ2AdminForMeta
+      ? null
+      : (rhTaxaAdm ?? taxaAdmMotorExtra),
     // RH 2026-10: esteticistas não possuem bônus — zera rascunhos antigos com 10%.
     esteticista_bonus:
       resolveEsteticistaBonusRate(cargo, person) != null
@@ -673,6 +715,12 @@ export function buildFolhaDraftLine(
         : null,
     acumulado_mes: extras?.acumulado_mes ?? null,
     romeu_comissao_parcela: romeuParcela,
+    faturado_ano_anterior_mes: faturadoAnoAnteriorMes,
+    faturado_mes: faturadoMes,
+    taxa_adm_q1: taxaAdmQ1,
+    meta_quinzena_alvo: metaAlvo != null ? roundFolha(metaAlvo, 4) : null,
+    devolucao_taxa_adm_q1:
+      devolucaoTaxaAdmQ1 != null ? roundFolha(devolucaoTaxaAdmQ1, 4) : null,
     liquido_referencia: extras?.liquido_referencia ?? null,
     fat_liquido_referencia: extras?.fat_liquido_referencia ?? null,
     produto_referencia: extras?.produto_referencia ?? null,
@@ -999,7 +1047,12 @@ export function buildFolhaDraftLine(
   if (!row.role?.trim()) flags.push('sem_cargo')
   if (assistantMag != null && assistantMag > 0) flags.push('assistente_com_desconto')
   if (person) flags.push('excecao_nomeada')
-  if (person?.hasQuinzenaMeta && person.quinzenaMeta == null) {
+  if (
+    person?.hasQuinzenaMeta &&
+    (metaAlvo == null ||
+      faturadoMes == null ||
+      (isQ2 && metaHit === true && taxaAdmQ1 == null))
+  ) {
     flags.push('meta_quinzena_pendente')
   }
   if (person?.isRomeuAssistant) flags.push('assistente_romeu')

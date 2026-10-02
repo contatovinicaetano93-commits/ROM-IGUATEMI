@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { calculateFolhaLine, roundFolha } from '@/lib/folha/calc'
 import { buildFolhaDraftLine } from '@/lib/folha/draft-from-8123'
 import {
+  LUCAS_CAMPOS_META_YOY_GROWTH,
+  lucasCamposAdminRefundQ2,
   quinzenaMetaHit,
   resolveAssistantAdminTaxRate,
   resolveFolhaPersonRules,
   resolveMeioAMeioRate,
   resolveProfessionalServiceTaxRate,
+  resolveQuinzenaMetaTarget,
   romeuAssistantCommissionRate,
   romeuAssistantMetaTopUp,
 } from '@/lib/folha/exceptions'
@@ -89,15 +92,33 @@ describe('resolveFolhaPersonRules', () => {
     }
   })
 
-  it('metas Lucas Campos e Juscelino existem sem valor (null)', () => {
+  it('Lucas Campos: meta +14% YoY; Juscelino sem meta', () => {
     const lucas = resolveFolhaPersonRules('Lucas Campos De Macedo')
     expect(lucas?.hasQuinzenaMeta).toBe(true)
-    expect(lucas?.quinzenaMeta).toBeNull()
-    expect(quinzenaMetaHit(lucas, 50_000)).toBeNull()
+    expect(lucas?.id).toBe('lucas_campos')
+    expect(LUCAS_CAMPOS_META_YOY_GROWTH).toBe(0.14)
+    expect(resolveQuinzenaMetaTarget(lucas, 10_000)).toBeCloseTo(11_400, 5)
+    expect(quinzenaMetaHit(lucas, 11_400, 10_000)).toBe(true)
+    expect(quinzenaMetaHit(lucas, 11_399, 10_000)).toBe(false)
+    expect(quinzenaMetaHit(lucas, 50_000)).toBeNull() // falta ano anterior
+    expect(
+      lucasCamposAdminRefundQ2({
+        rules: lucas,
+        isQ2: true,
+        metaHit: true,
+        taxaAdmQ1: 500,
+      }),
+    ).toBe(500)
+    expect(
+      lucasCamposAdminRefundQ2({
+        rules: lucas,
+        isQ2: true,
+        metaHit: false,
+        taxaAdmQ1: 500,
+      }),
+    ).toBeNull()
 
-    const jus = resolveFolhaPersonRules('Juscelino')
-    expect(jus?.hasQuinzenaMeta).toBe(true)
-    expect(jus?.quinzenaMeta).toBeNull()
+    expect(resolveFolhaPersonRules('Juscelino')).toBeNull()
   })
 
   it('Jefferson / Gabriela / Lucas / Nicole / Jonathan são assistentes do Romeu', () => {

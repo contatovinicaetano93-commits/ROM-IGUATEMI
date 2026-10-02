@@ -24,6 +24,14 @@ const extrasSchema = z.object({
   /** Acumulado mensal assistente Romeu → faixa 30/40/50. */
   acumulado_mes: z.number().nullable().optional(),
   romeu_comissao_parcela: z.number().nullable().optional(),
+  /** Lucas Campos: faturado mesmo mês ano anterior (base meta +14%). */
+  faturado_ano_anterior_mes: z.number().nullable().optional(),
+  /** Lucas Campos: faturado mês corrente (Q1+Q2). */
+  faturado_mes: z.number().nullable().optional(),
+  /** Lucas Campos: taxa adm da Q1 a devolver na Q2 se bater meta. */
+  taxa_adm_q1: z.number().nullable().optional(),
+  meta_quinzena_alvo: z.number().nullable().optional(),
+  devolucao_taxa_adm_q1: z.number().nullable().optional(),
   liquido_referencia: z.number().nullable().optional(),
   fat_liquido_referencia: z.number().nullable().optional(),
   produto_referencia: z.number().nullable().optional(),

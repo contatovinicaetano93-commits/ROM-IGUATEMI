@@ -59,6 +59,16 @@ const draft: FolhaDraft = {
         taxa_administrativa: null,
         esteticista_bonus: null,
         acumulado_mes: null,
+
+        faturado_ano_anterior_mes: null,
+
+        faturado_mes: null,
+
+        taxa_adm_q1: null,
+
+        meta_quinzena_alvo: null,
+
+        devolucao_taxa_adm_q1: null,
         romeu_comissao_parcela: null,
         liquido_referencia: null,
         fat_liquido_referencia: null,

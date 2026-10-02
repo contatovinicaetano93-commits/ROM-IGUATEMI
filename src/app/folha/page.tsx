@@ -97,6 +97,9 @@ export default function FolhaPage() {
   const [uInput, setUInput] = useState('')
   const [baruInput, setBaruInput] = useState('')
   const [acumuladoInput, setAcumuladoInput] = useState('')
+  const [faturadoAnoAntInput, setFaturadoAnoAntInput] = useState('')
+  const [faturadoMesInput, setFaturadoMesInput] = useState('')
+  const [taxaAdmQ1Input, setTaxaAdmQ1Input] = useState('')
   const [darfInput, setDarfInput] = useState('')
   const [dasInput, setDasInput] = useState('')
   const [taxSubject, setTaxSubject] = useState('')
@@ -262,6 +265,9 @@ export default function FolhaPage() {
       servicos_assistente_como_pro: parseOptionalNumber(uInput),
       consumo_baru: parseOptionalNumber(baruInput),
       acumulado_mes: parseOptionalNumber(acumuladoInput),
+      faturado_ano_anterior_mes: parseOptionalNumber(faturadoAnoAntInput),
+      faturado_mes: parseOptionalNumber(faturadoMesInput),
+      taxa_adm_q1: parseOptionalNumber(taxaAdmQ1Input),
     }
     if (taxExtrasAllowed) {
       extras.darf = parseOptionalNumber(darfInput)
@@ -430,6 +436,21 @@ export default function FolhaPage() {
     setAcumuladoInput(
       line.folha_extras.acumulado_mes != null
         ? String(line.folha_extras.acumulado_mes)
+        : '',
+    )
+    setFaturadoAnoAntInput(
+      line.folha_extras.faturado_ano_anterior_mes != null
+        ? String(line.folha_extras.faturado_ano_anterior_mes)
+        : '',
+    )
+    setFaturadoMesInput(
+      line.folha_extras.faturado_mes != null
+        ? String(line.folha_extras.faturado_mes)
+        : '',
+    )
+    setTaxaAdmQ1Input(
+      line.folha_extras.taxa_adm_q1 != null
+        ? String(line.folha_extras.taxa_adm_q1)
         : '',
     )
     setDarfInput(line.folha_extras.darf != null ? String(line.folha_extras.darf) : '')
@@ -764,6 +785,50 @@ export default function FolhaPage() {
                       />
                     </label>
                   ) : null}
+                  {selectedLine?.exception_id === 'lucas_campos' ? (
+                    <>
+                      <label className="text-xs">
+                        <span className="text-muted">
+                          Faturado mesmo mês ano anterior (meta +14%)
+                          {selectedLine.folha_extras.meta_quinzena_alvo != null
+                            ? ` · alvo ${formatMoney(selectedLine.folha_extras.meta_quinzena_alvo)}`
+                            : ''}
+                        </span>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          value={faturadoAnoAntInput}
+                          onChange={(e) => setFaturadoAnoAntInput(e.target.value)}
+                          inputMode="decimal"
+                          placeholder="ex. 10000"
+                        />
+                      </label>
+                      <label className="text-xs">
+                        <span className="text-muted">Faturado mês atual (Q1+Q2)</span>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          value={faturadoMesInput}
+                          onChange={(e) => setFaturadoMesInput(e.target.value)}
+                          inputMode="decimal"
+                          placeholder="ex. 11400"
+                        />
+                      </label>
+                      <label className="text-xs">
+                        <span className="text-muted">
+                          Taxa adm Q1 (devolve na Q2 se bater meta)
+                          {selectedLine.folha_extras.devolucao_taxa_adm_q1 != null
+                            ? ` · devolução ${formatMoney(selectedLine.folha_extras.devolucao_taxa_adm_q1)}`
+                            : ''}
+                        </span>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          value={taxaAdmQ1Input}
+                          onChange={(e) => setTaxaAdmQ1Input(e.target.value)}
+                          inputMode="decimal"
+                          placeholder="ex. 500"
+                        />
+                      </label>
+                    </>
+                  ) : null}
                   {taxExtrasAllowed ? (
                     <>
                       <label className="text-xs">
@@ -975,7 +1040,8 @@ export default function FolhaPage() {
                 Marcela taxa U 5% (2%+3%) + time (Gabriela Martins, Graciele, Camila,
                 Tatiana, Patrícia Aguiar); assistentes Romeu: 30% já nas quinzenas; no
                 dia 05 top-up +10% (10–20k) / +20% (acima de 20k) sobre o acumulado U do
-                mês. Esteticistas: sem bônus.
+                mês. Lucas Campos: meta = +14% vs mesmo mês ano anterior; Q1 cobra adm;
+                se bater, Q2 isenta adm e devolve a adm da Q1. Esteticistas: sem bônus.
               </li>
               <li>Manicure sem taxa adm (exceto depilação)</li>
               <li>

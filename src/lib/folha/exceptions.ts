@@ -33,7 +33,6 @@ export type FolhaExceptionId =
   | 'tatiana_moura'
   | 'patricia_aguiar'
   | 'lucas_campos'
-  | 'juscelino'
   | 'romeu_assistant'
 
 export type FolhaServiceTaxSplit = {
@@ -69,10 +68,11 @@ export type FolhaPersonRules = {
    */
   adminFeeRate: number | null
   /**
-   * Meta de faturamento para isentar 2ª quinzena + devolver 1ª (dia 05).
-   * null = regra existe mas valor ainda não confirmado pelo RH.
+   * Meta absoluta opcional (override). Lucas usa crescimento YoY — ver
+   * {@link LUCAS_CAMPOS_META_YOY_GROWTH}; quinzenaMeta fica null.
    */
   quinzenaMeta: number | null
+  /** Tem regra de meta na 2ª quinzena (Lucas Campos). */
   hasQuinzenaMeta: boolean
   /** Assistente do Romeu — faixas progressivas 30/40/50. */
   isRomeuAssistant: boolean
@@ -346,21 +346,8 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     proCommissionRate: null,
     serviceTaxSplit: null,
     adminFeeRate: null,
-    // RH: se bater a meta → isenta adm na Q2 e devolve a adm da Q1 (dia 05).
-    // Valor numérico da meta ainda pendente.
-    quinzenaMeta: null,
-    hasQuinzenaMeta: true,
-    isRomeuAssistant: false,
-    suppressEsteticistaBonus: false,
-  },
-  {
-    id: 'juscelino',
-    aliases: ['juscelino'],
-    meioAMeioRate: null,
-    assistantRemitRate: null,
-    proCommissionRate: null,
-    serviceTaxSplit: null,
-    adminFeeRate: null,
+    // Meta = faturado mês ano anterior × 1,14. Q1 cobra adm (BR 5%);
+    // se bater no mês, Q2 isenta adm e devolve a adm da Q1 (dia 05).
     quinzenaMeta: null,
     hasQuinzenaMeta: true,
     isRomeuAssistant: false,
@@ -607,15 +594,62 @@ export function resolveAssistantEarnRate(
 }
 
 /**
- * Meta quinzenal (Lucas Campos / Juscelino).
- * RH Lucas: se atingir a meta → não cobra taxa adm na Q2 + devolve integral
- * a taxa adm da Q1 (pagamento dia 05). Valor null = meta ainda pendente RH.
+ * Crescimento YoY da meta do Lucas Campos: +14% sobre o faturado do mesmo
+ * mês do ano anterior.
+ */
+export const LUCAS_CAMPOS_META_YOY_GROWTH = 0.14
+
+/**
+ * Alvo da meta (Lucas): `faturado_ano_anterior × 1,14`, ou `quinzenaMeta`
+ * absoluto se preenchido.
+ */
+export function resolveQuinzenaMetaTarget(
+  rules: FolhaPersonRules | null,
+  priorYearMonthFaturado: number | null | undefined,
+): number | null {
+  if (!rules?.hasQuinzenaMeta) return null
+  if (rules.quinzenaMeta != null) return rules.quinzenaMeta
+  if (rules.id !== 'lucas_campos') return null
+  if (
+    priorYearMonthFaturado == null ||
+    Number.isNaN(priorYearMonthFaturado) ||
+    priorYearMonthFaturado < 0
+  ) {
+    return null
+  }
+  // Evita float 10000*1.14 → 11400.000000000002 (quebrava >=).
+  const growthBp = Math.round(LUCAS_CAMPOS_META_YOY_GROWTH * 100)
+  return (priorYearMonthFaturado * (100 + growthBp)) / 100
+}
+
+/**
+ * Meta mensal (Lucas Campos).
+ * RH: se o faturado do mês (Q1+Q2) ≥ meta → na Q2 (dia 05) não cobra taxa adm
+ * e devolve a taxa adm cobrada na Q1.
  */
 export function quinzenaMetaHit(
   rules: FolhaPersonRules | null,
-  realized: number | null | undefined,
+  realizedMonthFaturado: number | null | undefined,
+  priorYearMonthFaturado?: number | null,
 ): boolean | null {
   if (!rules?.hasQuinzenaMeta) return null
-  if (rules.quinzenaMeta == null || realized == null) return null
-  return realized >= rules.quinzenaMeta
+  const target = resolveQuinzenaMetaTarget(rules, priorYearMonthFaturado)
+  if (target == null || realizedMonthFaturado == null) return null
+  return realizedMonthFaturado >= target
+}
+
+/**
+ * Crédito na Q2 quando a meta bate: devolução da taxa adm da Q1.
+ * null se não é Q2, meta não bateu, ou taxa Q1 ausente.
+ */
+export function lucasCamposAdminRefundQ2(args: {
+  rules: FolhaPersonRules | null
+  isQ2: boolean
+  metaHit: boolean | null
+  taxaAdmQ1: number | null | undefined
+}): number | null {
+  if (args.rules?.id !== 'lucas_campos') return null
+  if (!args.isQ2 || args.metaHit !== true) return null
+  if (args.taxaAdmQ1 == null || Number.isNaN(args.taxaAdmQ1)) return null
+  return args.taxaAdmQ1
 }
