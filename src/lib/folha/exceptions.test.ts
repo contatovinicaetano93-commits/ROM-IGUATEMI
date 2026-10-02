@@ -158,6 +158,14 @@ describe('resolveFolhaPersonRules', () => {
       'romeu_assistant',
     )
   })
+
+  it('Auricaliane BR não casa com a xará do Iguatemi', () => {
+    const br = resolveFolhaPersonRules('Auricaliane Da Silva Dantas')
+    expect(br?.id).toBe('auricaliane')
+    expect(br?.assistantEarnInPay).toBe(true)
+    expect(resolveFolhaPersonRules('Auricaliane Dantas Da Silva')).toBeNull()
+    expect(resolveFolhaPersonRules('AURICALIANE')).toBeNull()
+  })
 })
 
 describe('romeuAssistantCommissionRate', () => {

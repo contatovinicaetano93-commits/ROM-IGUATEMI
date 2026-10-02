@@ -34,6 +34,7 @@ export type FolhaExceptionId =
   | 'patricia_aguiar'
   | 'lucas_campos'
   | 'romeu_assistant'
+  | 'auricaliane'
 
 export type FolhaServiceTaxSplit = {
   /** Soma das alíquotas (ex.: 0.05). */
@@ -81,6 +82,11 @@ export type FolhaPersonRules = {
    * sem bônus — perfil de manicure/depilação na sala).
    */
   suppressEsteticistaBonus: boolean
+  /**
+   * Multiplicador/assistente cujo líquido inclui ganho U×earn − W
+   * (Base Folha BR: Auricaliane). Default: U/V/W só conferência no assistente.
+   */
+  assistantEarnInPay?: boolean
 }
 
 const BRUNNA_TAX_SPLIT: FolhaServiceTaxSplit = {
@@ -379,6 +385,24 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     hasQuinzenaMeta: false,
     isRomeuAssistant: true,
     suppressEsteticistaBonus: false,
+  },
+  {
+    // Base Folha BR Q2: Y = G − J + V − W − diversos, com V = U×30% (earn).
+    // Diferente de Eliseu/Marcelo (U/V/W só conferência). Paridade de catálogo.
+    // Sem apelido de primeiro nome: IG "Auricaliane Dantas Da Silva" é outra
+    // pessoa e o match por prefixo herdaria assistantEarnInPay.
+    id: 'auricaliane',
+    aliases: ['auricaliane da silva dantas'],
+    meioAMeioRate: null,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: null,
+    adminFeeRate: null,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+    assistantEarnInPay: true,
   },
 ]
 

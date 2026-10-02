@@ -13,6 +13,7 @@ import {
   lucasCamposAdminRefundQ2,
   quinzenaMetaHit,
   resolveAssistantAdminTaxRate,
+  resolveAssistantEarnRate,
   resolveEsteticistaBonusRate,
   resolveFolhaPersonRules,
   resolveGrossAdminFeeRate,
@@ -807,6 +808,16 @@ export function buildFolhaDraftLine(
     if (folha_extras.taxa_servicos == null) {
       folha_extras.taxa_servicos = derived.taxaServicos
     }
+    /**
+     * Auricaliane (BR): coluna V na Base Folha é ganho U×30%, não remessa 20%.
+     * Só aplica quando a exceção pede earn no líquido.
+     */
+    if (person?.assistantEarnInPay) {
+      const earn = resolveAssistantEarnRate(person)
+      if (earn != null) {
+        folha_extras.valor_a_pagar_profissional = roundFolha(u * earn, 4)
+      }
+    }
     if (folha_extras.taxa_adm_assistente == null) {
       const assistTax = resolveAssistantAdminTaxRate(panel, person)
       folha_extras.taxa_adm_assistente =
@@ -845,11 +856,27 @@ export function buildFolhaDraftLine(
         (otherDiscountsMag == null || otherDiscountsMag <= 0.02) &&
         ((meio_a_meio != null && meio_a_meio > 0.02) ||
           (panel === 'brasil' && admU > 0.02))
+      /**
+       * Rascunho antigo / applyExtras às vezes carrega taxa_administrativa =
+       * charged×alíquota (antes de informar U). Com U na mão, isso é falso —
+       * trocar por admU (BR 2% / IG 3% sobre U).
+       */
+      const extrasIsFalseChargedAdm =
+        folha_extras.taxa_administrativa != null &&
+        row.charged != null &&
+        assistantAdminRate != null &&
+        Math.abs(
+          folha_extras.taxa_administrativa - row.charged * assistantAdminRate,
+        ) <= 1
       if (shouldAbateAdmU) {
-        if (folha_extras.taxa_administrativa == null || falseChargedAdm) {
+        if (
+          folha_extras.taxa_administrativa == null ||
+          falseChargedAdm ||
+          extrasIsFalseChargedAdm
+        ) {
           folha_extras.taxa_administrativa = admU
         }
-      } else if (falseChargedAdm) {
+      } else if (falseChargedAdm || extrasIsFalseChargedAdm) {
         folha_extras.taxa_administrativa = null
       }
     }
@@ -900,14 +927,17 @@ export function buildFolhaDraftLine(
    *
    * Assistente/multiplicador: U/V/W na Fopag são conferência / repasse ao
    * profissional — não entram no líquido do assistente (só no pro).
+   * Exceção: assistantEarnInPay (Auricaliane) — Y inclui V−W.
    */
-  let extrasForProposedPay: FolhaDraftLine['folha_extras'] = isAssistantLike
-    ? {
-        ...folha_extras,
-        valor_a_pagar_profissional: null,
-        taxa_servicos: null,
-      }
-    : { ...folha_extras }
+  const assistantEarnInPay = person?.assistantEarnInPay === true
+  let extrasForProposedPay: FolhaDraftLine['folha_extras'] =
+    isAssistantLike && !assistantEarnInPay
+      ? {
+          ...folha_extras,
+          valor_a_pagar_profissional: null,
+          taxa_servicos: null,
+        }
+      : { ...folha_extras }
 
   if (
     extrasForProposedPay.taxa_servicos != null &&
