@@ -228,7 +228,7 @@ function synthesize(f: FopagRow): {
       const motorMeio = resolveMeioAMeioRate(person) * f.desc_assistente
       if (Math.abs(motorMeio - f.meio_a_meio) > 1) {
         if (usesNamedMeioOverride(person)) {
-          // Diello/Dayana: Fopag coluna meio=50% genérica; RH confirma 5%.
+          // Diello/Dayana/Gildenice: Fopag coluna meio=50% genérica; RH confirma 5%.
           effectiveMeio = motorMeio
           notes.push(
             `meio_fopag_corrected_to_motor=${motorMeio.toFixed(2)}`,
@@ -306,7 +306,7 @@ describe('Fopag IG Q2 full sweep', () => {
       const bonus = bonusFor(f.name)
       const person = resolveFolhaPersonRules(f.name)
       let target = f.liquido
-      // Diello/Dayana: líquido Fopag usou meio=50%; alvo = líquido com meio do motor (5%).
+      // Diello/Dayana/Gildenice: líquido Fopag usou meio=50%; alvo = líquido com meio do motor (5%).
       if (
         usesNamedMeioOverride(person) &&
         f.desc_assistente > 0.02 &&
@@ -430,7 +430,12 @@ describe('Fopag IG Q2 full sweep', () => {
     expect(by('lucas rodrigues')?.motor_proposed).toBeCloseTo(777.56, 0)
     expect(by('maykon')?.motor_proposed).toBeCloseTo(22723.17, 0)
     expect(by('joanides')?.motor_proposed).toBeCloseTo(47658.4, 0)
-    expect(by('gildenice')?.motor_proposed).toBeCloseTo(12253.7, 0)
+    // Gildenice: Fopag meio 50% → corrigido para 5% (RH)
+    expect(by('gildenice')?.motor_proposed).toBeCloseTo(
+      12253.695 - 2892.875 + 289.2875,
+      0,
+    )
+    expect(by('gildenice')?.status).toBe('match')
     expect(by('romeu felipe')?.motor_proposed).toBeCloseTo(542.1, 0)
     // Diello: Fopag meio 50% → corrigido para 5% (11599.01 − 2127.3 + 212.73)
     expect(by('diello')?.motor_proposed).toBeCloseTo(

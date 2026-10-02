@@ -19,6 +19,7 @@ import type { RomPanelId } from '@/lib/brand'
 export type FolhaExceptionId =
   | 'pedro_diello'
   | 'dayana'
+  | 'gildenice'
   | 'romeu'
   | 'walter_leal'
   | 'dani_rocha'
@@ -30,6 +31,7 @@ export type FolhaExceptionId =
   | 'graciele'
   | 'camila_ornelas'
   | 'tatiana_moura'
+  | 'patricia_aguiar'
   | 'lucas_campos'
   | 'juscelino'
   | 'romeu_assistant'
@@ -110,9 +112,33 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
-    // Mesma lógica Diello: meio a meio 5% (5% salão + 5% profissional).
+    // BR: meio a meio 5% (salão 5%; pro arca o restante se assistente > 10%).
     id: 'dayana',
-    aliases: ['dayana marques silva pinto', 'dayana marques', 'dayana'],
+    aliases: [
+      'dayana marques silva pinto',
+      'dayana marques',
+      'dayana',
+      'daiana marques',
+      'daiana',
+    ],
+    meioAMeioRate: 0.05,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: null,
+    adminFeeRate: null,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+  },
+  {
+    // IG: mesma lógica Diello/Dayana — meio 5% (Fopag coluna pode mostrar 50%).
+    id: 'gildenice',
+    aliases: [
+      'gildenice teixeira de medeiros',
+      'gildenice teixeira',
+      'gildenice',
+    ],
     meioAMeioRate: 0.05,
     assistantRemitRate: null,
     proCommissionRate: null,
@@ -170,7 +196,8 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
-    // Usa sala de esteticista: taxa adm 7%, sem bônus 10% (perfil manicure/depilação).
+    // Usa sala de estética: taxa adm 7% (perfil manicure/depilação).
+    // RH 2026-10: esteticistas não possuem bônus — suppress é redundante, mas fica explícito.
     id: 'liria',
     aliases: ['liria pereira colman', 'liria pereira', 'liria colman', 'liria'],
     meioAMeioRate: null,
@@ -294,6 +321,24 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
+    // Time Brunna (RH 2026-10): multiplicador com split 2%+3%.
+    id: 'patricia_aguiar',
+    aliases: [
+      'patricia aguiar pinto',
+      'patricia aguiar',
+      'patricia a pinto',
+    ],
+    meioAMeioRate: null,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: BRUNNA_TAX_SPLIT,
+    adminFeeRate: null,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+  },
+  {
     id: 'lucas_campos',
     aliases: ['lucas campos de macedo', 'lucas campos'],
     meioAMeioRate: null,
@@ -301,7 +346,8 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     proCommissionRate: null,
     serviceTaxSplit: null,
     adminFeeRate: null,
-    // Meta existe (pagamento dia 05); valor numérico ainda pendente de conferência RH.
+    // RH: se bater a meta → isenta adm na Q2 e devolve a adm da Q1 (dia 05).
+    // Valor numérico da meta ainda pendente.
     quinzenaMeta: null,
     hasQuinzenaMeta: true,
     isRomeuAssistant: false,
@@ -418,21 +464,26 @@ export function resolveMeioAMeioRate(rules: FolhaPersonRules | null): number {
 }
 
 /**
- * Bônus esteticista (10% do faturado). null = não aplica
- * (cargo ≠ esteticista, ou Liria / suppress).
+ * Bônus esteticista. RH 2026-10: esteticistas **não** possuem bônus.
+ * Sempre null (constante legada mantida só para referência histórica).
  */
 export function resolveEsteticistaBonusRate(
   cargo: FolhaCargo,
   rules: FolhaPersonRules | null,
 ): number | null {
-  if (rules?.suppressEsteticistaBonus) return null
-  if (cargo !== 'esteticista') return null
-  return ESTETICISTA_BONUS_RATE
+  void cargo
+  void rules
+  void ESTETICISTA_BONUS_RATE
+  return null
 }
 
-/** Pedro/Dayana: Fopag formula meio=50% genérica — motor manda. */
+/** Pedro/Dayana/Gildenice: Fopag fórmula meio=50% genérica — motor manda 5%. */
 export function usesNamedMeioOverride(rules: FolhaPersonRules | null): boolean {
-  return rules?.id === 'pedro_diello' || rules?.id === 'dayana'
+  return (
+    rules?.id === 'pedro_diello' ||
+    rules?.id === 'dayana' ||
+    rules?.id === 'gildenice'
+  )
 }
 
 /**
@@ -556,8 +607,9 @@ export function resolveAssistantEarnRate(
 }
 
 /**
- * Meta quinzenal (Lucas Campos / Juscelino): se bater no pagamento do dia 05,
- * isenta a 2ª quinzena e devolve a da 1ª. Valor null = pendente RH.
+ * Meta quinzenal (Lucas Campos / Juscelino).
+ * RH Lucas: se atingir a meta → não cobra taxa adm na Q2 + devolve integral
+ * a taxa adm da Q1 (pagamento dia 05). Valor null = meta ainda pendente RH.
  */
 export function quinzenaMetaHit(
   rules: FolhaPersonRules | null,

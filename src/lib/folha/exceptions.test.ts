@@ -43,8 +43,13 @@ describe('resolveFolhaPersonRules', () => {
     )
   })
 
-  it('casa Dayana 5%, Romeu 50%, Walter 30% assistente, Dani meio 50% + comissão 55%', () => {
+  it('casa Dayana/Gildenice 5%, Romeu 50%, Walter 30% assistente, Dani meio 50% + comissão 55%', () => {
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Dayana Marques'))).toBe(0.05)
+    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daiana'))).toBe(0.05)
+    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Gildenice Teixeira'))).toBe(
+      0.05,
+    )
+    expect(resolveFolhaPersonRules('Gildenice')?.id).toBe('gildenice')
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Romeu Felipe'))).toBe(0.5)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Walter Leal'))).toBe(0.7)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daniela Machado Rocha'))).toBe(
@@ -108,12 +113,13 @@ describe('resolveFolhaPersonRules', () => {
     }
   })
 
-  it('Gabriela Martins / Graciele / Camila / Tatiana: split 2%+3% sem adm 5% sobre C', () => {
+  it('Gabriela Martins / Graciele / Camila / Tatiana / Patrícia: split 2%+3% sem adm 5% sobre C', () => {
     for (const [name, id] of [
       ['GABRIELA MARTINS DA SILVA', 'gabriela_martins'],
       ['GRACIELE DA SILVA SANTOS', 'graciele'],
       ['CAMILA ORNELAS SANTOS', 'camila_ornelas'],
       ['TATIANA CRISTINA DOS SANTOS MOURA', 'tatiana_moura'],
+      ['PATRICIA AGUIAR PINTO', 'patricia_aguiar'],
     ] as const) {
       const r = resolveFolhaPersonRules(name)
       expect(r?.id).toBe(id)

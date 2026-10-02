@@ -43,8 +43,11 @@ export const ASSISTANT_AS_PRO_EARN_RATE = 0.3
 /** Meio a meio: metade do desconto assistente volta ao profissional. */
 export const MEIO_A_MEIO_RATE = 0.5
 
-/** Esteticista: bônus de 10% sobre o faturado total. */
-export const ESTETICISTA_BONUS_RATE = 0.1
+/**
+ * Legado: caderno antigo falava em +10% para esteticista.
+ * RH 2026-10: esteticistas **não** possuem bônus — motor não aplica.
+ */
+export const ESTETICISTA_BONUS_RATE = 0
 
 /**
  * Taxa administrativa padrão por cargo (quando o contrato não sobrescreve).
@@ -128,7 +131,7 @@ export function folhaRulesSummary(panel: RomPanelId): FolhaRulesSummary {
       manicure:
         'Faturado − produto. Sem taxa adm — exceto quem tem depilação.',
       esteticista:
-        'Taxa adm: BR 5% / IG 7% sobre faturado − produto; ganha 10% do total faturado (exceto Liria: 7% sem bônus — sala de estética como manicure/depilação).',
+        'Taxa adm: BR 5% / IG 7% sobre faturado − produto. Sem bônus (RH 2026-10). Liria: adm 7% (sala de estética / manicure-depilação).',
       assistente:
         'Atuando como pro: ganho ~30% + taxa adm 3% sobre o serviço (todos, incl. Romeu). Romeu: faixas 30/40/50% no acumulado mês (soma U Q1+Q2); top-up (rate−30%) pago no dia 05. W sobre U: BR 3% / IG 4%; remessa V 20%.',
       multiplicador:

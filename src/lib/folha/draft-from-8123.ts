@@ -413,7 +413,7 @@ export function buildFolhaDraftLine(
       : null
   const serviceTaxRate = resolveProfessionalServiceTaxRate(panel, person)
   /**
-   * Diello/Dayana: 8123 real embute meio a 50% (Fopag); motor RH é 5%.
+   * Diello/Dayana/Gildenice: 8123 real embute meio a 50% (Fopag); motor RH é 5%.
    * Se o a_pagar casar com a forma 50%, desmembra nela e aplica delta no pay.
    * Se o 8123 já veio no formato motor (5%), não reaplica o delta.
    */
@@ -499,7 +499,7 @@ export function buildFolhaDraftLine(
    * Meio no proposed_pay só se a_pagar ainda não creditou
    * (nem via descontos ≈ meio−adm, nem via descontos ≈ +meio,
    * nem via a_pagar já fechado com adm/meio e descontos=0).
-   * Diello/Dayana com a_pagar na forma 50%: delta (motor 5% − planilha 50%).
+   * Diello/Dayana/Gildenice com a_pagar na forma 50%: delta (motor 5% − planilha 50%).
    */
   let meioForProposedPay: number | null =
     embeddedInDescontos || meioCreditedInNet ? null : meio_a_meio
@@ -666,10 +666,11 @@ export function buildFolhaDraftLine(
     taxa_servicos: extras?.taxa_servicos ?? null,
     taxa_adm_assistente: extras?.taxa_adm_assistente ?? null,
     taxa_administrativa: rhTaxaAdm ?? taxaAdmMotorExtra,
-    // Liria suprime o bônus mesmo se o rascunho antigo já gravou os 10%.
-    esteticista_bonus: person?.suppressEsteticistaBonus
-      ? null
-      : (extras?.esteticista_bonus ?? null),
+    // RH 2026-10: esteticistas não possuem bônus — zera rascunhos antigos com 10%.
+    esteticista_bonus:
+      resolveEsteticistaBonusRate(cargo, person) != null
+        ? (extras?.esteticista_bonus ?? null)
+        : null,
     acumulado_mes: extras?.acumulado_mes ?? null,
     romeu_comissao_parcela: romeuParcela,
     liquido_referencia: extras?.liquido_referencia ?? null,
@@ -680,8 +681,7 @@ export function buildFolhaDraftLine(
     folha_extras = stripFolhaTaxExtras(folha_extras)
   }
 
-  // Esteticista: bônus 10% do faturado (caderno) — só se charged presente,
-  // extras não override e pessoa não suprime (Liria).
+  // Esteticista: bônus legado (caderno 10%) — RH 2026-10 desligou; resolve = null.
   if (
     resolveEsteticistaBonusRate(cargo, person) != null &&
     folha_extras.esteticista_bonus == null &&

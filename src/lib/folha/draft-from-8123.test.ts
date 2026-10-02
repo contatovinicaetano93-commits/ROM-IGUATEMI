@@ -1079,7 +1079,7 @@ describe('buildFolhaDraftLine', () => {
     expect(lucas.proposed_pay).toBeCloseTo(1114.77, 2)
   })
 
-  it('Liria descarta bônus esteticista já gravado nos extras', () => {
+  it('descarta bônus esteticista já gravado nos extras (RH: sem bônus)', () => {
     const liria: CommissionProfessionalRow = {
       name: 'Liria Pereira Colman',
       role: 'Esteticista',
@@ -1103,12 +1103,12 @@ describe('buildFolhaDraftLine', () => {
     expect(line.folha_extras.esteticista_bonus).toBeNull()
     expect(line.proposed_pay).toBeCloseTo(2598.12, 2)
 
-    const kept = buildFolhaDraftLine(
+    const cleared = buildFolhaDraftLine(
       'iguatemi',
       { ...liria, name: 'Esteticista Teste' },
       { esteticista_bonus: staleBonus },
     )
-    expect(kept.folha_extras.esteticista_bonus).toBe(staleBonus)
+    expect(cleared.folha_extras.esteticista_bonus).toBeNull()
   })
 
   it('Brasil Q2: Jefferson 17958.05 → top-up 10%; Gabriela 24700.03 → 20% (faixa, não célula E14)', () => {
