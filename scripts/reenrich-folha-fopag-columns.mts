@@ -23,6 +23,7 @@ type FopagRow = {
   U: number
   baru: number
   liquido: number
+  produto?: number
 }
 
 type BonusRow = {
@@ -121,6 +122,13 @@ async function main() {
           // Fopag manda 0 — limpa Baru espúrio (ex.: match Zig errado).
           extras.consumo_baru = null
           clearedBaru++
+        }
+        // Alana: a_pagar ≈ Y → Baru só coluna (ver liquidoReferencia no motor).
+        if (f.liquido > 0.005) {
+          extras.liquido_referencia = f.liquido
+        }
+        if (f.produto != null && f.produto > 0.005) {
+          extras.produto_referencia = f.produto
         }
       }
       if (bonus && extras.acumulado_mes == null) {

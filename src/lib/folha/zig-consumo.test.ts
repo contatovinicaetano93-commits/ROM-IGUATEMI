@@ -126,6 +126,8 @@ describe('planZigConsumoBaruExtras', () => {
       esteticista_bonus: null,
       acumulado_mes: null,
       romeu_comissao_parcela: null,
+        liquido_referencia: null,
+        produto_referencia: null,
     },
     proposed_pay: 800,
     formula_y_preview: null,

@@ -619,6 +619,227 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(9684.44, 0)
   })
 
+  it('Jefferson: other≈Baru embutido → coluna Baru, líquido = a_pagar', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'JEFFERSON SCARAFICCI GOIABEIRA',
+        role: 'Assistente',
+        charged: 5000,
+        service_share: 2000,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: 0,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: -386.21,
+        net_payable: 2066.84,
+        house_share: null,
+      },
+      { consumo_baru: 386.21 },
+      { applyTaxExtras: false },
+    )
+    expect(line.folha_extras.consumo_baru).toBeCloseTo(386.21, 2)
+    expect(line.folha_extras.taxa_administrativa).toBeNull()
+    expect(line.proposed_pay).toBeCloseTo(2066.84, 2)
+  })
+
+  it('Wesley: other≈Baru+parc → não reabate nenhum dos dois', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'WESLEY SANTOS DE MOURA',
+        role: 'MULTIPLICADOR',
+        charged: 27031,
+        service_share: 2703,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: 0,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: -384.63,
+        net_payable: 2318.5,
+        house_share: null,
+      },
+      { consumo_baru: 326.88, parc: 57.75 },
+      { applyTaxExtras: false },
+    )
+    expect(line.folha_extras.consumo_baru).toBeCloseTo(326.88, 2)
+    expect(line.folha_extras.parc).toBeCloseTo(57.75, 2)
+    expect(line.proposed_pay).toBeCloseTo(2318.5, 2)
+  })
+
+  it('Beto: residual≈desc_diversos embutido → não reabate W', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'BETO FORTES',
+        role: 'Cabeleireiro',
+        charged: 33045.6,
+        service_share: 16469.3,
+        product_share: 5.35,
+        other_share: null,
+        tip: 0,
+        product_spend: -510.92,
+        card_fee: -400.22,
+        admin_fee: 0,
+        assistant_discount: -3293.86,
+        other_discounts: -1916.26,
+        net_payable: 10353.39,
+        house_share: null,
+      },
+      { descontos_diversos: 1250 },
+      { applyTaxExtras: false },
+    )
+    expect(line.outros_descontos).toBeCloseTo(1250, 0)
+    expect(line.folha_extras.descontos_diversos).toBeCloseTo(1250, 0)
+    expect(line.proposed_pay).toBeCloseTo(10353.39, 1)
+  })
+
+  it('Daniel Souza: produto Fopag já em descontos 8123 → não reabate', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'DANIEL SOUZA DA SILVA',
+        role: 'Assistente',
+        charged: 0,
+        service_share: 2460,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: 0,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: -63.44,
+        net_payable: 2397.36,
+        house_share: null,
+      },
+      { produto_referencia: 63.44, liquido_referencia: 2397.36 },
+      { applyTaxExtras: false },
+    )
+    expect(line.proposed_pay).toBeCloseTo(2397.36, 2)
+  })
+
+  it('Diana: produto Fopag > Avec → abate delta no líquido', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'DIANA DOS ANJOS SANTOS',
+        role: 'Manicure',
+        charged: 6675,
+        service_share: 4005,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: -9.5,
+        card_fee: -174,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: 0,
+        net_payable: 3891.0973,
+        house_share: null,
+      },
+      { produto_referencia: 42.68 },
+      { applyTaxExtras: false },
+    )
+    // 3891.0973 − (42.68 − 9.5) = 3857.9173
+    expect(line.proposed_pay).toBeCloseTo(3857.92, 1)
+  })
+
+  it('Alana: a_pagar ≈ líquido Fopag → Baru só coluna (não reabate)', () => {
+    const row = {
+      tip: 0,
+      name: 'ALANA SOARES DE SOUSA',
+      role: 'Assistente',
+      charged: 0,
+      service_share: 2127.5,
+      product_share: 0,
+      other_share: 0,
+      product_spend: 0,
+      card_fee: -48.85,
+      admin_fee: 0,
+      assistant_discount: 0,
+      other_discounts: 396.8,
+      net_payable: 2475.45,
+      house_share: 0,
+    }
+    const withoutHint = buildFolhaDraftLine(
+      'iguatemi',
+      row,
+      { consumo_baru: 91.76 },
+      { applyTaxExtras: false },
+    )
+    // Sem referência Fopag, Baru do Zig ainda abate (padrão econômico).
+    expect(withoutHint.proposed_pay).toBeCloseTo(2383.69, 1)
+
+    const withHint = buildFolhaDraftLine(
+      'iguatemi',
+      row,
+      { consumo_baru: 91.76 },
+      { applyTaxExtras: false, liquidoReferencia: 2475.44 },
+    )
+    expect(withHint.folha_extras.consumo_baru).toBeCloseTo(91.76, 2)
+    expect(withHint.proposed_pay).toBeCloseTo(2475.45, 1)
+  })
+
+  it('Gabriela Martins: other=adm < Baru → ainda abate Baru', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'GABRIELA MARTINS DA SILVA',
+        role: 'Assistente',
+        charged: 5811,
+        service_share: 3735.9,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: -67.34,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: -100,
+        net_payable: 3609.11,
+        house_share: null,
+      },
+      { consumo_baru: 188.3 },
+      { applyTaxExtras: false },
+    )
+    expect(line.folha_extras.consumo_baru).toBeCloseTo(188.3, 2)
+    expect(line.proposed_pay).toBeCloseTo(3420.81, 1)
+  })
+
+  it('Edijane: sem meio/descontos NÃO inventa taxa adm 3%', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'EDIJANE MARIA DE MACEDO',
+        role: 'MULTIPLICADOR',
+        charged: 2165,
+        service_share: 5600,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: 0,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: 0,
+        net_payable: 5616.25,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.taxa_administrativa).toBeNull()
+    expect(line.flags).not.toContain('taxa_adm_motor')
+    expect(line.proposed_pay).toBeCloseTo(5616.25, 2)
+  })
+
   it('Romeu Q2: acumulado_mes → top-up meta no líquido; U não altera pay do assistente', () => {
     const base = {
       name: 'GABRIELA DA SILVA SANTOS',

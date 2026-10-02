@@ -82,22 +82,29 @@ export function rateioAposCartao(args: {
 }
 
 /**
- * Quando o residual olerite já é o Consumo Baru do 8123, a coluna Baru é só
- * conferência — não reabater no proposed_pay nem duplicar em Outros.
+ * Quando o residual olerite (após adm↔meio) já é o Consumo Baru do 8123,
+ * a coluna Baru é só conferência — não reabater no proposed_pay nem
+ * duplicar em Outros.
  *
- * Esse residual sai só de `descontos` 8123, que já está dentro de `a_pagar`
- * — com ou sem embed adm↔meio (manicure/assistente cujo desconto é só Baru,
- * ou pro com adm↔meio + Baru). Alison BR (descontos=0, residual null):
+ * Alison BR (descontos=0, a_pagar já neteou adm/meio): residual null →
  * Baru do RH/Zig ainda abate.
  */
 export function resolveBaruVsOleriteResidual(args: {
-  /**
-   * Residual de `descontos` 8123 (após adm↔meio, ou o desconto inteiro
-   * quando não há embed). Já líquido em `a_pagar`.
-   */
+  /** Residual após desmembrar adm↔meio (coluna Outros bruta). */
   outrosResiduais: number | null
   /** Consumo Baru informado (RH / Zig / Fopag). */
   consumoBaru: number | null | undefined
+  /**
+   * True se `descontos` já neteou adm↔meio (a_pagar fechou o residual).
+   * Sem isso, residual/Baru ainda precisa abater.
+   */
+  residualAlreadyInNet?: boolean
+  /**
+   * Assistente/manicure/multiplicador: `descontos` 8123 (débito ou crédito)
+   * já fechou o a_pagar — Baru/parc embutidos (Jefferson/Wesley/Alana).
+   * Não exige residualAlreadyInNet (não há adm↔meio nesses cargos).
+   */
+  assistantOleriteClosed?: boolean
 }): {
   /** Coluna Outros (null se residual = Baru). */
   outrosDescontos: number | null
@@ -125,6 +132,20 @@ export function resolveBaruVsOleriteResidual(args: {
     }
   }
 
+  // Assistente com descontos 8123 material: a_pagar = líquido Fopag.
+  // Coluna Baru só conferência (Jefferson other≈Baru; Wesley other≈Baru+parc).
+  if (args.assistantOleriteClosed) {
+    return {
+      outrosDescontos:
+        residual != null && Math.abs(residual - baru) > 2
+          ? residual
+          : null,
+      consumoBaru: roundFolha(baru, 4),
+      baruAlreadyInNet: true,
+    }
+  }
+
+  // Residual ≈ Baru já saiu do a_pagar (manicure sem adm↔meio; Ana embutido).
   if (residual != null && Math.abs(residual - baru) <= 2) {
     return {
       outrosDescontos: null,
@@ -133,7 +154,11 @@ export function resolveBaruVsOleriteResidual(args: {
     }
   }
 
-  if (residual != null && baru + 0.02 < residual) {
+  if (
+    args.residualAlreadyInNet &&
+    residual != null &&
+    baru + 0.02 < residual
+  ) {
     const leftover = roundFolha(residual - baru, 4)
     return {
       outrosDescontos:
@@ -143,7 +168,7 @@ export function resolveBaruVsOleriteResidual(args: {
     }
   }
 
-  // Baru além do residual (ou sem residual) — abate no pay (Alison).
+  // Baru além do residual (ou sem residual) — abate no pay (Alison/Marina).
   return {
     outrosDescontos: residual,
     consumoBaru: roundFolha(baru, 4),
@@ -194,10 +219,16 @@ export function disaggregateOleriteDescontos(args: {
         ? roundFolha(args.charged * args.assistantAdminRate, 4)
         : null
 
-    // A) descontos ≈ meio − adm 3% (Gabriela)
-    if (meioAMeio != null && signedOther != null) {
+    // A) descontos ≈ meio − adm 3% (Gabriela: crédito +67 = 215 − 148).
+    // Exige meio material e descontos como crédito (≥0): débito com meio=0
+    // (Wesley other=−Baru) NÃO é esse padrão — inventava adm=|other|.
+    if (meioAMeio != null && meioAMeio > 0.02 && signedOther != null) {
       const impliedAdm = roundFolha(meioAMeio - signedOther, 4)
-      if (impliedAdm != null && impliedAdm > 0.02) {
+      if (
+        impliedAdm != null &&
+        impliedAdm > 0.02 &&
+        signedOther >= -0.02
+      ) {
         const maxAdm =
           expectedAdm != null ? expectedAdm + 1 : impliedAdm + 1
         if (impliedAdm <= maxAdm) {
@@ -214,8 +245,11 @@ export function disaggregateOleriteDescontos(args: {
         }
       }
 
-      // C) descontos ≈ +meio — meio já no a_pagar; adm = charged × 3%
+      // C) descontos ≈ +meio — meio já no a_pagar; adm = charged × 3%.
+      // Exige meio material: descontos=0 e meio=0 NÃO é “crédito de meio”
+      // (Amanda/Edijane: inventava 3%×faturado falso).
       if (
+        meioAMeio > 0.02 &&
         expectedAdm != null &&
         expectedAdm > 0.02 &&
         Math.abs(signedOther - meioAMeio) <= 0.05
@@ -345,12 +379,18 @@ export function disaggregateOleriteDescontos(args: {
     }
   }
 
-  // Crédito órfão (sem meio/adm): Romeu Q2 descontos=+1444 já no a_pagar → estornar.
+  // Crédito órfão (sem meio/adm): Romeu (cabeleireiro) Q2 descontos=+1444
+  // já no a_pagar → estornar. Assistente/multiplicador com crédito em
+  // descontos (Dailza/Alana/David): a_pagar já é o líquido Fopag — NÃO
+  // estornar (adminRate null + assistantAdminRate set).
   if (
     signedOther != null &&
     signedOther > 0.02 &&
     (meioAMeio == null || meioAMeio <= 0.02) &&
-    (taxaAdm == null || taxaAdm <= 0.02)
+    (taxaAdm == null || taxaAdm <= 0.02) &&
+    // Pro/Romeu: adminRate set OU sem caminho assistente. Assistente-como-pro
+    // (assistantAdminRate) não estorna.
+    (args.adminRate != null || args.assistantAdminRate == null)
   ) {
     return {
       embeddedAdminMeio: false,

@@ -24,6 +24,8 @@ const extrasSchema = z.object({
   /** Acumulado mensal assistente Romeu → faixa 30/40/50. */
   acumulado_mes: z.number().nullable().optional(),
   romeu_comissao_parcela: z.number().nullable().optional(),
+  liquido_referencia: z.number().nullable().optional(),
+  produto_referencia: z.number().nullable().optional(),
 })
 
 const bodySchema = z.object({

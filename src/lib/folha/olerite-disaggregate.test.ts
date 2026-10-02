@@ -104,6 +104,33 @@ describe('disaggregateOleriteDescontos', () => {
     expect(d.meioCreditedInNet).toBe(false)
   })
 
+  it('multiplicador assist=0 e descontos=0: NÃO path-C (Edijane 3% falso)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 2165,
+      adminFee8123: 0,
+      assistantDiscount: 0,
+      otherDiscounts: 0,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.03,
+    })
+    expect(d.taxaAdm).toBeNull()
+    expect(d.embeddedCreditResidual).toBeNull()
+  })
+
+  it('assistente crédito em descontos NÃO vira órfão a estornar (Dailza)', () => {
+    const d = disaggregateOleriteDescontos({
+      charged: 706,
+      adminFee8123: 0,
+      assistantDiscount: 0,
+      otherDiscounts: 655.08,
+      adminRate: null,
+      meioRate: 0.5,
+      assistantAdminRate: 0.03,
+    })
+    expect(d.embeddedCreditResidual).toBeNull()
+  })
+
   it('pro sem assistente: descontos ≈ taxa adm → embutido (Rafaella)', () => {
     const d = disaggregateOleriteDescontos({
       charged: 17112,
@@ -252,6 +279,40 @@ describe('resolveBaruVsOleriteResidual', () => {
     expect(r.consumoBaru).toBeCloseTo(324.65, 2)
     expect(r.baruAlreadyInNet).toBe(false)
   })
+
+  it('manicure: residual = Baru sem adm↔meio → não reabate', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 219.24,
+      consumoBaru: 219.24,
+      residualAlreadyInNet: false,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(219.24, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('Baru menor que o residual, sem adm embutido, ainda abate', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 400,
+      consumoBaru: 219.24,
+      residualAlreadyInNet: false,
+    })
+    expect(r.baruAlreadyInNet).toBe(false)
+    expect(r.outrosDescontos).toBe(400)
+    expect(r.consumoBaru).toBeCloseTo(219.24, 2)
+  })
+
+  it('assistente olerite fechado: Baru só coluna, sem reabater', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 386.21,
+      consumoBaru: 386.21,
+      residualAlreadyInNet: false,
+      assistantOleriteClosed: true,
+    })
+    expect(r.baruAlreadyInNet).toBe(true)
+    expect(r.consumoBaru).toBeCloseTo(386.21, 2)
+    expect(r.outrosDescontos).toBeNull()
+  })
 })
 
 describe('buildFolhaDraftLine olerite columns', () => {
@@ -318,6 +379,8 @@ describe('rehydrateFolhaDraftFromPeriod', () => {
         esteticista_bonus: null,
         acumulado_mes: null,
         romeu_comissao_parcela: null,
+        liquido_referencia: null,
+        produto_referencia: null,
         descontos_diversos: null,
         consumo_baru: null,
         mensalidade_contabilidade: null,
@@ -379,6 +442,8 @@ describe('rehydrateFolhaDraftFromPeriod', () => {
         esteticista_bonus: null,
         acumulado_mes: null,
         romeu_comissao_parcela: null,
+        liquido_referencia: null,
+        produto_referencia: null,
         descontos_diversos: null,
         consumo_baru: null,
         mensalidade_contabilidade: null,
