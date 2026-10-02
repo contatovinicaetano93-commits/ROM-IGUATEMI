@@ -53,9 +53,10 @@ describe('applyExtrasToDraftLines', () => {
     expect(result.matched).toBe(true)
     expect(result.lines[0]?.folha_extras.valor_a_pagar_profissional).toBe(200)
     expect(result.lines[0]?.folha_extras.taxa_servicos).toBe(30)
-    // Assistente: U/V/W só conferência. + meio 100 − adm 3% (360) − DARF 50
-    expect(result.lines[0]?.proposed_pay).toBe(5000 + 100 - 50 - 360)
-    expect(result.lines[0]?.taxa_administrativa).toBeCloseTo(360, 2)
+    // Assistente: U/V/W só conferência. + meio 100 − adm U×2% BR (20) − DARF 50
+    // (não charged×3% IG nem charged×2% residual do rascunho sem U)
+    expect(result.lines[0]?.proposed_pay).toBe(5000 + 100 - 50 - 20)
+    expect(result.lines[0]?.taxa_administrativa).toBeCloseTo(20, 2)
   })
 })
 
@@ -70,7 +71,7 @@ describe('refreshDraftPreservingExtras', () => {
     })
     expect(refreshed.lines[0]?.folha_extras.darf).toBe(99)
     expect(refreshed.lines[0]?.avec.net_payable).toBe(5100)
-    // + meio 100 − adm 3% (360) − DARF 99
-    expect(refreshed.lines[0]?.proposed_pay).toBe(5100 + 100 - 99 - 360)
+    // Sem U: path B olerite com base charged×2% BR (240). + meio 100 − adm − DARF
+    expect(refreshed.lines[0]?.proposed_pay).toBe(5100 + 100 - 99 - 240)
   })
 })

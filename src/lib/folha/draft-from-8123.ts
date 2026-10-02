@@ -856,11 +856,27 @@ export function buildFolhaDraftLine(
         (otherDiscountsMag == null || otherDiscountsMag <= 0.02) &&
         ((meio_a_meio != null && meio_a_meio > 0.02) ||
           (panel === 'brasil' && admU > 0.02))
+      /**
+       * Rascunho antigo / applyExtras às vezes carrega taxa_administrativa =
+       * charged×alíquota (antes de informar U). Com U na mão, isso é falso —
+       * trocar por admU (BR 2% / IG 3% sobre U).
+       */
+      const extrasIsFalseChargedAdm =
+        folha_extras.taxa_administrativa != null &&
+        row.charged != null &&
+        assistantAdminRate != null &&
+        Math.abs(
+          folha_extras.taxa_administrativa - row.charged * assistantAdminRate,
+        ) <= 1
       if (shouldAbateAdmU) {
-        if (folha_extras.taxa_administrativa == null || falseChargedAdm) {
+        if (
+          folha_extras.taxa_administrativa == null ||
+          falseChargedAdm ||
+          extrasIsFalseChargedAdm
+        ) {
           folha_extras.taxa_administrativa = admU
         }
-      } else if (falseChargedAdm) {
+      } else if (falseChargedAdm || extrasIsFalseChargedAdm) {
         folha_extras.taxa_administrativa = null
       }
     }
