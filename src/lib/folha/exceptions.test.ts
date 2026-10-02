@@ -46,7 +46,7 @@ describe('resolveFolhaPersonRules', () => {
     )
   })
 
-  it('casa Dayana/Gildenice 5%, Romeu 50%, Walter 30% assistente, Dani meio 50% + comissão 55%', () => {
+  it('casa Dayana/Gildenice 5%, Romeu 50%, Walter meio 60% + remessa 30%, Dani 55%', () => {
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Dayana Marques'))).toBe(0.05)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daiana'))).toBe(0.05)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Gildenice Teixeira'))).toBe(
@@ -54,11 +54,12 @@ describe('resolveFolhaPersonRules', () => {
     )
     expect(resolveFolhaPersonRules('Gildenice')?.id).toBe('gildenice')
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Romeu Felipe'))).toBe(0.5)
-    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Walter Leal'))).toBe(0.7)
+    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Walter Leal'))).toBe(0.6)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daniela Machado Rocha'))).toBe(
       0.5,
     )
     expect(resolveFolhaPersonRules('Walter Leal')?.proCommissionRate).toBe(0.6)
+    expect(resolveFolhaPersonRules('Walter Leal')?.assistantRemitRate).toBe(0.3)
     expect(resolveFolhaPersonRules('Dani Rocha')?.assistantRemitRate).toBeNull()
     expect(resolveFolhaPersonRules('Dani Rocha')?.proCommissionRate).toBe(0.55)
   })
@@ -262,10 +263,10 @@ describe('meio a meio nomeado no draft + calc', () => {
     expect(line.exception_id).toBe('pedro_diello')
   })
 
-  it('Walter: repasse assistente 30% → meio a meio 70%', () => {
+  it('Walter: meio a meio 60%; remessa 30% (não 20%)', () => {
     const line = buildFolhaDraftLine('brasil', row('Walter Martinho Leal Filho Cabeleireiro'))
-    expect(line.meio_a_meio_rate).toBe(0.7)
-    expect(line.meio_a_meio).toBe(700)
+    expect(line.meio_a_meio_rate).toBe(0.6)
+    expect(line.meio_a_meio).toBe(600)
 
     const y = calculateFolhaLine({
       panel: 'brasil',
@@ -286,14 +287,16 @@ describe('meio a meio nomeado no draft + calc', () => {
       mensalidadeContabilidade: null,
       descontosDiversos: null,
       produtosBlack: null,
-      servicosAssistenteComoPro: null,
+      servicosAssistenteComoPro: 1000,
       valorAPagarProfissional: null,
       remitRateOverride: null,
       taxaServicosOverride: null,
       hasDepilacao: false,
       waiveAdminFee: false,
     })
-    expect(roundFolha(y.meioAMeio, 2)).toBe(700)
+    expect(roundFolha(y.meioAMeio, 2)).toBe(600)
+    // Remessa Walter = 30% × serviços assistente como pro (padrão geral é 20%).
+    expect(roundFolha(y.valorAPagarProfissional, 2)).toBe(300)
   })
 
   it('Brunna: W = U × 3% (não 4% IG)', () => {

@@ -121,7 +121,7 @@ export type FolhaDraftLine = {
   }
   /** Meio a meio (crédito) — entra no proposed_pay. */
   meio_a_meio: number | null
-  /** Taxa efetiva de meio a meio (0.05 Pedro/Dayana; 0.70 Walter; 0.5 default). */
+  /** Taxa efetiva de meio a meio (0.05 Pedro/Dayana; 0.60 Walter; 0.5 default). */
   meio_a_meio_rate: number
   /**
    * Taxa adm efetiva para a tabela (8123 se > 0; senão motor × faturado).
