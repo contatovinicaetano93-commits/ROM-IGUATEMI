@@ -641,8 +641,6 @@ export function buildFolhaDraftLine(
   const baruSplit = resolveBaruVsOleriteResidual({
     outrosResiduais: debitResidualForBaru,
     consumoBaru: folha_extras.consumo_baru,
-    residualAlreadyInNet:
-      embeddedInDescontos && olerite.embeddedCreditResidual == null,
   })
   folha_extras = {
     ...folha_extras,

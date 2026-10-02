@@ -157,6 +157,62 @@ describe('buildFolhaDraftLine', () => {
     expect(withBaru.proposed_pay).toBeCloseTo(9472.05, 2)
   })
 
+  it('manicure/assistente: descontos = Baru sem embed → coluna Baru, a_pagar intacto', () => {
+    const cases: CommissionProfessionalRow[] = [
+      {
+        name: 'Andressa Erica Batista de Oliveira',
+        role: 'Manicure',
+        charged: 6449,
+        service_share: null,
+        product_share: null,
+        other_share: null,
+        tip: null,
+        product_spend: -65.12,
+        card_fee: -151.55,
+        admin_fee: 0,
+        assistant_discount: null,
+        other_discounts: -208.71,
+        net_payable: 3021.51,
+        house_share: null,
+      },
+      {
+        name: 'ARIANE CRISTINA DOS SANTOS',
+        role: 'MULTIPLICADOR',
+        charged: 26780.5,
+        service_share: null,
+        product_share: null,
+        other_share: null,
+        tip: null,
+        product_spend: null,
+        card_fee: null,
+        admin_fee: 0,
+        assistant_discount: null,
+        other_discounts: -136.26,
+        net_payable: 2541.79,
+        house_share: null,
+      },
+    ]
+    for (const row of cases) {
+      const baru = Math.abs(row.other_discounts ?? 0)
+      const bare = buildFolhaDraftLine('iguatemi', row, undefined, {
+        applyTaxExtras: false,
+      })
+      expect(bare.flags).not.toContain('taxa_adm_em_descontos')
+      expect(bare.outros_descontos).toBeCloseTo(baru, 2)
+      expect(bare.proposed_pay).toBeCloseTo(row.net_payable ?? 0, 2)
+
+      const withBaru = buildFolhaDraftLine(
+        'iguatemi',
+        row,
+        { consumo_baru: baru },
+        { applyTaxExtras: false },
+      )
+      expect(withBaru.folha_extras.consumo_baru).toBeCloseTo(baru, 2)
+      expect(withBaru.outros_descontos).toBeNull()
+      expect(withBaru.proposed_pay).toBeCloseTo(row.net_payable ?? 0, 2)
+    }
+  })
+
   it('BR cabeleireiro: taxa adm motor 5% quando 8123 veio 0', () => {
     const line = buildFolhaDraftLine(
       'brasil',

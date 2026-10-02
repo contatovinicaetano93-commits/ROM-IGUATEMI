@@ -82,23 +82,22 @@ export function rateioAposCartao(args: {
 }
 
 /**
- * Quando o residual olerite (após adm↔meio) já é o Consumo Baru do 8123,
- * a coluna Baru é só conferência — não reabater no proposed_pay nem
- * duplicar em Outros.
+ * Quando o residual olerite já é o Consumo Baru do 8123, a coluna Baru é só
+ * conferência — não reabater no proposed_pay nem duplicar em Outros.
  *
- * Alison BR (descontos=0, a_pagar já neteou adm/meio): residual null →
+ * Esse residual sai só de `descontos` 8123, que já está dentro de `a_pagar`
+ * — com ou sem embed adm↔meio (manicure/assistente cujo desconto é só Baru,
+ * ou pro com adm↔meio + Baru). Alison BR (descontos=0, residual null):
  * Baru do RH/Zig ainda abate.
  */
 export function resolveBaruVsOleriteResidual(args: {
-  /** Residual após desmembrar adm↔meio (coluna Outros bruta). */
+  /**
+   * Residual de `descontos` 8123 (após adm↔meio, ou o desconto inteiro
+   * quando não há embed). Já líquido em `a_pagar`.
+   */
   outrosResiduais: number | null
   /** Consumo Baru informado (RH / Zig / Fopag). */
   consumoBaru: number | null | undefined
-  /**
-   * True se `descontos` já neteou adm↔meio (a_pagar fechou o residual).
-   * Sem isso, residual/Baru ainda precisa abater.
-   */
-  residualAlreadyInNet: boolean
 }): {
   /** Coluna Outros (null se residual = Baru). */
   outrosDescontos: number | null
@@ -126,11 +125,7 @@ export function resolveBaruVsOleriteResidual(args: {
     }
   }
 
-  if (
-    args.residualAlreadyInNet &&
-    residual != null &&
-    Math.abs(residual - baru) <= 2
-  ) {
+  if (residual != null && Math.abs(residual - baru) <= 2) {
     return {
       outrosDescontos: null,
       consumoBaru: roundFolha(baru, 4),
@@ -138,11 +133,7 @@ export function resolveBaruVsOleriteResidual(args: {
     }
   }
 
-  if (
-    args.residualAlreadyInNet &&
-    residual != null &&
-    baru + 0.02 < residual
-  ) {
+  if (residual != null && baru + 0.02 < residual) {
     const leftover = roundFolha(residual - baru, 4)
     return {
       outrosDescontos:

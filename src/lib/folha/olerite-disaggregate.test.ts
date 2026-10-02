@@ -217,10 +217,29 @@ describe('resolveBaruVsOleriteResidual', () => {
     const r = resolveBaruVsOleriteResidual({
       outrosResiduais: 387.08,
       consumoBaru: 387.08,
-      residualAlreadyInNet: true,
     })
     expect(r.outrosDescontos).toBeNull()
     expect(r.consumoBaru).toBeCloseTo(387.08, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('descontos só Baru (sem embed adm↔meio) também já está no a_pagar', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 208.71,
+      consumoBaru: 208.71,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(208.71, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('Baru menor que o residual: sobra em Outros, sem reabater', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 500,
+      consumoBaru: 200,
+    })
+    expect(r.outrosDescontos).toBeCloseTo(300, 2)
+    expect(r.consumoBaru).toBeCloseTo(200, 2)
     expect(r.baruAlreadyInNet).toBe(true)
   })
 
@@ -228,7 +247,6 @@ describe('resolveBaruVsOleriteResidual', () => {
     const r = resolveBaruVsOleriteResidual({
       outrosResiduais: null,
       consumoBaru: 324.65,
-      residualAlreadyInNet: true,
     })
     expect(r.outrosDescontos).toBeNull()
     expect(r.consumoBaru).toBeCloseTo(324.65, 2)
