@@ -39,8 +39,19 @@ import {
   canTransitionFolhaStatus,
   periodRowToDraft,
   refreshDraftPreservingExtras,
+  sumProposedPay,
   type FolhaLineExtrasPatch,
 } from '@/lib/folha/workflow'
+import {
+  fetchZigDetailedTransactions,
+  zigWindowForQuinzenaDays,
+} from '@/lib/folha/zig-client'
+import {
+  aggregateZigEmployeeConsumo,
+  isZigFolhaConfigured,
+  planZigConsumoBaruExtras,
+  type ApplyZigConsumoResult,
+} from '@/lib/folha/zig-consumo'
 import { occupancyMergeKey } from '@/lib/director-report/match-pro'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
@@ -243,6 +254,87 @@ export async function refreshFolhaDraft(
     quinzena,
     source,
     avec_range: avecRange,
+  }
+}
+
+/**
+ * Puxa consumo funcionário no Baru (Zig) e preenche `consumo_baru` nas linhas.
+ * Não sobrescreve valor já lançado; não reabate se Baru já veio no 8123.
+ */
+export async function applyZigConsumoBaruToPeriod(
+  panel: RomPanelId,
+  args: { periodId: string; actor?: string | null },
+): Promise<{
+  draft: FolhaDraft
+  period: FolhaPeriodRow
+  report: ApplyZigConsumoResult
+  zig: { placeId: string; txs: number; pages: number; skipped?: string }
+}> {
+  if (!isZigFolhaConfigured()) {
+    throw new Error(
+      'Zig não configurado — defina ZIG_API_TOKEN (e opcional ZIG_TRANSACTIONS_RPC)',
+    )
+  }
+  const period = await getFolhaPeriod(args.periodId)
+  if (!period) throw new Error('Período da Folha não encontrado')
+  if (period.status === 'paid') throw new Error('Período já pago — reabra para editar')
+  if (period.lines.length === 0) {
+    throw new Error('Rascunho vazio — atualize do 8123 antes de puxar o Baru')
+  }
+
+  const quinzena = parseFolhaPeriodId(period.id)
+  if (!quinzena) throw new Error(`Período inválido: ${period.id}`)
+  const { sinceIso, untilIso } = zigWindowForQuinzenaDays(
+    quinzena.from,
+    quinzena.to,
+  )
+  const fetched = await fetchZigDetailedTransactions({
+    panel,
+    sinceIso,
+    untilIso,
+  })
+  if (fetched.skipped === 'not_configured') {
+    throw new Error('Zig não configurado — defina ZIG_API_TOKEN')
+  }
+
+  const spends = aggregateZigEmployeeConsumo(fetched.transactions, {
+    fromIso: quinzena.from,
+    toIso: quinzena.to,
+  })
+  const draftView = periodRowToDraft(panel, period)
+  const { patches, report } = planZigConsumoBaruExtras(draftView.lines, spends)
+
+  const applyTax = acceptsFolhaTaxExtras(quinzena.half)
+  let lines = period.lines
+  for (const patch of patches) {
+    const result = applyExtrasToDraftLines({
+      panel,
+      lines,
+      sourceProfessionals: period.source_professionals,
+      professionalName: patch.professionalName,
+      extras: patch.extras,
+      applyTaxExtras: applyTax,
+    })
+    lines = result.lines
+  }
+
+  const updated = await saveFolhaPeriodLines({
+    id: period.id,
+    lines,
+    totalProposedPay: sumProposedPay(lines),
+    updatedBy: args.actor ?? null,
+  })
+  if (!updated) throw new Error('Falha ao salvar consumo Baru')
+
+  return {
+    draft: periodRowToDraft(panel, updated),
+    period: updated,
+    report,
+    zig: {
+      placeId: fetched.placeId,
+      txs: fetched.transactions.length,
+      pages: fetched.pages,
+    },
   }
 }
 

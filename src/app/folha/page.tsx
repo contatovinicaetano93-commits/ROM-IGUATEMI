@@ -223,6 +223,36 @@ export default function FolhaPage() {
     setActionMsg(`8123 recarregado via ${src} (extras preservados).`)
   }
 
+  async function onZigConsumo() {
+    if (!periodId) {
+      setError('Selecione uma quinzena com rascunho')
+      return
+    }
+    const data = await postJson('/api/folha/zig-consumo', { period_id: periodId })
+    if (!data) return
+    applyDraft(data.draft)
+    setStatus((prev) =>
+      prev ? { ...prev, period_status: data.period_status, period_id: data.period_id } : prev,
+    )
+    const report = data.report as
+      | {
+          applied?: unknown[]
+          skipped_embedded?: unknown[]
+          skipped_manual?: unknown[]
+          unmatched_folha?: unknown[]
+        }
+      | undefined
+    const n = report?.applied?.length ?? 0
+    const emb = report?.skipped_embedded?.length ?? 0
+    const man = report?.skipped_manual?.length ?? 0
+    setActionMsg(
+      `Zig Baru: ${n} aplicados` +
+        (emb ? ` · ${emb} já no 8123` : '') +
+        (man ? ` · ${man} mantidos (RH)` : '') +
+        '.',
+    )
+  }
+
   async function onSaveExtras() {
     if (!periodId || !selectedName.trim()) {
       setError('Selecione um profissional')
@@ -522,6 +552,14 @@ export default function FolhaPage() {
                     className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
                   >
                     Exportar Excel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || !draft.line_count}
+                    onClick={() => void onZigConsumo()}
+                    className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    Puxar consumo Baru (Zig)
                   </button>
                   <button
                     type="button"
