@@ -19,6 +19,7 @@ import type { RomPanelId } from '@/lib/brand'
 export type FolhaExceptionId =
   | 'pedro_diello'
   | 'dayana'
+  | 'gildenice'
   | 'romeu'
   | 'walter_leal'
   | 'dani_rocha'
@@ -30,8 +31,8 @@ export type FolhaExceptionId =
   | 'graciele'
   | 'camila_ornelas'
   | 'tatiana_moura'
+  | 'patricia_aguiar'
   | 'lucas_campos'
-  | 'juscelino'
   | 'romeu_assistant'
 
 export type FolhaServiceTaxSplit = {
@@ -67,10 +68,11 @@ export type FolhaPersonRules = {
    */
   adminFeeRate: number | null
   /**
-   * Meta de faturamento para isentar 2ª quinzena + devolver 1ª (dia 05).
-   * null = regra existe mas valor ainda não confirmado pelo RH.
+   * Meta absoluta opcional (override). Lucas usa crescimento YoY — ver
+   * {@link LUCAS_CAMPOS_META_YOY_GROWTH}; quinzenaMeta fica null.
    */
   quinzenaMeta: number | null
+  /** Tem regra de meta na 2ª quinzena (Lucas Campos). */
   hasQuinzenaMeta: boolean
   /** Assistente do Romeu — faixas progressivas 30/40/50. */
   isRomeuAssistant: boolean
@@ -110,9 +112,33 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
-    // Mesma lógica Diello: meio a meio 5% (5% salão + 5% profissional).
+    // BR: meio a meio 5% (salão 5%; pro arca o restante se assistente > 10%).
     id: 'dayana',
-    aliases: ['dayana marques silva pinto', 'dayana marques', 'dayana'],
+    aliases: [
+      'dayana marques silva pinto',
+      'dayana marques',
+      'dayana',
+      'daiana marques',
+      'daiana',
+    ],
+    meioAMeioRate: 0.05,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: null,
+    adminFeeRate: null,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+  },
+  {
+    // IG: mesma lógica Diello/Dayana — meio 5% (Fopag coluna pode mostrar 50%).
+    id: 'gildenice',
+    aliases: [
+      'gildenice teixeira de medeiros',
+      'gildenice teixeira',
+      'gildenice',
+    ],
     meioAMeioRate: 0.05,
     assistantRemitRate: null,
     proCommissionRate: null,
@@ -170,7 +196,8 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
-    // Usa sala de esteticista: taxa adm 7%, sem bônus 10% (perfil manicure/depilação).
+    // Usa sala de estética: taxa adm 7% (perfil manicure/depilação).
+    // RH 2026-10: esteticistas não possuem bônus — suppress é redundante, mas fica explícito.
     id: 'liria',
     aliases: ['liria pereira colman', 'liria pereira', 'liria colman', 'liria'],
     meioAMeioRate: null,
@@ -294,6 +321,24 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
+    // Time Brunna (RH 2026-10): multiplicador com split 2%+3%.
+    id: 'patricia_aguiar',
+    aliases: [
+      'patricia aguiar pinto',
+      'patricia aguiar',
+      'patricia a pinto',
+    ],
+    meioAMeioRate: null,
+    assistantRemitRate: null,
+    proCommissionRate: null,
+    serviceTaxSplit: BRUNNA_TAX_SPLIT,
+    adminFeeRate: null,
+    quinzenaMeta: null,
+    hasQuinzenaMeta: false,
+    isRomeuAssistant: false,
+    suppressEsteticistaBonus: false,
+  },
+  {
     id: 'lucas_campos',
     aliases: ['lucas campos de macedo', 'lucas campos'],
     meioAMeioRate: null,
@@ -301,20 +346,8 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     proCommissionRate: null,
     serviceTaxSplit: null,
     adminFeeRate: null,
-    // Meta existe (pagamento dia 05); valor numérico ainda pendente de conferência RH.
-    quinzenaMeta: null,
-    hasQuinzenaMeta: true,
-    isRomeuAssistant: false,
-    suppressEsteticistaBonus: false,
-  },
-  {
-    id: 'juscelino',
-    aliases: ['juscelino'],
-    meioAMeioRate: null,
-    assistantRemitRate: null,
-    proCommissionRate: null,
-    serviceTaxSplit: null,
-    adminFeeRate: null,
+    // Meta = faturado mês ano anterior × 1,14. Q1 cobra adm (BR 5%);
+    // se bater no mês, Q2 isenta adm e devolve a adm da Q1 (dia 05).
     quinzenaMeta: null,
     hasQuinzenaMeta: true,
     isRomeuAssistant: false,
@@ -418,21 +451,26 @@ export function resolveMeioAMeioRate(rules: FolhaPersonRules | null): number {
 }
 
 /**
- * Bônus esteticista (10% do faturado). null = não aplica
- * (cargo ≠ esteticista, ou Liria / suppress).
+ * Bônus esteticista. RH 2026-10: esteticistas **não** possuem bônus.
+ * Sempre null (constante legada mantida só para referência histórica).
  */
 export function resolveEsteticistaBonusRate(
   cargo: FolhaCargo,
   rules: FolhaPersonRules | null,
 ): number | null {
-  if (rules?.suppressEsteticistaBonus) return null
-  if (cargo !== 'esteticista') return null
-  return ESTETICISTA_BONUS_RATE
+  void cargo
+  void rules
+  void ESTETICISTA_BONUS_RATE
+  return null
 }
 
-/** Pedro/Dayana: Fopag formula meio=50% genérica — motor manda. */
+/** Pedro/Dayana/Gildenice: Fopag fórmula meio=50% genérica — motor manda 5%. */
 export function usesNamedMeioOverride(rules: FolhaPersonRules | null): boolean {
-  return rules?.id === 'pedro_diello' || rules?.id === 'dayana'
+  return (
+    rules?.id === 'pedro_diello' ||
+    rules?.id === 'dayana' ||
+    rules?.id === 'gildenice'
+  )
 }
 
 /**
@@ -556,14 +594,62 @@ export function resolveAssistantEarnRate(
 }
 
 /**
- * Meta quinzenal (Lucas Campos / Juscelino): se bater no pagamento do dia 05,
- * isenta a 2ª quinzena e devolve a da 1ª. Valor null = pendente RH.
+ * Crescimento YoY da meta do Lucas Campos: +14% sobre o faturado do mesmo
+ * mês do ano anterior.
+ */
+export const LUCAS_CAMPOS_META_YOY_GROWTH = 0.14
+
+/**
+ * Alvo da meta (Lucas): `faturado_ano_anterior × 1,14`, ou `quinzenaMeta`
+ * absoluto se preenchido.
+ */
+export function resolveQuinzenaMetaTarget(
+  rules: FolhaPersonRules | null,
+  priorYearMonthFaturado: number | null | undefined,
+): number | null {
+  if (!rules?.hasQuinzenaMeta) return null
+  if (rules.quinzenaMeta != null) return rules.quinzenaMeta
+  if (rules.id !== 'lucas_campos') return null
+  if (
+    priorYearMonthFaturado == null ||
+    Number.isNaN(priorYearMonthFaturado) ||
+    priorYearMonthFaturado < 0
+  ) {
+    return null
+  }
+  // Evita float 10000*1.14 → 11400.000000000002 (quebrava >=).
+  const growthBp = Math.round(LUCAS_CAMPOS_META_YOY_GROWTH * 100)
+  return (priorYearMonthFaturado * (100 + growthBp)) / 100
+}
+
+/**
+ * Meta mensal (Lucas Campos).
+ * RH: se o faturado do mês (Q1+Q2) ≥ meta → na Q2 (dia 05) não cobra taxa adm
+ * e devolve a taxa adm cobrada na Q1.
  */
 export function quinzenaMetaHit(
   rules: FolhaPersonRules | null,
-  realized: number | null | undefined,
+  realizedMonthFaturado: number | null | undefined,
+  priorYearMonthFaturado?: number | null,
 ): boolean | null {
   if (!rules?.hasQuinzenaMeta) return null
-  if (rules.quinzenaMeta == null || realized == null) return null
-  return realized >= rules.quinzenaMeta
+  const target = resolveQuinzenaMetaTarget(rules, priorYearMonthFaturado)
+  if (target == null || realizedMonthFaturado == null) return null
+  return realizedMonthFaturado >= target
+}
+
+/**
+ * Crédito na Q2 quando a meta bate: devolução da taxa adm da Q1.
+ * null se não é Q2, meta não bateu, ou taxa Q1 ausente.
+ */
+export function lucasCamposAdminRefundQ2(args: {
+  rules: FolhaPersonRules | null
+  isQ2: boolean
+  metaHit: boolean | null
+  taxaAdmQ1: number | null | undefined
+}): number | null {
+  if (args.rules?.id !== 'lucas_campos') return null
+  if (!args.isQ2 || args.metaHit !== true) return null
+  if (args.taxaAdmQ1 == null || Number.isNaN(args.taxaAdmQ1)) return null
+  return args.taxaAdmQ1
 }

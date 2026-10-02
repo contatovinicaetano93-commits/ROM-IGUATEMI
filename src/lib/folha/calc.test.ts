@@ -137,7 +137,7 @@ describe('calculateFolhaLine — manicure', () => {
 })
 
 describe('calculateFolhaLine — esteticista', () => {
-  it('soma bônus 10% do faturado', () => {
+  it('RH: esteticista sem bônus 10%', () => {
     const result = calculateFolhaLine({
       panel: 'iguatemi',
       cargo: 'Esteticista',
@@ -163,11 +163,11 @@ describe('calculateFolhaLine — esteticista', () => {
       hasDepilacao: false,
       waiveAdminFee: false,
     })
-    expect(result.esteticistaBonus).toBe(100)
-    expect(result.valorLiquido).toBe(500 - 50 - 70 + 100)
+    expect(result.esteticistaBonus).toBeNull()
+    expect(result.valorLiquido).toBe(500 - 50 - 70)
   })
 
-  it('Liria: 7% adm sem bônus 10%', () => {
+  it('Liria: 7% adm sem bônus', () => {
     const result = calculateFolhaLine({
       panel: 'iguatemi',
       professionalName: 'Liria Pereira Colman',

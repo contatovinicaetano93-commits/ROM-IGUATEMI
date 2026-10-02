@@ -1079,7 +1079,7 @@ describe('buildFolhaDraftLine', () => {
     expect(lucas.proposed_pay).toBeCloseTo(1114.77, 2)
   })
 
-  it('Liria descarta bônus esteticista já gravado nos extras', () => {
+  it('descarta bônus esteticista já gravado nos extras (RH: sem bônus)', () => {
     const liria: CommissionProfessionalRow = {
       name: 'Liria Pereira Colman',
       role: 'Esteticista',
@@ -1103,12 +1103,12 @@ describe('buildFolhaDraftLine', () => {
     expect(line.folha_extras.esteticista_bonus).toBeNull()
     expect(line.proposed_pay).toBeCloseTo(2598.12, 2)
 
-    const kept = buildFolhaDraftLine(
+    const cleared = buildFolhaDraftLine(
       'iguatemi',
       { ...liria, name: 'Esteticista Teste' },
       { esteticista_bonus: staleBonus },
     )
-    expect(kept.folha_extras.esteticista_bonus).toBe(staleBonus)
+    expect(cleared.folha_extras.esteticista_bonus).toBeNull()
   })
 
   it('Brasil Q2: Jefferson 17958.05 → top-up 10%; Gabriela 24700.03 → 20% (faixa, não célula E14)', () => {
@@ -1171,6 +1171,56 @@ describe('buildFolhaDraftLine', () => {
     })
     expect(line.proposed_pay).toBeNull()
     expect(line.flags).toContain('sem_a_pagar')
+  })
+
+  it('Lucas Campos Q2: meta +14% → devolve adm Q1 e isenta adm Q2', () => {
+    const lucasRow: CommissionProfessionalRow = {
+      name: 'Lucas Campos De Macedo',
+      role: 'Cabeleireiro',
+      charged: 20_000,
+      service_share: null,
+      product_share: null,
+      other_share: null,
+      tip: null,
+      product_spend: null,
+      card_fee: null,
+      admin_fee: 0,
+      assistant_discount: null,
+      other_discounts: null,
+      net_payable: 10_000,
+      house_share: null,
+    }
+    const hit = buildFolhaDraftLine(
+      'brasil',
+      lucasRow,
+      {
+        faturado_ano_anterior_mes: 10_000,
+        faturado_mes: 11_400,
+        taxa_adm_q1: 500,
+      },
+      { applyTaxExtras: false },
+    )
+    expect(hit.exception_id).toBe('lucas_campos')
+    expect(hit.folha_extras.meta_quinzena_alvo).toBe(11_400)
+    expect(hit.folha_extras.devolucao_taxa_adm_q1).toBe(500)
+    expect(hit.folha_extras.taxa_administrativa).toBeNull()
+    expect(hit.proposed_pay).toBeCloseTo(10_500, 2)
+    expect(hit.flags).not.toContain('meta_quinzena_pendente')
+
+    const miss = buildFolhaDraftLine(
+      'brasil',
+      lucasRow,
+      {
+        faturado_ano_anterior_mes: 10_000,
+        faturado_mes: 11_399.99,
+        taxa_adm_q1: 500,
+      },
+      { applyTaxExtras: false },
+    )
+    expect(miss.folha_extras.devolucao_taxa_adm_q1).toBeNull()
+    // Sem meta: motor BR 5% sobre 20k ainda abate.
+    expect(miss.folha_extras.taxa_administrativa).toBeCloseTo(1000, 4)
+    expect(miss.proposed_pay).toBeCloseTo(9000, 2)
   })
 })
 
