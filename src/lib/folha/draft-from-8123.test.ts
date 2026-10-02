@@ -882,6 +882,36 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(2932.35, 1)
   })
 
+  it('Auricaliane (catálogo): earn-in-pay V=U×30% − W no líquido', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      {
+        name: 'AURICALIANE DA SILVA DANTAS',
+        role: 'MULTIPLICADOR',
+        charged: 3438.72,
+        service_share: null,
+        product_share: null,
+        other_share: null,
+        tip: null,
+        product_spend: null,
+        card_fee: null,
+        admin_fee: 0,
+        assistant_discount: null,
+        other_discounts: null,
+        net_payable: 2879.65,
+        house_share: null,
+      },
+      {
+        servicos_assistente_como_pro: 3304,
+        descontos_diversos: 77.05,
+      },
+      { applyTaxExtras: false },
+    )
+    expect(line.exception_id).toBe('auricaliane')
+    expect(line.folha_extras.valor_a_pagar_profissional).toBeCloseTo(991.2, 1)
+    expect(line.proposed_pay).toBeCloseTo(3628.6, 1)
+  })
+
   it('Francyele: V=850 sem U → coluna conferência; pay = a_pagar', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',
