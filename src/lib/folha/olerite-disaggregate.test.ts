@@ -260,10 +260,11 @@ describe('resolveBaruVsOleriteResidual', () => {
     expect(r.baruAlreadyInNet).toBe(true)
   })
 
-  it('Baru menor que o residual: sobra em Outros, sem reabater', () => {
+  it('Baru menor que o residual embutido: sobra em Outros, sem reabater', () => {
     const r = resolveBaruVsOleriteResidual({
       outrosResiduais: 500,
       consumoBaru: 200,
+      residualAlreadyInNet: true,
     })
     expect(r.outrosDescontos).toBeCloseTo(300, 2)
     expect(r.consumoBaru).toBeCloseTo(200, 2)
