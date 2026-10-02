@@ -162,6 +162,20 @@ export function resolveFolhaQuinzena(opts?: {
   return defaultFolhaQuinzena(today)
 }
 
+/**
+ * Quinzenas que o cron diário deve recalcular:
+ * 1) a do próximo pagamento (default da Folha)
+ * 2) a do calendário de hoje (acumulando comissões Avec), se for outra
+ */
+export function folhaQuinzenasForDailyRefresh(
+  today = todayIsoSaoPaulo(),
+): FolhaQuinzena[] {
+  const upcomingPay = defaultFolhaQuinzena(today)
+  const calendar = quinzenaForDay(today)
+  if (upcomingPay.id === calendar.id) return [upcomingPay]
+  return [upcomingPay, calendar]
+}
+
 /** YYYY-MM-DD → dd/mm/yyyy (query Avec). */
 export function isoToBrDay(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)

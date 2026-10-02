@@ -4,6 +4,7 @@ import {
   clampQuinzenaFetchEnd,
   defaultFolhaQuinzena,
   defaultFolhaTaxQuinzena,
+  folhaQuinzenasForDailyRefresh,
   formatPayDateBr,
   isoToBrDay,
   listRecentQuinzenas,
@@ -77,5 +78,18 @@ describe('folha period pay dates', () => {
     expect(defaultFolhaTaxQuinzena('2026-10-01').id).toBe('2026-10-q1')
     expect(defaultFolhaTaxQuinzena('2026-10-15').payDate).toBe('2026-10-20')
     expect(defaultFolhaTaxQuinzena('2026-10-21').id).toBe('2026-11-q1')
+  })
+
+  it('cron diário: em 01/10 atualiza Q2/09 (paga 05) + Q1/10 (calendário)', () => {
+    expect(folhaQuinzenasForDailyRefresh('2026-10-01').map((q) => q.id)).toEqual([
+      '2026-09-q2',
+      '2026-10-q1',
+    ])
+  })
+
+  it('cron diário: em 10/10 só Q1/10 (próximo pagamento = calendário)', () => {
+    expect(folhaQuinzenasForDailyRefresh('2026-10-10').map((q) => q.id)).toEqual([
+      '2026-10-q1',
+    ])
   })
 })
