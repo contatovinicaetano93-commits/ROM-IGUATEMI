@@ -170,6 +170,37 @@ describe('calculateFolhaLine — esteticista', () => {
     expect(result.esteticistaBonus).toBe(100)
     expect(result.valorLiquido).toBe(500 - 50 - 70 + 100)
   })
+
+  it('Liria: 7% adm sem bônus 10%', () => {
+    const result = calculateFolhaLine({
+      panel: 'iguatemi',
+      professionalName: 'Liria Pereira Colman',
+      cargo: 'Esteticista',
+      faturado: 5968,
+      pctSalao: 0.6,
+      fatLiquido: 3077.61,
+      taxaCartaoPix: 170.67,
+      produto: 61.73,
+      taxaAdministrativa: 417.76,
+      descontoAssistente: null,
+      meioAMeio: null,
+      parc: null,
+      darf: null,
+      das: null,
+      divAtiva: null,
+      mensalidadeContabilidade: null,
+      descontosDiversos: null,
+      produtosBlack: null,
+      servicosAssistenteComoPro: null,
+      valorAPagarProfissional: null,
+      remitRateOverride: null,
+      taxaServicosOverride: null,
+      hasDepilacao: false,
+      waiveAdminFee: false,
+    })
+    expect(result.esteticistaBonus).toBeNull()
+    expect(result.valorLiquido).toBeCloseTo(2598.12, 2)
+  })
 })
 
 describe('calculateFolhaLine — IG taxa 4% sobre U', () => {

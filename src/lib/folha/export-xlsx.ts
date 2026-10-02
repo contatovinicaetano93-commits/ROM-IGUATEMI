@@ -29,6 +29,7 @@ export const FOLHA_EXPORT_HEADERS = [
   'Meio a meio',
   'Meio a meio %',
   'Outros (olerite)',
+  'Consumo Baru',
   'a_pagar 8123',
   'DARF',
   'DAS',
@@ -46,7 +47,7 @@ export const FOLHA_EXPORT_HEADERS = [
 ] as const
 
 const MONEY_COLS = new Set([
-  3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+  3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
 ])
 
 export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | null)[] {
@@ -63,6 +64,7 @@ export function folhaLineToExportRow(line: FolhaDraftLine): (string | number | n
     line.meio_a_meio,
     line.meio_a_meio_rate,
     line.outros_descontos,
+    x.consumo_baru,
     line.avec.net_payable,
     x.darf,
     x.das,

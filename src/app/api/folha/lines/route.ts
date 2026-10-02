@@ -13,6 +13,7 @@ const extrasSchema = z.object({
   div_ativa: z.number().nullable().optional(),
   mensalidade_contabilidade: z.number().nullable().optional(),
   descontos_diversos: z.number().nullable().optional(),
+  consumo_baru: z.number().nullable().optional(),
   produtos_black: z.number().nullable().optional(),
   servicos_assistente_como_pro: z.number().nullable().optional(),
   valor_a_pagar_profissional: z.number().nullable().optional(),

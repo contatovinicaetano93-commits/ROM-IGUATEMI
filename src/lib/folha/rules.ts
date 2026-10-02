@@ -128,7 +128,7 @@ export function folhaRulesSummary(panel: RomPanelId): FolhaRulesSummary {
       manicure:
         'Faturado − produto. Sem taxa adm — exceto quem tem depilação.',
       esteticista:
-        'Taxa adm: BR 5% / IG 7% sobre faturado − produto; ganha 10% do total faturado.',
+        'Taxa adm: BR 5% / IG 7% sobre faturado − produto; ganha 10% do total faturado (exceto Liria: 7% sem bônus — sala de estética como manicure/depilação).',
       assistente:
         'Atuando como pro: ganho ~30% + taxa adm 3% sobre o serviço (todos, incl. Romeu). Romeu: faixas 30/40/50% no acumulado mês (soma U Q1+Q2); top-up (rate−30%) pago no dia 05. W sobre U: BR 3% / IG 4%; remessa V 20%.',
       multiplicador:

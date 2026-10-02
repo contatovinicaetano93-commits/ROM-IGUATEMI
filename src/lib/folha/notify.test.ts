@@ -50,6 +50,7 @@ const draft: FolhaDraft = {
         div_ativa: null,
         mensalidade_contabilidade: null,
         descontos_diversos: null,
+        consumo_baru: null,
         produtos_black: null,
         servicos_assistente_como_pro: null,
         valor_a_pagar_profissional: null,

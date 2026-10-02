@@ -43,15 +43,23 @@ describe('resolveFolhaPersonRules', () => {
     )
   })
 
-  it('casa Dayana 5%, Romeu 50%, Walter 30% assistente, Dani Rocha 35%', () => {
+  it('casa Dayana 5%, Romeu 50%, Walter 30% assistente, Dani meio 50% + comissão 55%', () => {
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Dayana Marques'))).toBe(0.05)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Romeu Felipe'))).toBe(0.5)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Walter Leal'))).toBe(0.7)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daniela Machado Rocha'))).toBe(
-      0.65,
+      0.5,
     )
     expect(resolveFolhaPersonRules('Walter Leal')?.proCommissionRate).toBe(0.6)
-    expect(resolveFolhaPersonRules('Dani Rocha')?.assistantRemitRate).toBe(0.35)
+    expect(resolveFolhaPersonRules('Dani Rocha')?.assistantRemitRate).toBeNull()
+    expect(resolveFolhaPersonRules('Dani Rocha')?.proCommissionRate).toBe(0.55)
+  })
+
+  it('Liria: taxa adm 7%, sem bônus esteticista', () => {
+    const r = resolveFolhaPersonRules('Liria Pereira Colman')
+    expect(r?.id).toBe('liria')
+    expect(r?.suppressEsteticistaBonus).toBe(true)
+    expect(r?.adminFeeRate).toBe(0.07)
   })
 
   it('não confunde Walter Junior com Walter Leal', () => {
