@@ -163,6 +163,16 @@ function synthesize(f: FopagRow): {
     (f.div_ativa > 0.005 ? f.div_ativa : 0) +
     (f.desc_diversos_02 > 0.005 ? f.desc_diversos_02 : 0)
 
+  /**
+   * Fechamento Q2 (dia 05): a Base Folha pode já embutir o top-up Romeu no
+   * líquido. O 8123 não traz isso — strip para o motor reaplicar via acumulado.
+   */
+  let liquidoSansRomeuTopup = f.liquido
+  if (person?.isRomeuAssistant && bonus && bonus.adic_10 > 0.005) {
+    liquidoSansRomeuTopup = Math.round((f.liquido - bonus.adic_10) * 10000) / 10000
+    notes.push(`stripped_topup_from_liquido=${bonus.adic_10}`)
+  }
+
   if (isAssist) {
     const uAdm = f.U > 0 ? f.U * 0.03 : null
     if (uAdm != null && approx(uAdm, f.taxa_adm, 0.5)) {
@@ -172,20 +182,23 @@ function synthesize(f: FopagRow): {
     if (pattern === 'assist_path_A') {
       base.other_discounts =
         Math.round((f.meio_a_meio - f.taxa_adm) * 10000) / 10000
-      base.net_payable = f.liquido + rhDebitRestore
+      base.net_payable = liquidoSansRomeuTopup + rhDebitRestore
     } else if (pattern === 'assist_path_B') {
       base.other_discounts = 0
       base.net_payable =
         Math.round(
-          (f.liquido - f.meio_a_meio + f.taxa_adm + rhDebitRestore) * 10000,
+          (liquidoSansRomeuTopup - f.meio_a_meio + f.taxa_adm + rhDebitRestore) *
+            10000,
         ) / 10000
     } else if (f.baru > 0.005) {
       extras.consumo_baru = (extras.consumo_baru ?? 0) + f.baru
       rhExtras.push('baru')
       base.net_payable =
-        Math.round((f.liquido + f.baru + rhDebitRestore) * 10000) / 10000
+        Math.round(
+          (liquidoSansRomeuTopup + f.baru + rhDebitRestore) * 10000,
+        ) / 10000
     } else {
-      base.net_payable = f.liquido + rhDebitRestore
+      base.net_payable = liquidoSansRomeuTopup + rhDebitRestore
     }
     if (person?.isRomeuAssistant && bonus) {
       extras.acumulado_mes = bonus.total
@@ -241,13 +254,26 @@ function synthesize(f: FopagRow): {
       }
     }
     const admMinusMeio = f.taxa_adm - effectiveMeio
-    const descontosMag = admMinusMeio + f.baru - shortfall
+    // Com shortfall W + Baru: Baru via extras (não embute no descontos 8123),
+    // senão o residual olerite não casa e o motor deixa de abater os R$ Baru.
+    const baruViaExtras = f.baru > 0.005 && shortfall > 0.02
+    const descontosMag =
+      admMinusMeio + (baruViaExtras ? 0 : f.baru) - shortfall
     base.other_discounts = -Math.round(descontosMag * 10000) / 10000
     // Se corrigimos o meio, o líquido Fopag também precisa do ajuste.
     const liqBase = f.liquido - f.meio_a_meio + effectiveMeio
+    let baruRestore = 0
+    if (baruViaExtras) {
+      extras.consumo_baru = (extras.consumo_baru ?? 0) + f.baru
+      rhExtras.push('baru')
+      baruRestore = f.baru
+      notes.push('baru_via_extras_with_W_shortfall')
+    }
     if (shortfall > 0.02) {
       base.net_payable =
-        Math.round((liqBase - f.V + 2 * f.W + rhDebitRestore) * 10000) / 10000
+        Math.round(
+          (liqBase - f.V + 2 * f.W + baruRestore + rhDebitRestore) * 10000,
+        ) / 10000
     } else {
       base.net_payable =
         Math.round((liqBase - f.V + f.W + rhDebitRestore) * 10000) / 10000
@@ -318,14 +344,15 @@ describe('Fopag IG Q2 full sweep', () => {
           syn.notes.push(`target_meio_corrected=${target.toFixed(2)}`)
         }
       }
+      // Líquido Fopag fechado (dia 05) já é o alvo a pagar — top-up Romeu
+      // embutido na Base Folha; o motor reaplica via acumulado_mes.
       if (
         person?.isRomeuAssistant &&
         bonus &&
         bonus.adic_10 > 0.005 &&
         syn.extras?.acumulado_mes != null
       ) {
-        target = target + bonus.adic_10
-        syn.notes.push(`target_includes_topup +${bonus.adic_10}`)
+        syn.notes.push(`target_liquido_includes_topup ${bonus.adic_10}`)
       }
       const line = buildFolhaDraftLine('iguatemi', syn.row, syn.extras, {
         applyTaxExtras: false,
@@ -423,10 +450,8 @@ describe('Fopag IG Q2 full sweep', () => {
     expect(by('brunna')?.motor_proposed).toBeCloseTo(68976.53, 0)
     expect(by('daniel chabaribery')?.motor_proposed).toBeCloseTo(17611.26, 0)
     expect(by('daniela machado')?.motor_proposed).toBeCloseTo(19755.805, 0)
-    expect(by('gabriela da silva santos')?.motor_proposed).toBeCloseTo(
-      1114.77 + 1023.003,
-      0,
-    )
+    // Gabriela: líquido fechado já inclui top-up meta Romeu (+1023)
+    expect(by('gabriela da silva santos')?.motor_proposed).toBeCloseTo(2137.77, 0)
     expect(by('lucas rodrigues')?.motor_proposed).toBeCloseTo(777.56, 0)
     expect(by('maykon')?.motor_proposed).toBeCloseTo(22723.17, 0)
     expect(by('joanides')?.motor_proposed).toBeCloseTo(47658.4, 0)
@@ -437,9 +462,9 @@ describe('Fopag IG Q2 full sweep', () => {
     )
     expect(by('gildenice')?.status).toBe('match')
     expect(by('romeu felipe')?.motor_proposed).toBeCloseTo(542.1, 0)
-    // Diello: Fopag meio 50% → corrigido para 5% (11599.01 − 2127.3 + 212.73)
+    // Diello: Fopag meio 50% → corrigido para 5% (fat_líquido atualizado no fechamento)
     expect(by('diello')?.motor_proposed).toBeCloseTo(
-      11599.01 - 2127.3 + 212.73,
+      12071.51 - 2127.3 + 212.73,
       0,
     )
     expect(by('liria')?.motor_proposed).toBeCloseTo(2598.12, 0)
@@ -447,8 +472,9 @@ describe('Fopag IG Q2 full sweep', () => {
     expect(by('diello')?.status).toBe('match')
     expect(by('liria')?.status).toBe('match')
 
-    // Soft floor: ≥95% após Dani/Diello/Liria
-    expect(matches.length / people.length).toBeGreaterThanOrEqual(0.95)
+    // Fechamento Q2 16–30/09: 115/115 vs Fopag
+    expect(matches.length).toBe(people.length)
+    expect(gaps.length).toBe(0)
     expect(rh.length).toBe(0)
   })
 })
