@@ -13,15 +13,13 @@ try {
 
 /**
  * Tagged-template client (postgres.js).
- * Não use neon() HTTP — falha em *.supabase.com; use pooler Supabase.
+ * Não use neon() HTTP (`@neondatabase/serverless`) — use postgres.js + DATABASE_URL.
  *
- * Preferir Transaction Pooler (6543) na Vercel:
- * postgresql://postgres.<ref>:<senha>@aws-0-<region>.pooler.supabase.com:6543/postgres
- * (senha URL-encoded: @ → %40)
+ * Unidades: Neon pooler (`*.neon.tech`). Supabase session pooler (5432) ainda
+ * é reescrito para transaction (6543) se aparecer legado.
  *
  * Overlay de deploy: `secrets/database-url.txt` (gitignore) tem prioridade sobre
- * DATABASE_URL — pooler Supabase; usado quando a API de env da Vercel
- * não está disponível neste agente.
+ * DATABASE_URL quando a API de env da Vercel não está disponível neste agente.
  */
 export type Sql = {
   /** Tagged template + helper sql(ids) para IN (...). */
