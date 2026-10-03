@@ -144,6 +144,7 @@ export function RomFlowApp() {
           <ExpenseList
             expenses={store.user!.role === 'solicitante' ? myExpenses : expenses}
             search={search}
+            categories={store.db.categories}
             title={store.user!.role === 'solicitante' ? 'Minhas solicitações' : 'Todas as solicitações'}
             subtitle={
               store.user!.role === 'solicitante'
@@ -164,6 +165,7 @@ export function RomFlowApp() {
           <ExpenseList
             expenses={myExpenses}
             search={search}
+            categories={store.db.categories}
             companyNames={companyNames}
             user={store.user!}
             onSearch={setSearch}
@@ -215,11 +217,23 @@ export function RomFlowApp() {
       }
       case 'approvals':
         return (
-          <FinancePage mode="approvals" expenses={expenses} users={store.db.users} onOpen={setSelected} />
+          <FinancePage
+            mode="approvals"
+            expenses={expenses}
+            users={store.db.users}
+            categories={store.db.categories}
+            onOpen={setSelected}
+          />
         )
       case 'payments':
         return (
-          <FinancePage mode="payments" expenses={expenses} users={store.db.users} onOpen={setSelected} />
+          <FinancePage
+            mode="payments"
+            expenses={expenses}
+            users={store.db.users}
+            categories={store.db.categories}
+            onOpen={setSelected}
+          />
         )
       case 'reports':
         return <ReportsPage expenses={expenses} categories={store.db.categories} />
