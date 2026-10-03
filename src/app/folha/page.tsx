@@ -924,6 +924,13 @@ export default function FolhaPage() {
                     Valores em R$ (sem símbolo na grade). Hover no cabeçalho = nome completo.
                     Em telas largas tudo cabe; se apertar, role só o mínimo.
                   </p>
+                  <p className="mb-1.5 text-[10px] text-muted">
+                    Legenda:{' '}
+                    <span className="text-foreground">U</span> = serviços em que o assistente
+                    atuou como profissional ·{' '}
+                    <span className="text-foreground">W</span> = taxa cobrada sobre esses
+                    serviços (U)
+                  </p>
                   <table className="w-full min-w-0 table-fixed border-collapse text-left text-[11px] leading-tight">
                     <colgroup>
                       <col className="w-[14%]" />
