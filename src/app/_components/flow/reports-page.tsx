@@ -28,7 +28,7 @@ export function ReportsPage({
   const ticket = expenses.length ? total / expenses.length : 0;
   const categories = categoryOptions.map((item) => {
     const value = expenses
-      .filter((expense) => expense.category === item.name)
+      .filter((expense) => expense.category === item.id || expense.category === item.name)
       .reduce((sum, expense) => sum + expense.amount, 0);
     return { name: item.name, color: item.color, value, pct: total ? Math.round((value / total) * 100) : 0 };
   });

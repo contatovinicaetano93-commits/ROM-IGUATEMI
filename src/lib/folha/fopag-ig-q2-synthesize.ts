@@ -164,6 +164,8 @@ export function synthesizeFopagIgQ2(
   if (isAssist) {
     const uAdm = f.U > 0 ? f.U * 0.03 : null
     if (uAdm != null && approx(uAdm, f.taxa_adm, 0.5)) {
+      // Motor usa U como charged (adm 3%); Fat. UI/export fica com C do Fopag.
+      if (f.faturado > 0.005) extras.faturado_referencia = f.faturado
       base.charged = f.U
       notes.push('charged=U_for_adm3')
     }

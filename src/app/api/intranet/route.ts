@@ -58,6 +58,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireSession(req)
   if (!auth.ok) return err(auth.message, auth.status)
-  await markNotificationsRead(readerKey(auth.session))
-  return ok({ ok: true })
+  try {
+    const user = await resolveFlowUser(auth.session)
+    const reader = readerKey(auth.session)
+    const audience = notificationAudienceKeys({
+      readerKey: reader,
+      panelRole: auth.session.role,
+      flowRole: user.role,
+      areaIds: user.areaIds,
+    })
+    await markNotificationsRead(reader, audience)
+    return ok({ ok: true })
+  } catch (error) {
+    return err(error instanceof Error ? error.message : 'Falha ao marcar notificação', 500)
+  }
 }

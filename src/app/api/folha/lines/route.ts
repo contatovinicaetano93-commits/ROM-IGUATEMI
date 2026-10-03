@@ -35,6 +35,8 @@ const extrasSchema = z.object({
   liquido_referencia: z.number().nullable().optional(),
   fat_liquido_referencia: z.number().nullable().optional(),
   produto_referencia: z.number().nullable().optional(),
+  /** Total Faturado olerite/Fopag — só coluna Fat. (não mexe no líquido). */
+  faturado_referencia: z.number().nullable().optional(),
 })
 
 const bodySchema = z.object({

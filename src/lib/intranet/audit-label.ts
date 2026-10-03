@@ -1,36 +1,26 @@
 import { AUDIT_LABEL } from '@/lib/flow/format'
 import type { AuditAction } from '@/lib/flow/types'
 
-/** Flow logs `action.toUpperCase()` (APPROVE, DOCS…) as well as canonical AUDIT_LABEL keys. */
+const FLOW_ACTIONS = new Set<string>(Object.keys(AUDIT_LABEL))
+
+/** Verbs persisted by applyExpenseAction (`action.toUpperCase()`) → AUDIT_LABEL keys. */
 const FLOW_ACTION_ALIAS: Record<string, AuditAction> = {
   CREATE: 'CREATE_EXPENSE',
-  CREATE_EXPENSE: 'CREATE_EXPENSE',
   DOCS: 'REQUEST_DOCUMENTATION',
-  REQUEST_DOCUMENTATION: 'REQUEST_DOCUMENTATION',
   APPROVE: 'APPROVE_EXPENSE',
-  APPROVE_EXPENSE: 'APPROVE_EXPENSE',
   REJECT: 'REJECT_EXPENSE',
-  REJECT_EXPENSE: 'REJECT_EXPENSE',
   RESUBMIT: 'UPDATE_EXPENSE',
-  UPDATE_EXPENSE: 'UPDATE_EXPENSE',
-  DELETE_EXPENSE: 'DELETE_EXPENSE',
-  CREATE_USER: 'CREATE_USER',
-  UPDATE_USER: 'UPDATE_USER',
-  REVOKE_USER: 'REVOKE_USER',
-  ATTACH_PROOF: 'ATTACH_PROOF',
   PROGRESS: 'PROGRESS_EXPENSE',
-  PROGRESS_EXPENSE: 'PROGRESS_EXPENSE',
   COMPLETE: 'COMPLETE_EXPENSE',
-  COMPLETE_EXPENSE: 'COMPLETE_EXPENSE',
   CANCEL: 'CANCEL_EXPENSE',
-  CANCEL_EXPENSE: 'CANCEL_EXPENSE',
 }
 
 export function intranetAuditLabel(action: string, resource: string): string {
   if (resource.startsWith('cms:')) return 'Publicou na intranet'
   if (action === 'PUBLISH') return 'Publicou na intranet'
-  const canonical = FLOW_ACTION_ALIAS[action.toUpperCase()]
-  if (canonical) return AUDIT_LABEL[canonical]
+  const key = action.toUpperCase()
+  const mapped = FLOW_ACTION_ALIAS[key] ?? (FLOW_ACTIONS.has(key) ? (key as AuditAction) : null)
+  if (mapped) return AUDIT_LABEL[mapped]
   return action
 }
 

@@ -147,13 +147,18 @@ export async function listUnreadNotifications(
   }
 }
 
-export async function markNotificationsRead(readerKey: string): Promise<void> {
+export async function markNotificationsRead(
+  readerKey: string,
+  audienceKeys: readonly string[] = [],
+): Promise<void> {
   try {
     const sql = getIntranetSql()
+    const keys = audienceKeys.length > 0 ? [...audienceKeys] : [readerKey]
     await sql`
       insert into intranet_notification_reads (notification_id, reader_key)
       select n.id, ${readerKey}
       from intranet_notifications n
+      where n.audience_key is null or n.audience_key = any(${keys})
       on conflict do nothing
     `
   } catch (error) {

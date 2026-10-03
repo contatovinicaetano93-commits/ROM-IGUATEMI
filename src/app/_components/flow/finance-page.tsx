@@ -8,8 +8,9 @@ import {
   Search,
   Wallet,
 } from "lucide-react";
+import { categoryLabel } from "@/lib/flow/category-label";
 import { AREA_LABEL, daysUntil, formatDate, money, shortId } from "@/lib/flow/format";
-import type { Expense, User } from "@/lib/flow/types";
+import type { Category, Expense, User } from "@/lib/flow/types";
 import { isAdminInbox, isWaitingPayment } from "@/lib/flow/workflow";
 import { StatusBadge } from "./status-badge";
 
@@ -20,11 +21,13 @@ export function FinancePage({
   mode,
   expenses,
   users,
+  categories = [],
   onOpen,
 }: {
   mode: "approvals" | "payments";
   expenses: Expense[];
   users: User[];
+  categories?: Category[];
   onOpen: (expense: Expense) => void;
 }) {
   const [approvalTab, setApprovalTab] = useState<ApprovalTab>("review");
@@ -79,12 +82,13 @@ export function FinancePage({
         }
       }
     }
-    return source.filter((item) =>
-      `${item.title} ${item.beneficiary_name} ${AREA_LABEL[item.area]}`
+    return source.filter((item) => {
+      const categoryName = categoryLabel(categories, item.category);
+      return `${item.title} ${item.beneficiary_name} ${item.category} ${categoryName} ${AREA_LABEL[item.area]}`
         .toLowerCase()
-        .includes(query.toLowerCase()),
-    );
-  }, [approvalTab, decided, mode, paymentTab, paid, query, queue, rejected, returned, waitingPay]);
+        .includes(query.toLowerCase());
+    });
+  }, [approvalTab, categories, decided, mode, paymentTab, paid, query, queue, rejected, returned, waitingPay]);
 
   return (
     <div className="page-stack">
@@ -253,14 +257,20 @@ export function FinancePage({
                         <strong>{requester?.name || "—"}</strong>
                       </span>
                       {item.area === "financeiro" ? (
-                        <span>
-                          <small>Beneficiário</small>
-                          <strong>{item.beneficiary_name}</strong>
-                        </span>
+                        <>
+                          <span>
+                            <small>Categoria</small>
+                            <strong>{categoryLabel(categories, item.category)}</strong>
+                          </span>
+                          <span>
+                            <small>Beneficiário</small>
+                            <strong>{item.beneficiary_name}</strong>
+                          </span>
+                        </>
                       ) : (
                         <span>
                           <small>Tipo</small>
-                          <strong>{item.category}</strong>
+                          <strong>{categoryLabel(categories, item.category)}</strong>
                         </span>
                       )}
                       {days !== null ? (

@@ -73,6 +73,7 @@ const draft: FolhaDraft = {
         liquido_referencia: null,
         fat_liquido_referencia: null,
         produto_referencia: null,
+        faturado_referencia: null,
       },
       proposed_pay: 985,
       formula_y_preview: null,

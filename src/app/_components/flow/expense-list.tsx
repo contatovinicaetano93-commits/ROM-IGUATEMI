@@ -2,8 +2,9 @@
 
 import { Filter, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { categoryLabel } from "@/lib/flow/category-label";
 import { AREA_LABEL, money, shortId } from "@/lib/flow/format";
-import type { Expense, ExpenseStatus, FinanceAction, RequestArea, Screen, User } from "@/lib/flow/types";
+import type { Category, Expense, ExpenseStatus, FinanceAction, RequestArea, Screen, User } from "@/lib/flow/types";
 import { allowedActions } from "@/lib/flow/workflow";
 import { MaintenanceStatusActions } from "./maintenance-status-actions";
 import { NewRequestPicker, resolveNewRequestAction } from "./new-request-picker";
@@ -28,6 +29,7 @@ export function ExpenseList({
   subtitle = "Manutenção: mude o status aqui — em andamento, finalizado ou cancelado.",
   eyebrow = "MEU FLUXO",
   companyNames = {},
+  categories = [],
   user,
   onSearch,
   onNavigate,
@@ -40,6 +42,7 @@ export function ExpenseList({
   subtitle?: string;
   eyebrow?: string;
   companyNames?: Record<string, string>;
+  categories?: Category[];
   user: User;
   onSearch: (value: string) => void;
   onNavigate: (screen: Screen) => void;
@@ -56,14 +59,15 @@ export function ExpenseList({
   const filtered = useMemo(
     () =>
       expenses.filter((item) => {
-        const matchesSearch = `${item.title} ${item.beneficiary_name} ${item.category} ${AREA_LABEL[item.area]}`
+        const categoryName = categoryLabel(categories, item.category);
+        const matchesSearch = `${item.title} ${item.beneficiary_name} ${item.category} ${categoryName} ${AREA_LABEL[item.area]}`
           .toLowerCase()
           .includes(search.toLowerCase());
         const matchesStatus = status === "todos" || item.status === status;
         const matchesArea = areaFilter === "todas" || item.area === areaFilter;
         return matchesSearch && matchesStatus && matchesArea;
       }),
-    [areaFilter, expenses, search, status],
+    [areaFilter, categories, expenses, search, status],
   );
 
   const total = filtered.reduce((sum, item) => sum + item.amount, 0);
@@ -259,7 +263,9 @@ export function ExpenseList({
                               <strong>{item.title}</strong>
                               <small>
                                 #{shortId(item.id)}
-                                {item.area === "financeiro" ? ` • ${item.beneficiary_name}` : ""}
+                                {item.area === "financeiro"
+                                  ? ` • ${categoryLabel(categories, item.category)} • ${item.beneficiary_name}`
+                                  : ""}
                               </small>
                             </span>
                           </button>
