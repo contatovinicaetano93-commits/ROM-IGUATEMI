@@ -95,6 +95,21 @@ interface IndicePerformancePro {
   constancia_pct: number | null
   delta_indice: number | null
   standing: 'acima' | 'abaixo' | 'neutro' | 'sem_base'
+  fat_bruto_ano: number | null
+  dias_trabalhados_ano: number | null
+  media_dia_ano: number | null
+}
+
+interface IndicePerformanceTotals {
+  fat_bruto: number | null
+  dias_trabalhados: number | null
+  dias_uteis_salao: number | null
+  constancia_pct: number | null
+  media_dia_trabalhado: number | null
+  fat_bruto_ano: number | null
+  dias_trabalhados_ano: number | null
+  media_dia_ano: number | null
+  delta_indice: null
 }
 
 interface IndicePerformanceData {
@@ -102,11 +117,14 @@ interface IndicePerformanceData {
   from: string
   to: string
   mtd: boolean
+  year_from: string
+  year_to: string
   reference_day: string | null
   salon_open_days: number | null
   media_dias_trabalhados: number | null
   indice: number | null
   professionals: IndicePerformancePro[]
+  totals: IndicePerformanceTotals
   note: string
 }
 
@@ -785,7 +803,10 @@ export default function DashboardPage() {
                     : ''}
               </p>
               <p className="mb-3 text-[0.7rem] text-muted">{indicePerf.note}</p>
-              <table className="w-full min-w-[720px] text-sm">
+              <p className="mb-3 text-[0.7rem] text-muted">
+                Ano: {indicePerf.year_from} → {indicePerf.year_to}
+              </p>
+              <table className="w-full min-w-[960px] text-sm">
                 <thead>
                   <tr className="text-left text-[0.65rem] uppercase tracking-wide text-muted">
                     <th className="pb-2 font-medium">Profissional</th>
@@ -795,6 +816,9 @@ export default function DashboardPage() {
                     <th className="pb-2 font-medium">Constância</th>
                     <th className="pb-2 font-medium">Δ vs média dias</th>
                     <th className="pb-2 font-medium">R$/dia veio</th>
+                    <th className="pb-2 font-medium">Fat. ano</th>
+                    <th className="pb-2 font-medium">Dias ano</th>
+                    <th className="pb-2 font-medium">R$/dia ano</th>
                     <th className="pb-2 font-medium">Status</th>
                   </tr>
                 </thead>
@@ -846,12 +870,76 @@ export default function DashboardPage() {
                           ? formatCurrency(pro.media_dia_trabalhado)
                           : '—'}
                       </td>
+                      <td className="py-2 tabular-nums">
+                        {pro.fat_bruto_ano != null
+                          ? formatCurrency(pro.fat_bruto_ano)
+                          : '—'}
+                      </td>
+                      <td className="py-2 tabular-nums">
+                        {pro.dias_trabalhados_ano != null
+                          ? pro.dias_trabalhados_ano
+                          : '—'}
+                      </td>
+                      <td className="py-2 tabular-nums">
+                        {pro.media_dia_ano != null
+                          ? formatCurrency(pro.media_dia_ano)
+                          : '—'}
+                      </td>
                       <td className="py-2">
                         <IndiceStandingBadge standing={pro.standing} />
                       </td>
                     </tr>
                   ))}
                 </tbody>
+                {indicePerf.totals ? (
+                  <tfoot>
+                    <tr className="border-t-2 border-border text-sm font-semibold">
+                      <td className="py-2.5 text-foreground">Total</td>
+                      <td className="py-2.5 tabular-nums">
+                        {indicePerf.totals.fat_bruto != null
+                          ? formatCurrency(indicePerf.totals.fat_bruto)
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 tabular-nums">
+                        {indicePerf.totals.dias_trabalhados != null
+                          ? indicePerf.totals.dias_trabalhados
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 tabular-nums">
+                        {indicePerf.totals.dias_uteis_salao != null
+                          ? indicePerf.totals.dias_uteis_salao
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 tabular-nums">
+                        {indicePerf.totals.constancia_pct != null
+                          ? formatPercentPoints(indicePerf.totals.constancia_pct, 1)
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 tabular-nums text-muted">—</td>
+                      <td className="py-2.5 tabular-nums">
+                        {indicePerf.totals.media_dia_trabalhado != null
+                          ? formatCurrency(indicePerf.totals.media_dia_trabalhado)
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 tabular-nums">
+                        {indicePerf.totals.fat_bruto_ano != null
+                          ? formatCurrency(indicePerf.totals.fat_bruto_ano)
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 tabular-nums">
+                        {indicePerf.totals.dias_trabalhados_ano != null
+                          ? indicePerf.totals.dias_trabalhados_ano
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 tabular-nums">
+                        {indicePerf.totals.media_dia_ano != null
+                          ? formatCurrency(indicePerf.totals.media_dia_ano)
+                          : '—'}
+                      </td>
+                      <td className="py-2.5 text-muted">—</td>
+                    </tr>
+                  </tfoot>
+                ) : null}
               </table>
             </div>
           )}
