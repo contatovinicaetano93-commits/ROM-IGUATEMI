@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
           professional_scope: proScope,
         })
       }
-      const cacheKey = `contacts:queue-counts:v6:ch=${channel ?? ''}:day=${day ?? 'today'}`
+      const cacheKey = `contacts:queue-counts:v7:ch=${channel ?? ''}:day=${day ?? 'today'}`
       const queues = await cachedFetch(
         cacheKey,
         () => countContactQueues({ channel, day }),
@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
 
     if (newNotAvec) {
       // v4: list-only (no countContactQueues / urgency scan); UI keeps prev overdue counts
-      const cacheKey = `contacts:novos:v4:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      const cacheKey = `contacts:novos:v5:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
       const result = await cachedFetch(
         cacheKey,
         async () => {
@@ -192,7 +192,7 @@ export async function GET(req: NextRequest) {
 
     if (withoutServices) {
       // v2: list-only (UI already fetches counts=1 in parallel for badges)
-      const cacheKey = `contacts:sem-servicos:v2:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
+      const cacheKey = `contacts:sem-servicos:v3:day=${day ?? 'today'}:lim=${limit}:ch=${channel ?? ''}`
       const result = await cachedFetch(
         cacheKey,
         async () => {

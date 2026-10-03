@@ -151,4 +151,17 @@ describe('contatos sem serviço (fora do funil)', () => {
     expect(texto).toContain("status <> 'perdido'")
     expect(texto).toContain("status <> 'importado'")
   })
+
+  it('exclui dump/histórico last_done e returning (não só avec_backfill%)', async () => {
+    sqlMock.mockResolvedValueOnce([{ n: 0 }])
+    const { countContactsWithoutServices } = await import('@/lib/contact-summary')
+    await countContactsWithoutServices({ day: '2026-08-01' })
+
+    const texto = (sqlMock.mock.calls[0]![0] as string[]).join(' ')
+    // avec_last_done_backfill NÃO casa com avec_backfill% — sem este filtro a
+    // fila Sem serviço do Iguatemi inchava (~2k) com placeholder Atendimento.
+    expect(texto).toContain('avec_last_done%')
+    expect(texto).toContain('avec_sync_returning%')
+    expect(texto).toContain('avec_backfill%')
+  })
 })

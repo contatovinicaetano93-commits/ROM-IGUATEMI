@@ -564,7 +564,8 @@ function normalizeDayKey(raw: string | null | undefined): string {
  * Contatos novos dos últimos NOVOS_WINDOW_DAYS dias sem cliente na Avec ainda.
  * O lead pode vir da Avec (agenda/atendimento), mas o ROM cria cadastro novo
  * porque ainda não existe no banco Avec (`avec_client_id` nulo).
- * Exclui só dump em massa (clients/backfill/lake) — não o sync operacional.
+ * Exclui dump/histórico Avec (clients/backfill/lake/last_done/returning) —
+ * mesma família que `healImportadoStatus`. Sync operacional (agenda/atendido) fica.
  *
  * Sai da lista quem já entrou no funil de cadência (serviço ativo com
  * `last_done_at` e `cadence_days`) — mesma condição que faz o contato contar em
@@ -589,6 +590,8 @@ export async function countNewContactsNotInAvec(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and coalesce(source, '') not like 'avec_last_done%'
+      and coalesce(source, '') not like 'avec_sync_returning%'
       and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1}::int)::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
@@ -654,6 +657,8 @@ export async function listNewContactsNotInAvec(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and coalesce(source, '') not like 'avec_last_done%'
+      and coalesce(source, '') not like 'avec_sync_returning%'
       and created_at >= ((${day}::date - ${NOVOS_WINDOW_DAYS - 1}::int)::timestamp at time zone 'America/Sao_Paulo')
       and created_at < ((${day}::date + 1)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
@@ -684,8 +689,9 @@ export async function listNewContactsNotInAvec(opts?: {
  * Junto com `countNewContactsNotInAvec` a divisão é exaustiva: ou o contato tem
  * `next_due` (funil de cadência), ou está em Novos (janela), ou está aqui.
  *
- * Fora: anonimizados, dump em massa da Avec, `importado` e `perdido` — este
- * último é a porta de saída, acionada na tela de detalhe do contato.
+ * Fora: anonimizados, dump/histórico Avec (clients/backfill/lake/last_done/
+ * returning — alinhado a `healImportadoStatus`), `importado` e `perdido` —
+ * este último é a porta de saída, acionada na tela de detalhe do contato.
  */
 export async function countContactsWithoutServices(opts?: {
   day?: string | null
@@ -701,6 +707,8 @@ export async function countContactsWithoutServices(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and coalesce(source, '') not like 'avec_last_done%'
+      and coalesce(source, '') not like 'avec_sync_returning%'
       and created_at < ((${day}::date - ${NOVOS_WINDOW_DAYS - 1}::int)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
         select 1
@@ -733,6 +741,8 @@ export async function listContactsWithoutServices(opts?: {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and coalesce(source, '') not like 'avec_last_done%'
+      and coalesce(source, '') not like 'avec_sync_returning%'
       and created_at < ((${day}::date - ${NOVOS_WINDOW_DAYS - 1}::int)::timestamp at time zone 'America/Sao_Paulo')
       and not exists (
         select 1
@@ -762,6 +772,8 @@ export async function countBaseAtiva(): Promise<number> {
       and coalesce(source, '') not like 'avec_sync_clients%'
       and coalesce(source, '') not like 'avec_backfill%'
       and coalesce(source, '') not like 'avec_lake%'
+      and coalesce(source, '') not like 'avec_last_done%'
+      and coalesce(source, '') not like 'avec_sync_returning%'
       and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
         >= ${from}::date
       and (timezone('America/Sao_Paulo', coalesce(first_contact_at, created_at)))::date
