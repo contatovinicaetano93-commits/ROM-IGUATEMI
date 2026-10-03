@@ -20,6 +20,10 @@ import {
 import { todayIso } from '@/lib/salon/format'
 import { resolveMonthWindow } from '@/lib/salon/month-window'
 import {
+  getSalonCommissionsDailyNear,
+  type CommissionProfessionalRow,
+} from '@/lib/salon/commission-metrics'
+import {
   getSalonP1DailyNear,
   type P1ProfessionalRow,
 } from '@/lib/salon/p1-metrics'
@@ -30,6 +34,8 @@ export type DailyPerformanceStanding = 'acima' | 'abaixo' | 'neutro' | 'sem_base
 
 export type DailyPerformanceProRow = {
   name: string
+  /** Cargo 8123 (Cabeleireiro, Manicure, Assistente…). */
+  categoria: string | null
   fat_bruto: number | null
   dias_trabalhados: number | null
   dias_uteis_salao: number | null
@@ -156,6 +162,30 @@ export function matchVisitKeyToP1(
   return best
 }
 
+/**
+ * Casa cargo 8123 → nome canônico P1 (mesma lógica de visitas).
+ */
+export function mapCategoriaByP1Name(
+  p1Names: string[],
+  commissionRows: readonly { name: string; role: string | null }[],
+): Map<string, string> {
+  const p1Keys = p1Names.map((n) => normalizeProKey(n))
+  const keyToName = new Map(p1Names.map((n) => [normalizeProKey(n), n]))
+  const out = new Map<string, string>()
+  for (const row of commissionRows) {
+    const role = String(row.role ?? '').trim()
+    if (!role) continue
+    const visitKey = normalizeProKey(String(row.name ?? ''))
+    if (!visitKey) continue
+    const matched = matchVisitKeyToP1(visitKey, p1Keys)
+    if (!matched) continue
+    const name = keyToName.get(matched)
+    if (!name || out.has(name)) continue
+    out.set(name, role)
+  }
+  return out
+}
+
 export function buildDailyPerformanceIndex(args: {
   month: string
   from: string
@@ -167,10 +197,13 @@ export function buildDailyPerformanceIndex(args: {
   fatByPro: Map<string, number>
   /** Chave normalizada de visita → dias distintos */
   daysByVisitKey: Map<string, number>
+  /** Nome canônico P1 → cargo 8123 */
+  categoriaByPro?: Map<string, string>
 }): DailyPerformanceIndex {
   const p1Names = [...args.fatByPro.keys()]
   const p1Keys = p1Names.map((n) => normalizeProKey(n))
   const keyToName = new Map(p1Names.map((n) => [normalizeProKey(n), n]))
+  const categoriaByPro = args.categoriaByPro ?? new Map<string, string>()
 
   const daysWorkedByP1 = new Map<string, number>()
   for (const [visitKey, days] of args.daysByVisitKey) {
@@ -203,6 +236,7 @@ export function buildDailyPerformanceIndex(args: {
     const mediaTrab = avgPerDay(fat, daysWorked)
     const mediaSalao = avgPerDay(fat, openDays)
     const constancia = constanciaPct(daysWorked, openDays)
+    const categoria = categoriaByPro.get(name)?.trim() || null
 
     if (daysWorked != null) diasComBase.push(daysWorked)
     if (constancia != null) constancias.push(constancia)
@@ -211,6 +245,7 @@ export function buildDailyPerformanceIndex(args: {
     if (fat == null && daysWorked == null) continue
     draft.push({
       name,
+      categoria,
       fat_bruto: fat,
       dias_trabalhados: daysWorked,
       dias_uteis_salao: openDays,
@@ -321,7 +356,10 @@ export async function computeDailyPerformanceIndex(opts?: {
       : referenceDay.slice(0, 7)
   const window = resolveMonthWindow(monthKey, referenceDay)
 
-  const latest = await getSalonP1DailyNear(window.to, { maxSkewDays: 14 })
+  const [latest, commissions] = await Promise.all([
+    getSalonP1DailyNear(window.to, { maxSkewDays: 14 }),
+    getSalonCommissionsDailyNear(window.to, { maxSkewDays: 45 }),
+  ])
   const pros = asJsonArray<P1ProfessionalRow>(latest?.professionals)
   const fatByPro = new Map<string, number>()
   for (const p of pros) {
@@ -331,6 +369,14 @@ export async function computeDailyPerformanceIndex(opts?: {
     if (!Number.isFinite(rev)) continue
     fatByPro.set(name, rev)
   }
+
+  const commissionPros = asJsonArray<CommissionProfessionalRow>(
+    commissions?.professionals,
+  )
+  const categoriaByPro = mapCategoriaByP1Name(
+    [...fatByPro.keys()],
+    commissionPros,
+  )
 
   const [salonOpenDays, daysByVisitKey] = await Promise.all([
     countSalonOpenDays(window.from, window.to),
@@ -346,5 +392,6 @@ export async function computeDailyPerformanceIndex(opts?: {
     salonOpenDays,
     fatByPro,
     daysByVisitKey,
+    categoriaByPro,
   })
 }

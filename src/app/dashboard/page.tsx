@@ -86,6 +86,7 @@ interface PerformanceData {
 
 interface IndicePerformancePro {
   name: string
+  categoria: string | null
   fat_bruto: number | null
   dias_trabalhados: number | null
   dias_uteis_salao: number | null
@@ -800,7 +801,14 @@ export default function DashboardPage() {
                 <tbody className="divide-y divide-border">
                   {indicePerf.professionals.map((pro) => (
                     <tr key={pro.name}>
-                      <td className="py-2 font-medium text-foreground/90">{pro.name}</td>
+                      <td className="py-2 font-medium text-foreground/90">
+                        {pro.name}
+                        {pro.categoria ? (
+                          <span className="ml-1.5 font-normal text-muted">
+                            · {pro.categoria}
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="py-2 tabular-nums">
                         {pro.fat_bruto != null ? formatCurrency(pro.fat_bruto) : '—'}
                       </td>
