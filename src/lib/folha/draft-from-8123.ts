@@ -452,11 +452,20 @@ export function buildFolhaDraftLine(
   const sheetMeioRate = usesNamedMeioOverride(person) ? 0.5 : meioRate
   const sheetMeio =
     assistantMag == null ? null : roundFolha(assistantMag * sheetMeioRate, 4)
+  /**
+   * Base U para olerite path B/C. Preferência: RH (`servicos_assistente_como_pro`).
+   * Fallback: assistente Romeu cujo 8123 `charged` já é o montante U (Lucas).
+   * Multiplicador BR com faturado C NÃO usa charged — sem U, J fica pendente.
+   */
   const assistantAdminBase =
     extras?.servicos_assistente_como_pro != null &&
     extras.servicos_assistente_como_pro > 0.02
       ? extras.servicos_assistente_como_pro
-      : null
+      : person?.isRomeuAssistant &&
+          row.charged != null &&
+          row.charged > 0.02
+        ? row.charged
+        : null
   const oleriteMotor = disaggregateOleriteDescontos({
     charged: row.charged,
     adminFee8123: row.admin_fee,
