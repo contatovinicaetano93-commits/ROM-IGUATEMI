@@ -52,7 +52,7 @@ import {
   planZigConsumoBaruExtras,
   type ApplyZigConsumoResult,
 } from '@/lib/folha/zig-consumo'
-import { occupancyMergeKey } from '@/lib/director-report/match-pro'
+import { findUniqueFolhaTaxLineName } from '@/lib/folha/tax-name-match'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
 export type FolhaLoadOpts = {
@@ -455,12 +455,11 @@ export async function applyFolhaTaxParsedToPeriod(
   ) {
     return { applied: false, period }
   }
-  const key = occupancyMergeKey(args.professionalName)
-  const hit = period.lines.find(
-    (l) =>
-      l.name === args.professionalName ||
-      (key != null && occupancyMergeKey(l.name) === key),
+  const hitName = findUniqueFolhaTaxLineName(
+    period.lines.map((l) => l.name),
+    args.professionalName,
   )
+  const hit = hitName ? period.lines.find((l) => l.name === hitName) : null
   if (!hit) return { applied: false, period }
   const existing = hit.folha_extras[extrasKey]
   if (existing != null) return { applied: false, period }
