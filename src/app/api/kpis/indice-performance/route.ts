@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const month = monthRaw && /^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : null
 
     const data = await ttlGetOrSet(
-      `kpis:indice-performance:v4:${month ?? 'latest'}`,
+      `kpis:indice-performance:v5:${month ?? 'latest'}`,
       45_000,
       async () =>
         computeDailyPerformanceIndex({
