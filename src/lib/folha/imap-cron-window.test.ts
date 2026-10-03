@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   decideFolhaImapCronRun,
   folhaImapPayWatchWindow,
+  folhaImapTaxPeriodIds,
   isoAddDays,
   resolveFolhaImapCronWindow,
 } from '@/lib/folha/imap-cron-window'
@@ -101,5 +102,18 @@ describe('folha IMAP cron window', () => {
         force: true,
       }),
     ).toMatchObject({ shouldPoll: true, trigger: 'manual' })
+  })
+
+  it('API: period_id é Q1 fiscal; pay_watch pode ser Q2', () => {
+    expect(
+      folhaImapTaxPeriodIds({
+        today: '2026-10-01',
+        payWatchPeriodId: '2026-09-q2',
+      }),
+    ).toEqual({
+      period_id: '2026-10-q1',
+      tax_period_id: '2026-10-q1',
+      pay_watch_period_id: '2026-09-q2',
+    })
   })
 })

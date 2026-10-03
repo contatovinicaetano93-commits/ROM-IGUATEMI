@@ -6,7 +6,7 @@
  * e Q2 (dia 05) passa a cada 10 min.
  */
 import type { RomPanelId } from '@/lib/brand'
-import { listRecentQuinzenas } from '@/lib/folha/period'
+import { defaultFolhaTaxQuinzena, listRecentQuinzenas } from '@/lib/folha/period'
 
 export const FOLHA_IMAP_PAY_WATCH_LEAD_DAYS = 5
 export const FOLHA_IMAP_CRON_DAILY_UTC_HOUR = 12
@@ -102,6 +102,26 @@ export function isFolhaImapDailyCronSlot(now: Date, panel: RomPanelId): boolean 
       const _never: never = panel
       throw new Error(`painel IMAP desconhecido: ${String(_never)}`)
     }
+  }
+}
+
+/**
+ * `period_id` na API IMAP é o Q1 (DARF/DAS/mensalidade, dia 20).
+ * A janela de cadência Q1/Q2 vai em `pay_watch_period_id` — não misturar.
+ */
+export function folhaImapTaxPeriodIds(opts: {
+  today: string
+  payWatchPeriodId: string | null
+}): {
+  period_id: string | null
+  tax_period_id: string | null
+  pay_watch_period_id: string | null
+} {
+  const taxPeriodId = defaultFolhaTaxQuinzena(opts.today).id
+  return {
+    period_id: taxPeriodId,
+    tax_period_id: taxPeriodId,
+    pay_watch_period_id: opts.payWatchPeriodId,
   }
 }
 

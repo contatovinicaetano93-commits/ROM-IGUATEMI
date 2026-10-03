@@ -1,6 +1,6 @@
 /**
- * Extrai DARF / DAS / mensalidade de texto de e-mail (paste ou futuro IMAP).
- * Não depende de credenciais — o cron IMAP só entrega subject+body aqui.
+ * Extrai DARF / DAS / mensalidade de texto de e-mail (paste, IMAP, PDF anexo).
+ * Não depende de credenciais — o cron IMAP entrega subject+body+filenames aqui.
  */
 
 export type FolhaTaxKind = 'darf' | 'das' | 'mensalidade' | 'other'
@@ -50,13 +50,27 @@ function guessProfessionalName(text: string): string | null {
   return null
 }
 
+function guessNameFromFilename(fileName: string): string | null {
+  const base = fileName
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[_]+/g, ' ')
+    .trim()
+  const head = (base.split(/\s[-–—]\s/)[0] ?? '').trim()
+  if (head.length >= 3 && !/darf|das|guia|mensalidade|simples|inss|parc/i.test(head)) {
+    return head
+  }
+  return null
+}
+
 export function parseFolhaTaxEmail(input: {
   subject?: string | null
   body: string
+  filenames?: string[] | null
 }): ParsedFolhaTaxDocument {
   const subject = input.subject?.trim() ?? ''
   const body = input.body.trim()
-  const blob = `${subject}\n${body}`
+  const files = (input.filenames ?? []).join('\n')
+  const blob = `${subject}\n${files}\n${body}`
   const kind = detectKind(blob)
 
   // Prefer amount near the kind keyword; fallback first money in text.
@@ -75,7 +89,10 @@ export function parseFolhaTaxEmail(input: {
   }
   if (amount == null) amount = parseBrlAmount(blob)
 
-  const professional_name = guessProfessionalName(blob)
+  const professional_name =
+    guessProfessionalName(blob) ??
+    (input.filenames ?? []).map(guessNameFromFilename).find((n) => n != null) ??
+    null
   const confidence: ParsedFolhaTaxDocument['confidence'] =
     kind !== 'other' && amount != null
       ? professional_name

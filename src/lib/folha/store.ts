@@ -80,6 +80,16 @@ export async function ensureFolhaTables() {
           created_at timestamptz not null default now()
         )
       `
+      await sql`
+        delete from folha_tax_documents a
+        using folha_tax_documents b
+        where a.source = b.source
+          and a.id > b.id
+      `
+      await sql`
+        create unique index if not exists folha_tax_documents_source_uidx
+          on folha_tax_documents (source)
+      `
     })().catch((err) => {
       tablesReady = null
       throw err
@@ -250,23 +260,14 @@ export async function saveFolhaPeriodLines(args: {
 }
 
 export async function folhaTaxSourceExists(source: string): Promise<boolean> {
-  await ensureFolhaTables()
-  const sql = getSql()
-  try {
-    const rows = (await sql`
-      select 1 as ok from folha_tax_documents
-      where source = ${source}
-      limit 1
-    `) as { ok: number }[]
-    return rows.length > 0
-  } catch {
-    return false
-  }
+  return (await getFolhaTaxDocumentByAnySource([source])) != null
 }
 
-export async function getFolhaTaxDocumentBySource(
-  source: string,
+export async function getFolhaTaxDocumentByAnySource(
+  sources: string[],
 ): Promise<FolhaTaxDocumentRow | null> {
+  const keys = [...new Set(sources.map((s) => s.trim()).filter(Boolean))]
+  if (keys.length === 0) return null
   await ensureFolhaTables()
   const sql = getSql()
   try {
@@ -275,7 +276,7 @@ export async function getFolhaTaxDocumentBySource(
         id, period_id, kind, professional_name, amount,
         raw_subject, raw_body, source, created_at
       from folha_tax_documents
-      where source = ${source}
+      where source in ${sql(keys)}
       order by id desc
       limit 1
     `) as Record<string, unknown>[]
@@ -297,6 +298,12 @@ export async function getFolhaTaxDocumentBySource(
   }
 }
 
+export async function getFolhaTaxDocumentBySource(
+  source: string,
+): Promise<FolhaTaxDocumentRow | null> {
+  return getFolhaTaxDocumentByAnySource([source])
+}
+
 export async function insertFolhaTaxDocument(args: {
   periodId: string | null
   kind: FolhaTaxKind
@@ -308,6 +315,7 @@ export async function insertFolhaTaxDocument(args: {
 }): Promise<FolhaTaxDocumentRow> {
   await ensureFolhaTables()
   const sql = getSql()
+  const source = args.source ?? 'manual'
   const rows = (await sql`
     insert into folha_tax_documents (
       period_id, kind, professional_name, amount, raw_subject, raw_body, source
@@ -318,14 +326,19 @@ export async function insertFolhaTaxDocument(args: {
       ${args.amount},
       ${args.subject ?? null},
       ${args.body ?? null},
-      ${args.source ?? 'manual'}
+      ${source}
     )
+    on conflict (source) do nothing
     returning
       id, period_id, kind, professional_name, amount,
       raw_subject, raw_body, source, created_at
   `) as Record<string, unknown>[]
   const r = rows[0]
-  if (!r) throw new Error('falha ao gravar documento fiscal')
+  if (!r) {
+    const existing = await getFolhaTaxDocumentBySource(source)
+    if (existing) return existing
+    throw new Error('falha ao gravar documento fiscal')
+  }
   return {
     id: Number(r.id),
     period_id: r.period_id != null ? String(r.period_id) : null,

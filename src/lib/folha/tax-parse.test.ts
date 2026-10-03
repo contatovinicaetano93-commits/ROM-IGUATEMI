@@ -41,4 +41,15 @@ describe('parseFolhaTaxEmail', () => {
     expect(parsed.professional_name).toMatch(/Brunna/i)
     expect(taxKindToExtrasKey(parsed.kind)).toBe('mensalidade_contabilidade')
   })
+
+  it('pega valor e nome no PDF/arquivo quando o assunto é genérico', () => {
+    const parsed = parseFolhaTaxEmail({
+      subject: 'Documento disponível',
+      body: 'Documento de Arrecadação de Receitas Federais\nDARF no valor de R$ 178,31',
+      filenames: ['M. G. DOS SANTOS - DARF INSS - AGO26.pdf'],
+    })
+    expect(parsed.kind).toBe('darf')
+    expect(parsed.amount).toBe(178.31)
+    expect(parsed.professional_name).toMatch(/SANTOS/i)
+  })
 })

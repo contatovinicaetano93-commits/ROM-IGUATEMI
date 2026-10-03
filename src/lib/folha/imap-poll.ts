@@ -1,12 +1,18 @@
 /**
- * Poll IMAP → parse DARF/DAS/mensalidade → aplica no período Folha Q1 (dia 20).
+ * Poll IMAP → parse DARF/DAS/mensalidade (texto + PDF) → aplica no Q1 (dia 20).
+ * Busca por lookback em todas as pastas de trabalho — não depende de UNSEEN.
  */
 
 import type { RomPanelId } from '@/lib/brand'
 import {
-  fetchUnseenFolhaTaxEmails,
+  FOLHA_IMAP_FETCH_CAP,
+  canonicalFolhaImapSource,
+  fetchFolhaImapMessages,
+  folhaImapSourceKeys,
+  listFolhaImapCandidates,
   markFolhaTaxEmailsSeen,
   readFolhaImapConfig,
+  type FolhaImapCandidate,
   type FolhaImapMessage,
 } from '@/lib/folha/imap-client'
 import {
@@ -21,9 +27,9 @@ import {
   loadOrCreateFolhaDraft,
 } from '@/lib/folha/service'
 import {
-  folhaTaxSourceExists,
   getFolhaPeriod,
-  getFolhaTaxDocumentBySource,
+  getFolhaTaxDocumentByAnySource,
+  type FolhaTaxDocumentRow,
 } from '@/lib/folha/store'
 
 export type FolhaImapPollResult = {
@@ -35,6 +41,8 @@ export type FolhaImapPollResult = {
   marked_seen: number
   errors: string[]
   period_id: string | null
+  tax_period_id?: string | null
+  pay_watch_period_id?: string | null
   cadence?: 'frequent' | 'daily'
   cron_trigger?: 'pay_watch' | 'daily_slot' | 'manual' | 'skip'
   pay_date?: string | null
@@ -42,50 +50,49 @@ export type FolhaImapPollResult = {
   window_to?: string | null
 }
 
-async function processMessage(
+function taxKindCanRetry(kind: string): boolean {
+  return kind === 'darf' || kind === 'das' || kind === 'mensalidade'
+}
+
+async function reapplyDocument(
+  panel: RomPanelId,
+  periodId: string,
+  doc: FolhaTaxDocumentRow,
+): Promise<{ applied: boolean; markSeen: boolean; error?: string }> {
+  try {
+    const result = await applyFolhaTaxParsedToPeriod(panel, {
+      periodId: doc.period_id ?? periodId,
+      kind: doc.kind,
+      amount: doc.amount,
+      professionalName: doc.professional_name,
+      actor: 'imap-cron',
+    })
+    const canRetry =
+      doc.amount != null &&
+      doc.professional_name != null &&
+      taxKindCanRetry(doc.kind)
+    return { applied: result.applied, markSeen: result.applied || !canRetry }
+  } catch (e) {
+    return {
+      applied: false,
+      markSeen: false,
+      error: e instanceof Error ? e.message : String(e),
+    }
+  }
+}
+
+async function ingestMessage(
   panel: RomPanelId,
   periodId: string,
   msg: FolhaImapMessage,
 ): Promise<{ ingested: boolean; applied: boolean; markSeen: boolean; error?: string }> {
-  const source = `imap:${msg.uid}`
-  if (await folhaTaxSourceExists(source)) {
-    // Doc já gravado (ex.: nome não bateu no 1º poll) — tenta aplicar de novo.
-    const doc = await getFolhaTaxDocumentBySource(source)
-    if (!doc) {
-      return { ingested: false, applied: false, markSeen: true }
-    }
-    try {
-      const result = await applyFolhaTaxParsedToPeriod(panel, {
-        periodId: doc.period_id ?? periodId,
-        kind: doc.kind,
-        amount: doc.amount,
-        professionalName: doc.professional_name,
-        actor: 'imap-cron',
-      })
-      // Marca visto se aplicou, ou se não dá mais para aplicar (sem nome/valor/tipo).
-      const canRetry =
-        doc.amount != null &&
-        doc.professional_name != null &&
-        (doc.kind === 'darf' || doc.kind === 'das' || doc.kind === 'mensalidade')
-      return {
-        ingested: false,
-        applied: result.applied,
-        markSeen: result.applied || !canRetry,
-      }
-    } catch (e) {
-      return {
-        ingested: false,
-        applied: false,
-        markSeen: false,
-        error: e instanceof Error ? e.message : String(e),
-      }
-    }
-  }
+  const source = canonicalFolhaImapSource(msg.mailbox, msg.uid)
   try {
     const result = await ingestFolhaTaxEmail(panel, {
       periodId,
       subject: msg.subject,
       body: msg.body || msg.subject,
+      filenames: msg.filenames,
       source,
       actor: 'imap-cron',
       applyToLine: true,
@@ -94,13 +101,10 @@ async function processMessage(
       !result.applied &&
       result.parsed.amount != null &&
       result.parsed.professional_name != null &&
-      (result.parsed.kind === 'darf' ||
-        result.parsed.kind === 'das' ||
-        result.parsed.kind === 'mensalidade')
+      taxKindCanRetry(result.parsed.kind)
     return {
       ingested: true,
       applied: result.applied,
-      // Não marca Seen se ainda dá para tentar no próximo cron (nome/linha ausente).
       markSeen: result.applied || !canRetry,
     }
   } catch (e) {
@@ -113,27 +117,34 @@ async function processMessage(
   }
 }
 
+function emptyPoll(partial: Partial<FolhaImapPollResult> & { period_id: string | null }): FolhaImapPollResult {
+  return {
+    configured: true,
+    fetched: 0,
+    ingested: 0,
+    applied: 0,
+    marked_seen: 0,
+    errors: [],
+    tax_period_id: partial.period_id,
+    ...partial,
+  }
+}
+
 export async function pollFolhaImapInbox(
   panel: RomPanelId,
   opts?: { day?: string; periodId?: string; markSeen?: boolean },
 ): Promise<FolhaImapPollResult> {
   const cfg = readFolhaImapConfig()
   if (!cfg) {
-    return {
+    return emptyPoll({
       configured: false,
       skipped: 'not_configured',
-      fetched: 0,
-      ingested: 0,
-      applied: 0,
-      marked_seen: 0,
-      errors: [],
       period_id: null,
-    }
+      tax_period_id: null,
+    })
   }
 
   const today = opts?.day ?? todayIsoSaoPaulo()
-  // DARF/DAS/mensalidade só abatem no pagamento do dia 20 (Q1).
-  // E-mails até o dia 15 → alvo = Q1 do mês (ou próxima Q1 após o dia 20).
   let quinzena =
     (opts?.periodId ? parseFolhaPeriodId(opts.periodId) : null) ??
     defaultFolhaTaxQuinzena(today)
@@ -148,51 +159,68 @@ export async function pollFolhaImapInbox(
   })
   const period = await getFolhaPeriod(quinzena.id)
   if (!period) {
-    return {
-      configured: true,
+    return emptyPoll({
       skipped: 'no_period',
-      fetched: 0,
-      ingested: 0,
-      applied: 0,
-      marked_seen: 0,
       errors: ['Período Folha Q1 (dia 20) ausente — rode refresh 8123'],
       period_id: quinzena.id,
-    }
+      tax_period_id: quinzena.id,
+    })
   }
 
   const errors: string[] = []
-  let messages: FolhaImapMessage[] = []
+  let candidates: FolhaImapCandidate[] = []
   try {
-    messages = await fetchUnseenFolhaTaxEmails(cfg)
+    candidates = await listFolhaImapCandidates(cfg)
   } catch (e) {
-    return {
-      configured: true,
-      fetched: 0,
-      ingested: 0,
-      applied: 0,
-      marked_seen: 0,
+    return emptyPoll({
       errors: [e instanceof Error ? e.message : String(e)],
       period_id: quinzena.id,
-    }
+      tax_period_id: quinzena.id,
+    })
   }
 
+  const toFetch: FolhaImapCandidate[] = []
   let ingested = 0
   let applied = 0
-  const seenUids: number[] = []
+  const seen: FolhaImapCandidate[] = []
+
+  for (const cand of candidates) {
+    const keys = folhaImapSourceKeys(cand.mailbox, cand.uid)
+    const doc = await getFolhaTaxDocumentByAnySource(keys)
+    if (doc) {
+      const r = await reapplyDocument(panel, quinzena.id, doc)
+      if (r.error) errors.push(`${cand.mailbox}#${cand.uid}: ${r.error}`)
+      if (r.applied) applied += 1
+      if (r.markSeen) seen.push(cand)
+      continue
+    }
+    if (toFetch.length < FOLHA_IMAP_FETCH_CAP) toFetch.push(cand)
+  }
+
+  let messages: FolhaImapMessage[] = []
+  try {
+    messages = await fetchFolhaImapMessages(cfg, toFetch)
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : String(e))
+  }
 
   for (const msg of messages) {
-    const r = await processMessage(panel, quinzena.id, msg)
-    if (r.error) errors.push(`uid ${msg.uid}: ${r.error}`)
-    if (r.ingested) ingested += 1
+    const keys = folhaImapSourceKeys(msg.mailbox, msg.uid, msg.messageId)
+    const doc = await getFolhaTaxDocumentByAnySource(keys)
+    const r = doc
+      ? await reapplyDocument(panel, quinzena.id, doc)
+      : await ingestMessage(panel, quinzena.id, msg)
+    if (r.error) errors.push(`${msg.mailbox}#${msg.uid}: ${r.error}`)
+    if ('ingested' in r && r.ingested) ingested += 1
     if (r.applied) applied += 1
-    if (r.markSeen) seenUids.push(msg.uid)
+    if (r.markSeen) seen.push({ mailbox: msg.mailbox, uid: msg.uid })
   }
 
   let marked = 0
-  if (opts?.markSeen !== false && seenUids.length > 0) {
+  if (opts?.markSeen !== false && seen.length > 0) {
     try {
-      await markFolhaTaxEmailsSeen(cfg, seenUids)
-      marked = seenUids.length
+      await markFolhaTaxEmailsSeen(cfg, seen)
+      marked = seen.length
     } catch (e) {
       errors.push(`markSeen: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -206,5 +234,6 @@ export async function pollFolhaImapInbox(
     marked_seen: marked,
     errors,
     period_id: quinzena.id,
+    tax_period_id: quinzena.id,
   }
 }
