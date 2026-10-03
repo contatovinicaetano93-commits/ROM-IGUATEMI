@@ -212,15 +212,12 @@ export async function fetchFolhaImapMessages(
             { source: true, envelope: true, uid: true },
             { uid: true },
           )
-          if (!fetched?.source) continue
-          const source = Buffer.isBuffer(fetched.source)
-            ? fetched.source
-            : Buffer.from(fetched.source)
+          if (!fetched || !fetched.source) continue
           out.push(
             await parseRawMessage(
               mailbox,
               uid,
-              source,
+              fetched.source,
               fetched.envelope?.subject,
               fetched.envelope?.messageId,
             ),
