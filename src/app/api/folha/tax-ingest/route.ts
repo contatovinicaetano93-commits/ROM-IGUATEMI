@@ -15,7 +15,7 @@ const bodySchema = z.object({
 
 /**
  * Ingesta texto de e-mail fiscal (paste manual).
- * Cron IMAP: GET /api/folha/imap-poll (FOLHA_IMAP_*).
+ * Cron IMAP: GET /api/folha/imap-poll (FOLHA_IMAP_*) — 1×/dia, 10 min na janela de pagamento.
  */
 export async function POST(req: NextRequest) {
   try {

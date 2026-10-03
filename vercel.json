@@ -55,7 +55,7 @@
     },
     {
       "path": "/api/folha/imap-poll",
-      "schedule": "15 12 * * 1-5"
+      "schedule": "*/10 * * * *"
     }
   ]
 }

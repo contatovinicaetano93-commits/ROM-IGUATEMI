@@ -28,13 +28,18 @@ import {
 
 export type FolhaImapPollResult = {
   configured: boolean
-  skipped?: 'not_configured' | 'no_period'
+  skipped?: 'not_configured' | 'no_period' | 'awaiting_daily_slot'
   fetched: number
   ingested: number
   applied: number
   marked_seen: number
   errors: string[]
   period_id: string | null
+  cadence?: 'frequent' | 'daily'
+  cron_trigger?: 'pay_watch' | 'daily_slot' | 'manual' | 'skip'
+  pay_date?: string | null
+  window_from?: string | null
+  window_to?: string | null
 }
 
 async function processMessage(
