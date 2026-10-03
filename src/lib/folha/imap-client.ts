@@ -147,12 +147,14 @@ class ImapSession {
     return (m[0].match(/\d+/g) ?? []).map(Number).filter((n) => n > 0)
   }
 
-  /** UIDs não lidos com DARF ou DAS no assunto. */
+  /** UIDs não lidos com DARF / DAS / mensalidade no assunto. */
   async searchTaxUnseen(): Promise<number[]> {
     const a = await this.searchUids('UNSEEN SUBJECT DARF')
     const b = await this.searchUids('UNSEEN SUBJECT DAS')
     const c = await this.searchUids('UNSEEN SUBJECT "Simples Nacional"')
-    return [...new Set([...a, ...b, ...c])].sort((x, y) => x - y)
+    const d = await this.searchUids('UNSEEN SUBJECT Mensalidade')
+    const e = await this.searchUids('UNSEEN SUBJECT Contabilidade')
+    return [...new Set([...a, ...b, ...c, ...d, ...e])].sort((x, y) => x - y)
   }
 
   async fetchMessage(uid: number): Promise<FolhaImapMessage> {

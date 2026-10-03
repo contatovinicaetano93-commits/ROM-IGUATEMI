@@ -14,8 +14,8 @@ const bodySchema = z.object({
 })
 
 /**
- * Ingesta texto de e-mail fiscal (paste hoje; cron IMAP no futuro).
- * Env opcional futuro: FOLHA_IMAP_HOST / FOLHA_IMAP_USER / FOLHA_IMAP_PASS.
+ * Ingesta texto de e-mail fiscal (paste manual).
+ * Cron IMAP: GET /api/folha/imap-poll (FOLHA_IMAP_*).
  */
 export async function POST(req: NextRequest) {
   try {

@@ -478,14 +478,18 @@ export async function ingestFolhaTaxEmail(
         (key != null && occupancyMergeKey(l.name) === key),
     )
     if (hit) {
-      const patched = await patchFolhaLine(panel, {
-        periodId: args.periodId,
-        professionalName: hit.name,
-        extras: { [extrasKey]: parsed.amount },
-        actor: args.actor,
-      })
-      current = patched.period
-      applied = true
+      // Não sobrescreve valor já preenchido (manual/RH) — só preenche buraco.
+      const existing = hit.folha_extras[extrasKey]
+      if (existing == null) {
+        const patched = await patchFolhaLine(panel, {
+          periodId: args.periodId,
+          professionalName: hit.name,
+          extras: { [extrasKey]: parsed.amount },
+          actor: args.actor,
+        })
+        current = patched.period
+        applied = true
+      }
     }
   }
 
