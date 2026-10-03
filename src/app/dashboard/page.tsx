@@ -792,7 +792,7 @@ export default function DashboardPage() {
                     <th className="pb-2 font-medium">Dias veio</th>
                     <th className="pb-2 font-medium">Dias úteis</th>
                     <th className="pb-2 font-medium">Constância</th>
-                    <th className="pb-2 font-medium">Δ índice</th>
+                    <th className="pb-2 font-medium">Δ vs média dias</th>
                     <th className="pb-2 font-medium">R$/dia veio</th>
                     <th className="pb-2 font-medium">Status</th>
                   </tr>
