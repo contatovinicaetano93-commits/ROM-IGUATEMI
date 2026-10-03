@@ -2,7 +2,8 @@
  * Índice de Performance Diária (V1.2 — constância + Δ vs média dias).
  *
  * Por profissional no período:
- * - fat_bruto: MTD 0021 (`salon_p1_daily`) — contexto
+ * - fat_bruto: 8123 `charged` / valor_cobrado (`salon_commissions_daily`) — mesmo
+ *   espelho Folha; elenco canônico ainda vem do P1 (0021) para casar visitas
  * - dias_trabalhados: dias distintos em `salon_client_visits` (proxy de “veio”)
  * - dias_uteis_salao: dias com receita em `salon_daily_metrics`
  * - constancia_pct = dias_trabalhados / dias_uteis_salao × 100
@@ -186,6 +187,31 @@ export function mapCategoriaByP1Name(
   return out
 }
 
+/**
+ * Casa fat bruto 8123 (`charged` / valor_cobrado) → nome canônico P1.
+ * Ausente ou ≤ 0,02 → não entra no mapa (KPI null na UI, não inventa 0).
+ */
+export function mapFatBrutoByP1Name(
+  p1Names: string[],
+  commissionRows: readonly { name: string; charged: number | null }[],
+): Map<string, number> {
+  const p1Keys = p1Names.map((n) => normalizeProKey(n))
+  const keyToName = new Map(p1Names.map((n) => [normalizeProKey(n), n]))
+  const out = new Map<string, number>()
+  for (const row of commissionRows) {
+    const charged = Number(row.charged)
+    if (!Number.isFinite(charged) || charged <= 0.02) continue
+    const visitKey = normalizeProKey(String(row.name ?? ''))
+    if (!visitKey) continue
+    const matched = matchVisitKeyToP1(visitKey, p1Keys)
+    if (!matched) continue
+    const name = keyToName.get(matched)
+    if (!name || out.has(name)) continue
+    out.set(name, charged)
+  }
+  return out
+}
+
 export function buildDailyPerformanceIndex(args: {
   month: string
   from: string
@@ -193,7 +219,7 @@ export function buildDailyPerformanceIndex(args: {
   mtd: boolean
   referenceDay: string | null
   salonOpenDays: number | null
-  /** Nome canônico P1 → fat MTD no referenceDay */
+  /** Nome canônico P1 → fat 8123 charged (mês/MTD no referenceDay) */
   fatByPro: Map<string, number>
   /** Chave normalizada de visita → dias distintos */
   daysByVisitKey: Map<string, number>
@@ -361,22 +387,25 @@ export async function computeDailyPerformanceIndex(opts?: {
     getSalonCommissionsDailyNear(window.to, { maxSkewDays: 45 }),
   ])
   const pros = asJsonArray<P1ProfessionalRow>(latest?.professionals)
-  const fatByPro = new Map<string, number>()
+  /** Elenco canônico P1 (presença / match de visitas); fat vem do 8123. */
+  const p1Names: string[] = []
   for (const p of pros) {
     const name = String(p.name ?? '').trim()
     if (!name) continue
-    const rev = Number(p.revenue)
-    if (!Number.isFinite(rev)) continue
-    fatByPro.set(name, rev)
+    p1Names.push(name)
   }
 
   const commissionPros = asJsonArray<CommissionProfessionalRow>(
     commissions?.professionals,
   )
-  const categoriaByPro = mapCategoriaByP1Name(
-    [...fatByPro.keys()],
-    commissionPros,
-  )
+  const chargedByPro = mapFatBrutoByP1Name(p1Names, commissionPros)
+  const categoriaByPro = mapCategoriaByP1Name(p1Names, commissionPros)
+
+  // Roster P1 com fat 8123 quando houver; 0 placeholder → null na UI (não coalescer).
+  const fatByPro = new Map<string, number>()
+  for (const name of p1Names) {
+    fatByPro.set(name, chargedByPro.get(name) ?? 0)
+  }
 
   const [salonOpenDays, daysByVisitKey] = await Promise.all([
     countSalonOpenDays(window.from, window.to),
@@ -388,7 +417,7 @@ export async function computeDailyPerformanceIndex(opts?: {
     from: window.from,
     to: window.to,
     mtd: window.mtd,
-    referenceDay: latest?.day ?? null,
+    referenceDay: commissions?.day ?? latest?.day ?? null,
     salonOpenDays,
     fatByPro,
     daysByVisitKey,

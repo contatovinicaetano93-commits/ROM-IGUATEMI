@@ -5,6 +5,7 @@ import {
   constanciaPct,
   deltaVsMediaDias,
   mapCategoriaByP1Name,
+  mapFatBrutoByP1Name,
   matchVisitKeyToP1,
   meanOf,
   meanPct,
@@ -70,6 +71,22 @@ describe('daily-performance-index math', () => {
     expect(map.get('MAURICIO DE CARVALHO LIMA')).toBe('Cabeleireiro')
     expect(map.get('Ana Silva')).toBe('Manicure')
     expect(map.has('Sem Cargo')).toBe(false)
+  })
+
+  it('mapFatBrutoByP1Name usa charged 8123 (não inventa 0)', () => {
+    const map = mapFatBrutoByP1Name(
+      ['MAURICIO DE CARVALHO LIMA', 'Ana Silva', 'Só P1'],
+      [
+        { name: 'MAURICIO CARVALHO', charged: 42_940.12 },
+        { name: 'Ana Silva', charged: 0 },
+        { name: 'Ana Silva', charged: null },
+        { name: 'Fantasma', charged: 9_999 },
+      ],
+    )
+    expect(map.get('MAURICIO DE CARVALHO LIMA')).toBe(42_940.12)
+    expect(map.has('Ana Silva')).toBe(false)
+    expect(map.has('Só P1')).toBe(false)
+    expect(map.has('Fantasma')).toBe(false)
   })
 })
 
@@ -139,5 +156,31 @@ describe('buildDailyPerformanceIndex', () => {
     expect(row?.standing).toBe('sem_base')
     expect(out.indice).toBeNull()
     expect(out.media_dias_trabalhados).toBeNull()
+  })
+
+  it('fat_bruto 8123 → R$/dia veio; 0 placeholder vira null', () => {
+    const out = buildDailyPerformanceIndex({
+      month: '2026-09',
+      from: '2026-09-01',
+      to: '2026-09-30',
+      mtd: false,
+      referenceDay: '2026-09-30',
+      salonOpenDays: 30,
+      fatByPro: new Map([
+        ['Leda', 11_940],
+        ['Alcibelle', 0],
+      ]),
+      daysByVisitKey: new Map([
+        [normalizeProKey('Leda'), 30],
+        [normalizeProKey('Alcibelle'), 29],
+      ]),
+    })
+    const leda = out.professionals.find((p) => p.name === 'Leda')
+    const alci = out.professionals.find((p) => p.name === 'Alcibelle')
+    expect(leda?.fat_bruto).toBe(11_940)
+    expect(leda?.media_dia_trabalhado).toBe(398)
+    expect(alci?.fat_bruto).toBeNull()
+    expect(alci?.media_dia_trabalhado).toBeNull()
+    expect(alci?.dias_trabalhados).toBe(29)
   })
 })
