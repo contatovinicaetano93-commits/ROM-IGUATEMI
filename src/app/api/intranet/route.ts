@@ -1,12 +1,14 @@
 import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
+import { checksHomeSummary } from '@/lib/checks-diario/service'
 import { listUnreadNotifications, markNotificationsRead, listPublishedPosts } from '@/lib/cms'
 import { loadWeekKpis } from '@/lib/intranet/load-week-kpis'
 import { notificationAudienceKeys } from '@/lib/intranet/notifications'
 import { readerKey, resolveFlowUser } from '@/lib/flow/from-session'
 import { listVisibleExpenses } from '@/lib/flow/store'
 import { allowedActions, isAdminInbox, isSolicitanteInbox } from '@/lib/flow/workflow'
+import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
 
 export async function GET(req: NextRequest) {
   const auth = await requireSession(req)
@@ -27,7 +29,7 @@ export async function GET(req: NextRequest) {
       listUnreadNotifications(reader, audience),
       listVisibleExpenses(user).catch(() => []),
     ])
-    const tasks = expenses
+    const flowTasks = expenses
       .filter((expense) =>
         user.role === 'solicitante' ? isSolicitanteInbox(expense) : isAdminInbox(expense),
       )
@@ -40,6 +42,29 @@ export async function GET(req: NextRequest) {
         href: `/flow/${expense.id}`,
         actions: allowedActions(user, expense),
       }))
+    const tasks: Array<{
+      id: string
+      title: string
+      area: string
+      status: string
+      href: string
+      actions: ReturnType<typeof allowedActions>
+    }> = [...flowTasks]
+    const role = auth.session.role as 'admin' | 'staff' | 'financeiro' | 'estoque' | 'mkt'
+    if (hasPanelModule(role, parseGrantableModules(auth.session.modules), 'checks_diario')) {
+      const checks = await checksHomeSummary(auth.session).catch(() => null)
+      if (checks) {
+        tasks.unshift({
+          id: 'checks-diario-home',
+          title: checks.label,
+          area: 'checks',
+          status: checks.pending > 0 ? 'pendente' : 'ok',
+          href: checks.href,
+          actions: [],
+        })
+      }
+    }
+
     return ok({
       greetingName: auth.session.displayName,
       can_view_revenue: canViewRevenue,

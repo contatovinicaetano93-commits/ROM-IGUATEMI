@@ -21,11 +21,13 @@ export type CargoPackageId =
   | 'gestor_baru'
   | 'dono'
   | 'rh'
+  | 'equipe_rh'
   | 'mkt'
   | 'recepcao'
   | 'pos_venda'
   | 'estoque_ops'
   | 'almoxarifado'
+  | 'limpeza'
   | 'profissional'
 
 export type CargoPackage = {
@@ -66,7 +68,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     panel_role: 'financeiro',
     flow_role: 'master',
     can_publish: false,
-    extras: ['pipeline', 'contatos', 'dashboard', 'folha'],
+    extras: ['pipeline', 'contatos', 'dashboard', 'folha', 'checks_diario'],
     areaIds: [...REQUEST_AREAS],
   },
   {
@@ -79,7 +81,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     panel_role: 'financeiro',
     flow_role: 'solicitante',
     can_publish: false,
-    extras: ['pipeline'],
+    extras: ['pipeline', 'checks_diario'],
     areaIds: ['financeiro', 'compras'],
   },
   {
@@ -103,7 +105,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     panel_role: 'staff',
     flow_role: 'solicitante',
     can_publish: false,
-    extras: ['dashboard', 'ativacoes'],
+    extras: ['dashboard', 'ativacoes', 'checks_diario'],
     areaIds: [...REQUEST_AREAS],
   },
   {
@@ -127,7 +129,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     panel_role: 'financeiro',
     flow_role: 'solicitante',
     can_publish: false,
-    extras: ['dashboard'],
+    extras: ['dashboard', 'checks_diario'],
     areaIds: [],
   },
   {
@@ -139,7 +141,19 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     panel_role: 'staff',
     flow_role: 'admin_rh',
     can_publish: false,
-    extras: ['folha'],
+    extras: ['folha', 'checks_diario'],
+    areaIds: ['rh'],
+  },
+  {
+    id: 'equipe_rh',
+    label: 'Equipe RH',
+    alias: 'Equipe RH',
+    summary: 'Time do RH: checks diários da equipe e pedidos de RH no Flow.',
+    examples: 'Assistentes / analistas RH',
+    panel_role: 'staff',
+    flow_role: 'solicitante',
+    can_publish: false,
+    extras: ['checks_diario'],
     areaIds: ['rh'],
   },
   {
@@ -163,7 +177,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     panel_role: 'staff',
     flow_role: 'solicitante',
     can_publish: false,
-    extras: [],
+    extras: ['checks_diario'],
     areaIds: ['manutencao'],
   },
   {
@@ -175,7 +189,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     panel_role: 'staff',
     flow_role: 'solicitante',
     can_publish: false,
-    extras: [],
+    extras: ['checks_diario'],
     areaIds: ['manutencao'],
   },
   {
@@ -187,7 +201,7 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     panel_role: 'estoque',
     flow_role: 'solicitante',
     can_publish: false,
-    extras: [],
+    extras: ['checks_diario'],
     areaIds: ['compras'],
   },
   {
@@ -199,8 +213,20 @@ export const CARGO_PACKAGES: readonly CargoPackage[] = [
     panel_role: 'estoque',
     flow_role: 'admin_compras',
     can_publish: false,
-    extras: [],
+    extras: ['checks_diario'],
     areaIds: ['compras'],
+  },
+  {
+    id: 'limpeza',
+    label: 'Limpeza',
+    alias: 'Limpeza',
+    summary: 'Rotina de limpeza da unidade com checks diários sob o gestor.',
+    examples: 'Equipe limpeza',
+    panel_role: 'staff',
+    flow_role: 'solicitante',
+    can_publish: false,
+    extras: ['checks_diario'],
+    areaIds: [],
   },
   {
     id: 'profissional',
