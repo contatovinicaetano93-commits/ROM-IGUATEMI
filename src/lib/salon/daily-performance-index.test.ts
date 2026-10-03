@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addChargedMaps,
   avgPerDay,
   buildDailyPerformanceIndex,
+  buildDailyPerformanceTotals,
   constanciaPct,
   deltaVsMediaDias,
   mapCategoriaByP1Name,
@@ -9,7 +11,11 @@ import {
   matchVisitKeyToP1,
   meanOf,
   meanPct,
+  monthKeysFromJanThrough,
+  roundMoney,
   standingFromDelta,
+  sumMoney,
+  sumPositiveInts,
 } from '@/lib/salon/daily-performance-index'
 import { normalizeProKey } from '@/lib/director-report/match-pro'
 
@@ -88,6 +94,32 @@ describe('daily-performance-index math', () => {
     expect(map.has('Só P1')).toBe(false)
     expect(map.has('Fantasma')).toBe(false)
   })
+
+  it('monthKeysFromJanThrough e soma YTD charged', () => {
+    expect(monthKeysFromJanThrough('2026-09')).toEqual([
+      '2026-01',
+      '2026-02',
+      '2026-03',
+      '2026-04',
+      '2026-05',
+      '2026-06',
+      '2026-07',
+      '2026-08',
+      '2026-09',
+    ])
+    expect(monthKeysFromJanThrough('bad')).toEqual([])
+    const ytd = addChargedMaps([
+      new Map([['Ana', 1000]]),
+      new Map([
+        ['Ana', 2500.55],
+        ['Bruno', 400],
+      ]),
+    ])
+    expect(ytd.get('Ana')).toBe(3500.55)
+    expect(ytd.get('Bruno')).toBe(400)
+    expect(sumMoney([100, null, 50.555])).toBe(150.56)
+    expect(sumPositiveInts([null, 0, 12, 8])).toBe(20)
+  })
 })
 
 describe('buildDailyPerformanceIndex', () => {
@@ -137,6 +169,54 @@ describe('buildDailyPerformanceIndex', () => {
     expect(carla?.standing).toBe('neutro')
     // Ordena por delta desc — Ana primeiro
     expect(out.professionals[0]?.name).toBe('Ana Silva')
+    expect(out.year_from).toBe('2026-01-01')
+    expect(out.year_to).toBe('2026-09-30')
+    expect(out.totals.fat_bruto).toBe(20_000)
+    expect(out.totals.dias_trabalhados).toBe(54)
+    expect(out.totals.media_dia_trabalhado).toBe(roundMoney(20_000 / 54))
+    expect(out.totals.constancia_pct).toBe(75)
+    expect(out.totals.delta_indice).toBeNull()
+  })
+
+  it('YTD: fat ano, dias ano, média ano + totais', () => {
+    const out = buildDailyPerformanceIndex({
+      month: '2026-09',
+      from: '2026-09-01',
+      to: '2026-09-30',
+      mtd: false,
+      yearFrom: '2026-01-01',
+      yearTo: '2026-09-30',
+      referenceDay: '2026-09-30',
+      salonOpenDays: 24,
+      fatByPro: new Map([
+        ['Ana Silva', 10_000],
+        ['Bruno Costa', 4_000],
+      ]),
+      daysByVisitKey: new Map([
+        [normalizeProKey('Ana Silva'), 24],
+        [normalizeProKey('Bruno Costa'), 12],
+      ]),
+      fatYtdByPro: new Map([
+        ['Ana Silva', 80_000],
+        ['Bruno Costa', 30_000],
+      ]),
+      daysYtdByVisitKey: new Map([
+        [normalizeProKey('Ana Silva'), 180],
+        [normalizeProKey('Bruno Costa'), 90],
+      ]),
+    })
+    const ana = out.professionals.find((p) => p.name === 'Ana Silva')
+    const bruno = out.professionals.find((p) => p.name === 'Bruno Costa')
+    expect(ana?.fat_bruto_ano).toBe(80_000)
+    expect(ana?.dias_trabalhados_ano).toBe(180)
+    expect(ana?.media_dia_ano).toBe(roundMoney(80_000 / 180))
+    expect(bruno?.fat_bruto_ano).toBe(30_000)
+    expect(bruno?.dias_trabalhados_ano).toBe(90)
+    expect(out.totals.fat_bruto_ano).toBe(110_000)
+    expect(out.totals.dias_trabalhados_ano).toBe(270)
+    expect(out.totals.media_dia_ano).toBe(roundMoney(110_000 / 270))
+    const totalsOnly = buildDailyPerformanceTotals(out.professionals, 24, out.indice)
+    expect(totalsOnly.fat_bruto_ano).toBe(out.totals.fat_bruto_ano)
   })
 
   it('sem dias veio → sem constância (KPI null)', () => {
