@@ -124,6 +124,12 @@ export async function upsertChecksMembership(args: {
       is_lead = excluded.is_lead,
       updated_at = now()
   `
+  // Garante o módulo grantable sem depender de re-salvar o cargo na Gestão de usuário.
+  await sql`
+    insert into intranet_employee_modules (employee_id, module_key)
+    values (${args.employeeId}::uuid, 'checks_diario')
+    on conflict do nothing
+  `
 }
 
 export async function listChecksMembers(team?: ChecksTeamId | null) {
