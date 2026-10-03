@@ -1,15 +1,15 @@
 /**
- * Índice de Performance Diária (V1.1 — constância).
+ * Índice de Performance Diária (V1.2 — constância + Δ vs média dias).
  *
  * Por profissional no período:
  * - fat_bruto: MTD 0021 (`salon_p1_daily`) — contexto
  * - dias_trabalhados: dias distintos em `salon_client_visits` (proxy de “veio”)
  * - dias_uteis_salao: dias com receita em `salon_daily_metrics`
  * - constancia_pct = dias_trabalhados / dias_uteis_salao × 100
- * - media_dia_trabalhado / media_dia_salao: R$ (contexto, não entram no índice)
+ * - media_dia_trabalhado / media_dia_salao: R$ (contexto)
  *
- * Índice do salão = média das constâncias (equivale a média dos dias veio ÷ dias úteis).
- * Delta (pp) = constancia_pct − índice.
+ * Índice do salão = média das constâncias (média dias veio ÷ dias úteis × 100).
+ * Delta (%) = (dias_trabalhados ÷ média_dias_unidade − 1) × 100.
  */
 import { getSql } from '@/lib/db'
 import {
@@ -37,7 +37,7 @@ export type DailyPerformanceProRow = {
   media_dia_salao: number | null
   /** dias veio ÷ dias úteis salão × 100 */
   constancia_pct: number | null
-  /** constancia_pct − índice do salão (pontos percentuais) */
+  /** (dias veio ÷ média dias da unidade − 1) × 100 */
   delta_indice: number | null
   standing: DailyPerformanceStanding
 }
@@ -102,7 +102,20 @@ export function meanPct(values: number[]): number | null {
   return roundPct(sum / values.length)
 }
 
-/** Standing a partir do Δ em pontos percentuais. */
+/**
+ * % do profissional vs média de dias trabalhados da unidade.
+ * Ex.: 24 dias com média 18 → +33,3%.
+ */
+export function deltaVsMediaDias(
+  diasTrabalhados: number | null | undefined,
+  mediaDiasUnidade: number | null | undefined,
+): number | null {
+  if (diasTrabalhados == null || diasTrabalhados <= 0) return null
+  if (mediaDiasUnidade == null || mediaDiasUnidade <= 0) return null
+  return roundPct((diasTrabalhados / mediaDiasUnidade - 1) * 100)
+}
+
+/** Standing a partir do Δ % vs média de dias. */
 export function standingFromDelta(
   delta: number | null,
   tol = 0.5,
@@ -209,13 +222,9 @@ export function buildDailyPerformanceIndex(args: {
 
   const mediaDias = meanOf(diasComBase)
   const indice = meanPct(constancias)
-  // Sanity: media_dias / openDays * 100 ≈ indice (mesma base).
   const professionals: DailyPerformanceProRow[] = draft
     .map((row) => {
-      const delta =
-        row.constancia_pct != null && indice != null
-          ? roundPct(row.constancia_pct - indice)
-          : null
+      const delta = deltaVsMediaDias(row.dias_trabalhados, mediaDias)
       return {
         ...row,
         delta_indice: delta,
@@ -248,7 +257,7 @@ export function buildDailyPerformanceIndex(args: {
     indice,
     professionals,
     note:
-      'Constância = dias com visita Avec ÷ dias úteis do salão (receita > 0). Índice = média dessas constâncias. Δ = constância do profissional − índice (pp).',
+      'Constância = dias com visita Avec ÷ dias úteis do salão. Índice = média das constâncias. Δ índice = (dias veio ÷ média de dias veio da unidade − 1) × 100.',
   }
 }
 

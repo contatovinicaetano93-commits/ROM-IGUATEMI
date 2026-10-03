@@ -3,6 +3,7 @@ import {
   avgPerDay,
   buildDailyPerformanceIndex,
   constanciaPct,
+  deltaVsMediaDias,
   matchVisitKeyToP1,
   meanOf,
   meanPct,
@@ -35,6 +36,14 @@ describe('daily-performance-index math', () => {
     expect(standingFromDelta(-5)).toBe('abaixo')
   })
 
+  it('deltaVsMediaDias = (dias ÷ média − 1) × 100', () => {
+    expect(deltaVsMediaDias(null, 18)).toBeNull()
+    expect(deltaVsMediaDias(24, 0)).toBeNull()
+    expect(deltaVsMediaDias(24, 18)).toBe(33.3)
+    expect(deltaVsMediaDias(12, 18)).toBe(-33.3)
+    expect(deltaVsMediaDias(18, 18)).toBe(0)
+  })
+
   it('matchVisitKeyToP1 casa nome curto com completo', () => {
     const p1 = [
       normalizeProKey('MAURICIO DE CARVALHO LIMA'),
@@ -50,8 +59,9 @@ describe('daily-performance-index math', () => {
 })
 
 describe('buildDailyPerformanceIndex', () => {
-  it('índice = média das constâncias; Δ em pp', () => {
-    // 24 dias úteis: Ana 24→100%, Bruno 12→50%, Carla 18→75% → índice 75%
+  it('índice = média constâncias; Δ = % vs média de dias', () => {
+    // 24 dias úteis: Ana 24, Bruno 12, Carla 18 → média dias 18; índice constância 75%
+    // Δ Ana = (24/18−1)×100 = +33,3%; Bruno −33,3%; Carla 0%
     const fatByPro = new Map([
       ['Ana Silva', 10000],
       ['Bruno Costa', 4000],
@@ -77,12 +87,15 @@ describe('buildDailyPerformanceIndex', () => {
     expect(out.salon_open_days).toBe(24)
     const ana = out.professionals.find((p) => p.name === 'Ana Silva')
     const bruno = out.professionals.find((p) => p.name === 'Bruno Costa')
+    const carla = out.professionals.find((p) => p.name === 'Carla Dias')
     expect(ana?.constancia_pct).toBe(100)
-    expect(ana?.delta_indice).toBe(25)
+    expect(ana?.delta_indice).toBe(33.3)
     expect(ana?.standing).toBe('acima')
     expect(bruno?.constancia_pct).toBe(50)
-    expect(bruno?.delta_indice).toBe(-25)
+    expect(bruno?.delta_indice).toBe(-33.3)
     expect(bruno?.standing).toBe('abaixo')
+    expect(carla?.delta_indice).toBe(0)
+    expect(carla?.standing).toBe('neutro')
     // Ordena por delta desc — Ana primeiro
     expect(out.professionals[0]?.name).toBe('Ana Silva')
   })
