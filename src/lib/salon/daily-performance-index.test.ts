@@ -4,11 +4,13 @@ import {
   avgPerDay,
   buildDailyPerformanceIndex,
   buildDailyPerformanceTotals,
+  buildFatYtdThroughMonth,
   constanciaPct,
   coveredMonthsDayRange,
   deltaVsMediaDias,
   mapCategoriaByP1Name,
   mapFatBrutoByP1Name,
+  mapP1RevenueByP1Name,
   matchVisitKeyToP1,
   meanOf,
   meanPct,
@@ -137,6 +139,31 @@ describe('daily-performance-index math', () => {
       to: '2026-09-30',
     })
   })
+
+  it('buildFatYtdThroughMonth: 8123 manda; P1 preenche buraco até o mês', () => {
+    const byMonth8123 = new Map<string, Map<string, number>>([
+      ['2026-09', new Map([['Ana Silva', 10_000]])],
+    ])
+    const byMonthP1 = new Map<string, Map<string, number>>([
+      ['2026-07', new Map([['Ana Silva', 8_000]])],
+      ['2026-08', new Map([['Ana Silva', 9_000]])],
+      ['2026-09', new Map([['Ana Silva', 99_999]])], // ignorado — há 8123
+    ])
+    const ytd = buildFatYtdThroughMonth({
+      monthsThrough: monthKeysFromJanThrough('2026-09'),
+      byMonth8123,
+      byMonthP1,
+    })
+    expect(ytd.monthsFromP1).toEqual(['2026-07', '2026-08'])
+    expect(ytd.monthsFrom8123).toEqual(['2026-09'])
+    expect(ytd.monthsCovered).toEqual(['2026-07', '2026-08', '2026-09'])
+    expect(ytd.fatByPro.get('Ana Silva')).toBe(27_000)
+    expect(
+      mapP1RevenueByP1Name(['Ana Silva'], [{ name: 'Ana Silva', revenue: 50 }]).get(
+        'Ana Silva',
+      ),
+    ).toBe(50)
+  })
 })
 
 describe('buildDailyPerformanceIndex', () => {
@@ -195,7 +222,7 @@ describe('buildDailyPerformanceIndex', () => {
     expect(out.totals.delta_indice).toBeNull()
   })
 
-  it('acumulado: fat 8123 só meses cobertos; média usa dias cobertos (não ano cheio)', () => {
+  it('acumulado até o mês: fat jan→set e médias nos meses cobertos', () => {
     const out = buildDailyPerformanceIndex({
       month: '2026-09',
       from: '2026-09-01',
@@ -203,7 +230,9 @@ describe('buildDailyPerformanceIndex', () => {
       mtd: false,
       yearFrom: '2026-01-01',
       yearTo: '2026-09-30',
-      yearMonthsCovered: ['2026-09'],
+      yearMonthsCovered: ['2026-07', '2026-08', '2026-09'],
+      yearMonthsFrom8123: ['2026-09'],
+      yearMonthsFromP1: ['2026-07', '2026-08'],
       referenceDay: '2026-09-30',
       salonOpenDays: 24,
       fatByPro: new Map([
@@ -214,32 +243,29 @@ describe('buildDailyPerformanceIndex', () => {
         [normalizeProKey('Ana Silva'), 24],
         [normalizeProKey('Bruno Costa'), 12],
       ]),
-      // Só setembro tem 8123 — fat acumulado = mês
       fatYtdByPro: new Map([
-        ['Ana Silva', 10_000],
-        ['Bruno Costa', 4_000],
+        ['Ana Silva', 27_000],
+        ['Bruno Costa', 12_000],
       ]),
-      // Ano civil tem mais dias de visita (jan–set)
       daysYtdByVisitKey: new Map([
         [normalizeProKey('Ana Silva'), 180],
         [normalizeProKey('Bruno Costa'), 90],
       ]),
-      // Base da média = só set
       daysYtdCoveredByVisitKey: new Map([
-        [normalizeProKey('Ana Silva'), 24],
-        [normalizeProKey('Bruno Costa'), 12],
+        [normalizeProKey('Ana Silva'), 70],
+        [normalizeProKey('Bruno Costa'), 40],
       ]),
     })
     const ana = out.professionals.find((p) => p.name === 'Ana Silva')
-    expect(out.year_months_covered).toEqual(['2026-09'])
-    expect(ana?.fat_bruto_ano).toBe(10_000)
+    expect(out.year_months_covered).toEqual(['2026-07', '2026-08', '2026-09'])
+    expect(out.year_months_from_8123).toEqual(['2026-09'])
+    expect(out.year_months_from_p1).toEqual(['2026-07', '2026-08'])
+    expect(ana?.fat_bruto_ano).toBe(27_000)
     expect(ana?.dias_trabalhados_ano).toBe(180)
-    expect(ana?.dias_base_media_ano).toBe(24)
-    // Sem diluir 10k ÷ 180 — usa 10k ÷ 24
-    expect(ana?.media_dia_ano).toBe(roundMoney(10_000 / 24))
-    expect(out.totals.fat_bruto_ano).toBe(14_000)
-    expect(out.totals.dias_trabalhados_ano).toBe(270)
-    expect(out.totals.media_dia_ano).toBe(roundMoney(14_000 / 36))
+    expect(ana?.dias_base_media_ano).toBe(70)
+    expect(ana?.media_dia_ano).toBe(roundMoney(27_000 / 70))
+    expect(out.totals.fat_bruto_ano).toBe(39_000)
+    expect(out.totals.media_dia_ano).toBe(roundMoney(39_000 / 110))
     const totalsOnly = buildDailyPerformanceTotals(out.professionals, 24, out.indice)
     expect(totalsOnly.fat_bruto_ano).toBe(out.totals.fat_bruto_ano)
   })

@@ -122,6 +122,8 @@ interface IndicePerformanceData {
   year_from: string
   year_to: string
   year_months_covered: string[]
+  year_months_from_8123: string[]
+  year_months_from_p1: string[]
   reference_day: string | null
   salon_open_days: number | null
   media_dias_trabalhados: number | null
@@ -814,21 +816,29 @@ export default function DashboardPage() {
                   dias em que o profissional apareceu em visita (antes “R$/dia veio”).
                 </p>
                 <p>
-                  <span className="font-medium text-foreground/80">Fat. acumulado</span> = soma do
-                  8123 MTD do <em>último</em> dia de cada mês com sync
+                  <span className="font-medium text-foreground/80">Fat. até o mês</span> = soma
+                  jan → mês do dropdown (último MTD de cada mês). Usa{' '}
+                  <em>8123</em> quando o mês tem sync; senão <em>P1 (0021)</em>
                   {indicePerf.year_months_covered?.length
-                    ? ` · cobertos: ${indicePerf.year_months_covered.join(', ')}`
-                    : ' · sem histórico 8123 ainda'}
-                  {indicePerf.year_months_covered?.length === 1
-                    ? ' (ainda não é ano cheio — só há esse mês na base)'
+                    ? ` · ${indicePerf.year_months_covered[0]}${
+                        indicePerf.year_months_covered.length > 1
+                          ? `…${indicePerf.year_months_covered[indicePerf.year_months_covered.length - 1]}`
+                          : ''
+                      } (${indicePerf.year_months_covered.length} meses)`
+                    : ' · sem histórico ainda'}
+                  {indicePerf.year_months_from_p1?.length
+                    ? ` · P1: ${indicePerf.year_months_from_p1.join(', ')}`
+                    : ''}
+                  {indicePerf.year_months_from_8123?.length
+                    ? ` · 8123: ${indicePerf.year_months_from_8123.join(', ')}`
                     : ''}
                   .
                 </p>
                 <p>
                   <span className="font-medium text-foreground/80">Dias no ano</span> = visitas no
-                  ano civil ({indicePerf.year_from} → {indicePerf.year_to}).{' '}
+                  ano até o recorte ({indicePerf.year_from} → {indicePerf.year_to}).{' '}
                   <span className="font-medium text-foreground/80">Média/dia (acumulado)</span> = Fat.
-                  acumulado ÷ dias veio <em>só nos meses com 8123</em>.
+                  até o mês ÷ dias veio nos meses do acumulado.
                 </p>
               </div>
               <table className="w-full min-w-[960px] text-sm">
@@ -864,9 +874,9 @@ export default function DashboardPage() {
                     </th>
                     <th
                       className="pb-2 font-medium"
-                      title="Soma do charged 8123 MTD do último dia de cada mês com sync"
+                      title="Soma jan→mês do dropdown: 8123 MTD por mês, ou P1 se faltar 8123"
                     >
-                      Fat. acumulado
+                      Fat. até o mês
                     </th>
                     <th
                       className="pb-2 font-medium"
@@ -876,7 +886,7 @@ export default function DashboardPage() {
                     </th>
                     <th
                       className="pb-2 font-medium"
-                      title="Fat. acumulado ÷ dias veio nos meses com 8123"
+                      title="Fat. até o mês ÷ dias veio nos meses do acumulado"
                     >
                       Média/dia (acum.)
                     </th>
