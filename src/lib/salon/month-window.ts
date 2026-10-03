@@ -37,6 +37,16 @@ export function yearAgoMonthKey(monthKey: string): string {
   return `${y! - 1}-${String(m).padStart(2, '0')}`
 }
 
+/** Mês civil imediatamente anterior a `referenceDay` (YYYY-MM). */
+export function previousMonthKey(referenceDay = todayIso()): string {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(referenceDay)
+    ? referenceDay
+    : todayIso()
+  const [y, m] = day.slice(0, 7).split('-').map(Number)
+  if (m === 1) return `${y! - 1}-12`
+  return `${y!}-${String(m! - 1).padStart(2, '0')}`
+}
+
 export function labelMonthPt(monthKey: string): string {
   const [y, m] = monthKey.split('-')
   const idx = Number(m) - 1

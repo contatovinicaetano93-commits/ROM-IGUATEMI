@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatMonthWindowLabel,
+  previousMonthKey,
   resolveMonthWindow,
   resolveComparableWindow,
   resolvePreviousComparableWindow,
@@ -31,6 +32,13 @@ describe('yearAgoMonthKey', () => {
   it('volta 12 meses', () => {
     expect(yearAgoMonthKey('2026-08')).toBe('2025-08')
     expect(yearAgoMonthKey('2026-01')).toBe('2025-01')
+  })
+})
+
+describe('previousMonthKey', () => {
+  it('mês civil anterior', () => {
+    expect(previousMonthKey('2026-10-03')).toBe('2026-09')
+    expect(previousMonthKey('2026-01-15')).toBe('2025-12')
   })
 })
 

@@ -22,7 +22,7 @@ import { VisaoSection } from '../_components/VisaoSection'
 import { VisaoAnaliticaNav } from '../_components/intranet/VisaoAnaliticaNav'
 import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/lib/salon/format'
 import { momCompareLine } from '@/lib/salon/mom-delta'
-import { yearAgoMonthKey } from '@/lib/salon/month-window'
+import { previousMonthKey, yearAgoMonthKey } from '@/lib/salon/month-window'
 
 import { apiFetch } from '@/lib/api-client'
 import { getBrand } from '@/lib/brand'
@@ -110,11 +110,14 @@ interface IndicePerformanceData {
 export default function DashboardPage() {
   const brand = getBrand()
   const [month, setMonth] = useState(() => todayIso().slice(0, 7))
+  /** Índice: padrão = mês fechado anterior (ex.: out → set). */
+  const [indiceMonth, setIndiceMonth] = useState(() => previousMonthKey())
   const [compareMonth, setCompareMonth] = useState('')
   const [data, setData] = useState<KpiData | null>(null)
   const [tm, setTm] = useState<TmComparison | null>(null)
   const [performance, setPerformance] = useState<PerformanceData | null>(null)
   const [indicePerf, setIndicePerf] = useState<IndicePerformanceData | null>(null)
+  const [indiceLoading, setIndiceLoading] = useState(true)
   const [period, setPeriod] = useState<(PeriodAnalytics & {
     sync?: {
       status: string | null
@@ -139,22 +142,13 @@ export default function DashboardPage() {
         // Evita KPIs do mês anterior com rótulos do mês novo enquanto as requests resolvem.
         setTm(null)
         setPerformance(null)
-        setIndicePerf(null)
         setPeriod(null)
-        // Dashboard + índice em paralelo (índice não bloqueia a visão).
         const q = new URLSearchParams({ month })
         if (compareMonth) q.set('compare', compareMonth)
-        const indiceQ = new URLSearchParams({ month })
-        const [dashRes, indiceRes] = await Promise.all([
-          apiFetch(`/api/kpis/dashboard?${q}`, {
-            cache: 'no-store',
-            timeoutMs: 100_000,
-          }),
-          apiFetch(`/api/kpis/indice-performance?${indiceQ}`, {
-            cache: 'no-store',
-            timeoutMs: 60_000,
-          }).catch(() => null),
-        ])
+        const dashRes = await apiFetch(`/api/kpis/dashboard?${q}`, {
+          cache: 'no-store',
+          timeoutMs: 100_000,
+        })
         const raw = await dashRes.text()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let dashJson: { error?: string; data?: any }
@@ -182,18 +176,6 @@ export default function DashboardPage() {
         setTm(bundle.tm ?? null)
         setPerformance(bundle.performance ?? null)
         setPeriod(bundle.period ?? null)
-        if (indiceRes?.ok) {
-          try {
-            const indiceJson = (await indiceRes.json()) as {
-              data?: IndicePerformanceData
-            }
-            setIndicePerf(indiceJson.data ?? null)
-          } catch {
-            setIndicePerf(null)
-          }
-        } else {
-          setIndicePerf(null)
-        }
         setError(null)
 
         const warnings: string[] = []
@@ -228,6 +210,40 @@ export default function DashboardPage() {
       cancelled = true
     }
   }, [month, compareMonth])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadIndice() {
+      try {
+        setIndiceLoading(true)
+        setIndicePerf(null)
+        const indiceQ = new URLSearchParams({ month: indiceMonth })
+        const indiceRes = await apiFetch(`/api/kpis/indice-performance?${indiceQ}`, {
+          cache: 'no-store',
+          timeoutMs: 60_000,
+        })
+        if (cancelled) return
+        if (!indiceRes.ok) {
+          setIndicePerf(null)
+          return
+        }
+        const indiceJson = (await indiceRes.json()) as {
+          data?: IndicePerformanceData
+        }
+        if (!cancelled) setIndicePerf(indiceJson.data ?? null)
+      } catch {
+        if (!cancelled) setIndicePerf(null)
+      } finally {
+        if (!cancelled) setIndiceLoading(false)
+      }
+    }
+
+    loadIndice()
+    return () => {
+      cancelled = true
+    }
+  }, [indiceMonth])
 
   function exportPeriodCsv() {
     if (!period) return
@@ -723,10 +739,18 @@ export default function DashboardPage() {
         <SectionCard
           title="Índice de Performance Diária"
           badge={<TrendingUp size={15} className="text-muted" />}
+          aside={
+            <MonthYearField
+              value={indiceMonth}
+              onChange={setIndiceMonth}
+              maxMonth={todayIso().slice(0, 7)}
+              aria-label="Mês do índice de performance"
+            />
+          }
           storageKey="visao-indice-performance-diaria"
           defaultOpen
         >
-          {loading && !indicePerf ? (
+          {indiceLoading && !indicePerf ? (
             <p className="text-xs text-muted">Carregando índice…</p>
           ) : !indicePerf || indicePerf.professionals.length === 0 ? (
             <p className="text-xs text-muted">
