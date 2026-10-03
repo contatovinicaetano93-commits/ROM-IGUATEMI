@@ -1,18 +1,17 @@
 /**
- * Índice de Performance Diária (V1.4 — constância + Δ + acumulado 8123 + totais).
+ * Índice de Performance Diária (V1.5 — constância + Δ + acumulado até o mês).
  *
  * Mês (dropdown):
  * - fat_bruto: 8123 `charged` MTD do mês (espelho Folha)
  * - dias_trabalhados: dias distintos com visita Avec no mês (“veio”)
- * - media_dia_trabalhado: fat_bruto ÷ dias_trabalhados  (= “R$/dia veio”)
+ * - media_dia_trabalhado: fat_bruto ÷ dias_trabalhados
  * - constancia_pct = dias_trabalhados ÷ dias_uteis_salao × 100
  *
- * Acumulado (só meses com snapshot 8123 — hoje tipicamente desde set/2026):
- * - fat_bruto_ano: soma do charged MTD do *último* dia de cada mês com 8123
- *   (nunca reutiliza snapshot de outro mês; nunca soma vários dias do mesmo mês)
- * - dias_trabalhados_ano: dias distintos com visita no ano civil até o recorte
- * - media_dia_ano: fat_bruto_ano ÷ dias veio *nos meses cobertos pelo 8123*
- *   (evita diluir fat parcial com dias de meses sem comissão syncada)
+ * Acumulado até o mês escolhido (jan → fim do recorte):
+ * - fat_bruto_ano: soma do MTD do último snapshot de cada mês
+ *   · 8123 `charged` quando o mês tem sync; senão P1 `revenue` (0021)
+ * - dias_trabalhados_ano: visitas no ano até o recorte
+ * - media_dia_ano: fat_bruto_ano ÷ dias veio nos meses do acumulado
  *
  * Totais = soma das colunas (médias ponderadas fat÷dias).
  */
@@ -51,11 +50,11 @@ export type DailyPerformanceProRow = {
   /** (dias veio ÷ média dias da unidade − 1) × 100 */
   delta_indice: number | null
   standing: DailyPerformanceStanding
-  /** Soma dos charged 8123 MTD dos meses com snapshot (não inventa mês sem 8123). */
+  /** Fat acumulado jan → mês do dropdown (8123 ou P1 por mês). */
   fat_bruto_ano: number | null
   /** Dias distintos com visita no ano civil até o recorte. */
   dias_trabalhados_ano: number | null
-  /** Dias veio só nos meses com 8123 (denominador da média acumulada). */
+  /** Dias veio nos meses que entraram no acumulado (denominador da média). */
   dias_base_media_ano: number | null
   /** fat_bruto_ano ÷ dias_base_media_ano. */
   media_dia_ano: number | null
@@ -88,10 +87,14 @@ export type DailyPerformanceIndex = {
   /** Fim do recorte anual (= `to` do mês). */
   year_to: string
   /**
-   * Meses YYYY-MM que entraram no acumulado 8123 (último snapshot de cada um).
+   * Meses YYYY-MM que entraram no acumulado até o mês (último snapshot de cada um).
    * Vazio → sem base de fat acumulado.
    */
   year_months_covered: string[]
+  /** Subconjunto coberto por 8123 charged. */
+  year_months_from_8123: string[]
+  /** Subconjunto coberto por P1 revenue (fallback sem 8123). */
+  year_months_from_p1: string[]
   reference_day: string | null
   salon_open_days: number | null
   /** Média aritmética dos dias veio (só quem tem base). */
@@ -315,6 +318,71 @@ export function mapFatBrutoByP1Name(
   return out
 }
 
+/**
+ * Casa receita P1 (0021) → nome canônico P1 — fallback do acumulado sem 8123.
+ */
+export function mapP1RevenueByP1Name(
+  p1Names: string[],
+  p1Rows: readonly { name: string; revenue: number | null | undefined }[],
+): Map<string, number> {
+  const p1Keys = p1Names.map((n) => normalizeProKey(n))
+  const keyToName = new Map(p1Names.map((n) => [normalizeProKey(n), n]))
+  const out = new Map<string, number>()
+  for (const row of p1Rows) {
+    const revenue = Number(row.revenue)
+    if (!Number.isFinite(revenue) || revenue <= 0.02) continue
+    const visitKey = normalizeProKey(String(row.name ?? ''))
+    if (!visitKey) continue
+    const matched = matchVisitKeyToP1(visitKey, p1Keys)
+    if (!matched) continue
+    const name = keyToName.get(matched)
+    if (!name || out.has(name)) continue
+    out.set(name, revenue)
+  }
+  return out
+}
+
+/**
+ * Acumulado jan→mês: por mês, 8123 se existir; senão P1.
+ * `monthsThrough` = monthKeysFromJanThrough(mês do dropdown).
+ */
+export function buildFatYtdThroughMonth(args: {
+  monthsThrough: readonly string[]
+  byMonth8123: Map<string, Map<string, number>>
+  byMonthP1: Map<string, Map<string, number>>
+}): {
+  fatByPro: Map<string, number>
+  monthsCovered: string[]
+  monthsFrom8123: string[]
+  monthsFromP1: string[]
+} {
+  const entries: Array<{ month: string; chargedByPro: Map<string, number> }> =
+    []
+  const monthsFrom8123: string[] = []
+  const monthsFromP1: string[] = []
+  for (const month of args.monthsThrough) {
+    if (!/^\d{4}-\d{2}$/.test(month)) continue
+    const m8123 = args.byMonth8123.get(month)
+    if (m8123 && m8123.size > 0) {
+      entries.push({ month, chargedByPro: m8123 })
+      monthsFrom8123.push(month)
+      continue
+    }
+    const mP1 = args.byMonthP1.get(month)
+    if (mP1 && mP1.size > 0) {
+      entries.push({ month, chargedByPro: mP1 })
+      monthsFromP1.push(month)
+    }
+  }
+  const merged = mergeExactMonthChargedMaps(entries)
+  return {
+    fatByPro: merged.fatByPro,
+    monthsCovered: merged.monthsCovered,
+    monthsFrom8123,
+    monthsFromP1,
+  }
+}
+
 /** Soma mapas de charged (ex.: meses → acumulado). */
 export function addChargedMaps(
   maps: readonly Map<string, number>[],
@@ -387,19 +455,21 @@ export function buildDailyPerformanceIndex(args: {
   yearFrom?: string
   yearTo?: string
   yearMonthsCovered?: string[]
+  yearMonthsFrom8123?: string[]
+  yearMonthsFromP1?: string[]
   referenceDay: string | null
   salonOpenDays: number | null
   /** Nome canônico P1 → fat 8123 charged (mês/MTD no referenceDay) */
   fatByPro: Map<string, number>
   /** Chave normalizada de visita → dias distintos (mês) */
   daysByVisitKey: Map<string, number>
-  /** Nome canônico P1 → fat 8123 charged acumulado (meses cobertos) */
+  /** Nome canônico P1 → fat acumulado até o mês */
   fatYtdByPro?: Map<string, number>
   /** Chave normalizada de visita → dias distintos (ano civil) */
   daysYtdByVisitKey?: Map<string, number>
   /**
-   * Dias veio só nos meses com 8123 (base da média/dia acumulada).
-   * Se omitido, cai no ano civil (pior se 8123 for parcial).
+   * Dias veio nos meses do acumulado (base da média/dia acumulada).
+   * Se omitido, cai no ano civil.
    */
   daysYtdCoveredByVisitKey?: Map<string, number>
   /** Nome canônico P1 → cargo 8123 */
@@ -409,6 +479,8 @@ export function buildDailyPerformanceIndex(args: {
   const categoriaByPro = args.categoriaByPro ?? new Map<string, string>()
   const fatYtdByPro = args.fatYtdByPro ?? new Map<string, number>()
   const yearMonthsCovered = [...(args.yearMonthsCovered ?? [])].sort()
+  const yearMonthsFrom8123 = [...(args.yearMonthsFrom8123 ?? [])].sort()
+  const yearMonthsFromP1 = [...(args.yearMonthsFromP1 ?? [])].sort()
   const daysWorkedByP1 = matchDaysByVisitKeyToP1(args.daysByVisitKey, p1Names)
   const daysYtdByP1 = matchDaysByVisitKeyToP1(
     args.daysYtdByVisitKey ?? new Map(),
@@ -457,7 +529,7 @@ export function buildDailyPerformanceIndex(args: {
     const daysCoveredRaw = daysYtdCoveredByP1.get(name)
     const daysCovered =
       daysCoveredRaw != null && daysCoveredRaw > 0 ? daysCoveredRaw : null
-    // Média acumulada usa dias dos meses com 8123 — senão fat parcial ÷ dias cheios mente.
+    // Média acumulada usa dias dos meses que entraram no acumulado.
     const mediaAno = avgPerDay(fatYtd, daysCovered)
 
     if (daysWorked != null) diasComBase.push(daysWorked)
@@ -515,10 +587,19 @@ export function buildDailyPerformanceIndex(args: {
 
   const coveredLabel =
     yearMonthsCovered.length === 0
-      ? 'sem meses 8123'
+      ? 'sem meses'
       : yearMonthsCovered.length === 1
-        ? `só ${yearMonthsCovered[0]}`
+        ? yearMonthsCovered[0]!
         : `${yearMonthsCovered[0]}…${yearMonthsCovered[yearMonthsCovered.length - 1]} (${yearMonthsCovered.length} meses)`
+  const sourceBits: string[] = []
+  if (yearMonthsFrom8123.length > 0) {
+    sourceBits.push(`8123: ${yearMonthsFrom8123.join(', ')}`)
+  }
+  if (yearMonthsFromP1.length > 0) {
+    sourceBits.push(`P1: ${yearMonthsFromP1.join(', ')}`)
+  }
+  const sourceLabel =
+    sourceBits.length > 0 ? sourceBits.join(' · ') : 'sem fonte'
 
   return {
     month: args.month,
@@ -528,6 +609,8 @@ export function buildDailyPerformanceIndex(args: {
     year_from: yearFrom,
     year_to: yearTo,
     year_months_covered: yearMonthsCovered,
+    year_months_from_8123: yearMonthsFrom8123,
+    year_months_from_p1: yearMonthsFromP1,
     reference_day: args.referenceDay,
     salon_open_days: args.salonOpenDays,
     media_dias_trabalhados: mediaDias,
@@ -535,7 +618,7 @@ export function buildDailyPerformanceIndex(args: {
     professionals,
     totals,
     note:
-      `Média/dia (mês) = fat bruto 8123 do mês ÷ dias em que o profissional apareceu em visita Avec. Constância = esses dias ÷ dias úteis do salão. Δ = (dias veio ÷ média da unidade − 1) × 100. Fat acumulado = soma do charged 8123 MTD do último dia de cada mês com sync (${coveredLabel}) — não é ano civil cheio se faltar histórico. Dias no ano = visitas no ano. Média/dia (acumulado) = fat acumulado ÷ dias veio nos meses com 8123.`,
+      `Média/dia (mês) = fat 8123 do mês ÷ dias com visita. Constância = dias no mês ÷ dias úteis. Δ = (dias ÷ média da unidade − 1) × 100. Fat acumulado = soma jan→mês do dropdown (${coveredLabel}; ${sourceLabel}) — 8123 quando houver, senão P1. Dias no ano = visitas no ano. Média/dia (acumulado) = fat acumulado ÷ dias veio nos meses do acumulado.`,
   }
 }
 
@@ -585,46 +668,85 @@ async function loadVisitDaysByPro(
   return out
 }
 
-/**
- * Último snapshot 8123 de cada mês civil em [yearFrom, yearTo].
- * DISTINCT ON evita reutilizar mês vizinho e evita somar vários dias do mesmo mês.
- */
-async function loadFatBrutoYtdByP1Name(
+/** Último snapshot por mês → mapa month → (nome P1 → valor). */
+async function loadLastMonthlyMoneyByPro(
+  kind: '8123' | 'p1',
   p1Names: string[],
   yearFrom: string,
   yearTo: string,
-): Promise<{ fatByPro: Map<string, number>; monthsCovered: string[] }> {
-  if (p1Names.length === 0) {
-    return { fatByPro: new Map(), monthsCovered: [] }
-  }
+): Promise<Map<string, Map<string, number>>> {
+  const out = new Map<string, Map<string, number>>()
+  if (p1Names.length === 0) return out
   const sql = getSql()
   try {
-    const rows = (await sql`
-      select distinct on (date_trunc('month', day))
-        to_char(day, 'YYYY-MM') as month,
-        day::text as day,
-        professionals
-      from salon_commissions_daily
-      where day >= ${yearFrom}::date
-        and day <= ${yearTo}::date
-      order by date_trunc('month', day), day desc
-    `) as { month: string; day: string; professionals: unknown }[]
+    const rows =
+      kind === '8123'
+        ? ((await sql`
+            select distinct on (date_trunc('month', day))
+              to_char(day, 'YYYY-MM') as month,
+              professionals
+            from salon_commissions_daily
+            where day >= ${yearFrom}::date
+              and day <= ${yearTo}::date
+            order by date_trunc('month', day), day desc
+          `) as { month: string; professionals: unknown }[])
+        : ((await sql`
+            select distinct on (date_trunc('month', day))
+              to_char(day, 'YYYY-MM') as month,
+              professionals
+            from salon_p1_daily
+            where day >= ${yearFrom}::date
+              and day <= ${yearTo}::date
+            order by date_trunc('month', day), day desc
+          `) as { month: string; professionals: unknown }[])
 
-    const entries: Array<{ month: string; chargedByPro: Map<string, number> }> =
-      []
     for (const row of rows) {
       const month = String(row.month ?? '')
       if (!/^\d{4}-\d{2}$/.test(month)) continue
-      const pros = asJsonArray<CommissionProfessionalRow>(row.professionals)
-      entries.push({
-        month,
-        chargedByPro: mapFatBrutoByP1Name(p1Names, pros),
-      })
+      if (kind === '8123') {
+        const pros = asJsonArray<CommissionProfessionalRow>(row.professionals)
+        const mapped = mapFatBrutoByP1Name(p1Names, pros)
+        if (mapped.size > 0) out.set(month, mapped)
+      } else {
+        const pros = asJsonArray<P1ProfessionalRow>(row.professionals)
+        const mapped = mapP1RevenueByP1Name(p1Names, pros)
+        if (mapped.size > 0) out.set(month, mapped)
+      }
     }
-    return mergeExactMonthChargedMaps(entries)
   } catch {
-    return { fatByPro: new Map(), monthsCovered: [] }
+    /* tabela ausente */
   }
+  return out
+}
+
+/**
+ * Fat acumulado jan → mês do dropdown: 8123 por mês, senão P1.
+ */
+async function loadFatBrutoYtdThroughMonth(
+  p1Names: string[],
+  monthKey: string,
+  yearFrom: string,
+  yearTo: string,
+): Promise<{
+  fatByPro: Map<string, number>
+  monthsCovered: string[]
+  monthsFrom8123: string[]
+  monthsFromP1: string[]
+}> {
+  const monthsThrough = monthKeysFromJanThrough(monthKey)
+  if (monthsThrough.length === 0 || p1Names.length === 0) {
+    return {
+      fatByPro: new Map(),
+      monthsCovered: [],
+      monthsFrom8123: [],
+      monthsFromP1: [],
+    }
+  }
+  const [byMonth8123, byMonthP1] = await Promise.all([
+    loadLastMonthlyMoneyByPro('8123', p1Names, yearFrom, yearTo),
+    loadLastMonthlyMoneyByPro('p1', p1Names, yearFrom, yearTo),
+  ])
+  return buildFatYtdThroughMonth({ monthsThrough, byMonth8123, byMonthP1 })
 }
 
 /**
@@ -673,7 +795,7 @@ export async function computeDailyPerformanceIndex(opts?: {
       countSalonOpenDays(window.from, window.to),
       loadVisitDaysByPro(window.from, window.to),
       loadVisitDaysByPro(yearFrom, yearTo),
-      loadFatBrutoYtdByP1Name(p1Names, yearFrom, yearTo),
+      loadFatBrutoYtdThroughMonth(p1Names, window.month, yearFrom, yearTo),
     ])
 
   const coveredRange = coveredMonthsDayRange(fatYtd.monthsCovered, yearTo)
@@ -691,6 +813,8 @@ export async function computeDailyPerformanceIndex(opts?: {
     yearFrom,
     yearTo,
     yearMonthsCovered: fatYtd.monthsCovered,
+    yearMonthsFrom8123: fatYtd.monthsFrom8123,
+    yearMonthsFromP1: fatYtd.monthsFromP1,
     referenceDay: commissions?.day ?? latest?.day ?? null,
     salonOpenDays,
     fatByPro,
