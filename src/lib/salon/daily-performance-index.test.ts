@@ -5,12 +5,14 @@ import {
   buildDailyPerformanceIndex,
   buildDailyPerformanceTotals,
   constanciaPct,
+  coveredMonthsDayRange,
   deltaVsMediaDias,
   mapCategoriaByP1Name,
   mapFatBrutoByP1Name,
   matchVisitKeyToP1,
   meanOf,
   meanPct,
+  mergeExactMonthChargedMaps,
   monthKeysFromJanThrough,
   roundMoney,
   standingFromDelta,
@@ -120,6 +122,21 @@ describe('daily-performance-index math', () => {
     expect(sumMoney([100, null, 50.555])).toBe(150.56)
     expect(sumPositiveInts([null, 0, 12, 8])).toBe(20)
   })
+
+  it('mergeExactMonthChargedMaps não reutiliza nem duplica mês', () => {
+    const merged = mergeExactMonthChargedMaps([
+      { month: '2026-08', chargedByPro: new Map([['Ana', 10_000]]) },
+      // “Near” de setembro sem snap → reaproveitaria agosto (bug antigo)
+      { month: '2026-08', chargedByPro: new Map([['Ana', 10_000]]) },
+      { month: '2026-09', chargedByPro: new Map([['Ana', 12_000]]) },
+    ])
+    expect(merged.monthsCovered).toEqual(['2026-08', '2026-09'])
+    expect(merged.fatByPro.get('Ana')).toBe(22_000)
+    expect(coveredMonthsDayRange(['2026-09'], '2026-09-30')).toEqual({
+      from: '2026-09-01',
+      to: '2026-09-30',
+    })
+  })
 })
 
 describe('buildDailyPerformanceIndex', () => {
@@ -178,7 +195,7 @@ describe('buildDailyPerformanceIndex', () => {
     expect(out.totals.delta_indice).toBeNull()
   })
 
-  it('YTD: fat ano, dias ano, média ano + totais', () => {
+  it('acumulado: fat 8123 só meses cobertos; média usa dias cobertos (não ano cheio)', () => {
     const out = buildDailyPerformanceIndex({
       month: '2026-09',
       from: '2026-09-01',
@@ -186,6 +203,7 @@ describe('buildDailyPerformanceIndex', () => {
       mtd: false,
       yearFrom: '2026-01-01',
       yearTo: '2026-09-30',
+      yearMonthsCovered: ['2026-09'],
       referenceDay: '2026-09-30',
       salonOpenDays: 24,
       fatByPro: new Map([
@@ -196,25 +214,32 @@ describe('buildDailyPerformanceIndex', () => {
         [normalizeProKey('Ana Silva'), 24],
         [normalizeProKey('Bruno Costa'), 12],
       ]),
+      // Só setembro tem 8123 — fat acumulado = mês
       fatYtdByPro: new Map([
-        ['Ana Silva', 80_000],
-        ['Bruno Costa', 30_000],
+        ['Ana Silva', 10_000],
+        ['Bruno Costa', 4_000],
       ]),
+      // Ano civil tem mais dias de visita (jan–set)
       daysYtdByVisitKey: new Map([
         [normalizeProKey('Ana Silva'), 180],
         [normalizeProKey('Bruno Costa'), 90],
       ]),
+      // Base da média = só set
+      daysYtdCoveredByVisitKey: new Map([
+        [normalizeProKey('Ana Silva'), 24],
+        [normalizeProKey('Bruno Costa'), 12],
+      ]),
     })
     const ana = out.professionals.find((p) => p.name === 'Ana Silva')
-    const bruno = out.professionals.find((p) => p.name === 'Bruno Costa')
-    expect(ana?.fat_bruto_ano).toBe(80_000)
+    expect(out.year_months_covered).toEqual(['2026-09'])
+    expect(ana?.fat_bruto_ano).toBe(10_000)
     expect(ana?.dias_trabalhados_ano).toBe(180)
-    expect(ana?.media_dia_ano).toBe(roundMoney(80_000 / 180))
-    expect(bruno?.fat_bruto_ano).toBe(30_000)
-    expect(bruno?.dias_trabalhados_ano).toBe(90)
-    expect(out.totals.fat_bruto_ano).toBe(110_000)
+    expect(ana?.dias_base_media_ano).toBe(24)
+    // Sem diluir 10k ÷ 180 — usa 10k ÷ 24
+    expect(ana?.media_dia_ano).toBe(roundMoney(10_000 / 24))
+    expect(out.totals.fat_bruto_ano).toBe(14_000)
     expect(out.totals.dias_trabalhados_ano).toBe(270)
-    expect(out.totals.media_dia_ano).toBe(roundMoney(110_000 / 270))
+    expect(out.totals.media_dia_ano).toBe(roundMoney(14_000 / 36))
     const totalsOnly = buildDailyPerformanceTotals(out.professionals, 24, out.indice)
     expect(totalsOnly.fat_bruto_ano).toBe(out.totals.fat_bruto_ano)
   })

@@ -97,6 +97,7 @@ interface IndicePerformancePro {
   standing: 'acima' | 'abaixo' | 'neutro' | 'sem_base'
   fat_bruto_ano: number | null
   dias_trabalhados_ano: number | null
+  dias_base_media_ano: number | null
   media_dia_ano: number | null
 }
 
@@ -108,6 +109,7 @@ interface IndicePerformanceTotals {
   media_dia_trabalhado: number | null
   fat_bruto_ano: number | null
   dias_trabalhados_ano: number | null
+  dias_base_media_ano: number | null
   media_dia_ano: number | null
   delta_indice: null
 }
@@ -119,6 +121,7 @@ interface IndicePerformanceData {
   mtd: boolean
   year_from: string
   year_to: string
+  year_months_covered: string[]
   reference_day: string | null
   salon_open_days: number | null
   media_dias_trabalhados: number | null
@@ -802,23 +805,81 @@ export default function DashboardPage() {
                     ? ` · ${indicePerf.salon_open_days} dias úteis salão`
                     : ''}
               </p>
-              <p className="mb-3 text-[0.7rem] text-muted">{indicePerf.note}</p>
-              <p className="mb-3 text-[0.7rem] text-muted">
-                Ano: {indicePerf.year_from} → {indicePerf.year_to}
-              </p>
+              <div className="mb-3 space-y-1.5 text-[0.7rem] leading-snug text-muted">
+                <p>
+                  <span className="font-medium text-foreground/80">Mês</span> = dropdown ·{' '}
+                  <span className="font-medium text-foreground/80">Fat. mês</span> = valor cobrado
+                  8123 no mês ·{' '}
+                  <span className="font-medium text-foreground/80">Média/dia (mês)</span> = Fat. mês ÷
+                  dias em que o profissional apareceu em visita (antes “R$/dia veio”).
+                </p>
+                <p>
+                  <span className="font-medium text-foreground/80">Fat. acumulado</span> = soma do
+                  8123 MTD do <em>último</em> dia de cada mês com sync
+                  {indicePerf.year_months_covered?.length
+                    ? ` · cobertos: ${indicePerf.year_months_covered.join(', ')}`
+                    : ' · sem histórico 8123 ainda'}
+                  {indicePerf.year_months_covered?.length === 1
+                    ? ' (ainda não é ano cheio — só há esse mês na base)'
+                    : ''}
+                  .
+                </p>
+                <p>
+                  <span className="font-medium text-foreground/80">Dias no ano</span> = visitas no
+                  ano civil ({indicePerf.year_from} → {indicePerf.year_to}).{' '}
+                  <span className="font-medium text-foreground/80">Média/dia (acumulado)</span> = Fat.
+                  acumulado ÷ dias veio <em>só nos meses com 8123</em>.
+                </p>
+              </div>
               <table className="w-full min-w-[960px] text-sm">
                 <thead>
                   <tr className="text-left text-[0.65rem] uppercase tracking-wide text-muted">
                     <th className="pb-2 font-medium">Profissional</th>
-                    <th className="pb-2 font-medium">Fat. bruto</th>
-                    <th className="pb-2 font-medium">Dias veio</th>
-                    <th className="pb-2 font-medium">Dias úteis</th>
-                    <th className="pb-2 font-medium">Constância</th>
-                    <th className="pb-2 font-medium">Δ vs média dias</th>
-                    <th className="pb-2 font-medium">R$/dia veio</th>
-                    <th className="pb-2 font-medium">Fat. ano</th>
-                    <th className="pb-2 font-medium">Dias ano</th>
-                    <th className="pb-2 font-medium">R$/dia ano</th>
+                    <th className="pb-2 font-medium" title="Valor cobrado 8123 no mês do dropdown">
+                      Fat. mês
+                    </th>
+                    <th className="pb-2 font-medium" title="Dias distintos com visita Avec no mês">
+                      Dias no mês
+                    </th>
+                    <th className="pb-2 font-medium" title="Dias com receita no salão (mês)">
+                      Dias úteis
+                    </th>
+                    <th
+                      className="pb-2 font-medium"
+                      title="Dias no mês ÷ dias úteis do salão × 100"
+                    >
+                      Constância
+                    </th>
+                    <th
+                      className="pb-2 font-medium"
+                      title="(Dias no mês ÷ média de dias da unidade − 1) × 100"
+                    >
+                      Δ vs média
+                    </th>
+                    <th
+                      className="pb-2 font-medium"
+                      title="Fat. mês ÷ dias no mês (quanto faturou por dia que veio)"
+                    >
+                      Média/dia (mês)
+                    </th>
+                    <th
+                      className="pb-2 font-medium"
+                      title="Soma do charged 8123 MTD do último dia de cada mês com sync"
+                    >
+                      Fat. acumulado
+                    </th>
+                    <th
+                      className="pb-2 font-medium"
+                      title="Dias distintos com visita no ano civil até o fim do recorte"
+                    >
+                      Dias no ano
+                    </th>
+                    <th
+                      className="pb-2 font-medium"
+                      title="Fat. acumulado ÷ dias veio nos meses com 8123"
+                    >
+                      Média/dia (acum.)
+                    </th>
                     <th className="pb-2 font-medium">Status</th>
                   </tr>
                 </thead>
