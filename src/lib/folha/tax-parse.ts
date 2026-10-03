@@ -3,12 +3,16 @@
  * Não depende de credenciais — o cron IMAP entrega subject+body+filenames aqui.
  */
 
+import { extractCnpjFromText } from '@/lib/folha/tax-cnpj'
+
 export type FolhaTaxKind = 'darf' | 'das' | 'mensalidade' | 'other'
 
 export type ParsedFolhaTaxDocument = {
   kind: FolhaTaxKind
   amount: number | null
   professional_name: string | null
+  /** 14 dígitos quando o documento traz CNPJ legível. */
+  cnpj: string | null
   confidence: 'high' | 'medium' | 'low'
 }
 
@@ -93,14 +97,15 @@ export function parseFolhaTaxEmail(input: {
     guessProfessionalName(blob) ??
     (input.filenames ?? []).map(guessNameFromFilename).find((n) => n != null) ??
     null
+  const cnpj = extractCnpjFromText(blob)
   const confidence: ParsedFolhaTaxDocument['confidence'] =
     kind !== 'other' && amount != null
-      ? professional_name
+      ? cnpj || professional_name
         ? 'high'
         : 'medium'
       : 'low'
 
-  return { kind, amount, professional_name, confidence }
+  return { kind, amount, professional_name, cnpj, confidence }
 }
 
 /** Mapeia tipo do e-mail → campo em folha_extras (Q1 / dia 20). */

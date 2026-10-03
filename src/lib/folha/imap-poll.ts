@@ -26,6 +26,7 @@ import {
   ingestFolhaTaxEmail,
   loadOrCreateFolhaDraft,
 } from '@/lib/folha/service'
+import { extractCnpjFromText } from '@/lib/folha/tax-cnpj'
 import {
   getFolhaPeriod,
   getFolhaTaxDocumentByAnySource,
@@ -54,22 +55,29 @@ function taxKindCanRetry(kind: string): boolean {
   return kind === 'darf' || kind === 'das' || kind === 'mensalidade'
 }
 
+function cnpjFromStoredTaxDoc(doc: FolhaTaxDocumentRow): string | null {
+  const blob = `${doc.raw_subject ?? ''}\n${doc.raw_body ?? ''}`
+  return extractCnpjFromText(blob)
+}
+
 async function reapplyDocument(
   panel: RomPanelId,
   periodId: string,
   doc: FolhaTaxDocumentRow,
 ): Promise<{ applied: boolean; markSeen: boolean; error?: string }> {
   try {
+    const cnpj = cnpjFromStoredTaxDoc(doc)
     const result = await applyFolhaTaxParsedToPeriod(panel, {
       periodId: doc.period_id ?? periodId,
       kind: doc.kind,
       amount: doc.amount,
       professionalName: doc.professional_name,
+      cnpj,
       actor: 'imap-cron',
     })
     const canRetry =
       doc.amount != null &&
-      doc.professional_name != null &&
+      (doc.professional_name != null || cnpj != null) &&
       taxKindCanRetry(doc.kind)
     return { applied: result.applied, markSeen: result.applied || !canRetry }
   } catch (e) {
@@ -100,7 +108,7 @@ async function ingestMessage(
     const canRetry =
       !result.applied &&
       result.parsed.amount != null &&
-      result.parsed.professional_name != null &&
+      (result.parsed.professional_name != null || result.parsed.cnpj != null) &&
       taxKindCanRetry(result.parsed.kind)
     return {
       ingested: true,
