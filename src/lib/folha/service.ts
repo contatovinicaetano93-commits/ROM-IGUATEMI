@@ -52,7 +52,7 @@ import {
   planZigConsumoBaruExtras,
   type ApplyZigConsumoResult,
 } from '@/lib/folha/zig-consumo'
-import { findUniqueFolhaTaxLineName } from '@/lib/folha/tax-name-match'
+import { resolveFolhaTaxLineName } from '@/lib/folha/tax-cnpj'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
 export type FolhaLoadOpts = {
@@ -439,6 +439,8 @@ export async function applyFolhaTaxParsedToPeriod(
     kind: ReturnType<typeof parseFolhaTaxEmail>['kind']
     amount: number | null
     professionalName: string | null
+    /** 14 dígitos ou máscara; prioridade sobre o nome. */
+    cnpj?: string | null
     actor?: string | null
   },
 ): Promise<{ applied: boolean; period: FolhaPeriodRow }> {
@@ -450,15 +452,16 @@ export async function applyFolhaTaxParsedToPeriod(
   if (
     !extrasKey ||
     args.amount == null ||
-    !args.professionalName ||
+    (!args.professionalName && !args.cnpj) ||
     !applyTax
   ) {
     return { applied: false, period }
   }
-  const hitName = findUniqueFolhaTaxLineName(
-    period.lines.map((l) => l.name),
-    args.professionalName,
-  )
+  const hitName = resolveFolhaTaxLineName({
+    lineNames: period.lines.map((l) => l.name),
+    professionalName: args.professionalName,
+    cnpj: args.cnpj,
+  })
   const hit = hitName ? period.lines.find((l) => l.name === hitName) : null
   if (!hit) return { applied: false, period }
   const existing = hit.folha_extras[extrasKey]
@@ -516,6 +519,7 @@ export async function ingestFolhaTaxEmail(
       kind: parsed.kind,
       amount: parsed.amount,
       professionalName: parsed.professional_name,
+      cnpj: parsed.cnpj,
       actor: args.actor,
     })
     current = result.period

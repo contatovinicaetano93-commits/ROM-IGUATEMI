@@ -53,19 +53,10 @@ function queryNameTokens(queryKey: string): string[] {
   )
 }
 
-/**
- * Query (e-mail/PDF) casa com candidato (linha Folha)?
- * Inclui iniciais + sobrenome, além do match frouxo já usado no salão.
- */
-export function folhaTaxNameMatches(query: string, candidate: string): boolean {
-  const qKey = occupancyMergeKey(query)
-  const cKey = occupancyMergeKey(candidate)
-  if (!qKey || !cKey) return false
-  if (qKey === cKey) return true
-  if (namesLooselyMatch(qKey, cKey)) return true
-
-  const qt = queryNameTokens(qKey)
-  const ct = significantNameTokens(cKey)
+/** Iniciais + sobrenome (ex.: M. G. DOS SANTOS). */
+function folhaTaxInitialsMatch(queryKey: string, candidateKey: string): boolean {
+  const qt = queryNameTokens(queryKey)
+  const ct = significantNameTokens(candidateKey)
   if (qt.length < 2 || ct.length < 2) return false
   if (!qt.some(isInitialToken)) return false
 
@@ -103,19 +94,70 @@ export function folhaTaxNameMatches(query: string, candidate: string): boolean {
   return true
 }
 
-/** Nome da linha Folha que casa de forma única com o nome do documento fiscal. */
+export type FolhaTaxNameMatchTier = 'exact' | 'loose' | 'initials'
+
+/** Melhor tier de match query→candidato, ou null. */
+export function folhaTaxNameMatchTier(
+  query: string,
+  candidate: string,
+): FolhaTaxNameMatchTier | null {
+  const qKey = occupancyMergeKey(query)
+  const cKey = occupancyMergeKey(candidate)
+  if (!qKey || !cKey) return null
+  if (qKey === cKey) return 'exact'
+  if (namesLooselyMatch(qKey, cKey)) return 'loose'
+  if (folhaTaxInitialsMatch(qKey, cKey)) return 'initials'
+  return null
+}
+
+/**
+ * Query (e-mail/PDF) casa com candidato (linha Folha)?
+ * Inclui iniciais + sobrenome, além do match frouxo já usado no salão.
+ */
+export function folhaTaxNameMatches(query: string, candidate: string): boolean {
+  return folhaTaxNameMatchTier(query, candidate) != null
+}
+
+/**
+ * Nome da linha Folha que casa de forma única.
+ * Prioridade: exact > loose > initials (evita Mauri Lima roubar Mauricio…).
+ */
 export function findUniqueFolhaTaxLineName(
   lineNames: readonly string[],
   professionalName: string,
 ): string | null {
-  const hits: string[] = []
-  const seen = new Set<string>()
+  const exact: string[] = []
+  const loose: string[] = []
+  const initials: string[] = []
+  const seenExact = new Set<string>()
+  const seenLoose = new Set<string>()
+  const seenInitials = new Set<string>()
+
   for (const name of lineNames) {
-    if (!folhaTaxNameMatches(professionalName, name)) continue
+    const tier = folhaTaxNameMatchTier(professionalName, name)
+    if (!tier) continue
     const key = occupancyMergeKey(name) || name
-    if (seen.has(key)) continue
-    seen.add(key)
-    hits.push(name)
+    if (tier === 'exact') {
+      if (seenExact.has(key)) continue
+      seenExact.add(key)
+      exact.push(name)
+      continue
+    }
+    if (tier === 'loose') {
+      if (seenLoose.has(key) || seenExact.has(key)) continue
+      seenLoose.add(key)
+      loose.push(name)
+      continue
+    }
+    if (seenInitials.has(key) || seenExact.has(key) || seenLoose.has(key)) continue
+    seenInitials.add(key)
+    initials.push(name)
   }
-  return hits.length === 1 ? hits[0]! : null
+
+  if (exact.length === 1) return exact[0]!
+  if (exact.length > 1) return null
+  if (loose.length === 1) return loose[0]!
+  if (loose.length > 1) return null
+  if (initials.length === 1) return initials[0]!
+  return null
 }

@@ -52,4 +52,15 @@ describe('parseFolhaTaxEmail', () => {
     expect(parsed.amount).toBe(178.31)
     expect(parsed.professional_name).toMatch(/SANTOS/i)
   })
+
+  it('extrai CNPJ do corpo (DARF)', () => {
+    const parsed = parseFolhaTaxEmail({
+      subject: 'DARF disponível',
+      body:
+        'CNPJ: 23.225.433/0001-40\nProfissional: Alberto\nDARF no valor de R$ 178,31',
+    })
+    expect(parsed.kind).toBe('darf')
+    expect(parsed.cnpj).toBe('23225433000140')
+    expect(parsed.confidence).toBe('high')
+  })
 })

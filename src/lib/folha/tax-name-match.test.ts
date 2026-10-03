@@ -55,4 +55,13 @@ describe('findUniqueFolhaTaxLineName', () => {
       findUniqueFolhaTaxLineName(['Brunna Silva', 'Beatriz Silva'], 'B. Silva'),
     ).toBeNull()
   })
+
+  it('exact vence loose (Mauricio ≠ Mauri)', () => {
+    expect(
+      findUniqueFolhaTaxLineName(
+        ['Mauri Lima', 'Mauricio De Carvalho Lima'],
+        'MAURICIO DE CARVALHO LIMA',
+      ),
+    ).toBe('Mauricio De Carvalho Lima')
+  })
 })
