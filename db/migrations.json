@@ -349,6 +349,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "044_folha_tax_source_unique",
+      "file": "delta-folha-tax-source-unique.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

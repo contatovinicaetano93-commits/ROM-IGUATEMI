@@ -2,7 +2,7 @@ import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['postgres'],
+  serverExternalPackages: ['postgres', 'imapflow', 'mailparser', 'pdf-parse'],
   // secrets/ overlay + db/*.sql + migrations.json no bundle serverless (Vercel).
   outputFileTracingIncludes: {
     '/*': ['./secrets/**/*', './db/**/*'],

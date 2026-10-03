@@ -479,6 +479,7 @@ export async function ingestFolhaTaxEmail(
     periodId: string
     subject?: string | null
     body: string
+    filenames?: string[] | null
     source?: string
     actor?: string | null
     applyToLine?: boolean
@@ -493,7 +494,11 @@ export async function ingestFolhaTaxEmail(
   const period = await getFolhaPeriod(args.periodId)
   if (!period) throw new Error('Período da Folha não encontrado')
 
-  const parsed = parseFolhaTaxEmail({ subject: args.subject, body: args.body })
+  const parsed = parseFolhaTaxEmail({
+    subject: args.subject,
+    body: args.body,
+    filenames: args.filenames,
+  })
   const doc = await insertFolhaTaxDocument({
     periodId: args.periodId,
     kind: parsed.kind,

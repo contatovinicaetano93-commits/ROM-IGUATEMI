@@ -1,25 +1,38 @@
 /**
- * Cliente IMAP mínimo (LOGIN / SELECT / SEARCH / FETCH / STORE \Seen / LOGOUT)
- * só para a caixa da Folha — sem dependência externa.
+ * IMAP Folha: pastas de trabalho + lookback (não UNSEEN) + RFC822/PDF.
  */
 
-import { connect as tlsConnect, type TLSSocket } from 'node:tls'
+import { ImapFlow } from 'imapflow'
+import { simpleParser, type Attachment } from 'mailparser'
+import {
+  isInboxMailbox,
+  shouldSyncMailbox,
+  sortWorkMailboxes,
+} from '@/lib/folha/imap-mailbox'
+import { extractPdfText } from '@/lib/folha/imap-pdf'
+
+export const FOLHA_IMAP_FETCH_CAP = 40
 
 export type FolhaImapConfig = {
   host: string
   port: number
   user: string
   pass: string
-  /** default INBOX */
   mailbox?: string
-  /** rejeitar cert inválido? default true em prod */
   rejectUnauthorized?: boolean
+  lookbackDays: number
 }
 
-export type FolhaImapMessage = {
+export type FolhaImapCandidate = {
+  mailbox: string
   uid: number
+}
+
+export type FolhaImapMessage = FolhaImapCandidate & {
+  messageId: string | null
   subject: string
   body: string
+  filenames: string[]
 }
 
 export function readFolhaImapConfig(
@@ -32,6 +45,9 @@ export function readFolhaImapConfig(
   const portRaw = env.FOLHA_IMAP_PORT?.trim()
   const port = portRaw ? Number(portRaw) : 993
   if (!Number.isFinite(port) || port <= 0) return null
+  const lookbackRaw = Number(env.FOLHA_IMAP_LOOKBACK_DAYS ?? '14')
+  const lookbackDays =
+    Number.isFinite(lookbackRaw) && lookbackRaw > 0 ? Math.min(lookbackRaw, 60) : 14
   return {
     host,
     port,
@@ -39,239 +55,204 @@ export function readFolhaImapConfig(
     pass,
     mailbox: env.FOLHA_IMAP_MAILBOX?.trim() || 'INBOX',
     rejectUnauthorized: env.FOLHA_IMAP_TLS_INSECURE === '1' ? false : true,
+    lookbackDays,
   }
 }
 
-function quoteImapString(value: string): string {
-  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+export function canonicalFolhaImapSource(mailbox: string, uid: number): string {
+  return `imap:${mailbox}:${uid}`
 }
 
-class ImapSession {
-  private sock: TLSSocket
-  private buf = ''
-  private tagSeq = 0
-
-  constructor(sock: TLSSocket) {
-    this.sock = sock
-  }
-
-  static async connect(cfg: FolhaImapConfig): Promise<ImapSession> {
-    const sock = await new Promise<TLSSocket>((resolve, reject) => {
-      const s = tlsConnect(
-        {
-          host: cfg.host,
-          port: cfg.port,
-          servername: cfg.host,
-          rejectUnauthorized: cfg.rejectUnauthorized !== false,
-        },
-        () => resolve(s),
-      )
-      s.setEncoding('utf8')
-      s.on('error', reject)
-      s.setTimeout(25_000, () => {
-        s.destroy(new Error('IMAP timeout'))
-      })
-    })
-    const session = new ImapSession(sock)
-    await session.readUntilReady()
-    return session
-  }
-
-  private readChunk(): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const onData = (chunk: string | Buffer) => {
-        cleanup()
-        resolve(typeof chunk === 'string' ? chunk : chunk.toString('utf8'))
-      }
-      const onErr = (err: Error) => {
-        cleanup()
-        reject(err)
-      }
-      const onEnd = () => {
-        cleanup()
-        reject(new Error('IMAP connection closed'))
-      }
-      const cleanup = () => {
-        this.sock.off('data', onData)
-        this.sock.off('error', onErr)
-        this.sock.off('end', onEnd)
-      }
-      this.sock.on('data', onData)
-      this.sock.on('error', onErr)
-      this.sock.on('end', onEnd)
-    })
-  }
-
-  private async readUntilReady() {
-    // greeting
-    for (;;) {
-      if (this.buf.includes('\n')) break
-      this.buf += await this.readChunk()
-    }
-  }
-
-  private async command(cmd: string): Promise<string> {
-    this.tagSeq += 1
-    const tag = `A${this.tagSeq}`
-    this.sock.write(`${tag} ${cmd}\r\n`)
-    for (;;) {
-      const done = new RegExp(`^${tag} (OK|NO|BAD)\\b`, 'm')
-      if (done.test(this.buf)) {
-        const idx = this.buf.search(done)
-        const m = this.buf.slice(idx).match(done)
-        const status = m?.[1]
-        const end = this.buf.indexOf('\n', idx)
-        const block = this.buf.slice(0, end >= 0 ? end + 1 : this.buf.length)
-        this.buf = this.buf.slice(end >= 0 ? end + 1 : this.buf.length)
-        if (status !== 'OK') {
-          throw new Error(`IMAP ${status}: ${cmd.split(' ')[0]} — ${block.trim()}`)
-        }
-        return block
-      }
-      this.buf += await this.readChunk()
-    }
-  }
-
-  async login(user: string, pass: string) {
-    await this.command(`LOGIN ${quoteImapString(user)} ${quoteImapString(pass)}`)
-  }
-
-  async select(mailbox: string) {
-    await this.command(`SELECT ${quoteImapString(mailbox)}`)
-  }
-
-  private async searchUids(criteria: string): Promise<number[]> {
-    const raw = await this.command(`UID SEARCH ${criteria}`)
-    const m = raw.match(/\* SEARCH[^\n]*/i)
-    if (!m) return []
-    return (m[0].match(/\d+/g) ?? []).map(Number).filter((n) => n > 0)
-  }
-
-  /** UIDs não lidos com DARF / DAS / mensalidade no assunto. */
-  async searchTaxUnseen(): Promise<number[]> {
-    const a = await this.searchUids('UNSEEN SUBJECT DARF')
-    const b = await this.searchUids('UNSEEN SUBJECT DAS')
-    const c = await this.searchUids('UNSEEN SUBJECT "Simples Nacional"')
-    const d = await this.searchUids('UNSEEN SUBJECT Mensalidade')
-    const e = await this.searchUids('UNSEEN SUBJECT Contabilidade')
-    return [...new Set([...a, ...b, ...c, ...d, ...e])].sort((x, y) => x - y)
-  }
-
-  async fetchMessage(uid: number): Promise<FolhaImapMessage> {
-    this.tagSeq += 1
-    const tag = `A${this.tagSeq}`
-    this.sock.write(
-      `${tag} UID FETCH ${uid} (BODY.PEEK[HEADER.FIELDS (SUBJECT)] BODY.PEEK[TEXT])\r\n`,
-    )
-    for (;;) {
-      const done = new RegExp(`^${tag} (OK|NO|BAD)\\b`, 'm')
-      if (done.test(this.buf)) {
-        const idx = this.buf.search(done)
-        const statusMatch = this.buf.slice(idx).match(done)
-        const block = this.buf.slice(0, idx)
-        this.buf = this.buf.slice(this.buf.indexOf('\n', idx) + 1)
-        if (statusMatch?.[1] !== 'OK') {
-          throw new Error(`IMAP FETCH failed uid=${uid}`)
-        }
-        return parseFetchBlock(uid, block)
-      }
-      this.buf += await this.readChunk()
-    }
-  }
-
-  async markSeen(uid: number) {
-    await this.command(`UID STORE ${uid} +FLAGS (\\Seen)`)
-  }
-
-  async logout() {
-    try {
-      await this.command('LOGOUT')
-    } catch {
-      // ignore
-    }
-    this.sock.destroy()
-  }
+export function folhaImapSourceKeys(
+  mailbox: string,
+  uid: number,
+  messageId?: string | null,
+): string[] {
+  const keys = [canonicalFolhaImapSource(mailbox, uid)]
+  if (isInboxMailbox(mailbox)) keys.push(`imap:${uid}`)
+  const mid = messageId?.replace(/[<>]/g, '').trim()
+  if (mid) keys.push(`imap:mid:${mid}`)
+  return [...new Set(keys)]
 }
 
-function decodeMimeWord(raw: string): string {
-  // =?UTF-8?B?...?= / =?UTF-8?Q?...?=
-  return raw.replace(/=\?([^?]+)\?([bqBQ])\?([^?]*)\?=/g, (_m, _cs, enc, data) => {
-    try {
-      if (String(enc).toUpperCase() === 'B') {
-        return Buffer.from(data, 'base64').toString('utf8')
-      }
-      const q = String(data)
-        .replace(/_/g, ' ')
-        .replace(/=([0-9A-Fa-f]{2})/g, (_: string, h: string) =>
-          String.fromCharCode(parseInt(h, 16)),
-        )
-      return q
-    } catch {
-      return raw
-    }
+function createClient(cfg: FolhaImapConfig): ImapFlow {
+  return new ImapFlow({
+    host: cfg.host,
+    port: cfg.port,
+    secure: true,
+    auth: { user: cfg.user, pass: cfg.pass },
+    logger: false,
+    disableAutoIdle: true,
+    tls: { rejectUnauthorized: cfg.rejectUnauthorized !== false },
   })
 }
 
-function parseFetchBlock(uid: number, block: string): FolhaImapMessage {
-  let subject = ''
-  let body = ''
-
-  const headerLiteral = block.match(
-    /BODY\[HEADER\.FIELDS \(SUBJECT\)\]\s*\{(\d+)\}\r?\n([\s\S]*)/i,
-  )
-  if (headerLiteral) {
-    const len = Number(headerLiteral[1])
-    const rest = headerLiteral[2] ?? ''
-    const header = rest.slice(0, len)
-    const subj = header.match(/^Subject:\s*(.*)$/im)
-    subject = decodeMimeWord((subj?.[1] ?? '').trim())
-    const after = rest.slice(len)
-    const textLiteral = after.match(/BODY\[TEXT\]\s*\{(\d+)\}\r?\n([\s\S]*)/i)
-    if (textLiteral) {
-      const tlen = Number(textLiteral[1])
-      body = (textLiteral[2] ?? '').slice(0, tlen)
+async function withImap<T>(
+  cfg: FolhaImapConfig,
+  fn: (client: ImapFlow) => Promise<T>,
+): Promise<T> {
+  const client = createClient(cfg)
+  await client.connect()
+  try {
+    return await fn(client)
+  } finally {
+    try {
+      await client.logout()
+    } catch {
+      client.close()
     }
-  } else {
-    const subj = block.match(/Subject:\s*([^\r\n]+)/i)
-    subject = decodeMimeWord((subj?.[1] ?? '').trim())
-    body = block
   }
-
-  return { uid, subject, body: body.trim() }
 }
 
-/** Busca e-mails fiscais não lidos. Sempre faz LOGOUT. */
-export async function fetchUnseenFolhaTaxEmails(
+function searchSince(cfg: FolhaImapConfig): Date {
+  const since = new Date()
+  since.setUTCDate(since.getUTCDate() - cfg.lookbackDays)
+  return since
+}
+
+export async function listFolhaImapCandidates(
   cfg: FolhaImapConfig,
-): Promise<FolhaImapMessage[]> {
-  const session = await ImapSession.connect(cfg)
-  try {
-    await session.login(cfg.user, cfg.pass)
-    await session.select(cfg.mailbox || 'INBOX')
-    const uids = await session.searchTaxUnseen()
-    const out: FolhaImapMessage[] = []
-    for (const uid of uids.slice(0, 40)) {
-      out.push(await session.fetchMessage(uid))
+): Promise<FolhaImapCandidate[]> {
+  return withImap(cfg, async (client) => {
+    const listed = await client.list()
+    const folders = sortWorkMailboxes(
+      listed.filter((box) =>
+        shouldSyncMailbox({
+          path: box.path,
+          name: box.name,
+          specialUse: box.specialUse,
+          flags: box.flags,
+          delimiter: box.delimiter,
+        }),
+      ),
+    )
+    const since = searchSince(cfg)
+    const out: FolhaImapCandidate[] = []
+    for (const folder of folders) {
+      const lock = await client.getMailboxLock(folder.path)
+      try {
+        const uids = await client.search({ since }, { uid: true })
+        const newest = [...(uids || [])]
+          .map(Number)
+          .filter((n) => n > 0)
+          .sort((a, b) => b - a)
+        for (const uid of newest) out.push({ mailbox: folder.path, uid })
+      } finally {
+        lock.release()
+      }
     }
     return out
-  } finally {
-    await session.logout()
+  })
+}
+
+async function attachmentBlob(attachment: Attachment): Promise<{
+  text: string
+  fileName: string
+} | null> {
+  const fileName = attachment.filename?.trim() || 'anexo'
+  const content = attachment.content
+  if (!content || !Buffer.isBuffer(content) || content.length === 0) return null
+  if (/\.pdf$/i.test(fileName) || /pdf/i.test(attachment.contentType || '')) {
+    return extractPdfText(content, fileName)
   }
+  return null
+}
+
+async function parseRawMessage(
+  mailbox: string,
+  uid: number,
+  source: Buffer,
+  envelopeSubject?: string | null,
+  envelopeMessageId?: string | null,
+): Promise<FolhaImapMessage> {
+  const parsed = await simpleParser(source)
+  const filenames: string[] = []
+  const texts: string[] = []
+  if (parsed.text?.trim()) texts.push(parsed.text.trim())
+  for (const att of parsed.attachments ?? []) {
+    const blob = await attachmentBlob(att)
+    if (!blob) continue
+    filenames.push(blob.fileName)
+    if (blob.text.trim()) texts.push(blob.text.trim())
+    else texts.push(blob.fileName)
+  }
+  const subject =
+    (parsed.subject || envelopeSubject || '').trim() ||
+    filenames[0] ||
+    ''
+  return {
+    mailbox,
+    uid,
+    messageId: (parsed.messageId || envelopeMessageId || '').trim() || null,
+    subject,
+    body: texts.join('\n\n'),
+    filenames,
+  }
+}
+
+export async function fetchFolhaImapMessages(
+  cfg: FolhaImapConfig,
+  targets: FolhaImapCandidate[],
+): Promise<FolhaImapMessage[]> {
+  if (targets.length === 0) return []
+  return withImap(cfg, async (client) => {
+    const byBox = new Map<string, number[]>()
+    for (const t of targets) {
+      const list = byBox.get(t.mailbox) ?? []
+      list.push(t.uid)
+      byBox.set(t.mailbox, list)
+    }
+    const out: FolhaImapMessage[] = []
+    for (const [mailbox, uids] of byBox) {
+      const lock = await client.getMailboxLock(mailbox)
+      try {
+        for (const uid of uids) {
+          const fetched = await client.fetchOne(
+            String(uid),
+            { source: true, envelope: true, uid: true },
+            { uid: true },
+          )
+          if (!fetched?.source) continue
+          const source = Buffer.isBuffer(fetched.source)
+            ? fetched.source
+            : Buffer.from(fetched.source)
+          out.push(
+            await parseRawMessage(
+              mailbox,
+              uid,
+              source,
+              fetched.envelope?.subject,
+              fetched.envelope?.messageId,
+            ),
+          )
+        }
+      } finally {
+        lock.release()
+      }
+    }
+    return out
+  })
 }
 
 export async function markFolhaTaxEmailsSeen(
   cfg: FolhaImapConfig,
-  uids: number[],
+  items: FolhaImapCandidate[],
 ): Promise<void> {
-  if (uids.length === 0) return
-  const session = await ImapSession.connect(cfg)
-  try {
-    await session.login(cfg.user, cfg.pass)
-    await session.select(cfg.mailbox || 'INBOX')
-    for (const uid of uids) {
-      await session.markSeen(uid)
+  if (items.length === 0) return
+  await withImap(cfg, async (client) => {
+    const byBox = new Map<string, number[]>()
+    for (const t of items) {
+      const list = byBox.get(t.mailbox) ?? []
+      list.push(t.uid)
+      byBox.set(t.mailbox, list)
     }
-  } finally {
-    await session.logout()
-  }
+    for (const [mailbox, uids] of byBox) {
+      const lock = await client.getMailboxLock(mailbox)
+      try {
+        await client.messageFlagsAdd(uids, ['\\Seen'], { uid: true })
+      } finally {
+        lock.release()
+      }
+    }
+  })
 }
