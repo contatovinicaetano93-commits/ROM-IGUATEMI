@@ -7,7 +7,7 @@ import { todayIso } from '@/lib/salon/format'
 
 export const maxDuration = 60
 
-/** Índice de Performance Diária — fat/dia trabalhado vs índice médio do salão. */
+/** Índice de Performance Diária — constância (dias veio ÷ dias úteis) vs média do salão. */
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireDashboard(req)
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const month = monthRaw && /^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : null
 
     const data = await ttlGetOrSet(
-      `kpis:indice-performance:v1:${month ?? 'latest'}`,
+      `kpis:indice-performance:v2:${month ?? 'latest'}`,
       45_000,
       async () =>
         computeDailyPerformanceIndex({

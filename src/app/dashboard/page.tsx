@@ -91,6 +91,7 @@ interface IndicePerformancePro {
   dias_uteis_salao: number | null
   media_dia_trabalhado: number | null
   media_dia_salao: number | null
+  constancia_pct: number | null
   delta_indice: number | null
   standing: 'acima' | 'abaixo' | 'neutro' | 'sem_base'
 }
@@ -102,6 +103,7 @@ interface IndicePerformanceData {
   mtd: boolean
   reference_day: string | null
   salon_open_days: number | null
+  media_dias_trabalhados: number | null
   indice: number | null
   professionals: IndicePerformancePro[]
   note: string
@@ -768,13 +770,18 @@ export default function DashboardPage() {
                 Índice salão:{' '}
                 <span className="font-semibold tabular-nums text-foreground">
                   {indicePerf.indice != null
-                    ? formatCurrency(indicePerf.indice)
+                    ? formatPercentPoints(indicePerf.indice, 1)
                     : '—'}
                 </span>
-                /dia trabalhado
-                {indicePerf.salon_open_days != null
-                  ? ` · ${indicePerf.salon_open_days} dias úteis salão`
-                  : ''}
+                {' constância'}
+                {indicePerf.media_dias_trabalhados != null &&
+                indicePerf.salon_open_days != null
+                  ? ` · média ${indicePerf.media_dias_trabalhados.toLocaleString('pt-BR', {
+                      maximumFractionDigits: 1,
+                    })} dias veio / ${indicePerf.salon_open_days} dias úteis`
+                  : indicePerf.salon_open_days != null
+                    ? ` · ${indicePerf.salon_open_days} dias úteis salão`
+                    : ''}
               </p>
               <p className="mb-3 text-[0.7rem] text-muted">{indicePerf.note}</p>
               <table className="w-full min-w-[720px] text-sm">
@@ -783,9 +790,10 @@ export default function DashboardPage() {
                     <th className="pb-2 font-medium">Profissional</th>
                     <th className="pb-2 font-medium">Fat. bruto</th>
                     <th className="pb-2 font-medium">Dias veio</th>
-                    <th className="pb-2 font-medium">R$/dia veio</th>
-                    <th className="pb-2 font-medium">R$/dia salão</th>
+                    <th className="pb-2 font-medium">Dias úteis</th>
+                    <th className="pb-2 font-medium">Constância</th>
                     <th className="pb-2 font-medium">Δ índice</th>
+                    <th className="pb-2 font-medium">R$/dia veio</th>
                     <th className="pb-2 font-medium">Status</th>
                   </tr>
                 </thead>
@@ -800,13 +808,11 @@ export default function DashboardPage() {
                         {pro.dias_trabalhados != null ? pro.dias_trabalhados : '—'}
                       </td>
                       <td className="py-2 tabular-nums">
-                        {pro.media_dia_trabalhado != null
-                          ? formatCurrency(pro.media_dia_trabalhado)
-                          : '—'}
+                        {pro.dias_uteis_salao != null ? pro.dias_uteis_salao : '—'}
                       </td>
-                      <td className="py-2 tabular-nums">
-                        {pro.media_dia_salao != null
-                          ? formatCurrency(pro.media_dia_salao)
+                      <td className="py-2 tabular-nums font-medium">
+                        {pro.constancia_pct != null
+                          ? formatPercentPoints(pro.constancia_pct, 1)
                           : '—'}
                       </td>
                       <td className="py-2 tabular-nums">
@@ -821,11 +827,16 @@ export default function DashboardPage() {
                             }
                           >
                             {pro.delta_indice > 0 ? '+' : ''}
-                            {formatCurrency(pro.delta_indice)}
+                            {formatPercentPoints(pro.delta_indice, 1)}
                           </span>
                         ) : (
                           '—'
                         )}
+                      </td>
+                      <td className="py-2 tabular-nums">
+                        {pro.media_dia_trabalhado != null
+                          ? formatCurrency(pro.media_dia_trabalhado)
+                          : '—'}
                       </td>
                       <td className="py-2">
                         <IndiceStandingBadge standing={pro.standing} />
