@@ -229,6 +229,9 @@ export async function refreshFolhaDraft(
   }
 
   const existing = await getFolhaPeriod(quinzena.id)
+  if (existing?.status === 'paid') {
+    throw new Error('Período já pago — reabra para editar')
+  }
   const previousLines = existing?.lines ?? []
 
   const draft = refreshDraftPreservingExtras({
@@ -428,6 +431,48 @@ export async function transitionFolhaPeriod(args: {
   return { draft, period: updated, notify }
 }
 
+/** Aplica DARF/DAS/mensalidade na linha (Q1); só preenche campo ainda null. */
+export async function applyFolhaTaxParsedToPeriod(
+  panel: RomPanelId,
+  args: {
+    periodId: string
+    kind: ReturnType<typeof parseFolhaTaxEmail>['kind']
+    amount: number | null
+    professionalName: string | null
+    actor?: string | null
+  },
+): Promise<{ applied: boolean; period: FolhaPeriodRow }> {
+  const period = await getFolhaPeriod(args.periodId)
+  if (!period) throw new Error('Período da Folha não encontrado')
+  const extrasKey = taxKindToExtrasKey(args.kind)
+  const quinzena = parseFolhaPeriodId(args.periodId)
+  const applyTax = quinzena ? acceptsFolhaTaxExtras(quinzena.half) : period.half === 1
+  if (
+    !extrasKey ||
+    args.amount == null ||
+    !args.professionalName ||
+    !applyTax
+  ) {
+    return { applied: false, period }
+  }
+  const key = occupancyMergeKey(args.professionalName)
+  const hit = period.lines.find(
+    (l) =>
+      l.name === args.professionalName ||
+      (key != null && occupancyMergeKey(l.name) === key),
+  )
+  if (!hit) return { applied: false, period }
+  const existing = hit.folha_extras[extrasKey]
+  if (existing != null) return { applied: false, period }
+  const patched = await patchFolhaLine(panel, {
+    periodId: args.periodId,
+    professionalName: hit.name,
+    extras: { [extrasKey]: args.amount },
+    actor: args.actor,
+  })
+  return { applied: true, period: patched.period }
+}
+
 export async function ingestFolhaTaxEmail(
   panel: RomPanelId,
   args: {
@@ -461,32 +506,16 @@ export async function ingestFolhaTaxEmail(
 
   let applied = false
   let current = period
-  const extrasKey = taxKindToExtrasKey(parsed.kind)
-  const quinzena = parseFolhaPeriodId(args.periodId)
-  const applyTax = quinzena ? acceptsFolhaTaxExtras(quinzena.half) : period.half === 1
-  if (
-    args.applyToLine !== false &&
-    extrasKey &&
-    parsed.amount != null &&
-    parsed.professional_name &&
-    applyTax
-  ) {
-    const key = occupancyMergeKey(parsed.professional_name)
-    const hit = period.lines.find(
-      (l) =>
-        l.name === parsed.professional_name ||
-        (key != null && occupancyMergeKey(l.name) === key),
-    )
-    if (hit) {
-      const patched = await patchFolhaLine(panel, {
-        periodId: args.periodId,
-        professionalName: hit.name,
-        extras: { [extrasKey]: parsed.amount },
-        actor: args.actor,
-      })
-      current = patched.period
-      applied = true
-    }
+  if (args.applyToLine !== false) {
+    const result = await applyFolhaTaxParsedToPeriod(panel, {
+      periodId: args.periodId,
+      kind: parsed.kind,
+      amount: parsed.amount,
+      professionalName: parsed.professional_name,
+      actor: args.actor,
+    })
+    current = result.period
+    applied = result.applied
   }
 
   return {

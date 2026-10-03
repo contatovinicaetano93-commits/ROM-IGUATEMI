@@ -1,5 +1,5 @@
 /**
- * Poll IMAP → parse DARF/DAS → aplica no período Folha aberto (próximo pagamento).
+ * Poll IMAP → parse DARF/DAS/mensalidade → aplica no período Folha Q1 (dia 20).
  */
 
 import type { RomPanelId } from '@/lib/brand'
@@ -15,8 +15,16 @@ import {
   parseFolhaPeriodId,
   todayIsoSaoPaulo,
 } from '@/lib/folha/period'
-import { ingestFolhaTaxEmail, loadOrCreateFolhaDraft } from '@/lib/folha/service'
-import { folhaTaxSourceExists, getFolhaPeriod } from '@/lib/folha/store'
+import {
+  applyFolhaTaxParsedToPeriod,
+  ingestFolhaTaxEmail,
+  loadOrCreateFolhaDraft,
+} from '@/lib/folha/service'
+import {
+  folhaTaxSourceExists,
+  getFolhaPeriod,
+  getFolhaTaxDocumentBySource,
+} from '@/lib/folha/store'
 
 export type FolhaImapPollResult = {
   configured: boolean
@@ -33,10 +41,40 @@ async function processMessage(
   panel: RomPanelId,
   periodId: string,
   msg: FolhaImapMessage,
-): Promise<{ ingested: boolean; applied: boolean; error?: string }> {
+): Promise<{ ingested: boolean; applied: boolean; markSeen: boolean; error?: string }> {
   const source = `imap:${msg.uid}`
   if (await folhaTaxSourceExists(source)) {
-    return { ingested: false, applied: false }
+    // Doc já gravado (ex.: nome não bateu no 1º poll) — tenta aplicar de novo.
+    const doc = await getFolhaTaxDocumentBySource(source)
+    if (!doc) {
+      return { ingested: false, applied: false, markSeen: true }
+    }
+    try {
+      const result = await applyFolhaTaxParsedToPeriod(panel, {
+        periodId: doc.period_id ?? periodId,
+        kind: doc.kind,
+        amount: doc.amount,
+        professionalName: doc.professional_name,
+        actor: 'imap-cron',
+      })
+      // Marca visto se aplicou, ou se não dá mais para aplicar (sem nome/valor/tipo).
+      const canRetry =
+        doc.amount != null &&
+        doc.professional_name != null &&
+        (doc.kind === 'darf' || doc.kind === 'das' || doc.kind === 'mensalidade')
+      return {
+        ingested: false,
+        applied: result.applied,
+        markSeen: result.applied || !canRetry,
+      }
+    } catch (e) {
+      return {
+        ingested: false,
+        applied: false,
+        markSeen: false,
+        error: e instanceof Error ? e.message : String(e),
+      }
+    }
   }
   try {
     const result = await ingestFolhaTaxEmail(panel, {
@@ -47,11 +85,24 @@ async function processMessage(
       actor: 'imap-cron',
       applyToLine: true,
     })
-    return { ingested: true, applied: result.applied }
+    const canRetry =
+      !result.applied &&
+      result.parsed.amount != null &&
+      result.parsed.professional_name != null &&
+      (result.parsed.kind === 'darf' ||
+        result.parsed.kind === 'das' ||
+        result.parsed.kind === 'mensalidade')
+    return {
+      ingested: true,
+      applied: result.applied,
+      // Não marca Seen se ainda dá para tentar no próximo cron (nome/linha ausente).
+      markSeen: result.applied || !canRetry,
+    }
   } catch (e) {
     return {
       ingested: false,
       applied: false,
+      markSeen: false,
       error: e instanceof Error ? e.message : String(e),
     }
   }
@@ -129,8 +180,7 @@ export async function pollFolhaImapInbox(
     if (r.error) errors.push(`uid ${msg.uid}: ${r.error}`)
     if (r.ingested) ingested += 1
     if (r.applied) applied += 1
-    // Marca visto mesmo se já existia (evita reprocessar).
-    if (r.ingested || !r.error) seenUids.push(msg.uid)
+    if (r.markSeen) seenUids.push(msg.uid)
   }
 
   let marked = 0

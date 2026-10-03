@@ -193,6 +193,8 @@ describe('buildFolhaWorkbook', () => {
     const ws = wb.getWorksheet('Olerite')
     expect(ws).toBeTruthy()
     expect(ws!.getRow(3).getCell(1).value).toBe('Profissional')
+    // Col 10 = Meio a meio % (não col 9 = R$).
+    expect(ws!.getRow(4).getCell(10).numFmt).toBe('0%')
     // title + meta + header + 2 lines + total = 6 rows
     expect(ws!.rowCount).toBe(6)
 

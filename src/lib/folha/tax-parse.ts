@@ -66,7 +66,9 @@ export function parseFolhaTaxEmail(input: {
       ? /darf[\s\S]{0,80}?(R\$\s*[\d.]+,\d{2}|[\d.]+,\d{2})/i
       : kind === 'das'
         ? /das[\s\S]{0,80}?(R\$\s*[\d.]+,\d{2}|[\d.]+,\d{2})/i
-        : null
+        : kind === 'mensalidade'
+          ? /mensalidade[\s\S]{0,80}?(R\$\s*[\d.]+,\d{2}|[\d.]+,\d{2})/i
+          : null
   if (kindRe) {
     const near = blob.match(kindRe)
     if (near?.[1]) amount = parseBrlAmount(near[1])
@@ -84,7 +86,7 @@ export function parseFolhaTaxEmail(input: {
   return { kind, amount, professional_name, confidence }
 }
 
-/** Aplica documento fiscal nas extras da linha (só preenche campos ainda null). */
+/** Mapeia tipo do e-mail → campo em folha_extras (Q1 / dia 20). */
 export function taxKindToExtrasKey(
   kind: FolhaTaxKind,
 ): 'darf' | 'das' | 'mensalidade_contabilidade' | null {

@@ -30,4 +30,15 @@ describe('parseFolhaTaxEmail', () => {
     expect(parsed.kind).toBe('das')
     expect(parsed.amount).toBe(86.05)
   })
+
+  it('detecta mensalidade contábil + valor + profissional', () => {
+    const parsed = parseFolhaTaxEmail({
+      subject: 'Mensalidade Contabilidade',
+      body: 'Profissional: Brunna Silva\nMensalidade contábil no valor de R$ 250,00',
+    })
+    expect(parsed.kind).toBe('mensalidade')
+    expect(parsed.amount).toBe(250)
+    expect(parsed.professional_name).toMatch(/Brunna/i)
+    expect(taxKindToExtrasKey(parsed.kind)).toBe('mensalidade_contabilidade')
+  })
 })

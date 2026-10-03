@@ -117,6 +117,7 @@ export default function FolhaPage() {
   const [taxaAdmQ1Input, setTaxaAdmQ1Input] = useState('')
   const [darfInput, setDarfInput] = useState('')
   const [dasInput, setDasInput] = useState('')
+  const [mensalidadeInput, setMensalidadeInput] = useState('')
   const [taxSubject, setTaxSubject] = useState('')
   const [taxBody, setTaxBody] = useState('')
   const [actionMsg, setActionMsg] = useState<string | null>(null)
@@ -287,6 +288,7 @@ export default function FolhaPage() {
     if (taxExtrasAllowed) {
       extras.darf = parseOptionalNumber(darfInput)
       extras.das = parseOptionalNumber(dasInput)
+      extras.mensalidade_contabilidade = parseOptionalNumber(mensalidadeInput)
     }
     const data = await postJson(
       '/api/folha/lines',
@@ -470,6 +472,11 @@ export default function FolhaPage() {
     )
     setDarfInput(line.folha_extras.darf != null ? String(line.folha_extras.darf) : '')
     setDasInput(line.folha_extras.das != null ? String(line.folha_extras.das) : '')
+    setMensalidadeInput(
+      line.folha_extras.mensalidade_contabilidade != null
+        ? String(line.folha_extras.mensalidade_contabilidade)
+        : '',
+    )
   }
 
   const upcoming = status?.upcoming_payments?.filter((p) => p.upcoming).slice(0, 2) ?? []
@@ -603,7 +610,7 @@ export default function FolhaPage() {
                     onClick={() => void onImapPoll()}
                     className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
                   >
-                    Buscar DARF/DAS (IMAP)
+                    Buscar DARF/DAS/mensalidade (IMAP)
                   </button>
                   {periodStatus === 'draft' || periodStatus === 'ready_for_review' ? (
                     <button
@@ -868,6 +875,15 @@ export default function FolhaPage() {
                           inputMode="decimal"
                         />
                       </label>
+                      <label className="text-xs">
+                        <span className="text-muted">Mensalidade contábil</span>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          value={mensalidadeInput}
+                          onChange={(e) => setMensalidadeInput(e.target.value)}
+                          inputMode="decimal"
+                        />
+                      </label>
                     </>
                   ) : (
                     <p className="text-xs text-muted md:col-span-2">
@@ -888,7 +904,9 @@ export default function FolhaPage() {
                 </div>
 
                 <div className="space-y-2 rounded-lg border border-border p-3">
-                  <p className="text-xs font-medium text-foreground">Colar e-mail fiscal (DARF/DAS)</p>
+                  <p className="text-xs font-medium text-foreground">
+                    Colar e-mail fiscal (DARF/DAS/mensalidade)
+                  </p>
                   {!taxExtrasAllowed ? (
                     <p className="text-xs text-muted">
                       Abre a 1ª quinzena (paga dia 20) para colar/aplicar impostos — e-mails até o
@@ -1001,6 +1019,12 @@ export default function FolhaPage() {
                             <th className="py-1 pr-1 text-right font-medium" title="DAS">
                               DAS
                             </th>
+                            <th
+                              className="py-1 pr-1 text-right font-medium"
+                              title="Mensalidade contábil"
+                            >
+                              Mensal.
+                            </th>
                           </>
                         ) : null}
                         <th className="py-1 font-medium" title="Alertas">
@@ -1077,6 +1101,11 @@ export default function FolhaPage() {
                                 </td>
                                 <td className="py-1 pr-1 text-right tabular-nums">
                                   {formatMoneyCompact(line.folha_extras.das)}
+                                </td>
+                                <td className="py-1 pr-1 text-right tabular-nums">
+                                  {formatMoneyCompact(
+                                    line.folha_extras.mensalidade_contabilidade,
+                                  )}
                                 </td>
                               </>
                             ) : null}

@@ -138,7 +138,8 @@ export async function buildFolhaWorkbook(
       const cell = row.getCell(col)
       if (typeof cell.value === 'number') cell.numFmt = '#,##0.00'
     }
-    const pctCell = row.getCell(9)
+    // Col 10 = "Meio a meio %" (col 9 é o valor em R$).
+    const pctCell = row.getCell(10)
     if (typeof pctCell.value === 'number') pctCell.numFmt = '0%'
   }
 

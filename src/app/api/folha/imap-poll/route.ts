@@ -8,7 +8,7 @@ import { pollFolhaImapInbox } from '@/lib/folha/imap-poll'
 
 /**
  * GET — cron (CRON_SECRET) ou sessão com módulo folha.
- * Lê UNSEEN com DARF/DAS na caixa FOLHA_IMAP_* e aplica no período atual.
+ * Lê UNSEEN com DARF/DAS/mensalidade na caixa FOLHA_IMAP_* e aplica no Q1 (dia 20).
  */
 export async function GET(req: NextRequest) {
   try {

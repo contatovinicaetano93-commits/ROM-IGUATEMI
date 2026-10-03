@@ -264,6 +264,39 @@ export async function folhaTaxSourceExists(source: string): Promise<boolean> {
   }
 }
 
+export async function getFolhaTaxDocumentBySource(
+  source: string,
+): Promise<FolhaTaxDocumentRow | null> {
+  await ensureFolhaTables()
+  const sql = getSql()
+  try {
+    const rows = (await sql`
+      select
+        id, period_id, kind, professional_name, amount,
+        raw_subject, raw_body, source, created_at
+      from folha_tax_documents
+      where source = ${source}
+      order by id desc
+      limit 1
+    `) as Record<string, unknown>[]
+    const r = rows[0]
+    if (!r) return null
+    return {
+      id: Number(r.id),
+      period_id: r.period_id != null ? String(r.period_id) : null,
+      kind: r.kind as FolhaTaxKind,
+      professional_name: r.professional_name != null ? String(r.professional_name) : null,
+      amount: r.amount == null ? null : Number(r.amount),
+      raw_subject: r.raw_subject != null ? String(r.raw_subject) : null,
+      raw_body: r.raw_body != null ? String(r.raw_body) : null,
+      source: String(r.source),
+      created_at: String(r.created_at),
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function insertFolhaTaxDocument(args: {
   periodId: string | null
   kind: FolhaTaxKind
