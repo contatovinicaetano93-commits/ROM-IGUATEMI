@@ -84,6 +84,29 @@ interface PerformanceData {
   professionals: ProfessionalRanking[]
 }
 
+interface IndicePerformancePro {
+  name: string
+  fat_bruto: number | null
+  dias_trabalhados: number | null
+  dias_uteis_salao: number | null
+  media_dia_trabalhado: number | null
+  media_dia_salao: number | null
+  delta_indice: number | null
+  standing: 'acima' | 'abaixo' | 'neutro' | 'sem_base'
+}
+
+interface IndicePerformanceData {
+  month: string
+  from: string
+  to: string
+  mtd: boolean
+  reference_day: string | null
+  salon_open_days: number | null
+  indice: number | null
+  professionals: IndicePerformancePro[]
+  note: string
+}
+
 export default function DashboardPage() {
   const brand = getBrand()
   const [month, setMonth] = useState(() => todayIso().slice(0, 7))
@@ -91,6 +114,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<KpiData | null>(null)
   const [tm, setTm] = useState<TmComparison | null>(null)
   const [performance, setPerformance] = useState<PerformanceData | null>(null)
+  const [indicePerf, setIndicePerf] = useState<IndicePerformanceData | null>(null)
   const [period, setPeriod] = useState<(PeriodAnalytics & {
     sync?: {
       status: string | null
@@ -115,14 +139,22 @@ export default function DashboardPage() {
         // Evita KPIs do mês anterior com rótulos do mês novo enquanto as requests resolvem.
         setTm(null)
         setPerformance(null)
+        setIndicePerf(null)
         setPeriod(null)
-        // Um lambda: evita waterfall de 4 rotas × pooler max:1.
+        // Dashboard + índice em paralelo (índice não bloqueia a visão).
         const q = new URLSearchParams({ month })
         if (compareMonth) q.set('compare', compareMonth)
-        const dashRes = await apiFetch(`/api/kpis/dashboard?${q}`, {
-          cache: 'no-store',
-          timeoutMs: 100_000,
-        })
+        const indiceQ = new URLSearchParams({ month })
+        const [dashRes, indiceRes] = await Promise.all([
+          apiFetch(`/api/kpis/dashboard?${q}`, {
+            cache: 'no-store',
+            timeoutMs: 100_000,
+          }),
+          apiFetch(`/api/kpis/indice-performance?${indiceQ}`, {
+            cache: 'no-store',
+            timeoutMs: 60_000,
+          }).catch(() => null),
+        ])
         const raw = await dashRes.text()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let dashJson: { error?: string; data?: any }
@@ -150,6 +182,18 @@ export default function DashboardPage() {
         setTm(bundle.tm ?? null)
         setPerformance(bundle.performance ?? null)
         setPeriod(bundle.period ?? null)
+        if (indiceRes?.ok) {
+          try {
+            const indiceJson = (await indiceRes.json()) as {
+              data?: IndicePerformanceData
+            }
+            setIndicePerf(indiceJson.data ?? null)
+          } catch {
+            setIndicePerf(null)
+          }
+        } else {
+          setIndicePerf(null)
+        }
         setError(null)
 
         const warnings: string[] = []
@@ -676,6 +720,100 @@ export default function DashboardPage() {
         </SectionCard>
       </VisaoSection>
 
+        <SectionCard
+          title="Índice de Performance Diária"
+          badge={<TrendingUp size={15} className="text-muted" />}
+          storageKey="visao-indice-performance-diaria"
+          defaultOpen
+        >
+          {loading && !indicePerf ? (
+            <p className="text-xs text-muted">Carregando índice…</p>
+          ) : !indicePerf || indicePerf.professionals.length === 0 ? (
+            <p className="text-xs text-muted">
+              Sem base ainda — precisa de faturamento 0021 e visitas com profissional no período.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <p className="mb-3 text-xs text-muted">
+                {indicePerf.from} → {indicePerf.to}
+                {indicePerf.mtd ? ' (MTD)' : ''}
+                {indicePerf.reference_day
+                  ? ` · snapshot ${indicePerf.reference_day}`
+                  : ''}
+                {' · '}
+                Índice salão:{' '}
+                <span className="font-semibold tabular-nums text-foreground">
+                  {indicePerf.indice != null
+                    ? formatCurrency(indicePerf.indice)
+                    : '—'}
+                </span>
+                /dia trabalhado
+                {indicePerf.salon_open_days != null
+                  ? ` · ${indicePerf.salon_open_days} dias úteis salão`
+                  : ''}
+              </p>
+              <p className="mb-3 text-[0.7rem] text-muted">{indicePerf.note}</p>
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="text-left text-[0.65rem] uppercase tracking-wide text-muted">
+                    <th className="pb-2 font-medium">Profissional</th>
+                    <th className="pb-2 font-medium">Fat. bruto</th>
+                    <th className="pb-2 font-medium">Dias veio</th>
+                    <th className="pb-2 font-medium">R$/dia veio</th>
+                    <th className="pb-2 font-medium">R$/dia salão</th>
+                    <th className="pb-2 font-medium">Δ índice</th>
+                    <th className="pb-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {indicePerf.professionals.map((pro) => (
+                    <tr key={pro.name}>
+                      <td className="py-2 font-medium text-foreground/90">{pro.name}</td>
+                      <td className="py-2 tabular-nums">
+                        {pro.fat_bruto != null ? formatCurrency(pro.fat_bruto) : '—'}
+                      </td>
+                      <td className="py-2 tabular-nums">
+                        {pro.dias_trabalhados != null ? pro.dias_trabalhados : '—'}
+                      </td>
+                      <td className="py-2 tabular-nums">
+                        {pro.media_dia_trabalhado != null
+                          ? formatCurrency(pro.media_dia_trabalhado)
+                          : '—'}
+                      </td>
+                      <td className="py-2 tabular-nums">
+                        {pro.media_dia_salao != null
+                          ? formatCurrency(pro.media_dia_salao)
+                          : '—'}
+                      </td>
+                      <td className="py-2 tabular-nums">
+                        {pro.delta_indice != null ? (
+                          <span
+                            className={
+                              pro.delta_indice > 0
+                                ? 'font-semibold text-success'
+                                : pro.delta_indice < 0
+                                  ? 'font-semibold text-warning'
+                                  : 'text-muted'
+                            }
+                          >
+                            {pro.delta_indice > 0 ? '+' : ''}
+                            {formatCurrency(pro.delta_indice)}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="py-2">
+                        <IndiceStandingBadge standing={pro.standing} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
+
       <VisaoSection
         title="Funil CRM"
         hint="Leads novos que o ROM registrou (WhatsApp/manual) — não é cliente novo no salão nem importação em massa da Avec. O número grande = leads que entraram no mês. Fila Novo = ainda não puxado."
@@ -844,6 +982,39 @@ function InsightCard({
         </p>
       ) : null}
     </div>
+  )
+}
+
+function IndiceStandingBadge({
+  standing,
+}: {
+  standing: IndicePerformancePro['standing']
+}) {
+  if (standing === 'acima') {
+    return (
+      <span className="rounded-full bg-success/15 px-2 py-0.5 text-[0.65rem] font-semibold text-success">
+        Acima
+      </span>
+    )
+  }
+  if (standing === 'abaixo') {
+    return (
+      <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.65rem] font-semibold text-warning">
+        Abaixo
+      </span>
+    )
+  }
+  if (standing === 'neutro') {
+    return (
+      <span className="rounded-full bg-border/60 px-2 py-0.5 text-[0.65rem] font-semibold text-muted">
+        Neutro
+      </span>
+    )
+  }
+  return (
+    <span className="rounded-full bg-border/40 px-2 py-0.5 text-[0.65rem] text-muted">
+      Sem base
+    </span>
   )
 }
 
