@@ -41,6 +41,8 @@ import {
   type CommissionProfessionalRow,
 } from '@/lib/salon/commission-metrics'
 
+export { folhaFaturadoDisplay } from '@/lib/folha/draft-from-8123-surface'
+
 /** Magnitude de abatimento Avec (8123 guarda negativos). Ausente → null. */
 export function deductionMagnitude(value: number | null | undefined): number | null {
   if (value == null || Number.isNaN(value)) return null
@@ -215,6 +217,12 @@ export type FolhaDraftLine = {
      * (Diana: Avec 9.50 vs Fopag 42.68). Interno — não exporta.
      */
     produto_referencia: number | null
+    /**
+     * Total Faturado do olerite/Fopag (coluna C da planilha). No assistente
+     * IG o motor às vezes reescreve `valor_cobrado` para U (adm 3%) — C fica
+     * aqui para a coluna Fat. Só display / export; o líquido segue charged + U.
+     */
+    faturado_referencia: number | null
   }
   /**
    * a_pagar 8123 ± extras Folha.
@@ -732,6 +740,7 @@ export function buildFolhaDraftLine(
     liquido_referencia: extras?.liquido_referencia ?? null,
     fat_liquido_referencia: extras?.fat_liquido_referencia ?? null,
     produto_referencia: extras?.produto_referencia ?? null,
+    faturado_referencia: extras?.faturado_referencia ?? null,
   }
   if (!applyTaxExtras) {
     folha_extras = stripFolhaTaxExtras(folha_extras)
