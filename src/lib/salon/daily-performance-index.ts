@@ -1,14 +1,15 @@
 /**
- * Índice de Performance Diária (V1).
+ * Índice de Performance Diária (V1.1 — constância).
  *
  * Por profissional no período:
- * - fat_bruto: MTD 0021 (`salon_p1_daily`) no fim da janela
+ * - fat_bruto: MTD 0021 (`salon_p1_daily`) — contexto
  * - dias_trabalhados: dias distintos em `salon_client_visits` (proxy de “veio”)
- * - media_dia_trabalhado = fat / dias_trabalhados
- * - media_dia_salao = fat / dias úteis com receita no salão
+ * - dias_uteis_salao: dias com receita em `salon_daily_metrics`
+ * - constancia_pct = dias_trabalhados / dias_uteis_salao × 100
+ * - media_dia_trabalhado / media_dia_salao: R$ (contexto, não entram no índice)
  *
- * Índice do salão = média das medias_dia_trabalhado dos profissionais elegíveis.
- * Delta = media_dia_trabalhado − índice (acima / abaixo).
+ * Índice do salão = média das constâncias (equivale a média dos dias veio ÷ dias úteis).
+ * Delta (pp) = constancia_pct − índice.
  */
 import { getSql } from '@/lib/db'
 import {
@@ -34,7 +35,9 @@ export type DailyPerformanceProRow = {
   dias_uteis_salao: number | null
   media_dia_trabalhado: number | null
   media_dia_salao: number | null
-  /** media_dia_trabalhado − índice do salão */
+  /** dias veio ÷ dias úteis salão × 100 */
+  constancia_pct: number | null
+  /** constancia_pct − índice do salão (pontos percentuais) */
   delta_indice: number | null
   standing: DailyPerformanceStanding
 }
@@ -46,7 +49,9 @@ export type DailyPerformanceIndex = {
   mtd: boolean
   reference_day: string | null
   salon_open_days: number | null
-  /** Média das medias/dia trabalhado (só quem tem base). */
+  /** Média aritmética dos dias veio (só quem tem base). */
+  media_dias_trabalhados: number | null
+  /** Constância média do salão (%): media_dias ÷ dias úteis × 100. */
   indice: number | null
   professionals: DailyPerformanceProRow[]
   note: string
@@ -54,6 +59,11 @@ export type DailyPerformanceIndex = {
 
 export function roundMoney(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+/** Percentual com 1 casa (ex.: 72,5). */
+export function roundPct(n: number): number {
+  return Math.round(n * 10) / 10
 }
 
 /** fat / dias — null se fat ausente ou dias ≤ 0. */
@@ -66,12 +76,33 @@ export function avgPerDay(
   return roundMoney(fat / days)
 }
 
+/**
+ * Constância: dias trabalhados ÷ dias úteis viáveis × 100.
+ * Cap em 100% (dias veio não deveriam passar dos úteis; se passarem, satura).
+ */
+export function constanciaPct(
+  diasTrabalhados: number | null | undefined,
+  diasUteisSalao: number | null | undefined,
+): number | null {
+  if (diasTrabalhados == null || diasTrabalhados <= 0) return null
+  if (diasUteisSalao == null || diasUteisSalao <= 0) return null
+  const raw = (diasTrabalhados / diasUteisSalao) * 100
+  return roundPct(Math.min(100, raw))
+}
+
 export function meanOf(values: number[]): number | null {
   if (values.length === 0) return null
   const sum = values.reduce((a, b) => a + b, 0)
   return roundMoney(sum / values.length)
 }
 
+export function meanPct(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sum = values.reduce((a, b) => a + b, 0)
+  return roundPct(sum / values.length)
+}
+
+/** Standing a partir do Δ em pontos percentuais. */
 export function standingFromDelta(
   delta: number | null,
   tol = 0.5,
@@ -137,9 +168,11 @@ export function buildDailyPerformanceIndex(args: {
     daysWorkedByP1.set(name, Math.max(daysWorkedByP1.get(name) ?? 0, days))
   }
 
-  const medias: number[] = []
-  const draft: Array<Omit<DailyPerformanceProRow, 'delta_indice' | 'standing'>> =
-    []
+  const diasComBase: number[] = []
+  const constancias: number[] = []
+  const draft: Array<
+    Omit<DailyPerformanceProRow, 'delta_indice' | 'standing'>
+  > = []
 
   for (const name of p1Names) {
     const fatRaw = args.fatByPro.get(name)
@@ -147,29 +180,41 @@ export function buildDailyPerformanceIndex(args: {
       fatRaw != null && Number.isFinite(fatRaw) && fatRaw > 0.02
         ? roundMoney(fatRaw)
         : null
-    const daysWorked = daysWorkedByP1.get(name) ?? null
-    const openDays = args.salonOpenDays
+    const daysWorkedRaw = daysWorkedByP1.get(name)
+    const daysWorked =
+      daysWorkedRaw != null && daysWorkedRaw > 0 ? daysWorkedRaw : null
+    const openDays =
+      args.salonOpenDays != null && args.salonOpenDays > 0
+        ? args.salonOpenDays
+        : null
     const mediaTrab = avgPerDay(fat, daysWorked)
     const mediaSalao = avgPerDay(fat, openDays)
-    if (mediaTrab != null) medias.push(mediaTrab)
+    const constancia = constanciaPct(daysWorked, openDays)
+
+    if (daysWorked != null) diasComBase.push(daysWorked)
+    if (constancia != null) constancias.push(constancia)
+
     // Só lista quem faturou ou veio — evita elenco Avec morto.
-    if (fat == null && (daysWorked == null || daysWorked <= 0)) continue
+    if (fat == null && daysWorked == null) continue
     draft.push({
       name,
       fat_bruto: fat,
-      dias_trabalhados: daysWorked != null && daysWorked > 0 ? daysWorked : null,
-      dias_uteis_salao: openDays != null && openDays > 0 ? openDays : null,
+      dias_trabalhados: daysWorked,
+      dias_uteis_salao: openDays,
       media_dia_trabalhado: mediaTrab,
       media_dia_salao: mediaSalao,
+      constancia_pct: constancia,
     })
   }
 
-  const indice = meanOf(medias)
+  const mediaDias = meanOf(diasComBase)
+  const indice = meanPct(constancias)
+  // Sanity: media_dias / openDays * 100 ≈ indice (mesma base).
   const professionals: DailyPerformanceProRow[] = draft
     .map((row) => {
       const delta =
-        row.media_dia_trabalhado != null && indice != null
-          ? roundMoney(row.media_dia_trabalhado - indice)
+        row.constancia_pct != null && indice != null
+          ? roundPct(row.constancia_pct - indice)
           : null
       return {
         ...row,
@@ -183,6 +228,9 @@ export function buildDailyPerformanceIndex(args: {
       if (da != null && db != null && da !== db) return db - da
       if (da != null && db == null) return -1
       if (da == null && db != null) return 1
+      const ca = a.constancia_pct ?? -1
+      const cb = b.constancia_pct ?? -1
+      if (ca !== cb) return cb - ca
       const fa = a.fat_bruto ?? -1
       const fb = b.fat_bruto ?? -1
       if (fa !== fb) return fb - fa
@@ -196,10 +244,11 @@ export function buildDailyPerformanceIndex(args: {
     mtd: args.mtd,
     reference_day: args.referenceDay,
     salon_open_days: args.salonOpenDays,
+    media_dias_trabalhados: mediaDias,
     indice,
     professionals,
     note:
-      'Dias trabalhados = dias com visita registrada no Avec (proxy de presença). Índice = média das médias/dia trabalhado.',
+      'Constância = dias com visita Avec ÷ dias úteis do salão (receita > 0). Índice = média dessas constâncias. Δ = constância do profissional − índice (pp).',
   }
 }
 
