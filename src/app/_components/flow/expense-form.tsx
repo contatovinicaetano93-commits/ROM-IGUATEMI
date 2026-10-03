@@ -94,7 +94,7 @@ export function ExpenseForm({
     event_project: "",
     event_date: "",
     amount: "",
-    category: categoryChoices[0]?.name ?? "Software",
+    category: categoryChoices[0]?.id ?? "cat_outros",
     payment_method: "pix" as PaymentMethod,
     beneficiary_name: "",
     beneficiary_document: "",
@@ -363,7 +363,9 @@ export function ExpenseForm({
                   onChange={(event) => setField("category", event.target.value)}
                 >
                   {categoryChoices.map((category) => (
-                    <option key={category.id}>{category.name}</option>
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -630,7 +632,9 @@ export function ExpenseForm({
               <div>
                 <small>Solicitação</small>
                 <strong>{form.title}</strong>
-                <span>{form.category}</span>
+                <span>
+                  {categoryChoices.find((category) => category.id === form.category)?.name ?? form.category}
+                </span>
               </div>
               <div>
                 <small>Beneficiário</small>

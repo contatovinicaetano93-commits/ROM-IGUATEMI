@@ -9,13 +9,13 @@ describe('intranetAuditLabel', () => {
     expect(intranetAuditLabel('CREATE_USER', 'flow:user:x')).toBe('Criou acesso de usuário')
   })
 
-  it('traduz aliases que o Flow grava com action.toUpperCase()', () => {
+  it('traduz verbos curtos gravados pelo Flow', () => {
     expect(intranetAuditLabel('APPROVE', 'flow:abc')).toBe('Aprovou solicitação')
-    expect(intranetAuditLabel('REJECT', 'flow:abc')).toBe('Recusou solicitação')
     expect(intranetAuditLabel('DOCS', 'flow:abc')).toBe('Devolveu para ajustes')
     expect(intranetAuditLabel('PROGRESS', 'flow:abc')).toBe('Colocou em andamento')
     expect(intranetAuditLabel('COMPLETE', 'flow:abc')).toBe('Finalizou solicitação')
     expect(intranetAuditLabel('CANCEL', 'flow:abc')).toBe('Cancelou solicitação')
+    expect(intranetAuditLabel('REJECT', 'flow:abc')).toBe('Recusou solicitação')
     expect(intranetAuditLabel('RESUBMIT', 'flow:abc')).toBe('Atualizou solicitação')
     expect(intranetAuditLabel('ATTACH_PROOF', 'flow:abc')).toBe('Anexou recibo de pagamento')
   })

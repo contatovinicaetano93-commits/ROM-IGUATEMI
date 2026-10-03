@@ -3,24 +3,20 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useClientSession } from '../SessionProvider'
-import { canSeeNavHref, parseGrantableModules } from '@/lib/intranet/modules'
+import { hasPanelModule, parseGrantableModules, type GrantableModuleKey } from '@/lib/intranet/modules'
 
-const TABS = [
-  { href: '/dashboard', label: 'Visão' },
-  { href: '/relatorios', label: 'Relatórios' },
-] as const
+const TABS: { href: string; label: string; key: GrantableModuleKey }[] = [
+  { href: '/dashboard', label: 'Visão', key: 'dashboard' },
+  { href: '/relatorios', label: 'Relatórios', key: 'relatorios' },
+]
 
 export function VisaoAnaliticaNav() {
   const pathname = usePathname()
   const { session } = useClientSession()
-  const role = session?.role
+  const role = session?.role ?? null
   const extras = parseGrantableModules(session?.modules)
-  const tabs = TABS.filter((tab) => {
-    if (!session) return false
-    if (!session.auth_enabled) return true
-    if (role == null) return false
-    return canSeeNavHref(tab.href, role, extras)
-  })
+  const openAuth = Boolean(session && !session.auth_enabled)
+  const tabs = TABS.filter((tab) => openAuth || (role != null && hasPanelModule(role, extras, tab.key)))
 
   if (tabs.length === 0) return null
 

@@ -44,7 +44,14 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== 'object') return err('Dados inválidos', 400)
   try {
     if (body.all === true) {
-      await markNotificationsRead(reader)
+      const user = await resolveFlowUser(auth.session)
+      const audience = notificationAudienceKeys({
+        readerKey: reader,
+        panelRole: auth.session.role,
+        flowRole: user.role,
+        areaIds: user.areaIds,
+      })
+      await markNotificationsRead(reader, audience)
       return ok({ ok: true })
     }
     const id = typeof body.id === 'string' ? body.id : ''
