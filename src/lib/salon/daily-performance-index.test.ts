@@ -4,6 +4,7 @@ import {
   buildDailyPerformanceIndex,
   constanciaPct,
   deltaVsMediaDias,
+  mapCategoriaByP1Name,
   matchVisitKeyToP1,
   meanOf,
   meanPct,
@@ -56,6 +57,20 @@ describe('daily-performance-index math', () => {
       normalizeProKey('ALISON ALVAREZ'),
     )
   })
+
+  it('mapCategoriaByP1Name usa cargo 8123', () => {
+    const map = mapCategoriaByP1Name(
+      ['MAURICIO DE CARVALHO LIMA', 'Ana Silva'],
+      [
+        { name: 'MAURICIO CARVALHO', role: 'Cabeleireiro' },
+        { name: 'Ana Silva', role: 'Manicure' },
+        { name: 'Sem Cargo', role: null },
+      ],
+    )
+    expect(map.get('MAURICIO DE CARVALHO LIMA')).toBe('Cabeleireiro')
+    expect(map.get('Ana Silva')).toBe('Manicure')
+    expect(map.has('Sem Cargo')).toBe(false)
+  })
 })
 
 describe('buildDailyPerformanceIndex', () => {
@@ -81,6 +96,10 @@ describe('buildDailyPerformanceIndex', () => {
       salonOpenDays: 24,
       fatByPro,
       daysByVisitKey,
+      categoriaByPro: new Map([
+        ['Ana Silva', 'Cabeleireiro'],
+        ['Bruno Costa', 'Assistente'],
+      ]),
     })
     expect(out.media_dias_trabalhados).toBe(18)
     expect(out.indice).toBe(75)
@@ -88,6 +107,9 @@ describe('buildDailyPerformanceIndex', () => {
     const ana = out.professionals.find((p) => p.name === 'Ana Silva')
     const bruno = out.professionals.find((p) => p.name === 'Bruno Costa')
     const carla = out.professionals.find((p) => p.name === 'Carla Dias')
+    expect(ana?.categoria).toBe('Cabeleireiro')
+    expect(bruno?.categoria).toBe('Assistente')
+    expect(carla?.categoria).toBeNull()
     expect(ana?.constancia_pct).toBe(100)
     expect(ana?.delta_indice).toBe(33.3)
     expect(ana?.standing).toBe('acima')
