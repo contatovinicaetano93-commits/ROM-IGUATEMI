@@ -65,6 +65,66 @@ function statusLabel(status: FolhaPeriodStatus | null | undefined): string {
   }
 }
 
+/** Pills de status com contraste semântico (rascunho → pago). */
+function statusTone(status: FolhaPeriodStatus | null | undefined): string {
+  switch (status) {
+    case 'draft':
+      return 'bg-card-elevated text-foreground ring-1 ring-border'
+    case 'ready_for_review':
+      return 'bg-warning/15 text-warning ring-1 ring-warning/30'
+    case 'approved':
+      return 'bg-gold/15 text-gold-strong ring-1 ring-gold/35'
+    case 'paid':
+      return 'bg-success/15 text-success ring-1 ring-success/30'
+    case 'awaiting_rules':
+      return 'bg-border/70 text-muted ring-1 ring-border'
+    case null:
+    case undefined:
+      return 'bg-border/50 text-muted ring-1 ring-border'
+    default: {
+      const _exhaustive: never = status
+      return _exhaustive
+    }
+  }
+}
+
+const FOLHA_BTN =
+  'inline-flex items-center justify-center rounded-xl border px-3 py-2 text-xs font-semibold transition-colors disabled:pointer-events-none disabled:opacity-45'
+const FOLHA_BTN_SECONDARY = `${FOLHA_BTN} border-border bg-surface text-foreground hover:border-gold/45 hover:bg-card-elevated`
+const FOLHA_BTN_PRIMARY = `${FOLHA_BTN} border-gold/40 bg-gold/15 text-gold-strong hover:bg-gold/25`
+const FOLHA_BTN_SUCCESS = `${FOLHA_BTN} border-success/35 bg-success/12 text-success hover:bg-success/20`
+const FOLHA_INPUT =
+  'mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted/70 focus:border-gold focus:ring-2 focus:ring-gold/20 disabled:opacity-50'
+
+function FolhaMetric({
+  label,
+  value,
+  emphasize = false,
+}: {
+  label: string
+  value: string
+  emphasize?: boolean
+}) {
+  return (
+    <div
+      className={`rounded-xl border px-2.5 py-2 ${
+        emphasize
+          ? 'border-gold/35 bg-gold/10'
+          : 'border-border/90 bg-surface/90'
+      }`}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+      <p
+        className={`mt-0.5 tabular-nums ${
+          emphasize ? 'text-sm font-semibold text-foreground' : 'text-xs font-medium text-foreground'
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  )
+}
+
 function flagLabel(flag: FolhaDraftLine['flags'][number]): string {
   switch (flag) {
     case 'manicure_com_taxa_adm':
@@ -489,38 +549,47 @@ export default function FolhaPage() {
     >
       <SectionCard title="Agenda de pagamento">
         {loading ? <p className="text-sm text-muted">Carregando…</p> : null}
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {error ? (
+          <p className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            {error}
+          </p>
+        ) : null}
         {!loading && status ? (
-          <div className="space-y-3 text-sm">
-            <div className="flex flex-wrap gap-2">
+          <div className="space-y-4 text-sm">
+            <div className="flex flex-wrap gap-2.5">
               {upcoming.length === 0 ? (
                 <p className="text-muted">Sem pagamentos futuros na janela listada.</p>
               ) : (
-                upcoming.map((p) => (
-                  <button
-                    key={p.period_id}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void onChangePeriod(p.period_id)}
-                    className={`rounded-md border px-3 py-2 text-left text-xs ${
-                      selectedPeriod === p.period_id
-                        ? 'border-foreground bg-foreground/5'
-                        : 'border-border'
-                    }`}
-                  >
-                    <div className="font-medium text-foreground">Paga {formatDayBr(p.pay_date)}</div>
-                    <div className="text-muted">{p.label}</div>
-                    <div className="text-muted">
-                      {formatDayBr(p.from)} – {formatDayBr(p.to)}
-                    </div>
-                  </button>
-                ))
+                upcoming.map((p) => {
+                  const active = selectedPeriod === p.period_id
+                  return (
+                    <button
+                      key={p.period_id}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void onChangePeriod(p.period_id)}
+                      className={`min-w-[11rem] rounded-2xl border px-3.5 py-3 text-left transition-colors disabled:opacity-50 ${
+                        active
+                          ? 'border-gold/50 bg-gold/10 shadow-sm ring-1 ring-gold/25'
+                          : 'border-border bg-surface hover:border-gold/40 hover:bg-card-elevated'
+                      }`}
+                    >
+                      <div className="text-sm font-semibold text-foreground">
+                        Paga {formatDayBr(p.pay_date)}
+                      </div>
+                      <div className="mt-0.5 text-xs font-medium text-foreground/80">{p.label}</div>
+                      <div className="mt-1 text-[11px] text-muted">
+                        {formatDayBr(p.from)} – {formatDayBr(p.to)}
+                      </div>
+                    </button>
+                  )
+                })
               )}
             </div>
-            <label className="block text-xs">
-              <span className="text-muted">Quinzena</span>
+            <label className="block max-w-md text-xs">
+              <span className="font-medium text-muted">Quinzena</span>
               <select
-                className="mt-1 w-full max-w-md rounded-md border border-border bg-background px-2 py-1.5"
+                className={FOLHA_INPUT}
                 value={selectedPeriod}
                 disabled={busy || (status.periods?.length ?? 0) === 0}
                 onChange={(e) => void onChangePeriod(e.target.value)}
@@ -540,15 +609,21 @@ export default function FolhaPage() {
         {loading ? <p className="text-sm text-muted">Carregando…</p> : null}
         {!loading && status ? (
           <div className="space-y-4 text-sm">
-            <p className="text-foreground">{status.message}</p>
-            {actionMsg ? <p className="text-xs text-muted">{actionMsg}</p> : null}
+            <p className="rounded-xl border border-border/80 bg-surface px-3 py-2 text-foreground">
+              {status.message}
+            </p>
+            {actionMsg ? (
+              <p className="rounded-xl border border-success/25 bg-success/10 px-3 py-2 text-xs font-medium text-success">
+                {actionMsg}
+              </p>
+            ) : null}
 
             {draft ? (
               <>
-                <label className="block text-xs max-w-lg">
-                  <span className="text-muted">Quinzena / data de pagamento</span>
+                <label className="block max-w-lg text-xs">
+                  <span className="font-medium text-muted">Quinzena / data de pagamento</span>
                   <select
-                    className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                    className={FOLHA_INPUT}
                     value={selectedPeriod}
                     disabled={busy || (status.periods?.length ?? 0) === 0}
                     onChange={(e) => void onChangePeriod(e.target.value)}
@@ -561,22 +636,28 @@ export default function FolhaPage() {
                   </select>
                 </label>
 
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="rounded-md border border-border px-2 py-1 text-xs">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border bg-card-elevated/80 px-3.5 py-3">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(periodStatus)}`}
+                  >
                     {statusLabel(periodStatus)}
                   </span>
-                  <span className="font-medium">Paga {formatDayBr(status.pay_date)}</span>
-                  <span className="text-muted">{draft.quinzena.label}</span>
-                  <span className="text-muted">
+                  <span className="text-sm font-semibold text-foreground">
+                    Paga {formatDayBr(status.pay_date)}
+                  </span>
+                  <span className="text-xs font-medium text-foreground/80">{draft.quinzena.label}</span>
+                  <span className="text-xs text-muted">
                     {formatDayBr(draft.quinzena.from)} – {formatDayBr(draft.quinzena.to)}
                   </span>
-                  <span className="text-muted">
+                  <span className="text-xs text-muted">
                     8123 {formatDayBr(draft.quinzena.from)}–{formatDayBr(draft.reference_day)}
                   </span>
-                  <span className="text-muted">
+                  <span className="text-xs text-muted">
                     {visibleLines.length}/{draft.line_count} na lista
                   </span>
-                  <span className="font-medium">Total {formatMoney(draft.total_proposed_pay)}</span>
+                  <span className="ml-auto rounded-xl border border-gold/30 bg-gold/10 px-2.5 py-1 text-sm font-semibold tabular-nums text-gold-strong">
+                    Total {formatMoney(draft.total_proposed_pay)}
+                  </span>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -584,7 +665,7 @@ export default function FolhaPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => void onRefresh()}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                    className={FOLHA_BTN_PRIMARY}
                   >
                     Atualizar do 8123
                   </button>
@@ -592,7 +673,7 @@ export default function FolhaPage() {
                     type="button"
                     disabled={busy || !draft.line_count}
                     onClick={() => void onExportExcel()}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                    className={FOLHA_BTN_SECONDARY}
                   >
                     Exportar Excel
                   </button>
@@ -600,7 +681,7 @@ export default function FolhaPage() {
                     type="button"
                     disabled={busy || !draft.line_count}
                     onClick={() => void onZigConsumo()}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                    className={FOLHA_BTN_SECONDARY}
                   >
                     Puxar consumo Baru (Zig)
                   </button>
@@ -608,7 +689,7 @@ export default function FolhaPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => void onImapPoll()}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                    className={FOLHA_BTN_SECONDARY}
                   >
                     Buscar DARF/DAS/mensalidade (IMAP)
                   </button>
@@ -617,7 +698,7 @@ export default function FolhaPage() {
                       type="button"
                       disabled={busy}
                       onClick={() => void onStatus('ready_for_review')}
-                      className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                      className={FOLHA_BTN_SECONDARY}
                     >
                       Enviar para conferência
                     </button>
@@ -627,7 +708,7 @@ export default function FolhaPage() {
                       type="button"
                       disabled={busy}
                       onClick={() => void onStatus('approved')}
-                      className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                      className={FOLHA_BTN_PRIMARY}
                     >
                       Aprovar
                     </button>
@@ -637,7 +718,7 @@ export default function FolhaPage() {
                       type="button"
                       disabled={busy}
                       onClick={() => void onStatus('paid')}
-                      className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                      className={FOLHA_BTN_SUCCESS}
                     >
                       Marcar pago
                     </button>
@@ -647,14 +728,15 @@ export default function FolhaPage() {
                       type="button"
                       disabled={busy}
                       onClick={() => void onStatus('draft')}
-                      className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                      className={FOLHA_BTN_SECONDARY}
                     >
                       Reabrir rascunho
                     </button>
                   ) : null}
-                  <label className="ml-auto flex items-center gap-2 text-xs text-muted">
+                  <label className="ml-auto flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-medium text-foreground">
                     <input
                       type="checkbox"
+                      className="size-3.5 accent-[var(--gold)]"
                       checked={onlyWithPay}
                       onChange={(e) => setOnlyWithPay(e.target.checked)}
                     />
@@ -662,11 +744,11 @@ export default function FolhaPage() {
                   </label>
                 </div>
 
-                <div className="grid gap-3 rounded-lg border border-border p-3 md:grid-cols-4">
+                <div className="grid gap-3 rounded-2xl border border-border bg-card-elevated/50 p-3.5 md:grid-cols-4">
                   <label className="text-xs md:col-span-2">
-                    <span className="text-muted">Profissional</span>
+                    <span className="font-medium text-muted">Profissional</span>
                     <select
-                      className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                      className={FOLHA_INPUT}
                       value={selectedName}
                       onChange={(e) => {
                         const name = e.target.value
@@ -683,101 +765,73 @@ export default function FolhaPage() {
                       ))}
                     </select>
                   </label>
-                  <div className="text-xs md:col-span-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    <div>
-                      <span className="text-muted">Faturado</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatMoney(
-                          selectedLine
-                            ? folhaFaturadoDisplay(selectedLine)
-                            : null,
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">Taxa cartão (8123)</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatDeduction(selectedLine?.avec.card_fee)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">Rateio após cartão</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatMoney(selectedLine?.rateio_apos_cartao)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">Produto</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatDeduction(selectedLine?.avec.product_spend)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">
-                        Taxa adm
-                        {selectedLine?.taxa_administrativa_rate != null
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:col-span-2">
+                    <FolhaMetric
+                      label="Faturado"
+                      value={formatMoney(
+                        selectedLine ? folhaFaturadoDisplay(selectedLine) : null,
+                      )}
+                    />
+                    <FolhaMetric
+                      label="Taxa cartão (8123)"
+                      value={formatDeduction(selectedLine?.avec.card_fee)}
+                    />
+                    <FolhaMetric
+                      label="Rateio após cartão"
+                      value={formatMoney(selectedLine?.rateio_apos_cartao)}
+                    />
+                    <FolhaMetric
+                      label="Produto"
+                      value={formatDeduction(selectedLine?.avec.product_spend)}
+                    />
+                    <FolhaMetric
+                      label={`Taxa adm${
+                        selectedLine?.taxa_administrativa_rate != null
                           ? ` ${pct(selectedLine.taxa_administrativa_rate)}`
-                          : ''}
-                      </span>
-                      <p className="mt-1 tabular-nums">
-                        {formatMoney(selectedLine?.taxa_administrativa)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">Assistente</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatDeduction(selectedLine?.avec.assistant_discount)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">Meio a meio</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatMoney(selectedLine?.meio_a_meio)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">Outros (olerite)</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatMoney(selectedLine?.outros_descontos)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">Consumo Baru</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatMoney(selectedLine?.folha_extras.consumo_baru)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">U · serv. assist. como pro</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatMoney(
-                          selectedLine?.folha_extras.servicos_assistente_como_pro,
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">W · taxa serviços</span>
-                      <p className="mt-1 tabular-nums">
-                        {formatMoney(selectedLine?.folha_extras.taxa_servicos)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">a_pagar 8123</span>
-                      <p className="mt-1 font-medium tabular-nums">
-                        {formatMoney(selectedLine?.avec.net_payable)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted">Líquido a pagar</span>
-                      <p className="mt-1 font-medium tabular-nums">
-                        {formatMoney(selectedLine?.proposed_pay)}
-                      </p>
-                    </div>
+                          : ''
+                      }`}
+                      value={formatMoney(selectedLine?.taxa_administrativa)}
+                    />
+                    <FolhaMetric
+                      label="Assistente"
+                      value={formatDeduction(selectedLine?.avec.assistant_discount)}
+                    />
+                    <FolhaMetric
+                      label="Meio a meio"
+                      value={formatMoney(selectedLine?.meio_a_meio)}
+                    />
+                    <FolhaMetric
+                      label="Outros (olerite)"
+                      value={formatMoney(selectedLine?.outros_descontos)}
+                    />
+                    <FolhaMetric
+                      label="Consumo Baru"
+                      value={formatMoney(selectedLine?.folha_extras.consumo_baru)}
+                    />
+                    <FolhaMetric
+                      label="U · serv. assist. como pro"
+                      value={formatMoney(
+                        selectedLine?.folha_extras.servicos_assistente_como_pro,
+                      )}
+                    />
+                    <FolhaMetric
+                      label="W · taxa serviços"
+                      value={formatMoney(selectedLine?.folha_extras.taxa_servicos)}
+                    />
+                    <FolhaMetric
+                      label="a_pagar 8123"
+                      value={formatMoney(selectedLine?.avec.net_payable)}
+                    />
+                    <FolhaMetric
+                      label="Líquido a pagar"
+                      value={formatMoney(selectedLine?.proposed_pay)}
+                      emphasize
+                    />
                   </div>
                   <label className="text-xs">
-                    <span className="text-muted">U · serviços assist. como pro</span>
+                    <span className="font-medium text-muted">U · serviços assist. como pro</span>
                     <input
-                      className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                      className={FOLHA_INPUT}
                       value={uInput}
                       onChange={(e) => setUInput(e.target.value)}
                       inputMode="decimal"
@@ -785,9 +839,9 @@ export default function FolhaPage() {
                     />
                   </label>
                   <label className="text-xs">
-                    <span className="text-muted">Consumo Baru</span>
+                    <span className="font-medium text-muted">Consumo Baru</span>
                     <input
-                      className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                      className={FOLHA_INPUT}
                       value={baruInput}
                       onChange={(e) => setBaruInput(e.target.value)}
                       inputMode="decimal"
@@ -796,14 +850,14 @@ export default function FolhaPage() {
                   </label>
                   {selectedLine?.flags.includes('assistente_romeu') ? (
                     <label className="text-xs">
-                      <span className="text-muted">
+                      <span className="font-medium text-muted">
                         Acumulado mês (soma U Romeu Q1+Q2)
                         {selectedLine.folha_extras.romeu_comissao_parcela != null
                           ? ` · top-up meta ${formatMoney(selectedLine.folha_extras.romeu_comissao_parcela)}`
                           : ''}
                       </span>
                       <input
-                        className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                        className={FOLHA_INPUT}
                         value={acumuladoInput}
                         onChange={(e) => setAcumuladoInput(e.target.value)}
                         inputMode="decimal"
@@ -814,14 +868,14 @@ export default function FolhaPage() {
                   {selectedLine?.exception_id === 'lucas_campos' ? (
                     <>
                       <label className="text-xs">
-                        <span className="text-muted">
+                        <span className="font-medium text-muted">
                           Faturado mesmo mês ano anterior (meta +14%)
                           {selectedLine.folha_extras.meta_quinzena_alvo != null
                             ? ` · alvo ${formatMoney(selectedLine.folha_extras.meta_quinzena_alvo)}`
                             : ''}
                         </span>
                         <input
-                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          className={FOLHA_INPUT}
                           value={faturadoAnoAntInput}
                           onChange={(e) => setFaturadoAnoAntInput(e.target.value)}
                           inputMode="decimal"
@@ -829,9 +883,9 @@ export default function FolhaPage() {
                         />
                       </label>
                       <label className="text-xs">
-                        <span className="text-muted">Faturado mês atual (Q1+Q2)</span>
+                        <span className="font-medium text-muted">Faturado mês atual (Q1+Q2)</span>
                         <input
-                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          className={FOLHA_INPUT}
                           value={faturadoMesInput}
                           onChange={(e) => setFaturadoMesInput(e.target.value)}
                           inputMode="decimal"
@@ -839,14 +893,14 @@ export default function FolhaPage() {
                         />
                       </label>
                       <label className="text-xs">
-                        <span className="text-muted">
+                        <span className="font-medium text-muted">
                           Taxa adm Q1 (devolve na Q2 se bater meta)
                           {selectedLine.folha_extras.devolucao_taxa_adm_q1 != null
                             ? ` · devolução ${formatMoney(selectedLine.folha_extras.devolucao_taxa_adm_q1)}`
                             : ''}
                         </span>
                         <input
-                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          className={FOLHA_INPUT}
                           value={taxaAdmQ1Input}
                           onChange={(e) => setTaxaAdmQ1Input(e.target.value)}
                           inputMode="decimal"
@@ -858,27 +912,27 @@ export default function FolhaPage() {
                   {taxExtrasAllowed ? (
                     <>
                       <label className="text-xs">
-                        <span className="text-muted">DARF</span>
+                        <span className="font-medium text-muted">DARF</span>
                         <input
-                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          className={FOLHA_INPUT}
                           value={darfInput}
                           onChange={(e) => setDarfInput(e.target.value)}
                           inputMode="decimal"
                         />
                       </label>
                       <label className="text-xs">
-                        <span className="text-muted">DAS</span>
+                        <span className="font-medium text-muted">DAS</span>
                         <input
-                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          className={FOLHA_INPUT}
                           value={dasInput}
                           onChange={(e) => setDasInput(e.target.value)}
                           inputMode="decimal"
                         />
                       </label>
                       <label className="text-xs">
-                        <span className="text-muted">Mensalidade contábil</span>
+                        <span className="font-medium text-muted">Mensalidade contábil</span>
                         <input
-                          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
+                          className={FOLHA_INPUT}
                           value={mensalidadeInput}
                           onChange={(e) => setMensalidadeInput(e.target.value)}
                           inputMode="decimal"
@@ -896,15 +950,15 @@ export default function FolhaPage() {
                       type="button"
                       disabled={busy || !selectedName}
                       onClick={() => void onSaveExtras()}
-                      className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                      className={FOLHA_BTN_PRIMARY}
                     >
                       Salvar extras na linha
                     </button>
                   </div>
                 </div>
 
-                <div className="space-y-2 rounded-lg border border-border p-3">
-                  <p className="text-xs font-medium text-foreground">
+                <div className="space-y-2.5 rounded-2xl border border-border bg-surface p-3.5">
+                  <p className="text-xs font-semibold text-foreground">
                     Colar e-mail fiscal (DARF/DAS/mensalidade)
                   </p>
                   {!taxExtrasAllowed ? (
@@ -914,14 +968,14 @@ export default function FolhaPage() {
                     </p>
                   ) : null}
                   <input
-                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                    className={`${FOLHA_INPUT} text-xs`}
                     placeholder="Assunto (opcional)"
                     value={taxSubject}
                     onChange={(e) => setTaxSubject(e.target.value)}
                     disabled={!taxExtrasAllowed}
                   />
                   <textarea
-                    className="min-h-[80px] w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                    className={`min-h-[88px] ${FOLHA_INPUT} text-xs`}
                     placeholder="Corpo do e-mail…"
                     value={taxBody}
                     onChange={(e) => setTaxBody(e.target.value)}
@@ -931,197 +985,212 @@ export default function FolhaPage() {
                     type="button"
                     disabled={busy || !taxBody.trim() || !taxExtrasAllowed}
                     onClick={() => void onTaxIngest()}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                    className={FOLHA_BTN_SECONDARY}
                   >
                     Ler e aplicar se houver nome
                   </button>
                 </div>
 
-                <div className="w-full overflow-x-auto">
-                  <p className="mb-1.5 text-[10px] text-muted">
-                    Valores em R$ (sem símbolo na grade). Hover no cabeçalho = nome completo.
-                    Em telas largas tudo cabe; se apertar, role só o mínimo.
+                <div className="w-full overflow-hidden rounded-2xl border border-border bg-surface">
+                  <p className="border-b border-border/80 bg-card-elevated px-3 py-2 text-[11px] text-muted">
+                    Valores em R$ (sem símbolo na grade). Clique na linha para editar · hover no
+                    cabeçalho = nome completo.
                   </p>
-                  <table className="w-full min-w-0 table-fixed border-collapse text-left text-[11px] leading-tight">
-                    <colgroup>
-                      <col className="w-[14%]" />
-                      <col className="w-[8%]" />
-                      <col className="w-[7%]" />
-                      <col className="w-[7%]" />
-                      <col className="w-[5.5%]" />
-                      <col className="w-[6.5%]" />
-                      <col className="w-[5.5%]" />
-                      <col className="w-[5.5%]" />
-                      <col className="w-[6%]" />
-                      <col className="w-[5.5%]" />
-                      <col className="w-[5%]" />
-                      <col className="w-[5.5%]" />
-                      <col className="w-[5%]" />
-                      <col className="w-[5%]" />
-                      {taxExtrasAllowed ? (
-                        <>
-                          <col className="w-[4.5%]" />
-                          <col className="w-[4.5%]" />
-                        </>
-                      ) : null}
-                      <col className="w-[5%]" />
-                    </colgroup>
-                    <thead>
-                      <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted">
-                        <th className="py-1 pr-1 font-medium">Profissional</th>
-                        <th className="py-1 pr-1 font-medium" title="Cargo">
-                          Cargo
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Líquido a pagar">
-                          Líquido
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Faturado">
-                          Fat.
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Taxa cartão">
-                          Cartão
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Rateio − cartão">
-                          Rateio
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Produto">
-                          Prod.
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Taxa administrativa">
-                          Adm
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Desconto assistente">
-                          Assist.
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Meio a meio">
-                          Meio
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Outros descontos">
-                          Outros
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Consumo Baru">
-                          Baru
-                        </th>
-                        <th
-                          className="py-1 pr-1 text-right font-medium"
-                          title="Serviços assistente como pro (U)"
-                        >
-                          U
-                        </th>
-                        <th className="py-1 pr-1 text-right font-medium" title="Taxa serviços (W)">
-                          W
-                        </th>
+                  <div className="w-full overflow-x-auto">
+                    <table className="w-full min-w-0 table-fixed border-collapse text-left text-[11px] leading-tight">
+                      <colgroup>
+                        <col className="w-[14%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[5.5%]" />
+                        <col className="w-[6.5%]" />
+                        <col className="w-[5.5%]" />
+                        <col className="w-[5.5%]" />
+                        <col className="w-[6%]" />
+                        <col className="w-[5.5%]" />
+                        <col className="w-[5%]" />
+                        <col className="w-[5.5%]" />
+                        <col className="w-[5%]" />
+                        <col className="w-[5%]" />
                         {taxExtrasAllowed ? (
                           <>
-                            <th className="py-1 pr-1 text-right font-medium" title="DARF">
-                              DARF
-                            </th>
-                            <th className="py-1 pr-1 text-right font-medium" title="DAS">
-                              DAS
-                            </th>
-                            <th
-                              className="py-1 pr-1 text-right font-medium"
-                              title="Mensalidade contábil"
-                            >
-                              Mensal.
-                            </th>
+                            <col className="w-[4.5%]" />
+                            <col className="w-[4.5%]" />
                           </>
                         ) : null}
-                        <th className="py-1 font-medium" title="Alertas">
-                          !
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleLines.map((line) => {
-                        const alertText =
-                          line.flags.length === 0
-                            ? ''
-                            : line.flags.map(flagLabel).join(' · ')
-                        return (
-                          <tr
-                            key={line.name}
-                            className="cursor-pointer border-b border-border/60 hover:bg-background/80"
-                            onClick={() => selectLine(line)}
+                        <col className="w-[5%]" />
+                      </colgroup>
+                      <thead>
+                        <tr className="sticky top-0 z-10 border-b border-border bg-card-elevated text-[10px] font-semibold uppercase tracking-wide text-foreground/70">
+                          <th className="px-2 py-2 font-semibold">Profissional</th>
+                          <th className="py-2 pr-1 font-semibold" title="Cargo">
+                            Cargo
+                          </th>
+                          <th className="py-2 pr-1 text-right font-semibold" title="Líquido a pagar">
+                            Líquido
+                          </th>
+                          <th className="py-2 pr-1 text-right font-semibold" title="Faturado">
+                            Fat.
+                          </th>
+                          <th className="py-2 pr-1 text-right font-semibold" title="Taxa cartão">
+                            Cartão
+                          </th>
+                          <th className="py-2 pr-1 text-right font-semibold" title="Rateio − cartão">
+                            Rateio
+                          </th>
+                          <th className="py-2 pr-1 text-right font-semibold" title="Produto">
+                            Prod.
+                          </th>
+                          <th
+                            className="py-2 pr-1 text-right font-semibold"
+                            title="Taxa administrativa"
                           >
-                            <td
-                              className="truncate py-1 pr-1 text-foreground"
-                              title={line.name}
+                            Adm
+                          </th>
+                          <th
+                            className="py-2 pr-1 text-right font-semibold"
+                            title="Desconto assistente"
+                          >
+                            Assist.
+                          </th>
+                          <th className="py-2 pr-1 text-right font-semibold" title="Meio a meio">
+                            Meio
+                          </th>
+                          <th className="py-2 pr-1 text-right font-semibold" title="Outros descontos">
+                            Outros
+                          </th>
+                          <th className="py-2 pr-1 text-right font-semibold" title="Consumo Baru">
+                            Baru
+                          </th>
+                          <th
+                            className="py-2 pr-1 text-right font-semibold"
+                            title="Serviços assistente como pro (U)"
+                          >
+                            U
+                          </th>
+                          <th className="py-2 pr-1 text-right font-semibold" title="Taxa serviços (W)">
+                            W
+                          </th>
+                          {taxExtrasAllowed ? (
+                            <>
+                              <th className="py-2 pr-1 text-right font-semibold" title="DARF">
+                                DARF
+                              </th>
+                              <th className="py-2 pr-1 text-right font-semibold" title="DAS">
+                                DAS
+                              </th>
+                              <th
+                                className="py-2 pr-1 text-right font-semibold"
+                                title="Mensalidade contábil"
+                              >
+                                Mensal.
+                              </th>
+                            </>
+                          ) : null}
+                          <th className="py-2 font-semibold" title="Alertas">
+                            !
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleLines.map((line) => {
+                          const alertText =
+                            line.flags.length === 0
+                              ? ''
+                              : line.flags.map(flagLabel).join(' · ')
+                          const selected = selectedName === line.name
+                          return (
+                            <tr
+                              key={line.name}
+                              className={`cursor-pointer border-b border-border/50 transition-colors ${
+                                selected
+                                  ? 'bg-gold/12'
+                                  : 'hover:bg-card-elevated/90 odd:bg-background/40'
+                              }`}
+                              onClick={() => selectLine(line)}
                             >
-                              {line.name}
-                            </td>
-                            <td
-                              className="truncate py-1 pr-1 text-muted"
-                              title={line.cargo_raw ?? undefined}
-                            >
-                              {line.cargo_raw ?? '—'}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums font-semibold">
-                              {formatMoneyCompact(line.proposed_pay)}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(folhaFaturadoDisplay(line))}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatDeductionCompact(line.avec.card_fee)}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(line.rateio_apos_cartao)}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatDeductionCompact(line.avec.product_spend)}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(line.taxa_administrativa)}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatDeductionCompact(line.avec.assistant_discount)}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(line.meio_a_meio)}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(line.outros_descontos)}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(line.folha_extras.consumo_baru)}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(
-                                line.folha_extras.servicos_assistente_como_pro,
-                              )}
-                            </td>
-                            <td className="py-1 pr-1 text-right tabular-nums">
-                              {formatMoneyCompact(line.folha_extras.taxa_servicos)}
-                            </td>
-                            {taxExtrasAllowed ? (
-                              <>
-                                <td className="py-1 pr-1 text-right tabular-nums">
-                                  {formatMoneyCompact(line.folha_extras.darf)}
-                                </td>
-                                <td className="py-1 pr-1 text-right tabular-nums">
-                                  {formatMoneyCompact(line.folha_extras.das)}
-                                </td>
-                                <td className="py-1 pr-1 text-right tabular-nums">
-                                  {formatMoneyCompact(
-                                    line.folha_extras.mensalidade_contabilidade,
-                                  )}
-                                </td>
-                              </>
-                            ) : null}
-                            <td
-                              className="py-1 text-center text-muted"
-                              title={alertText || undefined}
-                            >
-                              {line.flags.length === 0 ? '—' : String(line.flags.length)}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                              <td
+                                className="truncate px-2 py-1.5 font-medium text-foreground"
+                                title={line.name}
+                              >
+                                {line.name}
+                              </td>
+                              <td
+                                className="truncate py-1.5 pr-1 text-muted"
+                                title={line.cargo_raw ?? undefined}
+                              >
+                                {line.cargo_raw ?? '—'}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right font-semibold tabular-nums text-foreground">
+                                {formatMoneyCompact(line.proposed_pay)}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatMoneyCompact(folhaFaturadoDisplay(line))}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatDeductionCompact(line.avec.card_fee)}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatMoneyCompact(line.rateio_apos_cartao)}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatDeductionCompact(line.avec.product_spend)}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatMoneyCompact(line.taxa_administrativa)}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatDeductionCompact(line.avec.assistant_discount)}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatMoneyCompact(line.meio_a_meio)}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatMoneyCompact(line.outros_descontos)}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatMoneyCompact(line.folha_extras.consumo_baru)}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatMoneyCompact(
+                                  line.folha_extras.servicos_assistente_como_pro,
+                                )}
+                              </td>
+                              <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                {formatMoneyCompact(line.folha_extras.taxa_servicos)}
+                              </td>
+                              {taxExtrasAllowed ? (
+                                <>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                    {formatMoneyCompact(line.folha_extras.darf)}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                    {formatMoneyCompact(line.folha_extras.das)}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right tabular-nums text-foreground/90">
+                                    {formatMoneyCompact(
+                                      line.folha_extras.mensalidade_contabilidade,
+                                    )}
+                                  </td>
+                                </>
+                              ) : null}
+                              <td
+                                className={`py-1.5 text-center ${
+                                  line.flags.length === 0 ? 'text-muted' : 'font-semibold text-warning'
+                                }`}
+                                title={alertText || undefined}
+                              >
+                                {line.flags.length === 0 ? '—' : String(line.flags.length)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                   {visibleLines.length === 0 ? (
-                    <p className="mt-3 text-xs text-muted">
+                    <p className="px-3 py-3 text-xs text-muted">
                       Nenhuma linha com a_pagar nesta quinzena. Desmarque o filtro ou atualize o
                       8123 após o sync do dia fim do período.
                     </p>
@@ -1129,13 +1198,13 @@ export default function FolhaPage() {
                 </div>
               </>
             ) : (
-              <div className="space-y-2">
-                <p className="text-muted">Nenhum rascunho para esta quinzena ainda.</p>
+              <div className="space-y-3 rounded-2xl border border-dashed border-border bg-surface px-4 py-5">
+                <p className="text-sm text-muted">Nenhum rascunho para esta quinzena ainda.</p>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void onRefresh()}
-                  className="rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
+                  className={FOLHA_BTN_PRIMARY}
                 >
                   Montar do 8123
                 </button>
@@ -1145,11 +1214,13 @@ export default function FolhaPage() {
         ) : null}
       </SectionCard>
 
-      <SectionCard title="Regras do motor">
+      <SectionCard title="Regras do motor" storageKey="folha-regras" defaultOpen={false}>
         {!loading && !error && rules ? (
           <div className="space-y-2 text-sm">
-            <p className="text-muted">{rules.source}</p>
-            <ul className="list-disc space-y-1 pl-5 text-foreground">
+            <p className="rounded-xl bg-card-elevated px-3 py-2 text-xs font-medium text-muted">
+              {rules.source}
+            </p>
+            <ul className="list-disc space-y-1.5 pl-5 text-foreground/90">
               <li>Pagamentos: dia 05 (2ª quinzena anterior) e dia 20 (1ª quinzena)</li>
               <li>
                 Taxa serviços U: {pct(rules.assistant_service_tax_rate)} (≠ cartão)
