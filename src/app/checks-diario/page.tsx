@@ -2,12 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { upload } from '@vercel/blob/client'
-import { Camera, CheckCircle2, Circle, Plus, Users } from 'lucide-react'
-import {
-  CollapsibleBody,
-  SectionToggleHeader,
-  useSectionOpen,
-} from '../_components/CollapsibleSection'
+import { Camera, CheckCircle2, Circle, Plus, Settings2, Users } from 'lucide-react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { PanelButton, SectionCard } from '../_components/ui'
 import {
@@ -34,7 +29,8 @@ type EmployeeLite = {
   email: string
 }
 
-type TabId = 'meus' | 'equipe'
+/** hoje = rotina do dia; config = quem fiscaliza quem (fora do fluxo diário). */
+type TabId = 'meus' | 'hoje' | 'config'
 
 function teamLabel(id: ChecksTeamId | null): string {
   if (!id) return '—'
@@ -56,24 +52,17 @@ export default function ChecksDiarioPage() {
   const [access, setAccess] = useState<AccessMeta | null>(null)
   const [employees, setEmployees] = useState<EmployeeLite[]>([])
   const [team, setTeam] = useState<ChecksTeamId | 'all'>('all')
-  const [tab, setTab] = useState<TabId>('equipe')
+  const [tab, setTab] = useState<TabId>('hoje')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null)
-
-  const [newEmployeeId, setNewEmployeeId] = useState('')
-  const [newTitle, setNewTitle] = useState('')
-  const [newRequiresPhoto, setNewRequiresPhoto] = useState(false)
-  const [savingTask, setSavingTask] = useState(false)
+  const [savingTaskFor, setSavingTaskFor] = useState<string | null>(null)
+  const [composingFor, setComposingFor] = useState<string | null>(null)
 
   const [assignEmployeeId, setAssignEmployeeId] = useState('')
   const [assignTeam, setAssignTeam] = useState<ChecksTeamId>('gestor_unidade')
   const [assignLead, setAssignLead] = useState(false)
   const [savingMember, setSavingMember] = useState(false)
-  const [advancedOpen, setAdvancedOpen] = useSectionOpen(
-    'checks.diario.advanced.assign',
-    false,
-  )
 
   const load = useCallback(async (teamFilter: ChecksTeamId | 'all') => {
     setLoading(true)
@@ -128,11 +117,23 @@ export default function ChecksDiarioPage() {
     return board.people.find((p) => p.employee_id === board.my_employee_id) ?? null
   }, [board])
 
-  /** Rede Lead → membros, a partir do board (já filtrado pela equipe quando aplicável). */
   const teamNetwork = useMemo(
     () => buildTeamNetwork(board?.people ?? [], team),
     [board?.people, team],
   )
+
+  /** Pessoas do dia agrupadas por time (quando “todas”). */
+  const peopleByTeam = useMemo(() => {
+    const people = board?.people ?? []
+    if (team !== 'all') {
+      return [{ teamId: team as ChecksTeamId | null, label: null as string | null, people }]
+    }
+    return CHECKS_TEAMS.map((t) => ({
+      teamId: t.id as ChecksTeamId | null,
+      label: t.label,
+      people: people.filter((p) => p.team === t.id),
+    })).filter((g) => g.people.length > 0)
+  }, [board?.people, team])
 
   async function completeTask(
     taskId: string,
@@ -172,10 +173,13 @@ export default function ChecksDiarioPage() {
     }
   }
 
-  async function createTask(e: React.FormEvent) {
-    e.preventDefault()
-    if (!newEmployeeId || !newTitle.trim()) return
-    setSavingTask(true)
+  async function createTaskForPerson(args: {
+    employeeId: string
+    title: string
+    requiresPhoto: boolean
+  }) {
+    if (!args.employeeId || !args.title.trim()) return
+    setSavingTaskFor(args.employeeId)
     setError(null)
     try {
       const res = await fetch('/api/checks-diario/tasks', {
@@ -183,20 +187,19 @@ export default function ChecksDiarioPage() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          employee_id: newEmployeeId,
-          title: newTitle.trim(),
-          requires_photo: newRequiresPhoto,
+          employee_id: args.employeeId,
+          title: args.title.trim(),
+          requires_photo: args.requiresPhoto,
         }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Falha ao criar tarefa')
-      setNewTitle('')
-      setNewRequiresPhoto(false)
+      setComposingFor(null)
       await load(team)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao criar tarefa')
     } finally {
-      setSavingTask(false)
+      setSavingTaskFor(null)
     }
   }
 
@@ -248,11 +251,18 @@ export default function ChecksDiarioPage() {
     }
   }
 
+  // Colaborador sem visão de equipe: só Meus.
+  useEffect(() => {
+    if (board && !isMasterView && tab !== 'meus') setTab('meus')
+  }, [board, isMasterView, tab])
+
   const myPending = myPerson?.tasks.filter((t) => t.done_count === 0).length ?? 0
   const subtitle = board
-    ? isMasterView
-      ? `${formatDay(board.day)} · ${board.summary.complete}/${board.summary.people} ok na equipe`
-      : `${formatDay(board.day)} · ${myPerson ? `${myPerson.done_tasks}/${myPerson.total_tasks} feitos` : 'seus checks'}`
+    ? tab === 'config'
+      ? 'Quem fiscaliza quem — fora da rotina do dia'
+      : isMasterView
+        ? `${formatDay(board.day)} · ${board.summary.complete}/${board.summary.people} ok`
+        : `${formatDay(board.day)} · ${myPerson ? `${myPerson.done_tasks}/${myPerson.total_tasks} feitos` : 'seus checks'}`
     : 'Rotina do dia'
 
   return (
@@ -261,7 +271,7 @@ export default function ChecksDiarioPage() {
       title="Checks diários"
       subtitle={subtitle}
       actions={
-        canPickTeam ? (
+        canPickTeam && tab !== 'meus' ? (
           <select
             className="rounded-full border border-border bg-card px-3 py-2 text-sm"
             value={team}
@@ -286,7 +296,11 @@ export default function ChecksDiarioPage() {
       {loading && !board ? <p className="text-sm text-muted">Carregando…</p> : null}
 
       {isMasterView ? (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <TabButton active={tab === 'hoje'} onClick={() => setTab('hoje')}>
+            <Users size={14} />
+            Hoje
+          </TabButton>
           <TabButton active={tab === 'meus'} onClick={() => setTab('meus')}>
             Meus checks
             {myPending > 0 ? (
@@ -295,10 +309,16 @@ export default function ChecksDiarioPage() {
               </span>
             ) : null}
           </TabButton>
-          <TabButton active={tab === 'equipe'} onClick={() => setTab('equipe')}>
-            <Users size={14} />
-            Equipe
-          </TabButton>
+          <button
+            type="button"
+            onClick={() => setTab('config')}
+            className={`ml-auto inline-flex items-center gap-1.5 text-xs ${
+              tab === 'config' ? 'font-medium text-foreground' : 'text-muted hover:text-foreground'
+            }`}
+          >
+            <Settings2 size={13} />
+            Configurar equipes
+          </button>
         </div>
       ) : null}
 
@@ -308,159 +328,157 @@ export default function ChecksDiarioPage() {
           busyTaskId={busyTaskId}
           emptyHint={
             isMasterView
-              ? 'Você não tem checks pessoais hoje — use a aba Equipe para fiscalizar.'
-              : 'Seu lead ainda não atribuiu checks para hoje.'
+              ? 'Você não tem checks pessoais — a fiscalização fica em Hoje.'
+              : 'Seu responsável ainda não atribuiu checks para hoje.'
           }
           onComplete={completeTask}
         />
       )}
 
-      {isMasterView && tab === 'equipe' ? (
+      {isMasterView && tab === 'hoje' ? (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <SummaryTile label="Pessoas" value={String(board?.summary.people ?? 0)} />
-            <SummaryTile label="Completos" value={String(board?.summary.complete ?? 0)} tone="success" />
-            <SummaryTile label="Parciais" value={String(board?.summary.partial ?? 0)} tone="gold" />
-            <SummaryTile label="Pendentes" value={String(board?.summary.pending ?? 0)} tone="danger" />
+            <SummaryTile
+              label="Completos"
+              value={String(board?.summary.complete ?? 0)}
+              tone="success"
+            />
+            <SummaryTile
+              label="Parciais"
+              value={String(board?.summary.partial ?? 0)}
+              tone="gold"
+            />
+            <SummaryTile
+              label="Pendentes"
+              value={String(board?.summary.pending ?? 0)}
+              tone="danger"
+            />
           </div>
 
+          {access?.is_dono && !access.can_edit ? (
+            <p className="text-sm text-muted">Modo leitura (Dono) — acompanhe o dia, sem editar.</p>
+          ) : null}
+
+          {!board || board.people.length === 0 ? (
+            <SectionCard title="Equipe de hoje">
+              <p className="text-sm text-muted">
+                Ninguém nesta visão ainda. Abra{' '}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => setTab('config')}
+                >
+                  Configurar equipes
+                </button>{' '}
+                ou confira o cargo na Intranet.
+              </p>
+            </SectionCard>
+          ) : (
+            <div className="space-y-6">
+              {peopleByTeam.map((group) => (
+                <div key={group.teamId ?? 'none'} className="space-y-3">
+                  {group.label ? (
+                    <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                      {group.label}
+                    </h2>
+                  ) : null}
+                  <ul className="space-y-3">
+                    {group.people.map((person) => (
+                      <PersonDayCard
+                        key={person.employee_id}
+                        person={person}
+                        canEdit={Boolean(access?.can_edit)}
+                        busyTaskId={busyTaskId}
+                        composing={composingFor === person.employee_id}
+                        saving={savingTaskFor === person.employee_id}
+                        onStartCompose={() => setComposingFor(person.employee_id)}
+                        onCancelCompose={() => setComposingFor(null)}
+                        onCreate={(title, requiresPhoto) =>
+                          createTaskForPerson({
+                            employeeId: person.employee_id,
+                            title,
+                            requiresPhoto,
+                          })
+                        }
+                        onRemove={deactivateTask}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
+
+      {isMasterView && tab === 'config' ? (
+        <>
           <SectionCard title="Quem fiscaliza quem">
             <p className="mb-3 text-xs text-muted">
-              Três times fixos. O responsável cria os checks; o restante só executa. O cargo na
-              Intranet já coloca a pessoa no time certo.
+              Três times fixos. O cargo na Intranet já coloca a pessoa no time. O responsável cria
+              os checks na aba Hoje; o restante só executa.
             </p>
             <TeamNetworkMap teams={teamNetwork} />
           </SectionCard>
 
           {access?.can_edit ? (
-            <SectionCard title="Criar check para alguém">
+            <SectionCard title="Ajuste manual (exceção)">
               <p className="mb-3 text-xs text-muted">
-                Passo do dia: escolha alguém da rede e diga o que precisa ser feito. Ex.: “Abrir
-                caixa”, “Foto do estoque”.
+                Use só se faltar alguém na rede. Quase sempre o cargo resolve.
               </p>
-              <form className="grid gap-3 sm:grid-cols-[1fr_1.2fr_auto] sm:items-end" onSubmit={createTask}>
+              <form className="grid gap-3 sm:grid-cols-2" onSubmit={assignMember}>
                 <select
                   className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                  value={newEmployeeId}
-                  onChange={(e) => setNewEmployeeId(e.target.value)}
+                  value={assignEmployeeId}
+                  onChange={(e) => setAssignEmployeeId(e.target.value)}
                   required
                 >
-                  <option value="">Quem vai fazer…</option>
+                  <option value="">Colaborador…</option>
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.name}
                     </option>
                   ))}
                 </select>
-                <input
+                <select
                   className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                  placeholder="O que precisa ser feito"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  required
-                />
-                <PanelButton type="submit" disabled={savingTask}>
-                  <Plus size={14} />
-                  {savingTask ? 'Salvando…' : 'Criar check'}
-                </PanelButton>
-                <label className="flex items-center gap-2 text-sm sm:col-span-3">
-                  <input
-                    type="checkbox"
-                    checked={newRequiresPhoto}
-                    onChange={(e) => setNewRequiresPhoto(e.target.checked)}
-                  />
-                  Exige foto na hora (câmera)
-                </label>
-              </form>
-            </SectionCard>
-          ) : access?.is_dono ? (
-            <p className="text-sm text-muted">Modo leitura (Dono) — sem editar tarefas.</p>
-          ) : null}
-
-          <SectionCard title="Status da equipe hoje">
-            {!board || board.people.length === 0 ? (
-              <p className="text-sm text-muted">
-                Ninguém na equipe ainda. Confira o cargo na Intranet; o vínculo costuma aparecer
-                sozinho.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {board.people.map((person) => (
-                  <PersonRow
-                    key={person.employee_id}
-                    person={person}
-                    canEdit={Boolean(access?.can_edit)}
-                    busyTaskId={busyTaskId}
-                    onRemove={deactivateTask}
-                  />
-                ))}
-              </ul>
-            )}
-          </SectionCard>
-
-          {access?.can_edit ? (
-            <div className="rounded-2xl border border-dashed border-border/80 bg-card/40 px-4 py-3">
-              <SectionToggleHeader
-                title="Avançado · ajustar equipe na mão"
-                badge={
-                  <span className="rounded-full bg-muted/40 px-2 py-0.5 text-[0.65rem] text-muted">
-                    raro
-                  </span>
-                }
-                open={advancedOpen}
-                onToggle={() => setAdvancedOpen(!advancedOpen)}
-                titleClassName="text-sm font-medium text-muted"
-              />
-              <CollapsibleBody open={advancedOpen} className="mt-3 space-y-3">
-                <p className="text-xs text-muted">
-                  Só se faltar alguém na rede acima. Quase sempre o cargo resolve — use isto como
-                  exceção (ou para marcar lead, se for master).
-                </p>
-                <form className="space-y-3" onSubmit={assignMember}>
-                  <select
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                    value={assignEmployeeId}
-                    onChange={(e) => setAssignEmployeeId(e.target.value)}
-                    required
-                  >
-                    <option value="">Colaborador…</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                    value={assignTeam}
-                    onChange={(e) => setAssignTeam(e.target.value as ChecksTeamId)}
-                    disabled={!canPickTeam && Boolean(access?.scoped_team)}
-                  >
-                    {CHECKS_TEAMS.filter(
-                      (t) => !access?.scoped_team || t.id === access.scoped_team,
-                    ).map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                  {access?.is_admin_master ? (
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={assignLead}
-                        onChange={(e) => setAssignLead(e.target.checked)}
-                      />
-                      É responsável (lead) da equipe
-                    </label>
-                  ) : null}
+                  value={assignTeam}
+                  onChange={(e) => setAssignTeam(e.target.value as ChecksTeamId)}
+                  disabled={!canPickTeam && Boolean(access?.scoped_team)}
+                >
+                  {CHECKS_TEAMS.filter(
+                    (t) => !access?.scoped_team || t.id === access.scoped_team,
+                  ).map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                {access?.is_admin_master ? (
+                  <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={assignLead}
+                      onChange={(e) => setAssignLead(e.target.checked)}
+                    />
+                    É responsável (lead) da equipe
+                  </label>
+                ) : null}
+                <div className="sm:col-span-2">
                   <PanelButton type="submit" disabled={savingMember} variant="outline">
                     {savingMember ? 'Salvando…' : 'Colocar na equipe'}
                   </PanelButton>
-                </form>
-              </CollapsibleBody>
-            </div>
+                </div>
+              </form>
+            </SectionCard>
           ) : null}
+
+          <p className="text-center text-xs text-muted">
+            <button type="button" className="underline" onClick={() => setTab('hoje')}>
+              Voltar para Hoje
+            </button>
+          </p>
         </>
       ) : null}
     </IntranetPage>
@@ -510,10 +528,7 @@ function MyChecksCard({
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
   return (
-    <SectionCard
-      title="Meus checks de hoje"
-      badge={person ? `${done}/${total}` : undefined}
-    >
+    <SectionCard title="Meus checks de hoje" badge={person ? `${done}/${total}` : undefined}>
       {total > 0 ? (
         <div className="mb-4">
           <div className="h-1.5 overflow-hidden rounded-full bg-border">
@@ -602,24 +617,44 @@ function MyChecksCard({
   )
 }
 
-function PersonRow({
+function PersonDayCard({
   person,
   canEdit,
   busyTaskId,
+  composing,
+  saving,
+  onStartCompose,
+  onCancelCompose,
+  onCreate,
   onRemove,
 }: {
   person: ChecksDiarioPersonBoard
   canEdit: boolean
   busyTaskId: string | null
+  composing: boolean
+  saving: boolean
+  onStartCompose: () => void
+  onCancelCompose: () => void
+  onCreate: (title: string, requiresPhoto: boolean) => void
   onRemove: (taskId: string) => void
 }) {
+  const [title, setTitle] = useState('')
+  const [requiresPhoto, setRequiresPhoto] = useState(false)
   const pct =
     person.total_tasks > 0
       ? Math.round((person.done_tasks / person.total_tasks) * 100)
       : 0
+
+  useEffect(() => {
+    if (!composing) {
+      setTitle('')
+      setRequiresPhoto(false)
+    }
+  }, [composing])
+
   return (
-    <li className="rounded-2xl border border-border p-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+    <li className="rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">{person.name}</p>
           <p className="text-xs text-muted">
@@ -627,19 +662,47 @@ function PersonRow({
             {person.is_lead ? ' · responsável' : ''}
           </p>
         </div>
-        <span className="text-xs font-medium">
-          {person.done_tasks}/{person.total_tasks}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium">
+            {person.total_tasks === 0
+              ? 'sem rotina'
+              : `${person.done_tasks}/${person.total_tasks}`}
+          </span>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={onStartCompose}
+              className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium hover:bg-background"
+            >
+              <Plus size={12} />
+              Check
+            </button>
+          ) : null}
+        </div>
       </div>
+
       {person.total_tasks > 0 ? (
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-border">
           <div className="h-full rounded-full bg-gold-strong" style={{ width: `${pct}%` }} />
         </div>
       ) : null}
-      {person.tasks.length === 0 ? (
-        <p className="mt-2 text-xs text-muted">Sem checks ativos.</p>
+
+      {person.tasks.length === 0 && !composing ? (
+        <p className="mt-3 text-sm text-muted">
+          Ainda sem rotina
+          {canEdit ? (
+            <>
+              {' — '}
+              <button type="button" className="underline" onClick={onStartCompose}>
+                criar primeiro check
+              </button>
+            </>
+          ) : (
+            '.'
+          )}
+        </p>
       ) : (
-        <ul className="mt-2 space-y-1.5">
+        <ul className="mt-3 space-y-1.5">
           {person.tasks.map((task) => (
             <li key={task.id} className="flex items-center justify-between gap-2 text-sm">
               <span className="flex min-w-0 items-center gap-2">
@@ -677,6 +740,41 @@ function PersonRow({
           ))}
         </ul>
       )}
+
+      {composing && canEdit ? (
+        <form
+          className="mt-3 space-y-2 rounded-xl border border-border bg-background p-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            onCreate(title, requiresPhoto)
+          }}
+        >
+          <input
+            className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm"
+            placeholder="Ex.: Abrir caixa, Foto do estoque…"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            autoFocus
+            required
+          />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={requiresPhoto}
+              onChange={(e) => setRequiresPhoto(e.target.checked)}
+            />
+            Exige foto na hora
+          </label>
+          <div className="flex gap-2">
+            <PanelButton type="submit" disabled={saving || !title.trim()}>
+              {saving ? 'Salvando…' : 'Criar check'}
+            </PanelButton>
+            <PanelButton type="button" variant="outline" onClick={onCancelCompose}>
+              Cancelar
+            </PanelButton>
+          </div>
+        </form>
+      ) : null}
     </li>
   )
 }
@@ -723,7 +821,7 @@ function TeamNetworkMap({ teams }: { teams: TeamNetworkRow[] }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t.label}</p>
           <p className="mt-2 text-xs text-muted">Responsável</p>
           {t.leads.length === 0 ? (
-            <p className="text-sm text-danger/80">Sem lead — marque no avançado ou ajuste o cargo</p>
+            <p className="text-sm text-danger/80">Sem lead — ajuste o cargo ou use o formulário abaixo</p>
           ) : (
             <ul className="mt-0.5 space-y-0.5">
               {t.leads.map((lead) => (
