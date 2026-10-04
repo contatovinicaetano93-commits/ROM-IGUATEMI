@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateOwnedUrgencyFlags } from '@/lib/contact-owned-urgency'
+import {
+  aggregateOwnedUrgencyFlags,
+  totalForUrgencyQueue,
+} from '@/lib/contact-owned-urgency'
 
 describe('aggregateOwnedUrgencyFlags', () => {
   it('conta Atrasados e Vencendo exclusivos', () => {
@@ -28,5 +31,15 @@ describe('aggregateOwnedUrgencyFlags', () => {
       due_soon: 0,
       scheduled: 0,
     })
+  })
+})
+
+describe('totalForUrgencyQueue', () => {
+  const counts = { overdue: 3104, due_soon: 1804, scheduled: 220 }
+
+  it('não usa o limit da página (250) — devolve a contagem real', () => {
+    expect(totalForUrgencyQueue(counts, 'overdue')).toBe(3104)
+    expect(totalForUrgencyQueue(counts, 'due_soon')).toBe(1804)
+    expect(totalForUrgencyQueue(counts, 'scheduled')).toBe(220)
   })
 })
