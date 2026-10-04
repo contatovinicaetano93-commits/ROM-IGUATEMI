@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { fmtScheduleParts, toSalonDateIso, toSortableIso, whatsAppUrl } from './format'
+import {
+  fmtScheduleParts,
+  formatCurrency,
+  formatCurrencyCompact,
+  formatIntegerBr,
+  toSalonDateIso,
+  toSortableIso,
+  whatsAppUrl,
+} from './format'
+
+function brl(s: string) {
+  return s.replace(/\u00a0/g, ' ')
+}
 
 describe('toSalonDateIso', () => {
   it('converte instante perto da meia-noite SP sem usar slice UTC', () => {
@@ -50,5 +62,30 @@ describe('fmtScheduleParts', () => {
     const parts = fmtScheduleParts(agora.toISOString())
     expect(parts.day).toBe('Hoje')
     expect(parts.date).toMatch(/^\d{2}\/\d{2}$/)
+  })
+})
+
+describe('formatCurrency', () => {
+  it('corta ruído float em 2 casas (não cola 1.790 na célula vizinha)', () => {
+    expect(brl(formatCurrency(3_055_297.54179))).toBe('R$ 3.055.297,54')
+    expect(formatCurrency(null)).toBe('—')
+  })
+})
+
+describe('formatCurrencyCompact', () => {
+  it('enquadra milhão/bilhão em 2 casas e deixa abaixo de 1 mi no formato cheio', () => {
+    expect(brl(formatCurrencyCompact(28_414_970.5410813))).toBe('R$ 28,41 mi')
+    expect(brl(formatCurrencyCompact(3_055_297.54))).toBe('R$ 3,06 mi')
+    expect(brl(formatCurrencyCompact(17_623))).toBe('R$ 17.623,00')
+    expect(brl(formatCurrencyCompact(-2_000_000))).toBe('-R$ 2,00 mi')
+    expect(brl(formatCurrencyCompact(1_500_000_000))).toBe('R$ 1,50 bi')
+    expect(formatCurrencyCompact(null)).toBe('—')
+  })
+})
+
+describe('formatIntegerBr', () => {
+  it('separa milhar pt-BR', () => {
+    expect(formatIntegerBr(1790)).toBe('1.790')
+    expect(formatIntegerBr(null)).toBe('—')
   })
 })

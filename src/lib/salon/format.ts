@@ -128,9 +128,38 @@ export function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR')
 }
 
+const BRL_DIGITS = {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+} as const
+
 export function formatCurrency(value: number | null | undefined) {
-  if (value === null || value === undefined) return '—'
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  return value.toLocaleString('pt-BR', BRL_DIGITS)
+}
+
+/**
+ * Moeda pt-BR com no máximo 2 casas. ≥ 1 milhão vira `R$ 28,41 mi`
+ * (bilhão → `bi`) para caber em tabelas densas; o valor cheio fica no `title`.
+ */
+export function formatCurrencyCompact(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toLocaleString('pt-BR', BRL_DIGITS)} bi`
+  }
+  if (abs >= 1_000_000) {
+    return `${(value / 1_000_000).toLocaleString('pt-BR', BRL_DIGITS)} mi`
+  }
+  return formatCurrency(value)
+}
+
+/** Inteiro pt-BR (ex.: 1.790) — totais de dias sem colar na célula vizinha. */
+export function formatIntegerBr(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  return Math.round(value).toLocaleString('pt-BR')
 }
 
 /** Número pt-BR com casas decimais (ex.: 2.111.249,31). */
