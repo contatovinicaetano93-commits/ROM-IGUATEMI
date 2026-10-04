@@ -27,6 +27,22 @@ function pick(row: Record<string, unknown>, keys: string[]): string | null {
   return null
 }
 
+/** "Taxa Cartão" / taxaCartao / taxa_cartão → taxacartao */
+function avecHeaderSlug(key: string): string {
+  return key
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '')
+}
+
+function pickRawPresent(v: unknown): boolean {
+  if (v === null || v === undefined) return false
+  if (typeof v === 'string' && v.trim() === '') return false
+  return true
+}
+
 /**
  * Como pick(), mas preserva o tipo original (sem stringificar) — usado para
  * valores monetários, onde a API JSON da Avec manda number puro (ex: 1234.56)
@@ -35,8 +51,7 @@ function pick(row: Record<string, unknown>, keys: string[]): string | null {
 function pickRaw(row: Record<string, unknown>, keys: string[]): unknown {
   for (const k of keys) {
     const v = row[k]
-    if (v === null || v === undefined) continue
-    if (typeof v === 'string' && v.trim() === '') continue
+    if (!pickRawPresent(v)) continue
     return v
   }
   const lowerMap = new Map<string, unknown>()
@@ -45,8 +60,18 @@ function pickRaw(row: Record<string, unknown>, keys: string[]): unknown {
   }
   for (const k of keys) {
     const v = lowerMap.get(k.toLowerCase())
-    if (v === null || v === undefined) continue
-    if (typeof v === 'string' && v.trim() === '') continue
+    if (!pickRawPresent(v)) continue
+    return v
+  }
+  const slugMap = new Map<string, unknown>()
+  for (const [rk, rv] of Object.entries(row)) {
+    const slug = avecHeaderSlug(rk)
+    if (!slug || slugMap.has(slug)) continue
+    slugMap.set(slug, rv)
+  }
+  for (const k of keys) {
+    const v = slugMap.get(avecHeaderSlug(k))
+    if (!pickRawPresent(v)) continue
     return v
   }
   return null
@@ -776,7 +801,9 @@ export function normalizeCommission8123Row(
     other_share: parseSignedOptionalMoney(pickRaw(row, ['rateio_outros', 'rateio_outro'])),
     tip: parseSignedOptionalMoney(pickRaw(row, ['caixinha', 'gorjeta'])),
     product_spend: parseSignedOptionalMoney(pickRaw(row, ['gasto_produtos', 'gastos_produtos'])),
-    card_fee: parseSignedOptionalMoney(pickRaw(row, ['taxa_cartao', 'taxa_cartão'])),
+    card_fee: parseSignedOptionalMoney(
+      pickRaw(row, ['taxa_cartao', 'taxa_cartão', 'taxa cartao', 'taxa cartão', 'tx_cartao']),
+    ),
     admin_fee: parseSignedOptionalMoney(pickRaw(row, ['taxa_adm', 'taxa_administrativa'])),
     assistant_discount: parseSignedOptionalMoney(
       pickRaw(row, ['desconto_assistente', 'desconto_assistentes']),

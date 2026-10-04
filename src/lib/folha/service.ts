@@ -55,6 +55,11 @@ import {
   type ApplyZigConsumoResult,
 } from '@/lib/folha/zig-consumo'
 import { resolveFolhaTaxLineName } from '@/lib/folha/tax-cnpj'
+import {
+  canPersistCardFeeOverlay,
+  overlayMissing8123CardFee,
+  sourceMissingCardFee,
+} from '@/lib/folha/overlay-8123-card-fee'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
 export type FolhaLoadOpts = {
@@ -102,6 +107,59 @@ export async function listFolhaPeriodSummaries(
 }
 
 /**
+ * Rascunho sticky sem taxa cartão 8123: puxa só o campo Avec.
+ * Não substitui a_pagar. Aprovado/pago: só leitura, não grava.
+ */
+async function overlayStickyMissingCardFee(
+  panel: RomPanelId,
+  quinzena: FolhaQuinzena,
+  today: string,
+  persisted: FolhaPeriodRow,
+  fallback: readonly CommissionProfessionalRow[],
+  actor?: string | null,
+): Promise<FolhaPeriodRow> {
+  if (!sourceMissingCardFee(persisted.source_professionals)) return persisted
+  let from8123 = [...fallback]
+  const range = quinzenaAvecRangeBr(quinzena, today)
+  if (isAvecConfigured() && !isAvecMock()) {
+    try {
+      const fetched = await fetchCommissions8123ForRange({
+        inicioBr: range.inicio,
+        fimBr: range.fim,
+      })
+      if (!fetched.truncated && fetched.professionals.length > 0) {
+        from8123 = fetched.professionals
+      }
+    } catch {
+      /* snapshot / vazio */
+    }
+  }
+  const { rows, changed } = overlayMissing8123CardFee(
+    persisted.source_professionals,
+    from8123,
+  )
+  if (!changed) return persisted
+  if (!canPersistCardFeeOverlay(persisted.status)) {
+    return { ...persisted, source_professionals: rows }
+  }
+  const draft = refreshDraftPreservingExtras({
+    panel,
+    referenceDay: persisted.reference_day ?? quinzena.to,
+    professionals: rows,
+    previousLines: persisted.lines,
+    quinzenaDay: quinzena.to,
+  })
+  draft.quinzena = quinzena
+  return await upsertFolhaPeriodFromDraft({
+    draft,
+    sourceProfessionals: rows,
+    updatedBy: actor ?? 'folha-card-fee-overlay',
+    status: persisted.status,
+    forceStatus: true,
+  })
+}
+
+/**
  * Carrega (ou cria) o rascunho da quinzena alvo.
  * Leitura: período persistido, senão snapshot DB perto do fim da quinzena.
  * Corte real inicio/fim vem de `refreshFolhaDraft` (live Avec).
@@ -128,9 +186,17 @@ export async function loadOrCreateFolhaDraft(
   }
 
   if (persisted && !snapshot) {
+    const withCard = await overlayStickyMissingCardFee(
+      panel,
+      quinzena,
+      today,
+      persisted,
+      persisted.source_professionals,
+      opts?.actor,
+    )
     return {
-      draft: periodRowToDraft(panel, persisted),
-      period: persisted,
+      draft: periodRowToDraft(panel, withCard),
+      period: withCard,
       quinzena,
     }
   }
@@ -180,9 +246,17 @@ export async function loadOrCreateFolhaDraft(
     }
   }
 
+  const withCard = await overlayStickyMissingCardFee(
+    panel,
+    quinzena,
+    today,
+    persisted,
+    snapshot.professionals,
+    opts?.actor,
+  )
   return {
-    draft: periodRowToDraft(panel, persisted),
-    period: persisted,
+    draft: periodRowToDraft(panel, withCard),
+    period: withCard,
     quinzena,
   }
 }
