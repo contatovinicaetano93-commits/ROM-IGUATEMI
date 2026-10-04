@@ -1,15 +1,20 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { Camera, CheckCircle2, Circle, Plus, Settings2, Users } from 'lucide-react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
+import { IntranetPageSkeleton } from '../_components/intranet/IntranetPageSkeleton'
 import { PanelButton, SectionCard } from '../_components/ui'
 import {
   buildTeamNetwork,
   type TeamNetworkPerson,
   type TeamNetworkRow,
 } from '@/lib/checks-diario/team-network'
+import {
+  checksDayProgressLabel,
+  summarizeChecksPeople,
+} from '@/lib/checks-diario/summary'
 import {
   CHECKS_TEAMS,
   type ChecksDiarioBoard,
@@ -65,29 +70,29 @@ export default function ChecksDiarioPage() {
   const [assignLead, setAssignLead] = useState(false)
   const [savingMember, setSavingMember] = useState(false)
   const [busyUnassignId, setBusyUnassignId] = useState<string | null>(null)
+  const loadGen = useRef(0)
 
-  const load = useCallback(async (teamFilter: ChecksTeamId | 'all') => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (teamFilter: ChecksTeamId | 'all', quiet = false) => {
+    const seq = ++loadGen.current
+    if (!quiet) setLoading(true)
+    if (!quiet) setError(null)
     try {
       const qs = teamFilter !== 'all' ? `?team=${encodeURIComponent(teamFilter)}` : ''
       const res = await fetch(`/api/checks-diario${qs}`, { credentials: 'include' })
       const json = await res.json().catch(() => ({}))
+      if (seq !== loadGen.current) return
       if (!res.ok) {
         setError(json.error ?? 'Falha ao carregar checks')
-        setBoard(null)
         return
       }
+      setError(null)
       setBoard(json.data?.board ?? null)
       setAccess(json.data?.access ?? null)
-      if (json.data?.board?.team_filter) {
-        setTeam(json.data.board.team_filter)
-      }
     } catch {
+      if (seq !== loadGen.current) return
       setError('Falha ao carregar checks')
-      setBoard(null)
     } finally {
-      setLoading(false)
+      if (seq === loadGen.current) setLoading(false)
     }
   }, [])
 
@@ -167,7 +172,7 @@ export default function ChecksDiarioPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Falha ao lançar check')
-      await load(team)
+      await load(team, true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao lançar check')
     } finally {
@@ -197,7 +202,7 @@ export default function ChecksDiarioPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Falha ao criar tarefa')
       setComposingFor(null)
-      await load(team)
+      await load(team, true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao criar tarefa')
     } finally {
@@ -225,7 +230,7 @@ export default function ChecksDiarioPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Falha ao colocar na equipe')
       setAssignEmployeeId('')
-      await load(team)
+      await load(team, true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao colocar na equipe')
     } finally {
@@ -233,13 +238,28 @@ export default function ChecksDiarioPage() {
     }
   }
 
-  async function unassignMember(employeeId: string, name: string) {
-    const ok = window.confirm(
-      `Tirar ${name} dos Checks?\n\nO cargo não recoloca sozinho. Para voltar, use Configurar equipes.`,
-    )
-    if (!ok) return
+  async function unassignMember(
+    employeeId: string,
+    name: string,
+    opts?: { skipConfirm?: boolean },
+  ) {
+    if (!opts?.skipConfirm) {
+      const ok = window.confirm(
+        `Tirar ${name} dos Checks?\n\nO cargo não recoloca sozinho. Para voltar, use Configurar equipes.`,
+      )
+      if (!ok) return
+    }
+    const snapshot = board
     setBusyUnassignId(employeeId)
     setError(null)
+    if (snapshot) {
+      const people = snapshot.people.filter((p) => p.employee_id !== employeeId)
+      setBoard({
+        ...snapshot,
+        people,
+        summary: summarizeChecksPeople(people, snapshot.summary.logs_today),
+      })
+    }
     try {
       const res = await fetch('/api/checks-diario', {
         method: 'POST',
@@ -252,8 +272,9 @@ export default function ChecksDiarioPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Falha ao tirar da equipe')
-      await load(team)
+      await load(team, true)
     } catch (err) {
+      if (snapshot) setBoard(snapshot)
       setError(err instanceof Error ? err.message : 'Falha ao tirar da equipe')
     } finally {
       setBusyUnassignId(null)
@@ -272,7 +293,7 @@ export default function ChecksDiarioPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Falha ao remover tarefa')
-      await load(team)
+      await load(team, true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao remover tarefa')
     } finally {
@@ -290,9 +311,15 @@ export default function ChecksDiarioPage() {
     ? tab === 'config'
       ? 'Quem fiscaliza quem — fora da rotina do dia'
       : isMasterView
-        ? `${formatDay(board.day)} · ${board.summary.complete}/${board.summary.people} ok`
+        ? `${formatDay(board.day)} · ${checksDayProgressLabel(board.summary)}`
         : `${formatDay(board.day)} · ${myPerson ? `${myPerson.done_tasks}/${myPerson.total_tasks} feitos` : 'seus checks'}`
-    : 'Rotina do dia'
+    : loading
+      ? 'Carregando o dia…'
+      : 'Rotina do dia'
+
+  if (loading && !board && !error) {
+    return <IntranetPageSkeleton cards={4} />
+  }
 
   return (
     <IntranetPage
@@ -317,12 +344,17 @@ export default function ChecksDiarioPage() {
       }
     >
       {error ? (
-        <p className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-          {error}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          <p>{error}</p>
+          <button
+            type="button"
+            className="shrink-0 underline"
+            onClick={() => void load(team)}
+          >
+            Tentar de novo
+          </button>
+        </div>
       ) : null}
-
-      {loading && !board ? <p className="text-sm text-muted">Carregando…</p> : null}
 
       {isMasterView ? (
         <div className="flex flex-wrap items-center gap-2">
@@ -364,26 +396,31 @@ export default function ChecksDiarioPage() {
         />
       )}
 
-      {isMasterView && tab === 'hoje' ? (
+      {isMasterView && tab === 'hoje' && board ? (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SummaryTile label="Pessoas" value={String(board?.summary.people ?? 0)} />
+            <SummaryTile label="Pessoas" value={String(board.summary.people)} />
             <SummaryTile
               label="Completos"
-              value={String(board?.summary.complete ?? 0)}
+              value={String(board.summary.complete)}
               tone="success"
             />
             <SummaryTile
               label="Parciais"
-              value={String(board?.summary.partial ?? 0)}
+              value={String(board.summary.partial)}
               tone="gold"
             />
             <SummaryTile
               label="Pendentes"
-              value={String(board?.summary.pending ?? 0)}
+              value={String(board.summary.pending)}
               tone="danger"
             />
           </div>
+          {board.summary.no_routine > 0 ? (
+            <p className="text-xs text-muted">
+              {board.summary.no_routine} sem rotina — não entram em pendentes.
+            </p>
+          ) : null}
 
           {access?.is_dono && !access.can_edit ? (
             <p className="text-sm text-muted">Modo leitura (Dono) — acompanhe o dia, sem editar.</p>
@@ -404,9 +441,14 @@ export default function ChecksDiarioPage() {
               </p>
             </SectionCard>
           ) : (
-            <div className="space-y-6">
+            <div
+              className={`space-y-6 pb-[5.5rem] transition-opacity lg:pb-6 ${
+                loading ? 'opacity-70' : 'opacity-100'
+              }`}
+              aria-busy={loading}
+            >
               {peopleByTeam.map((group) => (
-                <div key={group.teamId ?? 'none'} className="space-y-3">
+                <div key={group.teamId ?? 'none'} className="animate-rise space-y-3">
                   {group.label ? (
                     <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
                       {group.label}
@@ -431,7 +473,11 @@ export default function ChecksDiarioPage() {
                           })
                         }
                         onRemove={deactivateTask}
-                        onUnassign={() => unassignMember(person.employee_id, person.name)}
+                        onUnassign={() =>
+                          unassignMember(person.employee_id, person.name, {
+                            skipConfirm: true,
+                          })
+                        }
                         unassigning={busyUnassignId === person.employee_id}
                       />
                     ))}
@@ -444,7 +490,7 @@ export default function ChecksDiarioPage() {
       ) : null}
 
       {isMasterView && tab === 'config' ? (
-        <>
+        <div className="animate-rise space-y-5 pb-[5.5rem] lg:pb-6">
           <SectionCard title="Quem fiscaliza quem">
             <p className="mb-3 text-xs text-muted">
               Três times fixos. O cargo na Intranet já coloca a pessoa no time. Master e o
@@ -517,7 +563,7 @@ export default function ChecksDiarioPage() {
               Voltar para Hoje
             </button>
           </p>
-        </>
+        </div>
       ) : null}
     </IntranetPage>
   )
@@ -682,10 +728,12 @@ function PersonDayCard({
 }) {
   const [title, setTitle] = useState('')
   const [requiresPhoto, setRequiresPhoto] = useState(false)
+  const [confirmUnassign, setConfirmUnassign] = useState(false)
   const pct =
     person.total_tasks > 0
       ? Math.round((person.done_tasks / person.total_tasks) * 100)
       : 0
+  const emptyRoutine = person.tasks.length === 0 && !composing
 
   useEffect(() => {
     if (!composing) {
@@ -694,8 +742,12 @@ function PersonDayCard({
     }
   }, [composing])
 
+  useEffect(() => {
+    if (!unassigning) setConfirmUnassign(false)
+  }, [unassigning])
+
   return (
-    <li className="rounded-2xl border border-border bg-card p-4">
+    <li className="rounded-2xl border border-border bg-card p-4 transition-shadow hover:shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">{person.name}</p>
@@ -715,19 +767,21 @@ function PersonDayCard({
               <button
                 type="button"
                 onClick={onStartCompose}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium hover:bg-background"
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-background"
               >
                 <Plus size={12} />
                 Check
               </button>
-              <button
-                type="button"
-                onClick={onUnassign}
-                disabled={unassigning}
-                className="text-xs text-muted underline"
-              >
-                {unassigning ? '…' : 'tirar da equipe'}
-              </button>
+              {!emptyRoutine ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmUnassign(true)}
+                  disabled={unassigning}
+                  className="text-xs text-muted underline"
+                >
+                  {unassigning ? '…' : 'tirar da equipe'}
+                </button>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -735,11 +789,11 @@ function PersonDayCard({
 
       {person.total_tasks > 0 ? (
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-border">
-          <div className="h-full rounded-full bg-gold-strong" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full bg-gold-strong transition-[width]" style={{ width: `${pct}%` }} />
         </div>
       ) : null}
 
-      {person.tasks.length === 0 && !composing ? (
+      {emptyRoutine ? (
         <p className="mt-3 text-sm text-muted">
           Ainda sem rotina
           {canEdit ? (
@@ -753,7 +807,7 @@ function PersonDayCard({
                 type="button"
                 className="underline"
                 disabled={unassigning}
-                onClick={onUnassign}
+                onClick={() => setConfirmUnassign(true)}
               >
                 tirar da equipe
               </button>
@@ -835,6 +889,25 @@ function PersonDayCard({
             </PanelButton>
           </div>
         </form>
+      ) : null}
+
+      {confirmUnassign && canEdit ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm">
+          <p className="min-w-0 flex-1 text-muted">
+            Tirar da equipe? O cargo não recoloca sozinho.
+          </p>
+          <PanelButton type="button" disabled={unassigning} onClick={onUnassign}>
+            {unassigning ? '…' : 'Tirar'}
+          </PanelButton>
+          <PanelButton
+            type="button"
+            variant="outline"
+            disabled={unassigning}
+            onClick={() => setConfirmUnassign(false)}
+          >
+            Cancelar
+          </PanelButton>
+        </div>
       ) : null}
     </li>
   )
