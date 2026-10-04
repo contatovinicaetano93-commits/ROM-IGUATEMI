@@ -250,6 +250,27 @@ describe('resolveBaruVsOleriteResidual', () => {
     expect(r.baruAlreadyInNet).toBe(true)
   })
 
+  it('Avec sem Zig/RH: promove residual → coluna Baru, sem reabater', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 387.08,
+      consumoBaru: null,
+    })
+    expect(r.outrosDescontos).toBeNull()
+    expect(r.consumoBaru).toBeCloseTo(387.08, 2)
+    expect(r.baruAlreadyInNet).toBe(true)
+  })
+
+  it('Beto: residual = W → não promove (fica em Outros)', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 1250,
+      consumoBaru: null,
+      promoteResidualAsBaru: false,
+    })
+    expect(r.outrosDescontos).toBeCloseTo(1250, 2)
+    expect(r.consumoBaru).toBeNull()
+    expect(r.baruAlreadyInNet).toBe(false)
+  })
+
   it('descontos só Baru (sem embed adm↔meio) também já está no a_pagar', () => {
     const r = resolveBaruVsOleriteResidual({
       outrosResiduais: 208.71,

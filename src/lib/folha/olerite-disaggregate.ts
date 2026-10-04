@@ -105,6 +105,11 @@ export function resolveBaruVsOleriteResidual(args: {
    * Não exige residualAlreadyInNet (não há adm↔meio nesses cargos).
    */
   assistantOleriteClosed?: boolean
+  /**
+   * False → não promover residual Avec → coluna Baru (ex.: Beto, residual = W
+   * ≈ descontos_diversos). Default true: residual débito do olerite é Baru.
+   */
+  promoteResidualAsBaru?: boolean
 }): {
   /** Coluna Outros (null se residual = Baru). */
   outrosDescontos: number | null
@@ -125,6 +130,15 @@ export function resolveBaruVsOleriteResidual(args: {
       : null
 
   if (baru == null) {
+    // Avec: residual após adm↔meio (ou descontos = só Baru) já saiu do a_pagar.
+    // Preenche a coluna Baru sem reabater — não precisa Zig/RH.
+    if (residual != null && args.promoteResidualAsBaru !== false) {
+      return {
+        outrosDescontos: null,
+        consumoBaru: roundFolha(residual, 4),
+        baruAlreadyInNet: true,
+      }
+    }
     return {
       outrosDescontos: residual,
       consumoBaru: null,
