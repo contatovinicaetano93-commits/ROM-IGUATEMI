@@ -5,6 +5,7 @@ import {
   defaultFolhaQuinzena,
   defaultFolhaTaxQuinzena,
   folhaQuinzenasForDailyRefresh,
+  shouldRefreshInProgressFolhaDraft,
   formatPayDateBr,
   isoToBrDay,
   listRecentQuinzenas,
@@ -80,16 +81,58 @@ describe('folha period pay dates', () => {
     expect(defaultFolhaTaxQuinzena('2026-10-21').id).toBe('2026-11-q1')
   })
 
-  it('cron diário: em 01/10 atualiza Q2/09 (paga 05) + Q1/10 (calendário)', () => {
+  it('cron diário: em 01–15/10 só Q1/10 (Q2/09 já fechada)', () => {
     expect(folhaQuinzenasForDailyRefresh('2026-10-01').map((q) => q.id)).toEqual([
-      '2026-09-q2',
+      '2026-10-q1',
+    ])
+    expect(folhaQuinzenasForDailyRefresh('2026-10-04').map((q) => q.id)).toEqual([
+      '2026-10-q1',
+    ])
+    expect(folhaQuinzenasForDailyRefresh('2026-10-10').map((q) => q.id)).toEqual([
       '2026-10-q1',
     ])
   })
 
-  it('cron diário: em 10/10 só Q1/10 (próximo pagamento = calendário)', () => {
-    expect(folhaQuinzenasForDailyRefresh('2026-10-10').map((q) => q.id)).toEqual([
-      '2026-10-q1',
+  it('cron diário: em 20/09 só Q2/09 (em curso)', () => {
+    expect(folhaQuinzenasForDailyRefresh('2026-09-20').map((q) => q.id)).toEqual([
+      '2026-09-q2',
     ])
+  })
+
+  it('Q1 em curso com 8123 de ontem → refresh; aprovado/pago não', () => {
+    const q1 = quinzenaForDay('2026-10-04')
+    expect(
+      shouldRefreshInProgressFolhaDraft({
+        status: 'ready_for_review',
+        quinzena: q1,
+        today: '2026-10-04',
+        referenceDay: '2026-10-03',
+      }),
+    ).toBe(true)
+    expect(
+      shouldRefreshInProgressFolhaDraft({
+        status: 'ready_for_review',
+        quinzena: q1,
+        today: '2026-10-04',
+        referenceDay: '2026-10-04',
+      }),
+    ).toBe(false)
+    expect(
+      shouldRefreshInProgressFolhaDraft({
+        status: 'approved',
+        quinzena: q1,
+        today: '2026-10-04',
+        referenceDay: '2026-10-03',
+      }),
+    ).toBe(false)
+    const q2 = quinzenaForDay('2026-09-30')
+    expect(
+      shouldRefreshInProgressFolhaDraft({
+        status: 'draft',
+        quinzena: q2,
+        today: '2026-10-04',
+        referenceDay: '2026-09-30',
+      }),
+    ).toBe(false)
   })
 })

@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const today = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined
     const result = await runFolhaDailyRefresh(getRomPanelId(), { today })
     const hasError = result.results.some((r) => r.outcome === 'error')
-    return ok(result, null, hasError ? 207 : 200)
+    return ok(result, undefined, hasError ? 207 : 200)
   } catch (e) {
     return handleError(e)
   }
