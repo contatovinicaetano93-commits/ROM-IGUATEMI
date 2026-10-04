@@ -18,6 +18,8 @@ function isProtectedPage(pathname: string) {
     pathname === '/pipeline' ||
     pathname === '/ativacoes' ||
     pathname.startsWith('/ativacoes/') ||
+    pathname === '/checks-diario' ||
+    pathname.startsWith('/checks-diario/') ||
     pathname === '/dashboard' ||
     pathname === '/contatos' ||
     pathname.startsWith('/contatos/') ||
@@ -135,6 +137,8 @@ export const config = {
     '/pipeline',
     '/ativacoes',
     '/ativacoes/:path*',
+    '/checks-diario',
+    '/checks-diario/:path*',
     '/dashboard',
     '/contatos',
     '/contatos/:path*',

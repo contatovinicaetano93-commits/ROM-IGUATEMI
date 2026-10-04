@@ -11,6 +11,7 @@ export const INTRANET_NAV = [
   { href: '/estoque', label: 'Estoque', short: 'Estoque' },
   { href: '/pipeline', label: 'Agenda do dia', short: 'Agenda' },
   { href: '/ativacoes', label: 'Ativações', short: 'Ativações' },
+  { href: '/checks-diario', label: 'Checks diários', short: 'Checks' },
   { href: '/dashboard', label: 'Visão analítica', short: 'Visão' },
   { href: '/contatos', label: 'Contatos', short: 'Contatos' },
 ] as const

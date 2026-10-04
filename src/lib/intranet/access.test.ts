@@ -39,6 +39,17 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/api/folha', 'mkt', [])).toBe(false)
   })
 
+  it('checks diários só com módulo checks_diario', () => {
+    expect(canAccessProtectedPath('/checks-diario', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/checks-diario', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/checks-diario', 'staff', [])).toBe(false)
+    expect(canAccessProtectedPath('/checks-diario', 'staff', ['checks_diario'])).toBe(true)
+    expect(canAccessProtectedPath('/api/checks-diario/complete', 'financeiro', [
+      'checks_diario',
+    ])).toBe(true)
+    expect(canAccessProtectedPath('/checks-diario', 'mkt', [])).toBe(false)
+  })
+
   it('estoque não entra em financeiro nem Visão analítica', () => {
     expect(canAccessProtectedPath('/estoque', 'estoque', [])).toBe(true)
     expect(canAccessProtectedPath('/hoje', 'estoque', [])).toBe(true)

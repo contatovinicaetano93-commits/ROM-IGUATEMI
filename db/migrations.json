@@ -357,6 +357,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "045_checks_diario",
+      "file": "delta-checks-diario.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

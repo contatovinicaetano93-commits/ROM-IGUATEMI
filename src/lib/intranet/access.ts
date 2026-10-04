@@ -74,6 +74,15 @@ export function isAtivacoesPath(pathname: string) {
   )
 }
 
+export function isChecksDiarioPath(pathname: string) {
+  return (
+    pathname === '/checks-diario' ||
+    pathname.startsWith('/checks-diario/') ||
+    pathname === '/api/checks-diario' ||
+    pathname.startsWith('/api/checks-diario/')
+  )
+}
+
 export function isFolhaPath(pathname: string) {
   return (
     pathname === '/folha' ||
@@ -155,5 +164,6 @@ export function canAccessProtectedPath(
   if (isDashboardPath(pathname)) return hasPanelModule(role, extras, 'dashboard')
   if (isAtivacoesPath(pathname)) return hasPanelModule(role, extras, 'ativacoes')
   if (isFolhaPath(pathname)) return hasPanelModule(role, extras, 'folha')
+  if (isChecksDiarioPath(pathname)) return hasPanelModule(role, extras, 'checks_diario')
   return false
 }

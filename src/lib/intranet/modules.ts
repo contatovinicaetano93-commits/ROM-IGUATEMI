@@ -13,6 +13,7 @@ export type GrantableModuleKey =
   | 'estoque'
   | 'relatorios'
   | 'dashboard'
+  | 'checks_diario'
 
 export type GrantableModule = {
   key: GrantableModuleKey
@@ -29,6 +30,7 @@ export const GRANTABLE_MODULES: readonly GrantableModule[] = [
   { key: 'estoque', href: '/estoque', label: 'Estoque' },
   { key: 'relatorios', href: '/relatorios', label: 'Relatórios' },
   { key: 'dashboard', href: '/dashboard', label: 'Visão analítica' },
+  { key: 'checks_diario', href: '/checks-diario', label: 'Checks diários' },
 ] as const
 
 const ALL_KEYS: readonly GrantableModuleKey[] = GRANTABLE_MODULES.map((item) => item.key)
