@@ -3,8 +3,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { Camera, CheckCircle2, Circle, Plus, Users } from 'lucide-react'
+import {
+  CollapsibleBody,
+  SectionToggleHeader,
+  useSectionOpen,
+} from '../_components/CollapsibleSection'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { PanelButton, SectionCard } from '../_components/ui'
+import {
+  buildTeamNetwork,
+  type TeamNetworkRow,
+} from '@/lib/checks-diario/team-network'
 import {
   CHECKS_TEAMS,
   type ChecksDiarioBoard,
@@ -61,6 +70,10 @@ export default function ChecksDiarioPage() {
   const [assignTeam, setAssignTeam] = useState<ChecksTeamId>('gestor_unidade')
   const [assignLead, setAssignLead] = useState(false)
   const [savingMember, setSavingMember] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useSectionOpen(
+    'checks.diario.advanced.assign',
+    false,
+  )
 
   const load = useCallback(async (teamFilter: ChecksTeamId | 'all') => {
     setLoading(true)
@@ -114,6 +127,12 @@ export default function ChecksDiarioPage() {
     if (!board?.my_employee_id) return null
     return board.people.find((p) => p.employee_id === board.my_employee_id) ?? null
   }, [board])
+
+  /** Rede Lead → membros, a partir do board (já filtrado pela equipe quando aplicável). */
+  const teamNetwork = useMemo(
+    () => buildTeamNetwork(board?.people ?? [], team),
+    [board?.people, team],
+  )
 
   async function completeTask(
     taskId: string,
@@ -305,52 +324,97 @@ export default function ChecksDiarioPage() {
             <SummaryTile label="Pendentes" value={String(board?.summary.pending ?? 0)} tone="danger" />
           </div>
 
-          {access?.can_edit ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <SectionCard title="Criar check para alguém">
-                <p className="mb-3 text-xs text-muted">
-                  Ex.: “Abrir caixa”, “Foto do estoque”. Marque foto se precisar prova ao vivo.
-                </p>
-                <form className="space-y-3" onSubmit={createTask}>
-                  <select
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                    value={newEmployeeId}
-                    onChange={(e) => setNewEmployeeId(e.target.value)}
-                    required
-                  >
-                    <option value="">Quem vai fazer…</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                    placeholder="O que precisa ser feito"
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    required
-                  />
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={newRequiresPhoto}
-                      onChange={(e) => setNewRequiresPhoto(e.target.checked)}
-                    />
-                    Exige foto na hora (câmera)
-                  </label>
-                  <PanelButton type="submit" disabled={savingTask}>
-                    <Plus size={14} />
-                    {savingTask ? 'Salvando…' : 'Criar check'}
-                  </PanelButton>
-                </form>
-              </SectionCard>
+          <SectionCard title="Quem fiscaliza quem">
+            <p className="mb-3 text-xs text-muted">
+              Três times fixos. O responsável cria os checks; o restante só executa. O cargo na
+              Intranet já coloca a pessoa no time certo.
+            </p>
+            <TeamNetworkMap teams={teamNetwork} />
+          </SectionCard>
 
-              <SectionCard title="Colocar pessoa na equipe">
-                <p className="mb-3 text-xs text-muted">
-                  Diz em qual time ela entra nos checks (Ops Fin, Gestor ou RH). Quase sempre o cargo
-                  já faz isso sozinho — use só se faltar alguém na lista.
+          {access?.can_edit ? (
+            <SectionCard title="Criar check para alguém">
+              <p className="mb-3 text-xs text-muted">
+                Passo do dia: escolha alguém da rede e diga o que precisa ser feito. Ex.: “Abrir
+                caixa”, “Foto do estoque”.
+              </p>
+              <form className="grid gap-3 sm:grid-cols-[1fr_1.2fr_auto] sm:items-end" onSubmit={createTask}>
+                <select
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                  value={newEmployeeId}
+                  onChange={(e) => setNewEmployeeId(e.target.value)}
+                  required
+                >
+                  <option value="">Quem vai fazer…</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                  placeholder="O que precisa ser feito"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  required
+                />
+                <PanelButton type="submit" disabled={savingTask}>
+                  <Plus size={14} />
+                  {savingTask ? 'Salvando…' : 'Criar check'}
+                </PanelButton>
+                <label className="flex items-center gap-2 text-sm sm:col-span-3">
+                  <input
+                    type="checkbox"
+                    checked={newRequiresPhoto}
+                    onChange={(e) => setNewRequiresPhoto(e.target.checked)}
+                  />
+                  Exige foto na hora (câmera)
+                </label>
+              </form>
+            </SectionCard>
+          ) : access?.is_dono ? (
+            <p className="text-sm text-muted">Modo leitura (Dono) — sem editar tarefas.</p>
+          ) : null}
+
+          <SectionCard title="Status da equipe hoje">
+            {!board || board.people.length === 0 ? (
+              <p className="text-sm text-muted">
+                Ninguém na equipe ainda. Confira o cargo na Intranet; o vínculo costuma aparecer
+                sozinho.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {board.people.map((person) => (
+                  <PersonRow
+                    key={person.employee_id}
+                    person={person}
+                    canEdit={Boolean(access?.can_edit)}
+                    busyTaskId={busyTaskId}
+                    onRemove={deactivateTask}
+                  />
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+
+          {access?.can_edit ? (
+            <div className="rounded-2xl border border-dashed border-border/80 bg-card/40 px-4 py-3">
+              <SectionToggleHeader
+                title="Avançado · ajustar equipe na mão"
+                badge={
+                  <span className="rounded-full bg-muted/40 px-2 py-0.5 text-[0.65rem] text-muted">
+                    raro
+                  </span>
+                }
+                open={advancedOpen}
+                onToggle={() => setAdvancedOpen(!advancedOpen)}
+                titleClassName="text-sm font-medium text-muted"
+              />
+              <CollapsibleBody open={advancedOpen} className="mt-3 space-y-3">
+                <p className="text-xs text-muted">
+                  Só se faltar alguém na rede acima. Quase sempre o cargo resolve — use isto como
+                  exceção (ou para marcar lead, se for master).
                 </p>
                 <form className="space-y-3" onSubmit={assignMember}>
                   <select
@@ -394,31 +458,9 @@ export default function ChecksDiarioPage() {
                     {savingMember ? 'Salvando…' : 'Colocar na equipe'}
                   </PanelButton>
                 </form>
-              </SectionCard>
+              </CollapsibleBody>
             </div>
-          ) : access?.is_dono ? (
-            <p className="text-sm text-muted">Modo leitura (Dono) — sem editar tarefas.</p>
           ) : null}
-
-          <SectionCard title="Status da equipe hoje">
-            {!board || board.people.length === 0 ? (
-              <p className="text-sm text-muted">
-                Ninguém na equipe ainda. Confira os cargos ou use “Colocar pessoa na equipe”.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {board.people.map((person) => (
-                  <PersonRow
-                    key={person.employee_id}
-                    person={person}
-                    canEdit={Boolean(access?.can_edit)}
-                    busyTaskId={busyTaskId}
-                    onRemove={deactivateTask}
-                  />
-                ))}
-              </ul>
-            )}
-          </SectionCard>
         </>
       ) : null}
     </IntranetPage>
@@ -661,5 +703,53 @@ function SummaryTile({
       <p className="text-xs text-muted">{label}</p>
       <p className={`mt-1 text-2xl font-semibold ${color}`}>{value}</p>
     </div>
+  )
+}
+
+function TeamNetworkMap({ teams }: { teams: TeamNetworkRow[] }) {
+  if (teams.every((t) => t.total === 0)) {
+    return (
+      <p className="text-sm text-muted">
+        Rede vazia. Confira se Ops Fin, Gestor, RH e as equipes deles têm o cargo certo na
+        Intranet.
+      </p>
+    )
+  }
+
+  return (
+    <ul className="grid gap-3 md:grid-cols-3">
+      {teams.map((t) => (
+        <li key={t.id} className="rounded-2xl border border-border bg-background px-3 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t.label}</p>
+          <p className="mt-2 text-xs text-muted">Responsável</p>
+          {t.leads.length === 0 ? (
+            <p className="text-sm text-danger/80">Sem lead — marque no avançado ou ajuste o cargo</p>
+          ) : (
+            <ul className="mt-0.5 space-y-0.5">
+              {t.leads.map((lead) => (
+                <li key={lead.employee_id} className="text-sm font-medium">
+                  {lead.name}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-xs text-muted">Equipe · {t.memberHint}</p>
+          {t.members.length === 0 ? (
+            <p className="mt-0.5 text-sm text-muted">Ninguém vinculado ainda</p>
+          ) : (
+            <ul className="mt-0.5 space-y-0.5">
+              {t.members.map((m) => (
+                <li key={m.employee_id} className="text-sm">
+                  {m.name}
+                  {m.total_tasks === 0 ? (
+                    <span className="ml-1 text-xs text-muted">· sem check</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }
