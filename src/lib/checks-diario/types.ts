@@ -49,6 +49,8 @@ export type ChecksDiarioBoard = {
     complete: number
     partial: number
     pending: number
+    no_routine: number
+    with_routine: number
     logs_today: number
   }
 }

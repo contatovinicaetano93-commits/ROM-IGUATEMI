@@ -54,6 +54,20 @@ export type ChecksAccess = {
   isAdminMaster: boolean
 }
 
+export function canManageChecksTeam(
+  access: Pick<ChecksAccess, 'canEdit' | 'isAdminMaster' | 'scopedTeam'>,
+  team: ChecksTeamId,
+): boolean {
+  if (!access.canEdit) return false
+  if (access.isAdminMaster) return true
+  return access.scopedTeam === team
+}
+
+/** Cargo só auto-coloca quem ainda não tem linha em checks_diario_members (ativa ou não). */
+export function shouldAutoAssignFromCargo(hasMembershipRecord: boolean): boolean {
+  return !hasMembershipRecord
+}
+
 export function resolveChecksAccess(args: {
   session: AuthSession
   employee: EmployeeRecord | null

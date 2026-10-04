@@ -4,13 +4,17 @@ import type { AuthSession } from '@/lib/auth'
 import {
   resolveChecksAccess,
   checksTeamFromCargoPackage,
+  canManageChecksTeam,
+  shouldAutoAssignFromCargo,
 } from '@/lib/checks-diario/access'
 import {
   checksToday,
   createChecksLog,
   createChecksTask,
+  deactivateChecksMembership,
   getChecksMembership,
   getChecksTask,
+  hasChecksMembershipRecord,
   listActiveEmployeesLite,
   listChecksMembers,
   listLogsForDay,
@@ -25,6 +29,7 @@ import type {
 } from '@/lib/checks-diario/types'
 import { findEmployeeById, listEmployees } from '@/lib/employees'
 import { matchCargoPackage } from '@/lib/intranet/cargo-packages'
+import { summarizeChecksPeople } from '@/lib/checks-diario/summary'
 
 export async function loadChecksAccess(session: AuthSession) {
   const employee = session.employeeId
@@ -36,23 +41,26 @@ export async function loadChecksAccess(session: AuthSession) {
 
   // Auto-vínculo pela cargo package se ainda não estiver na tabela
   if (session.employeeId && employee && !membership) {
-    const pack = matchCargoPackage({
-      panel_role: employee.panel_role,
-      flow_role: employee.flow_role,
-      modules: employee.modules,
-      areaIds: employee.areaIds,
-    })
-    const inferred = checksTeamFromCargoPackage(pack?.id)
-    if (inferred) {
-      try {
-        await upsertChecksMembership({
-          employeeId: session.employeeId,
-          team: inferred.team,
-          isLead: inferred.is_lead,
-        })
-        membership = inferred
-      } catch {
-        membership = inferred
+    const alreadyRecorded = await hasChecksMembershipRecord(session.employeeId)
+    if (shouldAutoAssignFromCargo(alreadyRecorded)) {
+      const pack = matchCargoPackage({
+        panel_role: employee.panel_role,
+        flow_role: employee.flow_role,
+        modules: employee.modules,
+        areaIds: employee.areaIds,
+      })
+      const inferred = checksTeamFromCargoPackage(pack?.id)
+      if (inferred) {
+        try {
+          await upsertChecksMembership({
+            employeeId: session.employeeId,
+            team: inferred.team,
+            isLead: inferred.is_lead,
+          })
+          membership = inferred
+        } catch {
+          membership = inferred
+        }
       }
     }
   }
@@ -67,28 +75,30 @@ export async function loadChecksAccess(session: AuthSession) {
 /** Upsert memberships from cargo packages so the board isn't empty until manual assign. */
 async function syncMembershipsFromCargos() {
   const all = await listEmployees()
-  for (const emp of all) {
-    if (emp.status !== 'active') continue
-    const pack = matchCargoPackage({
-      panel_role: emp.panel_role,
-      flow_role: emp.flow_role,
-      modules: emp.modules,
-      areaIds: emp.areaIds,
-    })
-    const inferred = checksTeamFromCargoPackage(pack?.id)
-    if (!inferred) continue
-    try {
-      const existing = await getChecksMembership(emp.id)
-      if (existing) continue
-      await upsertChecksMembership({
-        employeeId: emp.id,
-        team: inferred.team,
-        isLead: inferred.is_lead,
+  await Promise.all(
+    all.map(async (emp) => {
+      if (emp.status !== 'active') return
+      const pack = matchCargoPackage({
+        panel_role: emp.panel_role,
+        flow_role: emp.flow_role,
+        modules: emp.modules,
+        areaIds: emp.areaIds,
       })
-    } catch {
-      // Uma falha (CHECK/módulo) não pode derrubar o board inteiro.
-    }
-  }
+      const inferred = checksTeamFromCargoPackage(pack?.id)
+      if (!inferred) return
+      try {
+        const alreadyRecorded = await hasChecksMembershipRecord(emp.id)
+        if (!shouldAutoAssignFromCargo(alreadyRecorded)) return
+        await upsertChecksMembership({
+          employeeId: emp.id,
+          team: inferred.team,
+          isLead: inferred.is_lead,
+        })
+      } catch {
+        // Uma falha (CHECK/módulo) não pode derrubar o board inteiro.
+      }
+    }),
+  )
 }
 
 export async function buildChecksBoard(args: {
@@ -166,19 +176,6 @@ export async function buildChecksBoard(args: {
     }
   })
 
-  let complete = 0
-  let partial = 0
-  let pending = 0
-  for (const p of people) {
-    if (p.total_tasks === 0) {
-      pending += 1
-      continue
-    }
-    if (p.done_tasks >= p.total_tasks) complete += 1
-    else if (p.done_tasks > 0) partial += 1
-    else pending += 1
-  }
-
   return {
     day,
     can_edit: access.canEdit,
@@ -186,13 +183,7 @@ export async function buildChecksBoard(args: {
     my_employee_id: args.session.employeeId,
     team_filter: teamFilter,
     people,
-    summary: {
-      people: people.length,
-      complete,
-      partial,
-      pending,
-      logs_today: logs.length,
-    },
+    summary: summarizeChecksPeople(people, logs.length),
   }
 }
 
@@ -219,15 +210,27 @@ export async function assignMemberToTeam(args: {
   isLead?: boolean
 }) {
   const { access } = await loadChecksAccess(args.session)
-  if (!access.canEdit) throw new Error('Sem permissão')
-  if (!access.isAdminMaster && access.scopedTeam !== args.team) {
-    throw new Error('Só pode gerir sua equipe')
+  if (!canManageChecksTeam(access, args.team)) {
+    throw new Error(access.canEdit ? 'Só pode gerir sua equipe' : 'Sem permissão')
   }
   await upsertChecksMembership({
     employeeId: args.employeeId,
     team: args.team,
     isLead: args.isLead === true,
   })
+}
+
+export async function unassignMemberFromTeam(args: {
+  session: AuthSession
+  employeeId: string
+}) {
+  const { access } = await loadChecksAccess(args.session)
+  const target = await getChecksMembership(args.employeeId)
+  if (!target) throw new Error('Pessoa não está nos Checks')
+  if (!canManageChecksTeam(access, target.team)) {
+    throw new Error(access.canEdit ? 'Só pode gerir sua equipe' : 'Sem permissão')
+  }
+  await deactivateChecksMembership(args.employeeId)
 }
 
 export async function createTaskForEmployee(args: {
@@ -313,8 +316,11 @@ export async function checksHomeSummary(session: AuthSession): Promise<{
       if (board.is_master_view) {
         return {
           pending: board.summary.pending + board.summary.partial,
-          total: board.summary.people,
-          label: `${board.summary.complete}/${board.summary.people} ok hoje`,
+          total: board.summary.with_routine,
+          label:
+            board.summary.with_routine === 0
+              ? 'Sem rotina hoje'
+              : `${board.summary.complete}/${board.summary.with_routine} ok hoje`,
           href: '/checks-diario',
         }
       }
