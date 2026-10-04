@@ -27,3 +27,26 @@ export function aggregateOwnedUrgencyFlags(
   }
   return { overdue, due_soon, scheduled }
 }
+
+/**
+ * Total do badge da fila Reativar a partir das contagens SQL.
+ * Não usa `items.length` — a lista é paginada (limit 250) e o badge
+ * precisa do total real (ex.: Atrasados 3104, não 250).
+ */
+export function totalForUrgencyQueue(
+  counts: OwnedUrgencyQueueCounts,
+  queue: 'overdue' | 'due_soon' | 'scheduled',
+): number {
+  switch (queue) {
+    case 'overdue':
+      return counts.overdue
+    case 'due_soon':
+      return counts.due_soon
+    case 'scheduled':
+      return counts.scheduled
+    default: {
+      const _exhaustive: never = queue
+      return _exhaustive
+    }
+  }
+}

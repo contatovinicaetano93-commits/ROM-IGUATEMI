@@ -1,3 +1,4 @@
+import { totalForUrgencyQueue } from '@/lib/contact-owned-urgency'
 import { CONTACT_STATUSES, type ContactRow, type ContactStatus } from '@/lib/contacts'
 import { getSql } from '@/lib/db'
 import type { ClientService } from '@/lib/services'
@@ -303,10 +304,15 @@ async function rankUrgentContactIds(
   return rows.map((r) => r.contact_id)
 }
 
-/** Totais das filas Reativar (Atrasados/Vencendo exclusivos; Agendados = agenda da semana). */
-export async function countUrgencyQueues(
+type UrgencyQueueCountsWithPending = UrgencyQueueCounts & {
+  /** Contatos com qualquer sinal (atraso ∪ vencendo ∪ agendado). */
+  pending: number
+}
+
+/** Totais Reativar + união (para meta.total da lista paginada). */
+async function countUrgencyQueuesWithPending(
   opts: { channel?: string | null } = {},
-): Promise<UrgencyQueueCounts> {
+): Promise<UrgencyQueueCountsWithPending> {
   const sql = getSql()
   const channel = opts.channel ?? null
   const rows = (await sql`
@@ -346,13 +352,32 @@ export async function countUrgencyQueues(
     select
       count(*) filter (where pc.overdue > 0)::int as overdue,
       count(*) filter (where pc.overdue = 0 and pc.due_soon > 0)::int as due_soon,
-      count(*) filter (where pc.scheduled_soon > 0)::int as scheduled
+      count(*) filter (where pc.scheduled_soon > 0)::int as scheduled,
+      count(*) filter (
+        where pc.overdue > 0 or pc.due_soon > 0 or pc.scheduled_soon > 0
+      )::int as pending
     from per_contact pc
     join contacts c on c.id = pc.contact_id
     where c.anonymized_at is null
       and (${channel}::text is null or c.channel = ${channel})
-  `) as UrgencyQueueCounts[]
-  return rows[0] ?? { overdue: 0, due_soon: 0, scheduled: 0 }
+  `) as UrgencyQueueCountsWithPending[]
+  return rows[0] ?? { overdue: 0, due_soon: 0, scheduled: 0, pending: 0 }
+}
+
+/** Totais das filas Reativar (Atrasados/Vencendo exclusivos; Agendados = agenda da semana). */
+export async function countUrgencyQueues(
+  opts: { channel?: string | null } = {},
+): Promise<UrgencyQueueCounts> {
+  const { overdue, due_soon, scheduled } = await countUrgencyQueuesWithPending(opts)
+  return { overdue, due_soon, scheduled }
+}
+
+function listTotalForUrgencyQueue(
+  counts: UrgencyQueueCountsWithPending,
+  queue: 'overdue' | 'due_soon' | 'scheduled' | null,
+): number {
+  if (queue == null) return counts.pending
+  return totalForUrgencyQueue(counts, queue)
 }
 
 /**
@@ -503,14 +528,18 @@ export async function listContactsWithSummary(
 
   // Pending: ranking SQL de urgência (atraso / vencendo / agendado).
   if (pendingOnly) {
-    const pendingIds = await rankUrgentContactIds(limit, { channel, urgencyQueue })
+    const [pendingIds, queueCounts] = await Promise.all([
+      rankUrgentContactIds(limit, { channel, urgencyQueue }),
+      countUrgencyQueuesWithPending({ channel }),
+    ])
     const byContact = await loadServicesByContactIds(pendingIds)
     const ordered =
       urgencyQueue === 'scheduled'
         ? await orderContactsByIds(pendingIds)
         : await orderContactsByUrgency(pendingIds, byContact)
     const items = withUrgency(ordered, byContact)
-    return { items, total: items.length }
+    // Badge da fila ativa usa meta.total — tem que ser a contagem real, não o limit.
+    return { items, total: listTotalForUrgencyQueue(queueCounts, urgencyQueue) }
   }
 
   // Default: urgentes via ranking SQL, depois recentes para completar a página.
