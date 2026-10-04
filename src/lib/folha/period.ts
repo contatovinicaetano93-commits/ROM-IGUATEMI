@@ -162,6 +162,57 @@ export function resolveFolhaQuinzena(opts?: {
   return defaultFolhaQuinzena(today)
 }
 
+/**
+ * Quinzenas que o cron diário deve recalcular: só a que está em curso
+ * (hoje entre `from` e `to`). Quinzena já fechada (ex.: Q2/09 em 04/10)
+ * fica congelada para conferência/pagamento — não reabrir o 8123.
+ */
+export function folhaQuinzenasForDailyRefresh(
+  today = todayIsoSaoPaulo(),
+): FolhaQuinzena[] {
+  const calendar = quinzenaForDay(today)
+  if (today < calendar.from || today > calendar.to) return []
+  return [calendar]
+}
+
+export type FolhaOpenStatus =
+  | 'awaiting_rules'
+  | 'draft'
+  | 'ready_for_review'
+  | 'approved'
+  | 'paid'
+
+/**
+ * Rascunho aberto de quinzena em curso, com 8123 defasado em relação a hoje.
+ * Não mexe em aprovado/pago nem em período já fechado.
+ */
+export function shouldRefreshInProgressFolhaDraft(args: {
+  status: FolhaOpenStatus
+  quinzena: FolhaQuinzena
+  today: string
+  referenceDay: string | null
+}): boolean {
+  switch (args.status) {
+    case 'approved':
+    case 'paid':
+    case 'awaiting_rules':
+      return false
+    case 'draft':
+    case 'ready_for_review': {
+      if (args.today < args.quinzena.from || args.today > args.quinzena.to) {
+        return false
+      }
+      const expectedEnd = clampQuinzenaFetchEnd(args.quinzena, args.today)
+      if (!args.referenceDay) return true
+      return args.referenceDay < expectedEnd
+    }
+    default: {
+      const _never: never = args.status
+      return _never
+    }
+  }
+}
+
 /** YYYY-MM-DD → dd/mm/yyyy (query Avec). */
 export function isoToBrDay(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)

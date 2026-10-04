@@ -105,7 +105,8 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/admin/intranet-ensure' ||
     pathname === '/api/admin/revenue-backfill' ||
     pathname === '/api/admin/analytics-backfill' ||
-    pathname === '/api/folha/imap-poll'
+    pathname === '/api/folha/imap-poll' ||
+    pathname === '/api/folha/daily-refresh'
   if (!(await isAuthorized(req, { allowHeaderTokens }))) {
     if (isProtectedApi(pathname)) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })

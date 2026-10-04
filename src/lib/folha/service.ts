@@ -11,10 +11,12 @@ import {
 } from '@/lib/folha/draft-from-8123'
 import {
   acceptsFolhaTaxExtras,
+  folhaQuinzenasForDailyRefresh,
   listRecentQuinzenas,
   parseFolhaPeriodId,
   quinzenaAvecRangeBr,
   resolveFolhaQuinzena,
+  shouldRefreshInProgressFolhaDraft,
   todayIsoSaoPaulo,
   type FolhaQuinzena,
 } from '@/lib/folha/period'
@@ -154,6 +156,30 @@ export async function loadOrCreateFolhaDraft(
     return { draft: periodRowToDraft(panel, period), period, quinzena }
   }
 
+  if (
+    shouldRefreshInProgressFolhaDraft({
+      status: persisted.status,
+      quinzena,
+      today,
+      referenceDay: persisted.reference_day,
+    })
+  ) {
+    try {
+      const fresh = await refreshFolhaDraft(panel, {
+        ...opts,
+        periodId: quinzena.id,
+        today,
+      })
+      return {
+        draft: fresh.draft,
+        period: fresh.period,
+        quinzena: fresh.quinzena,
+      }
+    } catch {
+      // Mantém sticky se Avec/DB falhar — UI ainda pode “Atualizar do 8123”.
+    }
+  }
+
   return {
     draft: periodRowToDraft(panel, persisted),
     period: persisted,
@@ -258,6 +284,62 @@ export async function refreshFolhaDraft(
     source,
     avec_range: avecRange,
   }
+}
+
+export type FolhaDailyRefreshItem = {
+  period_id: string
+  outcome: 'refreshed' | 'skipped_locked' | 'error'
+  period_status?: FolhaPeriodStatus
+  source?: 'avec_window' | 'db_snapshot'
+  error?: string
+}
+
+/**
+ * Cron diário: recalcula rascunhos abertos (draft / ready_for_review)
+ * da quinzena em curso (hoje entre from e to). Não reabre Q2 fechada
+ * nem toca períodos já aprovados ou pagos.
+ */
+export async function runFolhaDailyRefresh(
+  panel: RomPanelId,
+  opts?: { today?: string },
+): Promise<{ today: string; results: FolhaDailyRefreshItem[] }> {
+  const today = opts?.today ?? todayIsoSaoPaulo()
+  const targets = folhaQuinzenasForDailyRefresh(today)
+  const results: FolhaDailyRefreshItem[] = []
+
+  for (const q of targets) {
+    const existing = await getFolhaPeriod(q.id)
+    if (existing && (existing.status === 'approved' || existing.status === 'paid')) {
+      results.push({
+        period_id: q.id,
+        outcome: 'skipped_locked',
+        period_status: existing.status,
+      })
+      continue
+    }
+    try {
+      const refreshed = await refreshFolhaDraft(panel, {
+        periodId: q.id,
+        today,
+        actor: 'cron:folha-daily',
+      })
+      results.push({
+        period_id: q.id,
+        outcome: 'refreshed',
+        period_status: refreshed.period.status,
+        source: refreshed.source,
+      })
+    } catch (e) {
+      results.push({
+        period_id: q.id,
+        outcome: 'error',
+        period_status: existing?.status,
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
+  return { today, results }
 }
 
 /**

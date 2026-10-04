@@ -994,7 +994,11 @@ export default function FolhaPage() {
                 <div className="w-full overflow-hidden rounded-2xl border border-border bg-surface">
                   <p className="border-b border-border/80 bg-card-elevated px-3 py-2 text-[11px] text-muted">
                     Valores em R$ (sem símbolo na grade). Clique na linha para editar · hover no
-                    cabeçalho = nome completo.
+                    cabeçalho = nome completo. Legenda:{' '}
+                    <span className="text-foreground">U</span> = serviços em que o assistente
+                    atuou como profissional ·{' '}
+                    <span className="text-foreground">W</span> = taxa cobrada sobre esses
+                    serviços (U).
                   </p>
                   <div className="w-full overflow-x-auto">
                     <table className="w-full min-w-0 table-fixed border-collapse text-left text-[11px] leading-tight">
