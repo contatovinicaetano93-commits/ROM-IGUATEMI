@@ -10,7 +10,11 @@ import {
   type FolhaDraftLine,
 } from '@/lib/folha/draft-from-8123'
 import { roundFolha } from '@/lib/folha/calc'
-import { quinzenaForYearMonthHalf } from '@/lib/folha/period'
+import { overlayClosedFopagExtras } from '@/lib/folha/fopag-extras-overlay'
+import {
+  quinzenaForDay,
+  quinzenaForYearMonthHalf,
+} from '@/lib/folha/period'
 import type { FolhaPeriodStatus } from '@/lib/folha/types'
 import { occupancyMergeKey } from '@/lib/director-report/match-pro'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
@@ -143,8 +147,19 @@ export function refreshDraftPreservingExtras(args: {
   previousLines: readonly FolhaDraftLine[]
   quinzenaDay?: string
 }): FolhaDraft {
+  const periodId = args.quinzenaDay
+    ? quinzenaForDay(args.quinzenaDay).id
+    : null
+  const overlayed = overlayClosedFopagExtras({
+    panel: args.panel,
+    periodId,
+    lines: args.previousLines,
+    sourceProfessionals: args.professionals,
+  })
+  const previousLines = overlayed.lines
+  const professionals = overlayed.sourceProfessionals ?? [...args.professionals]
   const extrasByKey = new Map<string, FolhaDraftLine['folha_extras']>()
-  for (const line of args.previousLines) {
+  for (const line of previousLines) {
     const key = occupancyMergeKey(line.name) || line.name
     extrasByKey.set(key, line.folha_extras)
   }
@@ -152,7 +167,7 @@ export function refreshDraftPreservingExtras(args: {
   const base = buildFolhaDraftFrom8123({
     panel: args.panel,
     referenceDay: args.referenceDay,
-    professionals: args.professionals,
+    professionals,
     quinzenaDay: args.quinzenaDay,
   })
 
@@ -160,7 +175,7 @@ export function refreshDraftPreservingExtras(args: {
     const key = occupancyMergeKey(line.name) || line.name
     const extras = extrasByKey.get(key)
     if (!extras) return line
-    const source = findSourcePro(args.professionals, line.name)
+    const source = findSourcePro(professionals, line.name)
     return patchFolhaLineExtras({
       panel: args.panel,
       line,
@@ -185,6 +200,8 @@ export function refreshDraftPreservingExtras(args: {
 export function rehydrateFolhaDraftFromPeriod(
   panel: RomPanelId,
   row: {
+    id?: string
+    year_month?: string
     half: 1 | 2
     to_day: string
     reference_day: string | null
@@ -192,20 +209,31 @@ export function rehydrateFolhaDraftFromPeriod(
     source_professionals?: readonly CommissionProfessionalRow[]
   },
 ): { lines: FolhaDraftLine[]; total: number | null } {
-  const source = row.source_professionals ?? []
+  const periodId =
+    row.id ??
+    (row.year_month
+      ? `${row.year_month}-q${row.half}`
+      : quinzenaForDay(row.to_day).id)
+  const overlayed = overlayClosedFopagExtras({
+    panel,
+    periodId,
+    lines: row.lines,
+    sourceProfessionals: row.source_professionals,
+  })
+  const source = overlayed.sourceProfessionals ?? []
   if (source.length > 0) {
     const draft = refreshDraftPreservingExtras({
       panel,
       referenceDay: row.reference_day ?? row.to_day,
       professionals: source,
-      previousLines: row.lines,
+      previousLines: overlayed.lines,
       quinzenaDay: row.to_day,
     })
     return { lines: draft.lines, total: draft.total_proposed_pay }
   }
   // Sem source: reconstrói a partir do espelho avec em cada linha.
   const applyTaxExtras = row.half === 1
-  const lines = row.lines.map((line) =>
+  const lines = overlayed.lines.map((line) =>
     patchFolhaLineExtras({
       panel,
       line,
