@@ -29,27 +29,52 @@ describe('checksTeamFromCargoPackage', () => {
     expect(checksTeamFromCargoPackage('ops_financeiro')).toEqual({
       team: 'ops_fin',
       is_lead: true,
+      cargo: 'ops_financeiro',
     })
     expect(checksTeamFromCargoPackage('func_financeiro')).toEqual({
       team: 'ops_fin',
       is_lead: false,
+      cargo: 'func_financeiro',
     })
     expect(checksTeamFromCargoPackage('gestor_unidade')).toEqual({
       team: 'gestor_unidade',
       is_lead: true,
+      cargo: 'gestor_unidade',
     })
     expect(checksTeamFromCargoPackage('limpeza')).toEqual({
       team: 'gestor_unidade',
       is_lead: false,
+      cargo: 'limpeza',
     })
     expect(checksTeamFromCargoPackage('recepcao')).toEqual({
       team: 'gestor_unidade',
       is_lead: false,
+      cargo: 'recepcao',
     })
-    expect(checksTeamFromCargoPackage('rh')).toEqual({ team: 'rh', is_lead: true })
+    expect(checksTeamFromCargoPackage('estoque_ops')).toEqual({
+      team: 'gestor_unidade',
+      is_lead: false,
+      cargo: 'estoque_ops',
+    })
+    expect(checksTeamFromCargoPackage('almoxarifado')).toEqual({
+      team: 'gestor_unidade',
+      is_lead: false,
+      cargo: 'almoxarifado',
+    })
+    expect(checksTeamFromCargoPackage('pos_venda')).toEqual({
+      team: 'gestor_unidade',
+      is_lead: false,
+      cargo: 'pos_venda',
+    })
+    expect(checksTeamFromCargoPackage('rh')).toEqual({
+      team: 'rh',
+      is_lead: true,
+      cargo: 'rh',
+    })
     expect(checksTeamFromCargoPackage('equipe_rh')).toEqual({
       team: 'rh',
       is_lead: false,
+      cargo: 'equipe_rh',
     })
     expect(checksTeamFromCargoPackage('profissional')).toBeNull()
   })

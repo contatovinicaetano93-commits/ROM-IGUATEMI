@@ -22,10 +22,12 @@ import {
   updateChecksTask,
   upsertChecksMembership,
 } from '@/lib/checks-diario/store'
-import type {
-  ChecksDiarioBoard,
-  ChecksDiarioPersonBoard,
-  ChecksTeamId,
+import {
+  resolveChecksCargo,
+  type ChecksCargoId,
+  type ChecksDiarioBoard,
+  type ChecksDiarioPersonBoard,
+  type ChecksTeamId,
 } from '@/lib/checks-diario/types'
 import { findEmployeeById, listEmployees } from '@/lib/employees'
 import { matchCargoPackage } from '@/lib/intranet/cargo-packages'
@@ -56,6 +58,7 @@ export async function loadChecksAccess(session: AuthSession) {
             employeeId: session.employeeId,
             team: inferred.team,
             isLead: inferred.is_lead,
+            cargo: inferred.cargo,
           })
           membership = inferred
         } catch {
@@ -93,6 +96,7 @@ async function syncMembershipsFromCargos() {
           employeeId: emp.id,
           team: inferred.team,
           isLead: inferred.is_lead,
+          cargo: inferred.cargo,
         })
       } catch {
         // Uma falha (CHECK/módulo) não pode derrubar o board inteiro.
@@ -124,6 +128,7 @@ export async function buildChecksBoard(args: {
     email: string
     team: ChecksTeamId | null
     is_lead: boolean
+    cargo: ChecksCargoId | null
   }> = []
 
   if (isMasterView) {
@@ -137,6 +142,11 @@ export async function buildChecksBoard(args: {
       email: m.email,
       team: m.team,
       is_lead: m.is_lead,
+      cargo: resolveChecksCargo({
+        cargo: m.cargo,
+        team: m.team,
+        is_lead: m.is_lead,
+      }),
     }))
   } else if (args.session.employeeId) {
     const me = await findEmployeeById(args.session.employeeId)
@@ -148,6 +158,11 @@ export async function buildChecksBoard(args: {
           email: me.email,
           team: membership?.team ?? null,
           is_lead: false,
+          cargo: resolveChecksCargo({
+            cargo: membership?.cargo,
+            team: membership?.team ?? null,
+            is_lead: membership?.is_lead ?? false,
+          }),
         },
       ]
     }
@@ -206,17 +221,28 @@ export async function ensureCanEditEmployee(
 export async function assignMemberToTeam(args: {
   session: AuthSession
   employeeId: string
-  team: ChecksTeamId
+  cargo?: ChecksCargoId | null
+  team?: ChecksTeamId
   isLead?: boolean
 }) {
   const { access } = await loadChecksAccess(args.session)
-  if (!canManageChecksTeam(access, args.team)) {
+  const inferred = args.cargo ? checksTeamFromCargoPackage(args.cargo) : null
+  const team = inferred?.team ?? args.team
+  if (!team) throw new Error('Informe o cargo ou a equipe')
+  if (!canManageChecksTeam(access, team)) {
     throw new Error(access.canEdit ? 'Só pode gerir sua equipe' : 'Sem permissão')
+  }
+  const isLead = inferred ? inferred.is_lead : args.isLead === true
+  if (isLead && !access.isAdminMaster) {
+    throw new Error('Só o master define o responsável da equipe')
   }
   await upsertChecksMembership({
     employeeId: args.employeeId,
-    team: args.team,
-    isLead: args.isLead === true,
+    team,
+    isLead,
+    cargo:
+      inferred?.cargo ??
+      resolveChecksCargo({ cargo: args.cargo, team, is_lead: isLead }),
   })
 }
 

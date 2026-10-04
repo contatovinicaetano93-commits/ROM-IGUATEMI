@@ -1,10 +1,12 @@
 import 'server-only'
 
 import { getIntranetSql } from '@/lib/db'
-import type {
-  ChecksDiarioLog,
-  ChecksDiarioTask,
-  ChecksTeamId,
+import {
+  parseChecksCargoId,
+  type ChecksCargoId,
+  type ChecksDiarioLog,
+  type ChecksDiarioTask,
+  type ChecksTeamId,
 } from '@/lib/checks-diario/types'
 import { ensureGrantableModuleKeyCheck } from '@/lib/intranet/ensure-module-key-check'
 
@@ -41,6 +43,10 @@ export async function ensureChecksDiarioTables() {
       await sql`
         alter table checks_diario_members
           add column if not exists active boolean not null default true
+      `
+      await sql`
+        alter table checks_diario_members
+          add column if not exists cargo text
       `
       await sql`
         create table if not exists checks_diario_tasks (
@@ -103,18 +109,24 @@ function isoFromRow(raw: unknown): string {
 
 export async function getChecksMembership(
   employeeId: string,
-): Promise<{ team: ChecksTeamId; is_lead: boolean } | null> {
+): Promise<{ team: ChecksTeamId; is_lead: boolean; cargo: ChecksCargoId | null } | null> {
   await ensureChecksDiarioTables()
   const sql = getIntranetSql()
   const rows = await sql`
-    select team, is_lead
+    select team, is_lead, cargo
     from checks_diario_members
     where employee_id = ${employeeId} and active = true
     limit 1
   `
-  const row = rows[0] as { team: ChecksTeamId; is_lead: boolean } | undefined
+  const row = rows[0] as
+    | { team: ChecksTeamId; is_lead: boolean; cargo: string | null }
+    | undefined
   if (!row) return null
-  return { team: row.team, is_lead: Boolean(row.is_lead) }
+  return {
+    team: row.team,
+    is_lead: Boolean(row.is_lead),
+    cargo: parseChecksCargoId(row.cargo),
+  }
 }
 
 /** Qualquer linha, inclusive quem o master tirou do board (active = false). */
@@ -142,15 +154,17 @@ export async function upsertChecksMembership(args: {
   employeeId: string
   team: ChecksTeamId
   isLead: boolean
+  cargo?: ChecksCargoId | null
 }) {
   await ensureChecksDiarioTables()
   const sql = getIntranetSql()
   await sql`
-    insert into checks_diario_members (employee_id, team, is_lead, active, updated_at)
-    values (${args.employeeId}, ${args.team}, ${args.isLead}, true, now())
+    insert into checks_diario_members (employee_id, team, is_lead, cargo, active, updated_at)
+    values (${args.employeeId}, ${args.team}, ${args.isLead}, ${args.cargo ?? null}, true, now())
     on conflict (employee_id) do update set
       team = excluded.team,
       is_lead = excluded.is_lead,
+      cargo = excluded.cargo,
       active = true,
       updated_at = now()
   `
@@ -174,12 +188,42 @@ export async function deactivateChecksMembership(employeeId: string) {
   if (rows.length === 0) throw new Error('Pessoa não está nos Checks')
 }
 
+type ChecksMemberRow = {
+  employee_id: string
+  team: ChecksTeamId
+  is_lead: boolean
+  cargo: ChecksCargoId | null
+  name: string
+  email: string
+  status: string
+}
+
+function mapMemberRow(row: {
+  employee_id: string
+  team: ChecksTeamId
+  is_lead: boolean
+  cargo: string | null
+  name: string
+  email: string
+  status: string
+}): ChecksMemberRow {
+  return {
+    employee_id: row.employee_id,
+    team: row.team,
+    is_lead: Boolean(row.is_lead),
+    cargo: parseChecksCargoId(row.cargo),
+    name: row.name,
+    email: row.email,
+    status: row.status,
+  }
+}
+
 export async function listChecksMembers(team?: ChecksTeamId | null) {
   await ensureChecksDiarioTables()
   const sql = getIntranetSql()
   if (team) {
-    return (await sql`
-      select m.employee_id, m.team, m.is_lead, e.name, e.email, e.status
+    const rows = (await sql`
+      select m.employee_id, m.team, m.is_lead, m.cargo, e.name, e.email, e.status
       from checks_diario_members m
       join intranet_employees e on e.id = m.employee_id
       where m.team = ${team} and m.active = true and e.status = 'active'
@@ -188,13 +232,15 @@ export async function listChecksMembers(team?: ChecksTeamId | null) {
       employee_id: string
       team: ChecksTeamId
       is_lead: boolean
+      cargo: string | null
       name: string
       email: string
       status: string
     }>
+    return rows.map(mapMemberRow)
   }
-  return (await sql`
-    select m.employee_id, m.team, m.is_lead, e.name, e.email, e.status
+  const rows = (await sql`
+    select m.employee_id, m.team, m.is_lead, m.cargo, e.name, e.email, e.status
     from checks_diario_members m
     join intranet_employees e on e.id = m.employee_id
     where m.active = true and e.status = 'active'
@@ -203,10 +249,12 @@ export async function listChecksMembers(team?: ChecksTeamId | null) {
     employee_id: string
     team: ChecksTeamId
     is_lead: boolean
+    cargo: string | null
     name: string
     email: string
     status: string
   }>
+  return rows.map(mapMemberRow)
 }
 
 export async function listActiveEmployeesLite() {

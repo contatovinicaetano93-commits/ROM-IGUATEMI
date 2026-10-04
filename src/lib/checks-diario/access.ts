@@ -1,5 +1,9 @@
 import type { AuthSession } from '@/lib/auth'
-import type { ChecksTeamId } from '@/lib/checks-diario/types'
+import {
+  checksCargoById,
+  type ChecksCargoId,
+  type ChecksTeamId,
+} from '@/lib/checks-diario/types'
 import { matchCargoPackage } from '@/lib/intranet/cargo-packages'
 import type { EmployeeRecord } from '@/lib/employees'
 import type { RequestArea } from '@/lib/flow/types'
@@ -7,27 +11,10 @@ import type { RequestArea } from '@/lib/flow/types'
 /** Cargo package → equipe de checks (lead ou member). */
 export function checksTeamFromCargoPackage(
   packageId: string | null | undefined,
-): { team: ChecksTeamId; is_lead: boolean } | null {
-  switch (packageId) {
-    case 'ops_financeiro':
-      return { team: 'ops_fin', is_lead: true }
-    case 'func_financeiro':
-      return { team: 'ops_fin', is_lead: false }
-    case 'gestor_unidade':
-      return { team: 'gestor_unidade', is_lead: true }
-    case 'recepcao':
-    case 'estoque_ops':
-    case 'almoxarifado':
-    case 'pos_venda':
-    case 'limpeza':
-      return { team: 'gestor_unidade', is_lead: false }
-    case 'rh':
-      return { team: 'rh', is_lead: true }
-    case 'equipe_rh':
-      return { team: 'rh', is_lead: false }
-    default:
-      return null
-  }
+): { team: ChecksTeamId; is_lead: boolean; cargo: ChecksCargoId } | null {
+  const cargo = checksCargoById(packageId)
+  if (!cargo) return null
+  return { team: cargo.team, is_lead: cargo.is_lead, cargo: cargo.id }
 }
 
 export function isChecksDono(session: AuthSession, employee: EmployeeRecord | null): boolean {

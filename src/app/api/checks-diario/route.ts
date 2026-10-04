@@ -8,7 +8,12 @@ import {
   loadChecksAccess,
   unassignMemberFromTeam,
 } from '@/lib/checks-diario/service'
-import { CHECKS_TEAMS, type ChecksTeamId } from '@/lib/checks-diario/types'
+import {
+  CHECKS_CARGOS,
+  CHECKS_TEAMS,
+  parseChecksCargoId,
+  type ChecksTeamId,
+} from '@/lib/checks-diario/types'
 
 function canUseChecks(session: { role: string; modules?: unknown }): boolean {
   const role = session.role as 'admin' | 'staff' | 'financeiro' | 'estoque' | 'mkt'
@@ -41,6 +46,7 @@ export async function GET(req: NextRequest) {
     return ok({
       board,
       teams: CHECKS_TEAMS,
+      cargos: CHECKS_CARGOS,
       access: {
         can_edit: access.canEdit,
         is_dono: access.isDono,
@@ -65,14 +71,16 @@ export async function POST(req: NextRequest) {
   try {
     if (action === 'assign_member') {
       const employeeId = typeof body.employee_id === 'string' ? body.employee_id : ''
+      const cargo = parseChecksCargoId(body.cargo)
       const team = parseTeam(body.team)
-      if (!employeeId || !team || team === 'all') {
-        return err('Informe colaborador e equipe', 400)
+      if (!employeeId || (!cargo && (!team || team === 'all'))) {
+        return err('Informe colaborador e cargo', 400)
       }
       await assignMemberToTeam({
         session: auth.session,
         employeeId,
-        team,
+        cargo,
+        team: team && team !== 'all' ? team : undefined,
         isLead: body.is_lead === true,
       })
       return ok({ ok: true })

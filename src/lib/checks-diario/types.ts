@@ -27,6 +27,8 @@ export type ChecksDiarioPersonBoard = {
   email: string
   team: ChecksTeamId | null
   is_lead: boolean
+  /** Cargo da equipe (recepção, func fin…), não só o time do gestor. */
+  cargo: ChecksCargoId | null
   tasks: Array<
     ChecksDiarioTask & {
       logs_today: ChecksDiarioLog[]
@@ -80,3 +82,116 @@ export const CHECKS_TEAMS: readonly {
     memberHint: 'Equipe RH',
   },
 ] as const
+
+/** Cargos que entram nos Checks: o responsável e a equipe de cada gestor. */
+export type ChecksCargoId =
+  | 'ops_financeiro'
+  | 'func_financeiro'
+  | 'gestor_unidade'
+  | 'recepcao'
+  | 'estoque_ops'
+  | 'almoxarifado'
+  | 'pos_venda'
+  | 'limpeza'
+  | 'rh'
+  | 'equipe_rh'
+
+export type ChecksCargoDef = {
+  id: ChecksCargoId
+  team: ChecksTeamId
+  is_lead: boolean
+  label: string
+}
+
+export const CHECKS_CARGOS: readonly ChecksCargoDef[] = [
+  {
+    id: 'ops_financeiro',
+    team: 'ops_fin',
+    is_lead: true,
+    label: 'Ops financeiro',
+  },
+  {
+    id: 'func_financeiro',
+    team: 'ops_fin',
+    is_lead: false,
+    label: 'Funcionário financeiro',
+  },
+  {
+    id: 'gestor_unidade',
+    team: 'gestor_unidade',
+    is_lead: true,
+    label: 'Gestor(a) de unidade',
+  },
+  {
+    id: 'recepcao',
+    team: 'gestor_unidade',
+    is_lead: false,
+    label: 'Recepção',
+  },
+  {
+    id: 'estoque_ops',
+    team: 'gestor_unidade',
+    is_lead: false,
+    label: 'Estoque',
+  },
+  {
+    id: 'almoxarifado',
+    team: 'gestor_unidade',
+    is_lead: false,
+    label: 'Almoxarifado',
+  },
+  {
+    id: 'pos_venda',
+    team: 'gestor_unidade',
+    is_lead: false,
+    label: 'Pós-venda',
+  },
+  {
+    id: 'limpeza',
+    team: 'gestor_unidade',
+    is_lead: false,
+    label: 'Limpeza',
+  },
+  { id: 'rh', team: 'rh', is_lead: true, label: 'RH' },
+  {
+    id: 'equipe_rh',
+    team: 'rh',
+    is_lead: false,
+    label: 'Equipe RH',
+  },
+] as const
+
+export function checksCargoById(
+  id: string | null | undefined,
+): ChecksCargoDef | null {
+  if (!id) return null
+  return CHECKS_CARGOS.find((c) => c.id === id) ?? null
+}
+
+export function parseChecksCargoId(raw: unknown): ChecksCargoId | null {
+  if (typeof raw !== 'string') return null
+  return checksCargoById(raw)?.id ?? null
+}
+
+export function checksCargosForTeam(team: ChecksTeamId): ChecksCargoDef[] {
+  return CHECKS_CARGOS.filter((c) => c.team === team)
+}
+
+export function checksCargoLabel(id: ChecksCargoId | null | undefined): string {
+  return checksCargoById(id)?.label ?? '—'
+}
+
+/** Cargo gravado, ou o cargo-lead do time se só sabemos que é responsável. */
+export function resolveChecksCargo(args: {
+  cargo?: string | null
+  team: ChecksTeamId | null
+  is_lead: boolean
+}): ChecksCargoId | null {
+  if (!args.team) return null
+  const stored = checksCargoById(args.cargo)
+  if (stored && stored.team === args.team) return stored.id
+  if (args.is_lead) {
+    return CHECKS_CARGOS.find((c) => c.team === args.team && c.is_lead)?.id ?? null
+  }
+  return null
+}
