@@ -60,6 +60,11 @@ import {
   filterFolhaProfessionalsForPanel,
   folhaPeriodNeedsUnitScope,
 } from '@/lib/folha/unit-scope'
+import {
+  canPersistCardFeeOverlay,
+  overlayMissing8123CardFee,
+  sourceMissingCardFee,
+} from '@/lib/folha/overlay-8123-card-fee'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
 export type FolhaLoadOpts = {
@@ -132,6 +137,59 @@ export async function listFolhaPeriodSummaries(
 }
 
 /**
+ * Rascunho sticky sem taxa cartão 8123: puxa só o campo Avec.
+ * Não substitui a_pagar. Aprovado/pago: só leitura, não grava.
+ */
+async function overlayStickyMissingCardFee(
+  panel: RomPanelId,
+  quinzena: FolhaQuinzena,
+  today: string,
+  persisted: FolhaPeriodRow,
+  fallback: readonly CommissionProfessionalRow[],
+  actor?: string | null,
+): Promise<FolhaPeriodRow> {
+  if (!sourceMissingCardFee(persisted.source_professionals)) return persisted
+  let from8123 = [...fallback]
+  const range = quinzenaAvecRangeBr(quinzena, today)
+  if (isAvecConfigured() && !isAvecMock()) {
+    try {
+      const fetched = await fetchCommissions8123ForRange({
+        inicioBr: range.inicio,
+        fimBr: range.fim,
+      })
+      if (!fetched.truncated && fetched.professionals.length > 0) {
+        from8123 = fetched.professionals
+      }
+    } catch {
+      /* snapshot / vazio */
+    }
+  }
+  const { rows, changed } = overlayMissing8123CardFee(
+    persisted.source_professionals,
+    from8123,
+  )
+  if (!changed) return persisted
+  if (!canPersistCardFeeOverlay(persisted.status)) {
+    return { ...persisted, source_professionals: rows }
+  }
+  const draft = refreshDraftPreservingExtras({
+    panel,
+    referenceDay: persisted.reference_day ?? quinzena.to,
+    professionals: rows,
+    previousLines: persisted.lines,
+    quinzenaDay: quinzena.to,
+  })
+  draft.quinzena = quinzena
+  return await upsertFolhaPeriodFromDraft({
+    draft,
+    sourceProfessionals: rows,
+    updatedBy: actor ?? 'folha-card-fee-overlay',
+    status: persisted.status,
+    forceStatus: true,
+  })
+}
+
+/**
  * Carrega (ou cria) o rascunho da quinzena alvo.
  * Leitura: período persistido, senão snapshot DB perto do fim da quinzena.
  * Corte real inicio/fim vem de `refreshFolhaDraft` (live Avec).
@@ -158,7 +216,19 @@ export async function loadOrCreateFolhaDraft(
   }
 
   if (persisted && !snapshot) {
-    const scoped = await persistScopedOpenFolhaPeriod(panel, persisted, opts?.actor)
+    const withCard = await overlayStickyMissingCardFee(
+      panel,
+      quinzena,
+      today,
+      persisted,
+      persisted.source_professionals,
+      opts?.actor,
+    )
+    const scoped = await persistScopedOpenFolhaPeriod(
+      panel,
+      withCard,
+      opts?.actor,
+    )
     return {
       draft: scoped.draft,
       period: scoped.period,
@@ -215,7 +285,19 @@ export async function loadOrCreateFolhaDraft(
     }
   }
 
-  const scoped = await persistScopedOpenFolhaPeriod(panel, persisted, opts?.actor)
+  const withCard = await overlayStickyMissingCardFee(
+    panel,
+    quinzena,
+    today,
+    persisted,
+    snapshot.professionals,
+    opts?.actor,
+  )
+  const scoped = await persistScopedOpenFolhaPeriod(
+    panel,
+    withCard,
+    opts?.actor,
+  )
   return {
     draft: scoped.draft,
     period: scoped.period,
@@ -337,13 +419,45 @@ export type FolhaDailyRefreshItem = {
   outcome: 'refreshed' | 'skipped_locked' | 'error'
   period_status?: FolhaPeriodStatus
   source?: 'avec_window' | 'db_snapshot'
+  /** Baru Zig aplicado após o 8123 (null se Zig off / falhou sem derrubar o refresh). */
+  zig_applied?: number | null
+  zig_skipped?: string | null
   error?: string
 }
 
 /**
+ * Após 8123: puxa Baru (Zig) se `ZIG_API_TOKEN` estiver setado.
+ * Falha soft — não derruba o refresh diário (token ausente / API fora).
+ */
+async function tryApplyZigAfterRefresh(
+  panel: RomPanelId,
+  periodId: string,
+  actor: string,
+): Promise<{ applied: number | null; skipped: string | null }> {
+  if (!isZigFolhaConfigured()) {
+    return { applied: null, skipped: 'zig_not_configured' }
+  }
+  try {
+    const zig = await applyZigConsumoBaruToPeriod(panel, {
+      periodId,
+      actor,
+    })
+    return {
+      applied: zig.report.applied.length,
+      skipped: zig.zig.skipped ?? null,
+    }
+  } catch (e) {
+    return {
+      applied: null,
+      skipped: e instanceof Error ? e.message : String(e),
+    }
+  }
+}
+
+/**
  * Cron diário: recalcula rascunhos abertos (draft / ready_for_review)
- * da quinzena em curso (hoje entre from e to). Não reabre Q2 fechada
- * nem toca períodos já aprovados ou pagos.
+ * da quinzena em curso (hoje entre from e to) — Avec 8123 + Zig Baru.
+ * Sem cola Fopag. Não reabre Q2 fechada nem toca aprovado/pago.
  */
 export async function runFolhaDailyRefresh(
   panel: RomPanelId,
@@ -369,11 +483,18 @@ export async function runFolhaDailyRefresh(
         today,
         actor: 'cron:folha-daily',
       })
+      const zig = await tryApplyZigAfterRefresh(
+        panel,
+        refreshed.period.id,
+        'cron:folha-daily-zig',
+      )
       results.push({
         period_id: q.id,
         outcome: 'refreshed',
         period_status: refreshed.period.status,
         source: refreshed.source,
+        zig_applied: zig.applied,
+        zig_skipped: zig.skipped,
       })
     } catch (e) {
       results.push({

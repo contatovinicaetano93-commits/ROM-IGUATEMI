@@ -112,6 +112,19 @@ describe('normalizeCommission8123Row', () => {
   it('sem nome → null', () => {
     expect(normalizeCommission8123Row({ a_pagar: 100 })).toBeNull()
   })
+
+  it('lê taxa cartão com cabeçalho Avec (espaço, acento, camelCase)', () => {
+    const spaced = normalizeCommission8123Row({
+      nome: 'ALISON ALVAREZ',
+      'Taxa Cartão': -588.01,
+    })
+    expect(spaced?.card_fee).toBe(-588.01)
+    const camel = normalizeCommission8123Row({
+      nome: 'ALISON ALVAREZ',
+      taxaCartao: '-114,12',
+    })
+    expect(camel?.card_fee).toBe(-114.12)
+  })
 })
 
 describe('normalizeCommission0029Row', () => {
