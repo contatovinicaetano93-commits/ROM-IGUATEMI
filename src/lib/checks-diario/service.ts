@@ -44,12 +44,16 @@ export async function loadChecksAccess(session: AuthSession) {
     })
     const inferred = checksTeamFromCargoPackage(pack?.id)
     if (inferred) {
-      await upsertChecksMembership({
-        employeeId: session.employeeId,
-        team: inferred.team,
-        isLead: inferred.is_lead,
-      })
-      membership = inferred
+      try {
+        await upsertChecksMembership({
+          employeeId: session.employeeId,
+          team: inferred.team,
+          isLead: inferred.is_lead,
+        })
+        membership = inferred
+      } catch {
+        membership = inferred
+      }
     }
   }
 
@@ -73,13 +77,17 @@ async function syncMembershipsFromCargos() {
     })
     const inferred = checksTeamFromCargoPackage(pack?.id)
     if (!inferred) continue
-    const existing = await getChecksMembership(emp.id)
-    if (existing) continue
-    await upsertChecksMembership({
-      employeeId: emp.id,
-      team: inferred.team,
-      isLead: inferred.is_lead,
-    })
+    try {
+      const existing = await getChecksMembership(emp.id)
+      if (existing) continue
+      await upsertChecksMembership({
+        employeeId: emp.id,
+        team: inferred.team,
+        isLead: inferred.is_lead,
+      })
+    } catch {
+      // Uma falha (CHECK/módulo) não pode derrubar o board inteiro.
+    }
   }
 }
 

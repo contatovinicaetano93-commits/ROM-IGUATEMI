@@ -9,5 +9,6 @@ describe('ensureGrantableModuleKeyCheck', () => {
     expect(sql).toContain("'dashboard'")
     expect(sql).toContain("'pipeline'")
     expect(sql).toContain("'checks_diario'")
+    expect(sql.startsWith('check (module_key in')).toBe(true)
   })
 })
