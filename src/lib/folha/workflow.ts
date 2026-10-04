@@ -13,6 +13,7 @@ import { roundFolha } from '@/lib/folha/calc'
 import { quinzenaForYearMonthHalf } from '@/lib/folha/period'
 import type { FolhaPeriodStatus } from '@/lib/folha/types'
 import { occupancyMergeKey } from '@/lib/director-report/match-pro'
+import { folhaNameBelongsToPanel } from '@/lib/folha/unit-scope'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
 export type FolhaLineExtrasPatch = Partial<FolhaDraftLine['folha_extras']>
@@ -39,6 +40,22 @@ export function canTransitionFolhaStatus(
   // Atalho admin: draft → approved (review implícita)
   if (from === 'draft' && to === 'approved') return true
   return STATUS_RANK[to] === STATUS_RANK[from] + 1
+}
+
+export function isFolhaStatusOpenForUnitScope(status: FolhaPeriodStatus): boolean {
+  switch (status) {
+    case 'awaiting_rules':
+    case 'draft':
+    case 'ready_for_review':
+      return true
+    case 'approved':
+    case 'paid':
+      return false
+    default: {
+      const _exhaustive: never = status
+      return _exhaustive
+    }
+  }
 }
 
 export function sumProposedPay(lines: readonly FolhaDraftLine[]): number | null {
@@ -142,6 +159,8 @@ export function refreshDraftPreservingExtras(args: {
   professionals: readonly CommissionProfessionalRow[]
   previousLines: readonly FolhaDraftLine[]
   quinzenaDay?: string
+  /** Default true. false preserva nomes de período já aprovado/pago. */
+  scopeToPanel?: boolean
 }): FolhaDraft {
   const extrasByKey = new Map<string, FolhaDraftLine['folha_extras']>()
   for (const line of args.previousLines) {
@@ -154,6 +173,7 @@ export function refreshDraftPreservingExtras(args: {
     referenceDay: args.referenceDay,
     professionals: args.professionals,
     quinzenaDay: args.quinzenaDay,
+    scopeToPanel: args.scopeToPanel,
   })
 
   const lines = base.lines.map((line) => {
@@ -190,8 +210,11 @@ export function rehydrateFolhaDraftFromPeriod(
     reference_day: string | null
     lines: FolhaDraftLine[]
     source_professionals?: readonly CommissionProfessionalRow[]
+    status?: FolhaPeriodStatus
   },
 ): { lines: FolhaDraftLine[]; total: number | null } {
+  const scopeToPanel =
+    row.status == null ? true : isFolhaStatusOpenForUnitScope(row.status)
   const source = row.source_professionals ?? []
   if (source.length > 0) {
     const draft = refreshDraftPreservingExtras({
@@ -200,35 +223,38 @@ export function rehydrateFolhaDraftFromPeriod(
       professionals: source,
       previousLines: row.lines,
       quinzenaDay: row.to_day,
+      scopeToPanel,
     })
     return { lines: draft.lines, total: draft.total_proposed_pay }
   }
   // Sem source: reconstrói a partir do espelho avec em cada linha.
   const applyTaxExtras = row.half === 1
-  const lines = row.lines.map((line) =>
-    patchFolhaLineExtras({
-      panel,
-      line,
-      source: {
-        name: line.name,
-        role: line.cargo_raw,
-        charged: line.avec.charged,
-        service_share: line.avec.service_share,
-        product_share: line.avec.product_share,
-        other_share: null,
-        tip: line.avec.tip,
-        product_spend: line.avec.product_spend,
-        card_fee: line.avec.card_fee,
-        admin_fee: line.avec.admin_fee,
-        assistant_discount: line.avec.assistant_discount,
-        other_discounts: line.avec.other_discounts,
-        net_payable: line.avec.net_payable,
-        house_share: line.avec.house_share,
-      },
-      extras: line.folha_extras,
-      applyTaxExtras,
-    }),
-  )
+  const lines = row.lines
+    .filter((line) => !scopeToPanel || folhaNameBelongsToPanel(panel, line.name))
+    .map((line) =>
+      patchFolhaLineExtras({
+        panel,
+        line,
+        source: {
+          name: line.name,
+          role: line.cargo_raw,
+          charged: line.avec.charged,
+          service_share: line.avec.service_share,
+          product_share: line.avec.product_share,
+          other_share: null,
+          tip: line.avec.tip,
+          product_spend: line.avec.product_spend,
+          card_fee: line.avec.card_fee,
+          admin_fee: line.avec.admin_fee,
+          assistant_discount: line.avec.assistant_discount,
+          other_discounts: line.avec.other_discounts,
+          net_payable: line.avec.net_payable,
+          house_share: line.avec.house_share,
+        },
+        extras: line.folha_extras,
+        applyTaxExtras,
+      }),
+    )
   return { lines, total: sumProposedPay(lines) }
 }
 
@@ -244,6 +270,7 @@ export function periodRowToDraft(
     lines: FolhaDraftLine[]
     total_proposed_pay: number | null
     source_professionals?: readonly CommissionProfessionalRow[]
+    status?: FolhaPeriodStatus
   },
 ): FolhaDraft {
   const { lines, total } = rehydrateFolhaDraftFromPeriod(panel, row)

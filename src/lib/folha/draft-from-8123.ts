@@ -35,6 +35,7 @@ import {
   normalizeFolhaCargo,
   type FolhaCargo,
 } from '@/lib/folha/rules'
+import { folhaNameBelongsToPanel } from '@/lib/folha/unit-scope'
 import {
   getLatestSalonCommissionsDaily,
   getSalonCommissionsDailyNear,
@@ -1241,11 +1242,18 @@ export function buildFolhaDraftFrom8123(args: {
   professionals: readonly CommissionProfessionalRow[]
   /** Âncora da quinzena; default = referenceDay. */
   quinzenaDay?: string
+  /**
+   * Isola a unidade (default true). false só em período já aprovado/pago,
+   * para não reescrever o histórico na tela.
+   */
+  scopeToPanel?: boolean
 }): FolhaDraft {
   const quinzena = quinzenaForDay(args.quinzenaDay ?? args.referenceDay)
   const applyTaxExtras = quinzena.half === 1
+  const scopeToPanel = args.scopeToPanel !== false
   const lines = args.professionals
     .filter((p) => Boolean(p.name?.trim()))
+    .filter((p) => !scopeToPanel || folhaNameBelongsToPanel(args.panel, p.name))
     .map((p) => buildFolhaDraftLine(args.panel, p, undefined, { applyTaxExtras }))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
 

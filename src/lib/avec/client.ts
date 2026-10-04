@@ -224,6 +224,14 @@ export function withRequiredAvecReportParams(
         salao_id: params.salao_id ?? unit ?? undefined,
       }
     }
+    case '8123': {
+      // Comissões — sem salao_id o token compartilhado devolve as duas unidades.
+      const unit = getAvecUnitId()
+      return {
+        ...params,
+        salao_id: params.salao_id ?? unit ?? undefined,
+      }
+    }
     case '0029': {
       // Descontos linha a linha — profissional_id obrigatório (sem id a Avec devolve 400).
       const range = currentMonthRange()

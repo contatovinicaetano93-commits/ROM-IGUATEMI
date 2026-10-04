@@ -39,6 +39,7 @@ import type {
 import {
   applyExtrasToDraftLines,
   canTransitionFolhaStatus,
+  isFolhaStatusOpenForUnitScope,
   periodRowToDraft,
   refreshDraftPreservingExtras,
   sumProposedPay,
@@ -55,6 +56,10 @@ import {
   type ApplyZigConsumoResult,
 } from '@/lib/folha/zig-consumo'
 import { resolveFolhaTaxLineName } from '@/lib/folha/tax-cnpj'
+import {
+  filterFolhaProfessionalsForPanel,
+  folhaPeriodNeedsUnitScope,
+} from '@/lib/folha/unit-scope'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
 export type FolhaLoadOpts = {
@@ -64,6 +69,31 @@ export type FolhaLoadOpts = {
   referenceDay?: string
   actor?: string | null
   today?: string
+}
+
+async function persistScopedOpenFolhaPeriod(
+  panel: RomPanelId,
+  persisted: FolhaPeriodRow,
+  actor?: string | null,
+): Promise<{ draft: FolhaDraft; period: FolhaPeriodRow }> {
+  if (
+    !isFolhaStatusOpenForUnitScope(persisted.status) ||
+    !folhaPeriodNeedsUnitScope(panel, persisted)
+  ) {
+    return { draft: periodRowToDraft(panel, persisted), period: persisted }
+  }
+  const draft = periodRowToDraft(panel, persisted)
+  const period = await upsertFolhaPeriodFromDraft({
+    draft,
+    sourceProfessionals: filterFolhaProfessionalsForPanel(
+      panel,
+      persisted.source_professionals,
+    ),
+    updatedBy: actor ?? 'folha-unit-scope',
+    status: persisted.status,
+    forceStatus: true,
+  })
+  return { draft: periodRowToDraft(panel, period), period }
 }
 
 export function buildUpcomingPayments(today = todayIsoSaoPaulo()): FolhaUpcomingPayment[] {
@@ -128,9 +158,10 @@ export async function loadOrCreateFolhaDraft(
   }
 
   if (persisted && !snapshot) {
+    const scoped = await persistScopedOpenFolhaPeriod(panel, persisted, opts?.actor)
     return {
-      draft: periodRowToDraft(panel, persisted),
-      period: persisted,
+      draft: scoped.draft,
+      period: scoped.period,
       quinzena,
     }
   }
@@ -138,10 +169,14 @@ export async function loadOrCreateFolhaDraft(
   if (!snapshot) return { draft: null, period: persisted, quinzena }
 
   if (!persisted) {
+    const professionals = filterFolhaProfessionalsForPanel(panel, snapshot.professionals)
+    if (professionals.length === 0) {
+      return { draft: null, period: null, quinzena }
+    }
     const draft = buildFolhaDraftFrom8123({
       panel,
       referenceDay: snapshot.day,
-      professionals: snapshot.professionals,
+      professionals,
       quinzenaDay: quinzena.to,
     })
     // Garante id/label/payDate da quinzena pedida (não a do snapshot day).
@@ -149,7 +184,7 @@ export async function loadOrCreateFolhaDraft(
     const period = await upsertFolhaPeriodFromDraft({
       draft,
       status: 'draft',
-      sourceProfessionals: snapshot.professionals,
+      sourceProfessionals: professionals,
       updatedBy: opts?.actor ?? null,
       forceStatus: true,
     })
@@ -180,9 +215,10 @@ export async function loadOrCreateFolhaDraft(
     }
   }
 
+  const scoped = await persistScopedOpenFolhaPeriod(panel, persisted, opts?.actor)
   return {
-    draft: periodRowToDraft(panel, persisted),
-    period: persisted,
+    draft: scoped.draft,
+    period: scoped.period,
     quinzena,
   }
 }
@@ -252,6 +288,16 @@ export async function refreshFolhaDraft(
     professionals = snapshot.professionals
     referenceDay = snapshot.day
     source = 'db_snapshot'
+  }
+
+  professionals = filterFolhaProfessionalsForPanel(panel, professionals)
+  if (professionals.length === 0) {
+    throw (
+      avecError ??
+      new Error(
+        `Sem 8123 na janela ${range.inicio}–${range.fim} (nem snapshot DB até ${quinzena.to})`,
+      )
+    )
   }
 
   const existing = await getFolhaPeriod(quinzena.id)
