@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Area, AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import {
@@ -20,7 +20,14 @@ import { SectionCard, CountBadge, CHANNEL_LABEL } from '../_components/ui'
 import { MonthYearField } from '../_components/MonthYearField'
 import { VisaoSection } from '../_components/VisaoSection'
 import { VisaoAnaliticaNav } from '../_components/intranet/VisaoAnaliticaNav'
-import { formatCurrency, formatPercent, formatPercentPoints, todayIso } from '@/lib/salon/format'
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+  formatIntegerBr,
+  formatPercent,
+  formatPercentPoints,
+  todayIso,
+} from '@/lib/salon/format'
 import { momCompareLine } from '@/lib/salon/mom-delta'
 import { previousMonthKey, yearAgoMonthKey } from '@/lib/salon/month-window'
 
@@ -840,63 +847,87 @@ export default function DashboardPage() {
                   <span className="font-medium text-foreground/80">Média/dia (acumulado)</span> = Fat.
                   até o mês ÷ dias veio nos meses do acumulado.
                 </p>
+                <p>
+                  <span className="font-medium text-foreground/80">— / Sem visita</span> = faturou
+                  no 8123, mas não há dia de visita Avec casado ao nome neste recorte. Constância, Δ
+                  e médias/dia só existem com visita. Célula vazia não é zero.
+                </p>
               </div>
-              <table className="w-full min-w-[960px] text-sm">
+              <div className="-mx-1 overflow-x-auto rounded-xl border border-border/70">
+              <table className="w-full min-w-[1080px] text-sm">
                 <thead>
-                  <tr className="text-left text-[0.65rem] uppercase tracking-wide text-muted">
-                    <th className="pb-2 font-medium">Profissional</th>
-                    <th className="pb-2 font-medium" title="Valor cobrado 8123 no mês do dropdown">
+                  <tr className="text-[0.65rem] uppercase tracking-wide text-muted">
+                    <th className="sticky left-0 z-[2] bg-card px-3 py-2.5 text-left font-medium">
+                      Profissional
+                    </th>
+                    <th
+                      className="whitespace-nowrap px-2 py-2.5 text-right font-medium"
+                      title="Valor cobrado 8123 no mês do dropdown"
+                    >
                       Fat. mês
                     </th>
-                    <th className="pb-2 font-medium" title="Dias distintos com visita Avec no mês">
+                    <th
+                      className="whitespace-nowrap px-2 py-2.5 text-right font-medium"
+                      title="Dias distintos com visita Avec no mês"
+                    >
                       Dias no mês
                     </th>
-                    <th className="pb-2 font-medium" title="Dias com receita no salão (mês)">
+                    <th
+                      className="whitespace-nowrap px-2 py-2.5 text-right font-medium"
+                      title="Dias com receita no salão (mês)"
+                    >
                       Dias úteis
                     </th>
                     <th
-                      className="pb-2 font-medium"
+                      className="whitespace-nowrap px-2 py-2.5 text-right font-medium"
                       title="Dias no mês ÷ dias úteis do salão × 100"
                     >
                       Constância
                     </th>
                     <th
-                      className="pb-2 font-medium"
+                      className="whitespace-nowrap px-2 py-2.5 text-right font-medium"
                       title="(Dias no mês ÷ média de dias da unidade − 1) × 100"
                     >
                       Δ vs média
                     </th>
                     <th
-                      className="pb-2 font-medium"
+                      className="whitespace-nowrap px-2 py-2.5 text-right font-medium"
                       title="Fat. mês ÷ dias no mês (quanto faturou por dia que veio)"
                     >
                       Média/dia (mês)
                     </th>
                     <th
-                      className="pb-2 font-medium"
+                      className="whitespace-nowrap px-2 py-2.5 text-right font-medium"
                       title="Soma jan→mês do dropdown: 8123 MTD por mês, ou P1 se faltar 8123"
                     >
                       Fat. até o mês
                     </th>
                     <th
-                      className="pb-2 font-medium"
+                      className="whitespace-nowrap px-2 py-2.5 text-right font-medium"
                       title="Dias distintos com visita no ano civil até o fim do recorte"
                     >
                       Dias no ano
                     </th>
                     <th
-                      className="pb-2 font-medium"
+                      className="whitespace-nowrap px-2 py-2.5 text-right font-medium"
                       title="Fat. até o mês ÷ dias veio nos meses do acumulado"
                     >
                       Média/dia (acum.)
                     </th>
-                    <th className="pb-2 font-medium">Status</th>
+                    <th className="whitespace-nowrap px-2 py-2.5 text-right font-medium">
+                      Status
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {indicePerf.professionals.map((pro) => (
-                    <tr key={pro.name}>
-                      <td className="py-2 font-medium text-foreground/90">
+                    <tr key={pro.name} className="border-t border-border">
+                      <td
+                        className="sticky left-0 z-[1] max-w-[16rem] truncate bg-card px-3 py-2 font-medium text-foreground/90"
+                        title={
+                          pro.categoria ? `${pro.name} · ${pro.categoria}` : pro.name
+                        }
+                      >
                         {pro.name}
                         {pro.categoria ? (
                           <span className="ml-1.5 font-normal text-muted">
@@ -904,21 +935,15 @@ export default function DashboardPage() {
                           </span>
                         ) : null}
                       </td>
-                      <td className="py-2 tabular-nums">
-                        {pro.fat_bruto != null ? formatCurrency(pro.fat_bruto) : '—'}
-                      </td>
-                      <td className="py-2 tabular-nums">
-                        {pro.dias_trabalhados != null ? pro.dias_trabalhados : '—'}
-                      </td>
-                      <td className="py-2 tabular-nums">
-                        {pro.dias_uteis_salao != null ? pro.dias_uteis_salao : '—'}
-                      </td>
-                      <td className="py-2 tabular-nums font-medium">
+                      <IndiceMoneyCell value={pro.fat_bruto} />
+                      <IndiceCountCell value={pro.dias_trabalhados} />
+                      <IndiceCountCell value={pro.dias_uteis_salao} />
+                      <IndiceDerivedCell>
                         {pro.constancia_pct != null
                           ? formatPercentPoints(pro.constancia_pct, 1)
-                          : '—'}
-                      </td>
-                      <td className="py-2 tabular-nums">
+                          : null}
+                      </IndiceDerivedCell>
+                      <IndiceDerivedCell>
                         {pro.delta_indice != null ? (
                           <span
                             className={
@@ -932,31 +957,13 @@ export default function DashboardPage() {
                             {pro.delta_indice > 0 ? '+' : ''}
                             {formatPercentPoints(pro.delta_indice, 1)}
                           </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="py-2 tabular-nums">
-                        {pro.media_dia_trabalhado != null
-                          ? formatCurrency(pro.media_dia_trabalhado)
-                          : '—'}
-                      </td>
-                      <td className="py-2 tabular-nums">
-                        {pro.fat_bruto_ano != null
-                          ? formatCurrency(pro.fat_bruto_ano)
-                          : '—'}
-                      </td>
-                      <td className="py-2 tabular-nums">
-                        {pro.dias_trabalhados_ano != null
-                          ? pro.dias_trabalhados_ano
-                          : '—'}
-                      </td>
-                      <td className="py-2 tabular-nums">
-                        {pro.media_dia_ano != null
-                          ? formatCurrency(pro.media_dia_ano)
-                          : '—'}
-                      </td>
-                      <td className="py-2">
+                        ) : null}
+                      </IndiceDerivedCell>
+                      <IndiceMoneyCell value={pro.media_dia_trabalhado} />
+                      <IndiceMoneyCell value={pro.fat_bruto_ano} />
+                      <IndiceCountCell value={pro.dias_trabalhados_ano} />
+                      <IndiceMoneyCell value={pro.media_dia_ano} />
+                      <td className="whitespace-nowrap px-2 py-2 text-right">
                         <IndiceStandingBadge standing={pro.standing} />
                       </td>
                     </tr>
@@ -965,53 +972,53 @@ export default function DashboardPage() {
                 {indicePerf.totals ? (
                   <tfoot>
                     <tr className="border-t-2 border-border text-sm font-semibold">
-                      <td className="py-2.5 text-foreground">Total</td>
-                      <td className="py-2.5 tabular-nums">
-                        {indicePerf.totals.fat_bruto != null
-                          ? formatCurrency(indicePerf.totals.fat_bruto)
-                          : '—'}
+                      <td className="sticky left-0 z-[1] bg-card px-3 py-2.5 text-foreground">
+                        Total
                       </td>
-                      <td className="py-2.5 tabular-nums">
-                        {indicePerf.totals.dias_trabalhados != null
-                          ? indicePerf.totals.dias_trabalhados
-                          : '—'}
-                      </td>
-                      <td className="py-2.5 tabular-nums">
-                        {indicePerf.totals.dias_uteis_salao != null
-                          ? indicePerf.totals.dias_uteis_salao
-                          : '—'}
-                      </td>
-                      <td className="py-2.5 tabular-nums">
+                      <IndiceMoneyCell
+                        value={indicePerf.totals.fat_bruto}
+                        className="py-2.5"
+                      />
+                      <IndiceCountCell
+                        value={indicePerf.totals.dias_trabalhados}
+                        className="py-2.5"
+                      />
+                      <IndiceCountCell
+                        value={indicePerf.totals.dias_uteis_salao}
+                        className="py-2.5"
+                      />
+                      <IndiceDerivedCell className="py-2.5">
                         {indicePerf.totals.constancia_pct != null
                           ? formatPercentPoints(indicePerf.totals.constancia_pct, 1)
-                          : '—'}
+                          : null}
+                      </IndiceDerivedCell>
+                      <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-muted">
+                        —
                       </td>
-                      <td className="py-2.5 tabular-nums text-muted">—</td>
-                      <td className="py-2.5 tabular-nums">
-                        {indicePerf.totals.media_dia_trabalhado != null
-                          ? formatCurrency(indicePerf.totals.media_dia_trabalhado)
-                          : '—'}
+                      <IndiceMoneyCell
+                        value={indicePerf.totals.media_dia_trabalhado}
+                        className="py-2.5"
+                      />
+                      <IndiceMoneyCell
+                        value={indicePerf.totals.fat_bruto_ano}
+                        className="py-2.5"
+                      />
+                      <IndiceCountCell
+                        value={indicePerf.totals.dias_trabalhados_ano}
+                        className="py-2.5"
+                      />
+                      <IndiceMoneyCell
+                        value={indicePerf.totals.media_dia_ano}
+                        className="py-2.5"
+                      />
+                      <td className="whitespace-nowrap px-2 py-2.5 text-right text-muted">
+                        —
                       </td>
-                      <td className="py-2.5 tabular-nums">
-                        {indicePerf.totals.fat_bruto_ano != null
-                          ? formatCurrency(indicePerf.totals.fat_bruto_ano)
-                          : '—'}
-                      </td>
-                      <td className="py-2.5 tabular-nums">
-                        {indicePerf.totals.dias_trabalhados_ano != null
-                          ? indicePerf.totals.dias_trabalhados_ano
-                          : '—'}
-                      </td>
-                      <td className="py-2.5 tabular-nums">
-                        {indicePerf.totals.media_dia_ano != null
-                          ? formatCurrency(indicePerf.totals.media_dia_ano)
-                          : '—'}
-                      </td>
-                      <td className="py-2.5 text-muted">—</td>
                     </tr>
                   </tfoot>
                 ) : null}
               </table>
+              </div>
             </div>
           )}
         </SectionCard>
@@ -1187,37 +1194,129 @@ function InsightCard({
   )
 }
 
+function indiceDashTitle(kind: 'money' | 'days' | 'derived'): string {
+  switch (kind) {
+    case 'money':
+      return 'Sem faturamento neste recorte — não é R$ 0'
+    case 'days':
+      return 'Sem dia de visita Avec casado ao nome — não é 0'
+    case 'derived':
+      return 'Depende de dias de visita no recorte — não é 0'
+    default: {
+      const _exhaustive: never = kind
+      return _exhaustive
+    }
+  }
+}
+
+const INDICE_CELL = 'whitespace-nowrap px-2 py-2 text-right tabular-nums'
+
+function IndiceMoneyCell({
+  value,
+  className = '',
+}: {
+  value: number | null | undefined
+  className?: string
+}) {
+  if (value == null) {
+    return (
+      <td
+        className={`${INDICE_CELL} text-muted ${className}`}
+        title={indiceDashTitle('money')}
+      >
+        —
+      </td>
+    )
+  }
+  return (
+    <td className={`${INDICE_CELL} ${className}`} title={formatCurrency(value)}>
+      {formatCurrencyCompact(value)}
+    </td>
+  )
+}
+
+function IndiceCountCell({
+  value,
+  className = '',
+}: {
+  value: number | null | undefined
+  className?: string
+}) {
+  if (value == null) {
+    return (
+      <td
+        className={`${INDICE_CELL} text-muted ${className}`}
+        title={indiceDashTitle('days')}
+      >
+        —
+      </td>
+    )
+  }
+  return (
+    <td className={`${INDICE_CELL} ${className}`}>{formatIntegerBr(value)}</td>
+  )
+}
+
+function IndiceDerivedCell({
+  children,
+  className = '',
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  if (children == null) {
+    return (
+      <td
+        className={`${INDICE_CELL} text-muted ${className}`}
+        title={indiceDashTitle('derived')}
+      >
+        —
+      </td>
+    )
+  }
+  return (
+    <td className={`${INDICE_CELL} font-medium ${className}`}>{children}</td>
+  )
+}
+
 function IndiceStandingBadge({
   standing,
 }: {
   standing: IndicePerformancePro['standing']
 }) {
-  if (standing === 'acima') {
-    return (
-      <span className="rounded-full bg-success/15 px-2 py-0.5 text-[0.65rem] font-semibold text-success">
-        Acima
-      </span>
-    )
+  switch (standing) {
+    case 'acima':
+      return (
+        <span className="rounded-full bg-success/15 px-2 py-0.5 text-[0.65rem] font-semibold text-success">
+          Acima
+        </span>
+      )
+    case 'abaixo':
+      return (
+        <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.65rem] font-semibold text-warning">
+          Abaixo
+        </span>
+      )
+    case 'neutro':
+      return (
+        <span className="rounded-full bg-border/60 px-2 py-0.5 text-[0.65rem] font-semibold text-muted">
+          Neutro
+        </span>
+      )
+    case 'sem_base':
+      return (
+        <span
+          className="rounded-full bg-border/40 px-2 py-0.5 text-[0.65rem] text-muted"
+          title="Faturou no 8123, mas não há dia de visita Avec neste mês. Constância, Δ e médias/dia só existem com visita."
+        >
+          Sem visita
+        </span>
+      )
+    default: {
+      const _exhaustive: never = standing
+      return _exhaustive
+    }
   }
-  if (standing === 'abaixo') {
-    return (
-      <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[0.65rem] font-semibold text-warning">
-        Abaixo
-      </span>
-    )
-  }
-  if (standing === 'neutro') {
-    return (
-      <span className="rounded-full bg-border/60 px-2 py-0.5 text-[0.65rem] font-semibold text-muted">
-        Neutro
-      </span>
-    )
-  }
-  return (
-    <span className="rounded-full bg-border/40 px-2 py-0.5 text-[0.65rem] text-muted">
-      Sem base
-    </span>
-  )
 }
 
 function DeltaUnder({
