@@ -6,6 +6,7 @@ import {
   assignMemberToTeam,
   buildChecksBoard,
   loadChecksAccess,
+  unassignMemberFromTeam,
 } from '@/lib/checks-diario/service'
 import { CHECKS_TEAMS, type ChecksTeamId } from '@/lib/checks-diario/types'
 
@@ -73,6 +74,15 @@ export async function POST(req: NextRequest) {
         employeeId,
         team,
         isLead: body.is_lead === true,
+      })
+      return ok({ ok: true })
+    }
+    if (action === 'unassign_member') {
+      const employeeId = typeof body.employee_id === 'string' ? body.employee_id : ''
+      if (!employeeId) return err('Informe o colaborador', 400)
+      await unassignMemberFromTeam({
+        session: auth.session,
+        employeeId,
       })
       return ok({ ok: true })
     }

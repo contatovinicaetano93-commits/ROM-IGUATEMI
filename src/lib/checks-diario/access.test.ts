@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canManageChecksTeam,
   checksTeamFromCargoPackage,
   isChecksDono,
   resolveChecksAccess,
+  shouldAutoAssignFromCargo,
 } from '@/lib/checks-diario/access'
 import type { AuthSession } from '@/lib/auth'
 import type { EmployeeRecord } from '@/lib/employees'
@@ -101,5 +103,41 @@ describe('resolveChecksAccess', () => {
         membership: null,
       }),
     ).toMatchObject({ canEdit: false, isDono: true, scopedTeam: null })
+  })
+})
+
+describe('canManageChecksTeam', () => {
+  it('master gere qualquer time; lead só o seu; dono não edita', () => {
+    expect(
+      canManageChecksTeam(
+        { canEdit: true, isAdminMaster: true, scopedTeam: null },
+        'ops_fin',
+      ),
+    ).toBe(true)
+    expect(
+      canManageChecksTeam(
+        { canEdit: true, isAdminMaster: false, scopedTeam: 'gestor_unidade' },
+        'gestor_unidade',
+      ),
+    ).toBe(true)
+    expect(
+      canManageChecksTeam(
+        { canEdit: true, isAdminMaster: false, scopedTeam: 'gestor_unidade' },
+        'ops_fin',
+      ),
+    ).toBe(false)
+    expect(
+      canManageChecksTeam(
+        { canEdit: false, isAdminMaster: false, scopedTeam: null },
+        'rh',
+      ),
+    ).toBe(false)
+  })
+})
+
+describe('shouldAutoAssignFromCargo', () => {
+  it('não recoloca quem o master já tirou (linha inativa ainda existe)', () => {
+    expect(shouldAutoAssignFromCargo(false)).toBe(true)
+    expect(shouldAutoAssignFromCargo(true)).toBe(false)
   })
 })

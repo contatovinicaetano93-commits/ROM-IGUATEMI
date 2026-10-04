@@ -7,6 +7,7 @@ import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { PanelButton, SectionCard } from '../_components/ui'
 import {
   buildTeamNetwork,
+  type TeamNetworkPerson,
   type TeamNetworkRow,
 } from '@/lib/checks-diario/team-network'
 import {
@@ -63,6 +64,7 @@ export default function ChecksDiarioPage() {
   const [assignTeam, setAssignTeam] = useState<ChecksTeamId>('gestor_unidade')
   const [assignLead, setAssignLead] = useState(false)
   const [savingMember, setSavingMember] = useState(false)
+  const [busyUnassignId, setBusyUnassignId] = useState<string | null>(null)
 
   const load = useCallback(async (teamFilter: ChecksTeamId | 'all') => {
     setLoading(true)
@@ -228,6 +230,33 @@ export default function ChecksDiarioPage() {
       setError(err instanceof Error ? err.message : 'Falha ao colocar na equipe')
     } finally {
       setSavingMember(false)
+    }
+  }
+
+  async function unassignMember(employeeId: string, name: string) {
+    const ok = window.confirm(
+      `Tirar ${name} dos Checks?\n\nO cargo não recoloca sozinho. Para voltar, use Configurar equipes.`,
+    )
+    if (!ok) return
+    setBusyUnassignId(employeeId)
+    setError(null)
+    try {
+      const res = await fetch('/api/checks-diario', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'unassign_member',
+          employee_id: employeeId,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Falha ao tirar da equipe')
+      await load(team)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao tirar da equipe')
+    } finally {
+      setBusyUnassignId(null)
     }
   }
 
@@ -402,6 +431,8 @@ export default function ChecksDiarioPage() {
                           })
                         }
                         onRemove={deactivateTask}
+                        onUnassign={() => unassignMember(person.employee_id, person.name)}
+                        unassigning={busyUnassignId === person.employee_id}
                       />
                     ))}
                   </ul>
@@ -416,10 +447,17 @@ export default function ChecksDiarioPage() {
         <>
           <SectionCard title="Quem fiscaliza quem">
             <p className="mb-3 text-xs text-muted">
-              Três times fixos. O cargo na Intranet já coloca a pessoa no time. O responsável cria
-              os checks na aba Hoje; o restante só executa.
+              Três times fixos. O cargo na Intranet já coloca a pessoa no time. Master e o
+              responsável podem tirar alguém — o cargo não recoloca sozinho. Para voltar, use o
+              ajuste manual abaixo. Checks individuais somem com o botão remover em cada item, na
+              aba Hoje.
             </p>
-            <TeamNetworkMap teams={teamNetwork} />
+            <TeamNetworkMap
+              teams={teamNetwork}
+              canEdit={Boolean(access?.can_edit)}
+              busyUnassignId={busyUnassignId}
+              onUnassign={unassignMember}
+            />
           </SectionCard>
 
           {access?.can_edit ? (
@@ -627,6 +665,8 @@ function PersonDayCard({
   onCancelCompose,
   onCreate,
   onRemove,
+  onUnassign,
+  unassigning,
 }: {
   person: ChecksDiarioPersonBoard
   canEdit: boolean
@@ -637,6 +677,8 @@ function PersonDayCard({
   onCancelCompose: () => void
   onCreate: (title: string, requiresPhoto: boolean) => void
   onRemove: (taskId: string) => void
+  onUnassign: () => void
+  unassigning: boolean
 }) {
   const [title, setTitle] = useState('')
   const [requiresPhoto, setRequiresPhoto] = useState(false)
@@ -669,14 +711,24 @@ function PersonDayCard({
               : `${person.done_tasks}/${person.total_tasks}`}
           </span>
           {canEdit ? (
-            <button
-              type="button"
-              onClick={onStartCompose}
-              className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium hover:bg-background"
-            >
-              <Plus size={12} />
-              Check
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onStartCompose}
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium hover:bg-background"
+              >
+                <Plus size={12} />
+                Check
+              </button>
+              <button
+                type="button"
+                onClick={onUnassign}
+                disabled={unassigning}
+                className="text-xs text-muted underline"
+              >
+                {unassigning ? '…' : 'tirar da equipe'}
+              </button>
+            </>
           ) : null}
         </div>
       </div>
@@ -695,6 +747,15 @@ function PersonDayCard({
               {' — '}
               <button type="button" className="underline" onClick={onStartCompose}>
                 criar primeiro check
+              </button>
+              {' · '}
+              <button
+                type="button"
+                className="underline"
+                disabled={unassigning}
+                onClick={onUnassign}
+              >
+                tirar da equipe
               </button>
             </>
           ) : (
@@ -804,7 +865,52 @@ function SummaryTile({
   )
 }
 
-function TeamNetworkMap({ teams }: { teams: TeamNetworkRow[] }) {
+function TeamNetworkPersonRow({
+  person,
+  hint,
+  strong,
+  canEdit,
+  busy,
+  onUnassign,
+}: {
+  person: TeamNetworkPerson
+  hint?: string
+  strong?: boolean
+  canEdit: boolean
+  busy: boolean
+  onUnassign: (employeeId: string, name: string) => void
+}) {
+  return (
+    <li className="flex items-center justify-between gap-2 text-sm">
+      <span>
+        <span className={strong ? 'font-medium' : undefined}>{person.name}</span>
+        {hint ? <span className="ml-1 text-xs text-muted">{hint}</span> : null}
+      </span>
+      {canEdit ? (
+        <button
+          type="button"
+          className="shrink-0 text-xs text-muted underline"
+          disabled={busy}
+          onClick={() => onUnassign(person.employee_id, person.name)}
+        >
+          {busy ? '…' : 'tirar'}
+        </button>
+      ) : null}
+    </li>
+  )
+}
+
+function TeamNetworkMap({
+  teams,
+  canEdit,
+  busyUnassignId,
+  onUnassign,
+}: {
+  teams: TeamNetworkRow[]
+  canEdit: boolean
+  busyUnassignId: string | null
+  onUnassign: (employeeId: string, name: string) => void
+}) {
   if (teams.every((t) => t.total === 0)) {
     return (
       <p className="text-sm text-muted">
@@ -825,9 +931,14 @@ function TeamNetworkMap({ teams }: { teams: TeamNetworkRow[] }) {
           ) : (
             <ul className="mt-0.5 space-y-0.5">
               {t.leads.map((lead) => (
-                <li key={lead.employee_id} className="text-sm font-medium">
-                  {lead.name}
-                </li>
+                <TeamNetworkPersonRow
+                  key={lead.employee_id}
+                  person={lead}
+                  strong
+                  canEdit={canEdit}
+                  busy={busyUnassignId === lead.employee_id}
+                  onUnassign={onUnassign}
+                />
               ))}
             </ul>
           )}
@@ -837,12 +948,14 @@ function TeamNetworkMap({ teams }: { teams: TeamNetworkRow[] }) {
           ) : (
             <ul className="mt-0.5 space-y-0.5">
               {t.members.map((m) => (
-                <li key={m.employee_id} className="text-sm">
-                  {m.name}
-                  {m.total_tasks === 0 ? (
-                    <span className="ml-1 text-xs text-muted">· sem check</span>
-                  ) : null}
-                </li>
+                <TeamNetworkPersonRow
+                  key={m.employee_id}
+                  person={m}
+                  hint={m.total_tasks === 0 ? '· sem check' : undefined}
+                  canEdit={canEdit}
+                  busy={busyUnassignId === m.employee_id}
+                  onUnassign={onUnassign}
+                />
               ))}
             </ul>
           )}

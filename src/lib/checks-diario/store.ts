@@ -39,6 +39,10 @@ export async function ensureChecksDiarioTables() {
           on checks_diario_members (team)
       `
       await sql`
+        alter table checks_diario_members
+          add column if not exists active boolean not null default true
+      `
+      await sql`
         create table if not exists checks_diario_tasks (
           id uuid primary key default gen_random_uuid(),
           employee_id uuid not null references intranet_employees (id) on delete cascade,
@@ -103,11 +107,24 @@ export async function getChecksMembership(
   await ensureChecksDiarioTables()
   const sql = getIntranetSql()
   const rows = await sql`
-    select team, is_lead from checks_diario_members where employee_id = ${employeeId} limit 1
+    select team, is_lead
+    from checks_diario_members
+    where employee_id = ${employeeId} and active = true
+    limit 1
   `
   const row = rows[0] as { team: ChecksTeamId; is_lead: boolean } | undefined
   if (!row) return null
   return { team: row.team, is_lead: Boolean(row.is_lead) }
+}
+
+/** Qualquer linha, inclusive quem o master tirou do board (active = false). */
+export async function hasChecksMembershipRecord(employeeId: string): Promise<boolean> {
+  await ensureChecksDiarioTables()
+  const sql = getIntranetSql()
+  const rows = await sql`
+    select 1 from checks_diario_members where employee_id = ${employeeId} limit 1
+  `
+  return rows.length > 0
 }
 
 /** Concede módulo checks_diario; nunca derruba o fluxo se o CHECK ainda estiver velho. */
@@ -129,11 +146,12 @@ export async function upsertChecksMembership(args: {
   await ensureChecksDiarioTables()
   const sql = getIntranetSql()
   await sql`
-    insert into checks_diario_members (employee_id, team, is_lead, updated_at)
-    values (${args.employeeId}, ${args.team}, ${args.isLead}, now())
+    insert into checks_diario_members (employee_id, team, is_lead, active, updated_at)
+    values (${args.employeeId}, ${args.team}, ${args.isLead}, true, now())
     on conflict (employee_id) do update set
       team = excluded.team,
       is_lead = excluded.is_lead,
+      active = true,
       updated_at = now()
   `
   // Módulo é best-effort: membership já basta pro board; sessão precisa re-login.
@@ -144,6 +162,18 @@ export async function upsertChecksMembership(args: {
   }
 }
 
+export async function deactivateChecksMembership(employeeId: string) {
+  await ensureChecksDiarioTables()
+  const sql = getIntranetSql()
+  const rows = await sql`
+    update checks_diario_members
+    set active = false, updated_at = now()
+    where employee_id = ${employeeId} and active = true
+    returning employee_id
+  `
+  if (rows.length === 0) throw new Error('Pessoa não está nos Checks')
+}
+
 export async function listChecksMembers(team?: ChecksTeamId | null) {
   await ensureChecksDiarioTables()
   const sql = getIntranetSql()
@@ -152,7 +182,7 @@ export async function listChecksMembers(team?: ChecksTeamId | null) {
       select m.employee_id, m.team, m.is_lead, e.name, e.email, e.status
       from checks_diario_members m
       join intranet_employees e on e.id = m.employee_id
-      where m.team = ${team} and e.status = 'active'
+      where m.team = ${team} and m.active = true and e.status = 'active'
       order by m.is_lead desc, e.name asc
     `) as Array<{
       employee_id: string
@@ -167,7 +197,7 @@ export async function listChecksMembers(team?: ChecksTeamId | null) {
     select m.employee_id, m.team, m.is_lead, e.name, e.email, e.status
     from checks_diario_members m
     join intranet_employees e on e.id = m.employee_id
-    where e.status = 'active'
+    where m.active = true and e.status = 'active'
     order by m.team, m.is_lead desc, e.name asc
   `) as Array<{
     employee_id: string

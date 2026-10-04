@@ -4,13 +4,17 @@ import type { AuthSession } from '@/lib/auth'
 import {
   resolveChecksAccess,
   checksTeamFromCargoPackage,
+  canManageChecksTeam,
+  shouldAutoAssignFromCargo,
 } from '@/lib/checks-diario/access'
 import {
   checksToday,
   createChecksLog,
   createChecksTask,
+  deactivateChecksMembership,
   getChecksMembership,
   getChecksTask,
+  hasChecksMembershipRecord,
   listActiveEmployeesLite,
   listChecksMembers,
   listLogsForDay,
@@ -36,23 +40,26 @@ export async function loadChecksAccess(session: AuthSession) {
 
   // Auto-vínculo pela cargo package se ainda não estiver na tabela
   if (session.employeeId && employee && !membership) {
-    const pack = matchCargoPackage({
-      panel_role: employee.panel_role,
-      flow_role: employee.flow_role,
-      modules: employee.modules,
-      areaIds: employee.areaIds,
-    })
-    const inferred = checksTeamFromCargoPackage(pack?.id)
-    if (inferred) {
-      try {
-        await upsertChecksMembership({
-          employeeId: session.employeeId,
-          team: inferred.team,
-          isLead: inferred.is_lead,
-        })
-        membership = inferred
-      } catch {
-        membership = inferred
+    const alreadyRecorded = await hasChecksMembershipRecord(session.employeeId)
+    if (shouldAutoAssignFromCargo(alreadyRecorded)) {
+      const pack = matchCargoPackage({
+        panel_role: employee.panel_role,
+        flow_role: employee.flow_role,
+        modules: employee.modules,
+        areaIds: employee.areaIds,
+      })
+      const inferred = checksTeamFromCargoPackage(pack?.id)
+      if (inferred) {
+        try {
+          await upsertChecksMembership({
+            employeeId: session.employeeId,
+            team: inferred.team,
+            isLead: inferred.is_lead,
+          })
+          membership = inferred
+        } catch {
+          membership = inferred
+        }
       }
     }
   }
@@ -78,8 +85,8 @@ async function syncMembershipsFromCargos() {
     const inferred = checksTeamFromCargoPackage(pack?.id)
     if (!inferred) continue
     try {
-      const existing = await getChecksMembership(emp.id)
-      if (existing) continue
+      const alreadyRecorded = await hasChecksMembershipRecord(emp.id)
+      if (!shouldAutoAssignFromCargo(alreadyRecorded)) continue
       await upsertChecksMembership({
         employeeId: emp.id,
         team: inferred.team,
@@ -219,15 +226,27 @@ export async function assignMemberToTeam(args: {
   isLead?: boolean
 }) {
   const { access } = await loadChecksAccess(args.session)
-  if (!access.canEdit) throw new Error('Sem permissão')
-  if (!access.isAdminMaster && access.scopedTeam !== args.team) {
-    throw new Error('Só pode gerir sua equipe')
+  if (!canManageChecksTeam(access, args.team)) {
+    throw new Error(access.canEdit ? 'Só pode gerir sua equipe' : 'Sem permissão')
   }
   await upsertChecksMembership({
     employeeId: args.employeeId,
     team: args.team,
     isLead: args.isLead === true,
   })
+}
+
+export async function unassignMemberFromTeam(args: {
+  session: AuthSession
+  employeeId: string
+}) {
+  const { access } = await loadChecksAccess(args.session)
+  const target = await getChecksMembership(args.employeeId)
+  if (!target) throw new Error('Pessoa não está nos Checks')
+  if (!canManageChecksTeam(access, target.team)) {
+    throw new Error(access.canEdit ? 'Só pode gerir sua equipe' : 'Sem permissão')
+  }
+  await deactivateChecksMembership(args.employeeId)
 }
 
 export async function createTaskForEmployee(args: {
