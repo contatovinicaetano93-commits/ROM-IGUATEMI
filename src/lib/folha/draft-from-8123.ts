@@ -674,7 +674,21 @@ export function buildFolhaDraftLine(
       fatLiquidoRef != null &&
       Math.abs(row.net_payable + baruForClose - fatLiquidoRef) <= 1
     ) {
-      assistantOleriteClosed = true
+      /**
+       * G ≈ a_pagar + Baru só vale quando G realmente embute S (Alana,
+       * produto=0). Se a_pagar ≈ G − produto (Carey: produto ≈ Baru), é
+       * coincidência — Baru ainda abate.
+       */
+      const produtoRef =
+        extras?.produto_referencia != null && extras.produto_referencia > 0.02
+          ? extras.produto_referencia
+          : null
+      const netIsGMinusProduto =
+        produtoRef != null &&
+        Math.abs(row.net_payable - (fatLiquidoRef - produtoRef)) <= 2
+      if (!netIsGMinusProduto) {
+        assistantOleriteClosed = true
+      }
     }
   }
 

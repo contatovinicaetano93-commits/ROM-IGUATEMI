@@ -118,6 +118,14 @@ async function main() {
       if (f) {
         if (f.U > 0.005) {
           extras.servicos_assistente_como_pro = f.U
+          extras.valor_a_pagar_profissional = null
+          extras.taxa_servicos = null
+          patchedU++
+        } else if (extras.servicos_assistente_como_pro != null) {
+          extras.servicos_assistente_como_pro = null
+          extras.valor_a_pagar_profissional = null
+          extras.taxa_servicos = null
+          extras.taxa_adm_assistente = null
           patchedU++
         }
         // Francyele: V literal sem U — coluna conferência (fora do pay do assistente).

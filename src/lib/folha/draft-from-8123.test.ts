@@ -827,6 +827,39 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(2046.9, 1)
   })
 
+  it('Carey: produto ≈ Baru não fecha olerite — Baru ainda abate', () => {
+    const line = buildFolhaDraftLine(
+      'brasil',
+      {
+        name: 'CAREY DOS SANTOS CASTRO',
+        role: 'MULTIPLICADOR',
+        charged: 14448,
+        service_share: null,
+        product_share: null,
+        other_share: null,
+        tip: null,
+        product_spend: -69.76,
+        card_fee: null,
+        admin_fee: 0,
+        assistant_discount: null,
+        other_discounts: null,
+        net_payable: 1515.04,
+        house_share: null,
+      },
+      {
+        consumo_baru: 70.11,
+        servicos_assistente_como_pro: 700,
+        taxa_administrativa: 14,
+        produto_referencia: 69.76,
+        fat_liquido_referencia: 1584.8,
+        liquido_referencia: 1430.93,
+        faturado_referencia: 14448,
+      },
+      { applyTaxExtras: false },
+    )
+    expect(line.proposed_pay).toBeCloseTo(1430.93, 1)
+  })
+
   it('Camila Ornelas: charged×2% → coluna adm; pay já neteia (other≈J+Baru)', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',
