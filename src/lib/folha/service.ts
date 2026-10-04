@@ -431,6 +431,29 @@ export async function transitionFolhaPeriod(args: {
   return { draft, period: updated, notify }
 }
 
+export async function resendFolhaPeriodNotify(args: {
+  panel: RomPanelId
+  periodId: string
+  actor?: string | null
+}): Promise<{
+  draft: FolhaDraft
+  period: FolhaPeriodRow
+  notify: Awaited<ReturnType<typeof sendFolhaNotifyEmail>>
+}> {
+  const period = await getFolhaPeriod(args.periodId)
+  if (!period) throw new Error('Período da Folha não encontrado')
+  if (period.status !== 'approved' && period.status !== 'paid') {
+    throw new Error('Só reenvia aviso de período aprovado ou pago')
+  }
+  const draft = periodRowToDraft(args.panel, period)
+  const notify = await sendFolhaNotifyEmail({
+    draft,
+    status: period.status,
+    actor: args.actor,
+  })
+  return { draft, period, notify }
+}
+
 /** Aplica DARF/DAS/mensalidade na linha (Q1); só preenche campo ainda null. */
 export async function applyFolhaTaxParsedToPeriod(
   panel: RomPanelId,

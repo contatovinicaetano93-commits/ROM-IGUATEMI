@@ -36,6 +36,68 @@ export type FolhaNotifyResult =
   | { ok: true; to: string[]; subject: string; skipped?: undefined }
   | { ok: false; skipped: 'not_configured' | 'send_failed'; error?: string; to: string[] }
 
+export type FolhaNotifyClientPayload = {
+  ok?: boolean
+  skipped?: string
+  to?: string[]
+  error?: string
+} | null
+
+export function formatFolhaNotifyError(error?: string | null): string {
+  const raw = error?.trim()
+  if (!raw) return 'erro de envio'
+  if (/domain is not verified/i.test(raw)) {
+    return 'domínio de envio não verificado no Resend'
+  }
+  return raw
+}
+
+export function folhaApprovedNotifyMessage(notify: FolhaNotifyClientPayload): {
+  text: string
+  tone: 'ok' | 'warn'
+} {
+  if (notify?.ok) {
+    const to = (notify.to ?? []).join(', ')
+    return {
+      text: to ? `Aprovado · aviso enviado a ${to}` : 'Aprovado · aviso enviado',
+      tone: 'ok',
+    }
+  }
+  if (notify?.skipped === 'not_configured') {
+    return {
+      text: 'Aprovado. O pagamento ficou gravado; o aviso por e-mail não está configurado.',
+      tone: 'warn',
+    }
+  }
+  return {
+    text: `Aprovado. O pagamento ficou gravado; o aviso por e-mail não saiu (${formatFolhaNotifyError(notify?.error)}).`,
+    tone: 'warn',
+  }
+}
+
+export function folhaResendNotifyMessage(notify: FolhaNotifyClientPayload): {
+  text: string
+  tone: 'ok' | 'warn'
+} {
+  if (notify?.ok) {
+    const to = (notify.to ?? []).join(', ')
+    return {
+      text: to ? `Aviso reenviado a ${to}` : 'Aviso reenviado',
+      tone: 'ok',
+    }
+  }
+  if (notify?.skipped === 'not_configured') {
+    return {
+      text: 'Aviso por e-mail não está configurado (FOLHA_NOTIFY_EMAIL / RESEND_API_KEY).',
+      tone: 'warn',
+    }
+  }
+  return {
+    text: `Aviso não saiu (${formatFolhaNotifyError(notify?.error)}). O pagamento continua aprovado.`,
+    tone: 'warn',
+  }
+}
+
 export function buildFolhaNotifyHtml(args: {
   draft: FolhaDraft
   status: FolhaPeriodStatus
