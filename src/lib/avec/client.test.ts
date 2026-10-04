@@ -120,6 +120,24 @@ describe('withRequiredAvecReportParams', () => {
     process.env.AVEC_UNIT_ID = prev
   })
 
+  it('8123 exige salao_id (AVEC_UNIT_ID)', () => {
+    const prev = process.env.AVEC_UNIT_ID
+    process.env.AVEC_UNIT_ID = '99801'
+    expect(
+      withRequiredAvecReportParams('8123', {
+        inicio: '01/09/2026',
+        fim: '15/09/2026',
+        limit: 250,
+      }),
+    ).toMatchObject({
+      salao_id: '99801',
+      inicio: '01/09/2026',
+      fim: '15/09/2026',
+      limit: 250,
+    })
+    process.env.AVEC_UNIT_ID = prev
+  })
+
   it('0051 usa site como origem Online/Local (não AVEC_UNIT_ID)', () => {
     expect(withRequiredAvecReportParams('0051', { site: '40613', inicio: '24/07/2026' })).toMatchObject({
       site: '',

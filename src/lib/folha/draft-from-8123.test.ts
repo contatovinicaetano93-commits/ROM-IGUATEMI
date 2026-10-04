@@ -1303,6 +1303,31 @@ describe('buildFolhaDraftFrom8123', () => {
     expect(draft.total_proposed_pay).toBe(6032.64 + 75 + 2350)
     expect(draft.lines[0].name <= draft.lines[1].name).toBe(true)
   })
+
+  it('isola nomes exclusivos da outra unidade', () => {
+    const mixed: CommissionProfessionalRow[] = [
+      jefferson,
+      { ...jefferson, name: 'Alison Alvarez', net_payable: 100 },
+      { ...jefferson, name: 'Beto Fortes', net_payable: 200 },
+    ]
+    const br = buildFolhaDraftFrom8123({
+      panel: 'brasil',
+      referenceDay: '2026-05-15',
+      professionals: mixed,
+    })
+    expect(br.lines.some((l) => l.name === 'Alison Alvarez')).toBe(true)
+    expect(br.lines.some((l) => l.name === 'Beto Fortes')).toBe(false)
+    expect(br.lines.some((l) => l.name === jefferson.name)).toBe(true)
+
+    const ig = buildFolhaDraftFrom8123({
+      panel: 'iguatemi',
+      referenceDay: '2026-05-15',
+      professionals: mixed,
+    })
+    expect(ig.lines.some((l) => l.name === 'Alison Alvarez')).toBe(false)
+    expect(ig.lines.some((l) => l.name === 'Beto Fortes')).toBe(true)
+    expect(ig.lines.some((l) => l.name === jefferson.name)).toBe(true)
+  })
 })
 
 describe('reconstructFatLiquidoFrom8123', () => {

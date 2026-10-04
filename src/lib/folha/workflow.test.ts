@@ -3,6 +3,7 @@ import { buildFolhaDraftLine } from '@/lib/folha/draft-from-8123'
 import {
   applyExtrasToDraftLines,
   canTransitionFolhaStatus,
+  periodRowToDraft,
   refreshDraftPreservingExtras,
 } from '@/lib/folha/workflow'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
@@ -73,5 +74,51 @@ describe('refreshDraftPreservingExtras', () => {
     expect(refreshed.lines[0]?.avec.net_payable).toBe(5100)
     // Sem U: path B olerite com base charged×2% BR (240). + meio 100 − adm − DARF
     expect(refreshed.lines[0]?.proposed_pay).toBe(5100 + 100 - 99 - 240)
+  })
+})
+
+describe('periodRowToDraft unit scope', () => {
+  it('rascunho aberto esconde exclusivo da outra unidade; pago mantém', () => {
+    const alison = buildFolhaDraftLine('iguatemi', { ...pro, name: 'Alison Alvarez' })
+    const beto = buildFolhaDraftLine('iguatemi', { ...pro, name: 'Beto Fortes' })
+    const row = {
+      id: '2026-09-q1',
+      year_month: '2026-09',
+      half: 1 as const,
+      from_day: '2026-09-01',
+      to_day: '2026-09-15',
+      reference_day: '2026-09-15',
+      lines: [alison, beto],
+      total_proposed_pay: 1,
+      source_professionals: [] as CommissionProfessionalRow[],
+    }
+    const draft = periodRowToDraft('iguatemi', { ...row, status: 'draft' })
+    expect(draft.lines.map((l) => l.name)).toEqual(['Beto Fortes'])
+    const paid = periodRowToDraft('iguatemi', { ...row, status: 'paid' })
+    expect(paid.lines.map((l) => l.name).sort()).toEqual(['Alison Alvarez', 'Beto Fortes'])
+  })
+
+  it('com source 8123 misturado, draft filtra e paid não', () => {
+    const alison = buildFolhaDraftLine('iguatemi', { ...pro, name: 'Alison Alvarez' })
+    const beto = buildFolhaDraftLine('iguatemi', { ...pro, name: 'Beto Fortes' })
+    const source = [
+      { ...pro, name: 'Alison Alvarez' },
+      { ...pro, name: 'Beto Fortes' },
+    ]
+    const row = {
+      id: '2026-09-q1',
+      year_month: '2026-09',
+      half: 1 as const,
+      from_day: '2026-09-01',
+      to_day: '2026-09-15',
+      reference_day: '2026-09-15',
+      lines: [alison, beto],
+      total_proposed_pay: 1,
+      source_professionals: source,
+    }
+    const draft = periodRowToDraft('iguatemi', { ...row, status: 'draft' })
+    expect(draft.lines.map((l) => l.name)).toEqual(['Beto Fortes'])
+    const paid = periodRowToDraft('iguatemi', { ...row, status: 'paid' })
+    expect(paid.lines.map((l) => l.name).sort()).toEqual(['Alison Alvarez', 'Beto Fortes'])
   })
 })

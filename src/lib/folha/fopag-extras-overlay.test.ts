@@ -131,4 +131,24 @@ describe('overlayClosedFopagExtras', () => {
     })
     expect(lines[0]?.folha_extras.servicos_assistente_como_pro).toBeNull()
   })
+
+  it('Outubro+ é no-op — fechamento nativo sem cola Fopag', () => {
+    const source = avecRow('WALTER FERREIRA DA SILVA', 'Cabeleireiro', {
+      charged: 10000,
+      net_payable: 4000,
+    })
+    const line = buildFolhaDraftLine('brasil', source, {
+      consumo_baru: 50,
+      liquido_referencia: 9999,
+      faturado_referencia: 10000,
+    })
+    const { changed, lines } = overlayClosedFopagExtras({
+      panel: 'brasil',
+      periodId: '2026-10-q1',
+      lines: [line],
+    })
+    expect(changed).toBe(false)
+    expect(lines[0]?.folha_extras.consumo_baru).toBe(50)
+    expect(lines[0]?.folha_extras.liquido_referencia).toBe(9999)
+  })
 })

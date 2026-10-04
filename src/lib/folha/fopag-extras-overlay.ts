@@ -1,10 +1,13 @@
 /**
  * Overlay da Fopag fechada sobre extras sticky do rascunho.
  *
- * O motor (Y) fecha 125/125 quando os extras vêm da planilha. Rascunhos vivos
- * às vezes guardam U/Baru de um seed antigo ou do Zig — aí o líquido diverge
- * mesmo com o 8123 certo. Só aplica em quinzena com fixture (hoje: 2026-09-q2)
- * e em linhas que já carregam referência Fopag (não mexe em 8123 puro).
+ * Legado de Setembro/2026: o motor (Y) fecha 125/125 quando os extras vêm da
+ * planilha. Rascunhos vivos às vezes guardam U/Baru de seed antigo — aí o
+ * líquido diverge mesmo com o 8123 certo.
+ *
+ * Escopo fixo: só `2026-09-q2` + linhas com referência Fopag.
+ * Outubro+ fecha só com motor + Avec (janela) + Zig + IMAP — este overlay
+ * é no-op para qualquer outro `periodId`.
  */
 
 import type { RomPanelId } from '@/lib/brand'
