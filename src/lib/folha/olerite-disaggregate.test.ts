@@ -260,6 +260,16 @@ describe('resolveBaruVsOleriteResidual', () => {
     expect(r.baruAlreadyInNet).toBe(true)
   })
 
+  it('Alison: residual grande sem Baru → Outros (não inventa coluna)', () => {
+    const r = resolveBaruVsOleriteResidual({
+      outrosResiduais: 5112.51,
+      consumoBaru: null,
+    })
+    expect(r.outrosDescontos).toBeCloseTo(5112.51, 2)
+    expect(r.consumoBaru).toBeNull()
+    expect(r.baruAlreadyInNet).toBe(false)
+  })
+
   it('Beto: residual = W → não promove (fica em Outros)', () => {
     const r = resolveBaruVsOleriteResidual({
       outrosResiduais: 1250,

@@ -130,9 +130,15 @@ export function resolveBaruVsOleriteResidual(args: {
       : null
 
   if (baru == null) {
-    // Avec: residual após adm↔meio (ou descontos = só Baru) já saiu do a_pagar.
-    // Preenche a coluna Baru sem reabater — não precisa Zig/RH.
-    if (residual != null && args.promoteResidualAsBaru !== false) {
+    // Avec: residual típico de CONSUMO BARU (dezenas/centenas) → coluna.
+    // Residual grande (Alison ~5k = descontos quase inteiro) fica em Outros —
+    // não inventar Baru. Teto alinhado ao shortfall Baru do desmembrar.
+    const BARU_PROMOTE_CAP = 800
+    if (
+      residual != null &&
+      residual <= BARU_PROMOTE_CAP &&
+      args.promoteResidualAsBaru !== false
+    ) {
       return {
         outrosDescontos: null,
         consumoBaru: roundFolha(residual, 4),
