@@ -29,15 +29,29 @@ async function run(sql: SqlExec, statement: string): Promise<void> {
 
 /**
  * Garante que o CHECK de intranet_employee_modules aceita todos os módulos
- * grantable (incl. ativacoes). Idempotente. Não depende de schemaOnce/arquivo.
+ * grantable (incl. checks_diario). Idempotente e resiliente a corrida
+ * serverless (DROP/ADD em isolates paralelos).
  */
 export async function ensureGrantableModuleKeyCheck(sql: SqlExec): Promise<void> {
+  const checkBody = grantableModuleKeyCheckSql()
+  // Um único DO: dropa qualquer CHECK na coluna e recria com o nome canônico.
+  // Evita "already exists" quando dois cold starts batem no ADD.
   await run(
     sql,
-    'alter table intranet_employee_modules drop constraint if exists intranet_employee_modules_module_key_check',
-  )
-  await run(
-    sql,
-    `alter table intranet_employee_modules add constraint intranet_employee_modules_module_key_check ${grantableModuleKeyCheckSql()}`,
+    `
+DO $ensure_module_key$
+BEGIN
+  ALTER TABLE intranet_employee_modules
+    DROP CONSTRAINT IF EXISTS intranet_employee_modules_module_key_check;
+  ALTER TABLE intranet_employee_modules
+    ADD CONSTRAINT intranet_employee_modules_module_key_check
+    ${checkBody};
+EXCEPTION
+  WHEN duplicate_object THEN
+    -- Outro isolate acabou de criar o mesmo CHECK — ok se as keys batem.
+    NULL;
+END
+$ensure_module_key$;
+`.trim(),
   )
 }

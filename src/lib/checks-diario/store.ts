@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getSql } from '@/lib/db'
+import { getIntranetSql } from '@/lib/db'
 import type {
   ChecksDiarioLog,
   ChecksDiarioTask,
@@ -22,7 +22,8 @@ let tableReady: Promise<void> | null = null
 export async function ensureChecksDiarioTables() {
   if (!tableReady) {
     tableReady = (async () => {
-      const sql = getSql()
+      // Checks FK → intranet_employees; usa o mesmo banco da intranet.
+      const sql = getIntranetSql()
       await ensureGrantableModuleKeyCheck(sql)
       await sql`
         create table if not exists checks_diario_members (
@@ -100,7 +101,7 @@ export async function getChecksMembership(
   employeeId: string,
 ): Promise<{ team: ChecksTeamId; is_lead: boolean } | null> {
   await ensureChecksDiarioTables()
-  const sql = getSql()
+  const sql = getIntranetSql()
   const rows = await sql`
     select team, is_lead from checks_diario_members where employee_id = ${employeeId} limit 1
   `
@@ -109,13 +110,24 @@ export async function getChecksMembership(
   return { team: row.team, is_lead: Boolean(row.is_lead) }
 }
 
+/** Concede módulo checks_diario; nunca derruba o fluxo se o CHECK ainda estiver velho. */
+async function grantChecksDiarioModule(employeeId: string): Promise<void> {
+  const sql = getIntranetSql()
+  await ensureGrantableModuleKeyCheck(sql)
+  await sql`
+    insert into intranet_employee_modules (employee_id, module_key)
+    values (${employeeId}::uuid, 'checks_diario')
+    on conflict do nothing
+  `
+}
+
 export async function upsertChecksMembership(args: {
   employeeId: string
   team: ChecksTeamId
   isLead: boolean
 }) {
   await ensureChecksDiarioTables()
-  const sql = getSql()
+  const sql = getIntranetSql()
   await sql`
     insert into checks_diario_members (employee_id, team, is_lead, updated_at)
     values (${args.employeeId}, ${args.team}, ${args.isLead}, now())
@@ -124,17 +136,17 @@ export async function upsertChecksMembership(args: {
       is_lead = excluded.is_lead,
       updated_at = now()
   `
-  // Garante o módulo grantable sem depender de re-salvar o cargo na Gestão de usuário.
-  await sql`
-    insert into intranet_employee_modules (employee_id, module_key)
-    values (${args.employeeId}::uuid, 'checks_diario')
-    on conflict do nothing
-  `
+  // Módulo é best-effort: membership já basta pro board; sessão precisa re-login.
+  try {
+    await grantChecksDiarioModule(args.employeeId)
+  } catch {
+    // CHECK antigo / corrida — ensure acima costuma corrigir no próximo request.
+  }
 }
 
 export async function listChecksMembers(team?: ChecksTeamId | null) {
   await ensureChecksDiarioTables()
-  const sql = getSql()
+  const sql = getIntranetSql()
   if (team) {
     return (await sql`
       select m.employee_id, m.team, m.is_lead, e.name, e.email, e.status
@@ -168,7 +180,7 @@ export async function listChecksMembers(team?: ChecksTeamId | null) {
 }
 
 export async function listActiveEmployeesLite() {
-  const sql = getSql()
+  const sql = getIntranetSql()
   return (await sql`
     select id, name, email, panel_role, flow_role
     from intranet_employees
@@ -212,7 +224,7 @@ function mapLog(row: Record<string, unknown>): ChecksDiarioLog {
 export async function listTasksForEmployees(employeeIds: string[]) {
   await ensureChecksDiarioTables()
   if (employeeIds.length === 0) return [] as ChecksDiarioTask[]
-  const sql = getSql()
+  const sql = getIntranetSql()
   const rows = await sql`
     select * from checks_diario_tasks
     where employee_id in ${sql(employeeIds)} and active = true
@@ -224,7 +236,7 @@ export async function listTasksForEmployees(employeeIds: string[]) {
 export async function listLogsForDay(employeeIds: string[], day: string) {
   await ensureChecksDiarioTables()
   if (employeeIds.length === 0) return [] as ChecksDiarioLog[]
-  const sql = getSql()
+  const sql = getIntranetSql()
   const rows = await sql`
     select * from checks_diario_logs
     where employee_id in ${sql(employeeIds)} and day = ${day}::date
@@ -242,7 +254,7 @@ export async function createChecksTask(args: {
   createdByEmployeeId?: string | null
 }) {
   await ensureChecksDiarioTables()
-  const sql = getSql()
+  const sql = getIntranetSql()
   const title = args.title.trim()
   if (!title) throw new Error('Título obrigatório')
   const rows = await sql`
@@ -270,7 +282,7 @@ export async function updateChecksTask(args: {
   active?: boolean
 }) {
   await ensureChecksDiarioTables()
-  const sql = getSql()
+  const sql = getIntranetSql()
   const current = await sql`select * from checks_diario_tasks where id = ${args.taskId} limit 1`
   if (!current[0]) throw new Error('Tarefa não encontrada')
   const cur = current[0] as Record<string, unknown>
@@ -298,7 +310,7 @@ export async function updateChecksTask(args: {
 
 export async function getChecksTask(taskId: string) {
   await ensureChecksDiarioTables()
-  const sql = getSql()
+  const sql = getIntranetSql()
   const rows = await sql`select * from checks_diario_tasks where id = ${taskId} limit 1`
   if (!rows[0]) return null
   return mapTask(rows[0] as Record<string, unknown>)
@@ -334,7 +346,7 @@ export async function createChecksLog(args: {
     if (!args.photoUrl?.trim()) throw new Error('Foto obrigatória neste check')
   }
   const day = args.day ?? todayIsoSaoPaulo()
-  const sql = getSql()
+  const sql = getIntranetSql()
   const rows = await sql`
     insert into checks_diario_logs (
       task_id, employee_id, day, note, photo_url, photo_captured_at
