@@ -16,7 +16,11 @@ import {
   summarizeChecksPeople,
 } from '@/lib/checks-diario/summary'
 import {
+  CHECKS_CARGOS,
   CHECKS_TEAMS,
+  checksCargoLabel,
+  resolveChecksCargo,
+  type ChecksCargoId,
   type ChecksDiarioBoard,
   type ChecksDiarioPersonBoard,
   type ChecksTeamId,
@@ -38,9 +42,19 @@ type EmployeeLite = {
 /** hoje = rotina do dia; config = quem fiscaliza quem (fora do fluxo diário). */
 type TabId = 'meus' | 'hoje' | 'config'
 
-function teamLabel(id: ChecksTeamId | null): string {
-  if (!id) return '—'
-  return CHECKS_TEAMS.find((t) => t.id === id)?.label ?? id
+function personRoleLabel(person: {
+  team: ChecksTeamId | null
+  is_lead: boolean
+  cargo?: ChecksCargoId | null
+}): string {
+  const cargo = resolveChecksCargo({
+    cargo: person.cargo,
+    team: person.team,
+    is_lead: person.is_lead,
+  })
+  if (cargo) return checksCargoLabel(cargo)
+  if (!person.team) return '—'
+  return CHECKS_TEAMS.find((t) => t.id === person.team)?.label ?? person.team
 }
 
 function formatDay(day: string): string {
@@ -66,8 +80,7 @@ export default function ChecksDiarioPage() {
   const [composingFor, setComposingFor] = useState<string | null>(null)
 
   const [assignEmployeeId, setAssignEmployeeId] = useState('')
-  const [assignTeam, setAssignTeam] = useState<ChecksTeamId>('gestor_unidade')
-  const [assignLead, setAssignLead] = useState(false)
+  const [assignCargo, setAssignCargo] = useState<ChecksCargoId>('recepcao')
   const [savingMember, setSavingMember] = useState(false)
   const [busyUnassignId, setBusyUnassignId] = useState<string | null>(null)
   const loadGen = useRef(0)
@@ -118,6 +131,22 @@ export default function ChecksDiarioPage() {
 
   const canPickTeam = Boolean(access?.is_admin_master || access?.is_dono)
   const isMasterView = Boolean(board?.is_master_view)
+  const assignableCargos = useMemo(() => {
+    return CHECKS_CARGOS.filter((c) => {
+      if (access?.scoped_team && c.team !== access.scoped_team) return false
+      if (!access?.is_admin_master && c.is_lead) return false
+      return true
+    })
+  }, [access?.is_admin_master, access?.scoped_team])
+
+  useEffect(() => {
+    if (assignableCargos.length === 0) return
+    setAssignCargo((prev) =>
+      assignableCargos.some((c) => c.id === prev)
+        ? prev
+        : (assignableCargos[0]?.id ?? 'recepcao'),
+    )
+  }, [assignableCargos])
 
   const myPerson = useMemo(() => {
     if (!board?.my_employee_id) return null
@@ -129,17 +158,46 @@ export default function ChecksDiarioPage() {
     [board?.people, team],
   )
 
-  /** Pessoas do dia agrupadas por time (quando “todas”). */
+  /** Pessoas do dia agrupadas por cargo (quando “todas”). */
   const peopleByTeam = useMemo(() => {
     const people = board?.people ?? []
-    if (team !== 'all') {
-      return [{ teamId: team as ChecksTeamId | null, label: null as string | null, people }]
+    const visibleTeams =
+      team === 'all' ? CHECKS_TEAMS : CHECKS_TEAMS.filter((t) => t.id === team)
+    const groups: Array<{
+      teamId: ChecksTeamId | null
+      label: string | null
+      people: ChecksDiarioPersonBoard[]
+    }> = []
+    for (const t of visibleTeams) {
+      const inTeam = people.filter((p) => p.team === t.id)
+      const used = new Set<string>()
+      for (const cargo of CHECKS_CARGOS.filter((c) => c.team === t.id)) {
+        const slotPeople = inTeam.filter(
+          (p) =>
+            resolveChecksCargo({
+              cargo: p.cargo,
+              team: p.team,
+              is_lead: p.is_lead,
+            }) === cargo.id,
+        )
+        for (const person of slotPeople) used.add(person.employee_id)
+        if (slotPeople.length === 0) continue
+        groups.push({
+          teamId: t.id,
+          label: team === 'all' ? `${t.label} · ${cargo.label}` : cargo.label,
+          people: slotPeople,
+        })
+      }
+      const leftovers = inTeam.filter((p) => !used.has(p.employee_id))
+      if (leftovers.length > 0) {
+        groups.push({
+          teamId: t.id,
+          label: team === 'all' ? `${t.label} · Outros` : 'Outros na equipe',
+          people: leftovers,
+        })
+      }
     }
-    return CHECKS_TEAMS.map((t) => ({
-      teamId: t.id as ChecksTeamId | null,
-      label: t.label,
-      people: people.filter((p) => p.team === t.id),
-    })).filter((g) => g.people.length > 0)
+    return groups
   }, [board?.people, team])
 
   async function completeTask(
@@ -223,8 +281,7 @@ export default function ChecksDiarioPage() {
         body: JSON.stringify({
           action: 'assign_member',
           employee_id: assignEmployeeId,
-          team: assignTeam,
-          is_lead: assignLead,
+          cargo: assignCargo,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -448,7 +505,10 @@ export default function ChecksDiarioPage() {
               aria-busy={loading}
             >
               {peopleByTeam.map((group) => (
-                <div key={group.teamId ?? 'none'} className="animate-rise space-y-3">
+                <div
+                  key={`${group.teamId ?? 'none'}:${group.label ?? 'people'}`}
+                  className="animate-rise space-y-3"
+                >
                   {group.label ? (
                     <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
                       {group.label}
@@ -493,10 +553,10 @@ export default function ChecksDiarioPage() {
         <div className="animate-rise space-y-5 pb-[5.5rem] lg:pb-6">
           <SectionCard title="Quem fiscaliza quem">
             <p className="mb-3 text-xs text-muted">
-              Três times fixos. O cargo na Intranet já coloca a pessoa no time. Master e o
-              responsável podem tirar alguém — o cargo não recoloca sozinho. Para voltar, use o
-              ajuste manual abaixo. Checks individuais somem com o botão remover em cada item, na
-              aba Hoje.
+              Três times. Cada um tem o responsável e os cargos da equipe — Func fin; Recepção,
+              Estoque, Almoxarifado, Pós-venda, Limpeza; Equipe RH. O cargo na Intranet já coloca
+              a pessoa no slot certo. Master e o responsável podem tirar alguém — o cargo não
+              recoloca sozinho. Para voltar, use o ajuste manual abaixo.
             </p>
             <TeamNetworkMap
               teams={teamNetwork}
@@ -509,7 +569,8 @@ export default function ChecksDiarioPage() {
           {access?.can_edit ? (
             <SectionCard title="Ajuste manual (exceção)">
               <p className="mb-3 text-xs text-muted">
-                Use só se faltar alguém na rede. Quase sempre o cargo resolve.
+                Use só se faltar alguém na rede. Escolha o cargo da equipe, não só o time do
+                gestor.
               </p>
               <form className="grid gap-3 sm:grid-cols-2" onSubmit={assignMember}>
                 <select
@@ -527,31 +588,28 @@ export default function ChecksDiarioPage() {
                 </select>
                 <select
                   className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                  value={assignTeam}
-                  onChange={(e) => setAssignTeam(e.target.value as ChecksTeamId)}
-                  disabled={!canPickTeam && Boolean(access?.scoped_team)}
+                  value={assignCargo}
+                  onChange={(e) => setAssignCargo(e.target.value as ChecksCargoId)}
                 >
                   {CHECKS_TEAMS.filter(
-                    (t) => !access?.scoped_team || t.id === access.scoped_team,
+                    (t) =>
+                      assignableCargos.some((c) => c.team === t.id) &&
+                      (!access?.scoped_team || t.id === access.scoped_team),
                   ).map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
+                    <optgroup key={t.id} label={t.label}>
+                      {assignableCargos
+                        .filter((c) => c.team === t.id)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.is_lead ? `${c.label} (responsável)` : c.label}
+                          </option>
+                        ))}
+                    </optgroup>
                   ))}
                 </select>
-                {access?.is_admin_master ? (
-                  <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={assignLead}
-                      onChange={(e) => setAssignLead(e.target.checked)}
-                    />
-                    É responsável (lead) da equipe
-                  </label>
-                ) : null}
                 <div className="sm:col-span-2">
                   <PanelButton type="submit" disabled={savingMember} variant="outline">
-                    {savingMember ? 'Salvando…' : 'Colocar na equipe'}
+                    {savingMember ? 'Salvando…' : 'Colocar no cargo'}
                   </PanelButton>
                 </div>
               </form>
@@ -751,10 +809,7 @@ function PersonDayCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">{person.name}</p>
-          <p className="text-xs text-muted">
-            {teamLabel(person.team)}
-            {person.is_lead ? ' · responsável' : ''}
-          </p>
+          <p className="text-xs text-muted">{personRoleLabel(person)}</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium">
@@ -987,8 +1042,8 @@ function TeamNetworkMap({
   if (teams.every((t) => t.total === 0)) {
     return (
       <p className="text-sm text-muted">
-        Rede vazia. Confira se Ops Fin, Gestor, RH e as equipes deles têm o cargo certo na
-        Intranet.
+        Rede vazia. Confira se Ops Fin, Gestor, RH e as equipes deles (recepção, estoque, func
+        fin, equipe RH…) têm o cargo certo na Intranet.
       </p>
     )
   }
@@ -998,40 +1053,41 @@ function TeamNetworkMap({
       {teams.map((t) => (
         <li key={t.id} className="rounded-2xl border border-border bg-background px-3 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t.label}</p>
-          <p className="mt-2 text-xs text-muted">Responsável</p>
-          {t.leads.length === 0 ? (
-            <p className="text-sm text-danger/80">Sem lead — ajuste o cargo ou use o formulário abaixo</p>
-          ) : (
-            <ul className="mt-0.5 space-y-0.5">
-              {t.leads.map((lead) => (
-                <TeamNetworkPersonRow
-                  key={lead.employee_id}
-                  person={lead}
-                  strong
-                  canEdit={canEdit}
-                  busy={busyUnassignId === lead.employee_id}
-                  onUnassign={onUnassign}
-                />
-              ))}
-            </ul>
-          )}
-          <p className="mt-3 text-xs text-muted">Equipe · {t.memberHint}</p>
-          {t.members.length === 0 ? (
-            <p className="mt-0.5 text-sm text-muted">Ninguém vinculado ainda</p>
-          ) : (
-            <ul className="mt-0.5 space-y-0.5">
-              {t.members.map((m) => (
-                <TeamNetworkPersonRow
-                  key={m.employee_id}
-                  person={m}
-                  hint={m.total_tasks === 0 ? '· sem check' : undefined}
-                  canEdit={canEdit}
-                  busy={busyUnassignId === m.employee_id}
-                  onUnassign={onUnassign}
-                />
-              ))}
-            </ul>
-          )}
+          {t.cargos.map((slot) => (
+            <div key={slot.id} className="mt-3">
+              <p className="text-xs text-muted">
+                {slot.is_lead ? 'Responsável · ' : ''}
+                {slot.label}
+              </p>
+              {slot.people.length === 0 ? (
+                <p
+                  className={`mt-0.5 text-sm ${
+                    slot.is_lead ? 'text-danger/80' : 'text-muted'
+                  }`}
+                >
+                  {slot.is_lead
+                    ? 'Sem lead — ajuste o cargo ou use o formulário abaixo'
+                    : 'Ninguém vinculado ainda'}
+                </p>
+              ) : (
+                <ul className="mt-0.5 space-y-0.5">
+                  {slot.people.map((person) => (
+                    <TeamNetworkPersonRow
+                      key={person.employee_id}
+                      person={person}
+                      strong={slot.is_lead}
+                      hint={
+                        !slot.is_lead && person.total_tasks === 0 ? '· sem check' : undefined
+                      }
+                      canEdit={canEdit}
+                      busy={busyUnassignId === person.employee_id}
+                      onUnassign={onUnassign}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
         </li>
       ))}
     </ul>
