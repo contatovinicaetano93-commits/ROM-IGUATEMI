@@ -8,7 +8,9 @@ create table if not exists intranet_employee_modules (
 );
 
 -- Amplia / recria o check (CREATE IF NOT EXISTS não atualiza constraint antiga).
--- Inclui 'ativacoes' (calendário de marcas no lavatório).
+-- Espelha GRANTABLE_MODULES (ativacoes, folha, checks_diario, …).
+-- CHECK estreito (sem checks_diario/folha) quebrava ensureIntranetSchema no
+-- Neon quando já havia linhas desses módulos — e bloqueava qualquer cadastro.
 alter table intranet_employee_modules
   drop constraint if exists intranet_employee_modules_module_key_check;
 
@@ -19,7 +21,9 @@ alter table intranet_employee_modules
     'contatos',
     'ativacoes',
     'financeiro',
+    'folha',
     'estoque',
     'relatorios',
-    'dashboard'
+    'dashboard',
+    'checks_diario'
   ));

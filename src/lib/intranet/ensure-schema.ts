@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getIntranetSql, peekResolvedIntranetDatabaseUrl } from '@/lib/db'
+import { ensureGrantableModuleKeyCheck } from '@/lib/intranet/ensure-module-key-check'
 import { readDbSqlFile, splitSqlStatements } from '@/lib/schema-migrations/sql'
 
 /**
@@ -47,6 +48,8 @@ export async function ensureIntranetSchema(): Promise<{ files: string[] }> {
           await runStatement(sql, statement)
         }
       }
+      // Fonte de verdade = GRANTABLE_MODULES (delta SQL pode ficar atrás).
+      await ensureGrantableModuleKeyCheck(sql)
     })().catch((err) => {
       schemaOnce = null
       throw err

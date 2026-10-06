@@ -31,9 +31,21 @@ export type EmployeeRecord = {
   created_at: string
 }
 
-function isMissingRelation(error: unknown): boolean {
+/**
+ * Só tabelas/URL ausentes — não engolir CHECK de module_key
+ * (a mensagem cita "intranet_employee_modules" e "relation").
+ */
+export function isMissingIntranetRelation(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error)
-  return /intranet_employees|intranet_employee_modules|does not exist|relation|DATABASE_URL não configurada/i.test(msg)
+  if (/check constraint|module_key_check/i.test(msg)) return false
+  if (/DATABASE_URL não configurada/i.test(msg)) return true
+  return /relation ["']?intranet_employee(?:s|_modules|_companies|_areas)?["']? does not exist/i.test(
+    msg,
+  )
+}
+
+function isMissingRelation(error: unknown): boolean {
+  return isMissingIntranetRelation(error)
 }
 
 function parsePanelRole(value: unknown): AuthRole {
@@ -72,7 +84,8 @@ export async function findEmployeeByEmail(email: string): Promise<EmployeeRecord
 
 export async function listEmployees(): Promise<Omit<EmployeeRecord, 'password_hash'>[]> {
   try {
-    await ensureIntranetSchema()
+    // Ensure é best-effort na leitura: CHECK estreito não pode esvaziar a lista.
+    await ensureIntranetSchema().catch(() => {})
     const sql = getIntranetSql()
     const rows = (await sql`
       select e.id, e.email, e.name, e.panel_role, e.flow_role, e.status, e.can_publish, e.professional_name, e.avec_pro_id, e.created_at,
