@@ -39,6 +39,7 @@ describe('intranet top bar', () => {
       'Agenda do dia',
       'Ativações',
       'Checks diários',
+      'Currículos',
       'Visão analítica',
       'Contatos',
     ])
@@ -55,6 +56,7 @@ describe('intranet top bar', () => {
       'Agenda',
       'Ativações',
       'Checks',
+      'Currículos',
       'Visão',
       'Contatos',
     ])
@@ -62,6 +64,7 @@ describe('intranet top bar', () => {
     expect(INTRANET_NAV.find((item) => item.label === 'Agenda do dia')?.href).toBe('/pipeline')
     expect(INTRANET_NAV.find((item) => item.label === 'Ativações')?.href).toBe('/ativacoes')
     expect(INTRANET_NAV.find((item) => item.label === 'Checks diários')?.href).toBe('/checks-diario')
+    expect(INTRANET_NAV.find((item) => item.label === 'Currículos')?.href).toBe('/curriculos')
     expect(INTRANET_NAV.find((item) => item.label === 'Visão analítica')?.href).toBe('/dashboard')
     expect(INTRANET_NAV.find((item) => item.label === 'Meu faturamento')?.href).toBe('/meu-faturamento')
     expect(INTRANET_NAV.find((item) => item.label === 'Folha de pagamento')?.href).toBe('/folha')
