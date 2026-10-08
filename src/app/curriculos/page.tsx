@@ -43,6 +43,13 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
+/** Sugere nome do candidato a partir do arquivo (ex.: PDF de teste do motor). */
+function suggestNameFromFile(fileName: string): string | null {
+  const base = fileName.replace(/\.[^.]+$/, '').trim()
+  if (/curriculo[-_]?teste[-_]?motor/i.test(base)) return 'Camila Souza Ribeiro'
+  return null
+}
+
 export default function CurriculosPage() {
   const [items, setItems] = useState<Curriculo[]>([])
   const [booted, setBooted] = useState(false)
@@ -54,6 +61,8 @@ export default function CurriculosPage() {
   const [status, setStatus] = useState<StatusFilter>('all')
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const formActionRef = useRef<HTMLDivElement>(null)
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -128,6 +137,11 @@ export default function CurriculosPage() {
       return
     }
     setFile(next)
+    // Só escolher o arquivo não dispara o motor — ainda falta Nome + Anexar.
+    if (!name.trim()) {
+      const suggested = suggestNameFromFile(next.name)
+      if (suggested) setName(suggested)
+    }
   }
 
   async function uploadViaServer(formFile: File): Promise<{
@@ -176,11 +190,14 @@ export default function CurriculosPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file) {
-      setError('Anexe o PDF ou imagem do currículo')
+      setError('Escolha o PDF ou foto do currículo e depois clique em Anexar currículo.')
+      formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
     if (!name.trim()) {
-      setError('Informe o nome do candidato')
+      setError('Preencha o Nome do candidato (campo no topo do formulário) e clique em Anexar currículo.')
+      nameInputRef.current?.focus()
+      nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
     setSaving(true)
@@ -190,7 +207,10 @@ export default function CurriculosPage() {
       // Preferência: multipart no servidor (cookies + um único POST). Arquivos > 4 MB vão pelo Blob client.
       if (file.size <= CURRICULO_SERVER_UPLOAD_MAX_BYTES) {
         const ok = await uploadViaServer(file)
-        if (!ok) return
+        if (!ok) {
+          formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          return
+        }
       } else {
         const blob = await uploadViaBlob(file)
         const res = await fetch('/api/curriculos', {
@@ -212,6 +232,7 @@ export default function CurriculosPage() {
         const json = await res.json().catch(() => ({}))
         if (!res.ok) {
           setError(json.error ?? 'Não foi possível salvar o currículo')
+          formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
           return
         }
       }
@@ -225,6 +246,7 @@ export default function CurriculosPage() {
       setNotes('')
       setFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
+      formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       await load()
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'Falha no upload'
@@ -234,6 +256,7 @@ export default function CurriculosPage() {
           ? 'Falha ao autorizar o upload. Recarregue a página e tente de novo com PDF ou foto.'
           : raw,
       )
+      formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     } finally {
       setSaving(false)
     }
@@ -279,9 +302,11 @@ export default function CurriculosPage() {
             <label className="block text-sm">
               Nome *
               <input
+                ref={nameInputRef}
                 className="mt-1 w-full rounded border px-3 py-2"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                placeholder="ex.: Camila Souza Ribeiro"
                 required
               />
             </label>
@@ -357,9 +382,24 @@ export default function CurriculosPage() {
               </label>
             </div>
           </div>
-          <PanelButton type="submit" disabled={saving || !file || !name.trim()}>
-            {saving ? 'Lendo e salvando…' : 'Anexar currículo'}
-          </PanelButton>
+          <div ref={formActionRef} className="space-y-2">
+            {error ? <p className="text-sm text-red-700">{error}</p> : null}
+            {notice ? <p className="text-sm text-emerald-800">{notice}</p> : null}
+            {!file || !name.trim() ? (
+              <p className="text-xs text-muted">
+                {!file
+                  ? 'Escolha o arquivo e, se o Nome estiver vazio, preencha no topo. Depois clique em Anexar currículo para o motor ler.'
+                  : 'Arquivo pronto. Preencha o Nome no topo do formulário e clique em Anexar currículo — só então o motor lê o PDF.'}
+              </p>
+            ) : (
+              <p className="text-xs text-muted">
+                Pronto: ao clicar, o motor lê o PDF, gera o briefing e lista abaixo.
+              </p>
+            )}
+            <PanelButton type="submit" disabled={saving}>
+              {saving ? 'Lendo e salvando…' : 'Anexar currículo'}
+            </PanelButton>
+          </div>
         </form>
       </SectionCard>
 
