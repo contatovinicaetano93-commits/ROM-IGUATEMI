@@ -1,11 +1,20 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { FileText, Search, Upload } from 'lucide-react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { IntranetPageSkeleton } from '../_components/intranet/IntranetPageSkeleton'
 import { PanelButton, SectionCard } from '../_components/ui'
+import {
+  CURRICULO_ACCEPT,
+  CURRICULO_MAX_BYTES,
+  CURRICULO_SERVER_UPLOAD_MAX_BYTES,
+  curriculoBlobPathname,
+  guessCurriculoContentType,
+  isAllowedCurriculoContentType,
+  safeCurriculoFileName,
+} from '@/lib/curriculos/file'
 import {
   CURRICULO_STATUSES,
   curriculoStatusLabel,
@@ -28,8 +37,15 @@ function formatWhen(iso: string): string {
   }).format(d)
 }
 
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export default function CurriculosPage() {
   const [items, setItems] = useState<Curriculo[]>([])
+  const [booted, setBooted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -37,6 +53,7 @@ export default function CurriculosPage() {
   const [debouncedQ, setDebouncedQ] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [saving, setSaving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -71,6 +88,7 @@ export default function CurriculosPage() {
       setItems([])
     } finally {
       setLoading(false)
+      setBooted(true)
     }
   }, [debouncedQ, status])
 
@@ -90,6 +108,71 @@ export default function CurriculosPage() {
     return map
   }, [items])
 
+  function onPickFile(next: File | null) {
+    setError(null)
+    if (!next) {
+      setFile(null)
+      return
+    }
+    if (next.size > CURRICULO_MAX_BYTES) {
+      setFile(null)
+      setError('Arquivo acima de 10 MB. Compacte o PDF ou envie uma foto menor.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+    const contentType = guessCurriculoContentType(next.name, next.type)
+    if (!isAllowedCurriculoContentType(contentType, next.name)) {
+      setFile(null)
+      setError('Formato inválido. Use PDF, JPG, PNG, WEBP ou HEIC (foto do celular).')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+    setFile(next)
+  }
+
+  async function uploadViaServer(formFile: File): Promise<{
+    file_url: string
+    file_name: string
+    file_content_type: string
+  } | null> {
+    const fd = new FormData()
+    fd.set('candidate_name', name.trim())
+    fd.set('email', email.trim())
+    fd.set('phone', phone.trim())
+    fd.set('desired_role', desiredRole.trim())
+    fd.set('keywords', keywords)
+    fd.set('notes', notes.trim())
+    fd.set('file', formFile, safeCurriculoFileName(formFile.name))
+
+    const res = await fetch('/api/curriculos', {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setError(json.error ?? 'Não foi possível salvar o currículo')
+      return null
+    }
+    return { file_url: 'ok', file_name: formFile.name, file_content_type: formFile.type }
+  }
+
+  async function uploadViaBlob(formFile: File): Promise<{
+    url: string
+    name: string
+    contentType: string
+  }> {
+    const fileName = safeCurriculoFileName(formFile.name)
+    const contentType = guessCurriculoContentType(fileName, formFile.type)
+    const blob = await upload(curriculoBlobPathname(fileName), formFile, {
+      access: 'public',
+      handleUploadUrl: '/api/curriculos/upload',
+      contentType,
+      multipart: formFile.size > 2 * 1024 * 1024,
+    })
+    return { url: blob.url, name: fileName, contentType }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file) {
@@ -104,31 +187,35 @@ export default function CurriculosPage() {
     setError(null)
     setNotice(null)
     try {
-      const blob = await upload(file.name, file, {
-        access: 'public',
-        handleUploadUrl: '/api/curriculos/upload',
-      })
-      const res = await fetch('/api/curriculos', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          candidate_name: name.trim(),
-          email: email.trim() || null,
-          phone: phone.trim() || null,
-          desired_role: desiredRole.trim() || null,
-          keywords,
-          notes: notes.trim() || null,
-          file_url: blob.url,
-          file_name: file.name,
-          file_content_type: file.type || null,
-        }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(json.error ?? 'Não foi possível salvar o currículo')
-        return
+      // Preferência: multipart no servidor (cookies + um único POST). Arquivos > 4 MB vão pelo Blob client.
+      if (file.size <= CURRICULO_SERVER_UPLOAD_MAX_BYTES) {
+        const ok = await uploadViaServer(file)
+        if (!ok) return
+      } else {
+        const blob = await uploadViaBlob(file)
+        const res = await fetch('/api/curriculos', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            candidate_name: name.trim(),
+            email: email.trim() || null,
+            phone: phone.trim() || null,
+            desired_role: desiredRole.trim() || null,
+            keywords,
+            notes: notes.trim() || null,
+            file_url: blob.url,
+            file_name: blob.name,
+            file_content_type: blob.contentType,
+          }),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setError(json.error ?? 'Não foi possível salvar o currículo')
+          return
+        }
       }
+
       setNotice('Currículo anexado e indexado para busca.')
       setName('')
       setEmail('')
@@ -137,9 +224,16 @@ export default function CurriculosPage() {
       setKeywords('')
       setNotes('')
       setFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha no upload')
+      const raw = err instanceof Error ? err.message : 'Falha no upload'
+      setError(
+        raw.includes('Failed to  retrieve the client token') ||
+          raw.includes('Failed to retrieve the client token')
+          ? 'Falha ao autorizar o upload. Recarregue a página e tente de novo com PDF ou foto.'
+          : raw,
+      )
     } finally {
       setSaving(false)
     }
@@ -163,7 +257,7 @@ export default function CurriculosPage() {
     setItems((prev) => prev.map((item) => (item.id === id ? updated : item)))
   }
 
-  if (loading && items.length === 0) {
+  if (!booted) {
     return (
       <IntranetPage title="Currículos" subtitle="Banco de currículos do RH">
         <IntranetPageSkeleton />
@@ -236,16 +330,34 @@ export default function CurriculosPage() {
               onChange={(e) => setNotes(e.target.value)}
             />
           </label>
-          <label className="block text-sm">
-            Arquivo (PDF ou imagem, até 10 MB) *
-            <input
-              type="file"
-              accept="application/pdf,image/jpeg,image/png,image/webp"
-              className="mt-1 block w-full text-sm"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
-          <PanelButton type="submit" disabled={saving}>
+          <div className="block text-sm">
+            <span className="font-medium">Arquivo (PDF ou foto, até 10 MB) *</span>
+            <div className="mt-1 flex flex-col gap-2 rounded border border-dashed border-border bg-card/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                {file ? (
+                  <p className="truncate text-sm text-foreground">
+                    {file.name}{' '}
+                    <span className="text-muted">({formatBytes(file.size)})</span>
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted">
+                    Escolha o PDF do currículo ou uma foto tirada do celular.
+                  </p>
+                )}
+              </div>
+              <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-card">
+                {file ? 'Trocar arquivo' : 'Escolher arquivo'}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={CURRICULO_ACCEPT}
+                  className="sr-only"
+                  onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+          </div>
+          <PanelButton type="submit" disabled={saving || !file || !name.trim()}>
             {saving ? 'Lendo e salvando…' : 'Anexar currículo'}
           </PanelButton>
         </form>
@@ -279,9 +391,13 @@ export default function CurriculosPage() {
           </label>
         </div>
 
-        {items.length === 0 ? (
+        {loading ? (
+          <p className="py-4 text-sm text-muted">Atualizando lista…</p>
+        ) : null}
+
+        {!loading && items.length === 0 ? (
           <p className="py-6 text-sm text-muted">
-            Nenhum currículo nesta filtro. Anexe o primeiro acima.
+            Nenhum currículo neste filtro. Anexe o primeiro acima.
           </p>
         ) : (
           <ul className="divide-y">
