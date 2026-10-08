@@ -47,6 +47,8 @@ describe('roleModulePack / effectiveModules', () => {
     expect(hasPanelModule('staff', ['folha'], 'folha')).toBe(true)
     expect(hasPanelModule('staff', [], 'folha')).toBe(false)
     expect(hasPanelModule('financeiro', ['folha'], 'folha')).toBe(true)
+    expect(hasPanelModule('staff', ['curriculos'], 'curriculos')).toBe(true)
+    expect(hasPanelModule('staff', [], 'curriculos')).toBe(false)
   })
 })
 

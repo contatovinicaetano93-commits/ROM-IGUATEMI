@@ -50,6 +50,15 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/checks-diario', 'mkt', [])).toBe(false)
   })
 
+  it('currículos só com módulo curriculos', () => {
+    expect(canAccessProtectedPath('/curriculos', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/curriculos', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/curriculos', 'staff', [])).toBe(false)
+    expect(canAccessProtectedPath('/curriculos', 'staff', ['curriculos'])).toBe(true)
+    expect(canAccessProtectedPath('/api/curriculos/upload', 'staff', ['curriculos'])).toBe(true)
+    expect(canAccessProtectedPath('/curriculos', 'mkt', [])).toBe(false)
+  })
+
   it('estoque não entra em financeiro nem Visão analítica', () => {
     expect(canAccessProtectedPath('/estoque', 'estoque', [])).toBe(true)
     expect(canAccessProtectedPath('/hoje', 'estoque', [])).toBe(true)

@@ -83,6 +83,15 @@ export function isChecksDiarioPath(pathname: string) {
   )
 }
 
+export function isCurriculosPath(pathname: string) {
+  return (
+    pathname === '/curriculos' ||
+    pathname.startsWith('/curriculos/') ||
+    pathname === '/api/curriculos' ||
+    pathname.startsWith('/api/curriculos/')
+  )
+}
+
 export function isFolhaPath(pathname: string) {
   return (
     pathname === '/folha' ||
@@ -165,5 +174,6 @@ export function canAccessProtectedPath(
   if (isAtivacoesPath(pathname)) return hasPanelModule(role, extras, 'ativacoes')
   if (isFolhaPath(pathname)) return hasPanelModule(role, extras, 'folha')
   if (isChecksDiarioPath(pathname)) return hasPanelModule(role, extras, 'checks_diario')
+  if (isCurriculosPath(pathname)) return hasPanelModule(role, extras, 'curriculos')
   return false
 }
