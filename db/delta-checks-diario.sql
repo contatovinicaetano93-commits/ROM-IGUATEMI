@@ -16,7 +16,8 @@ alter table intranet_employee_modules
     'estoque',
     'relatorios',
     'dashboard',
-    'checks_diario'
+    'checks_diario',
+    'curriculos'
   ));
 
 create table if not exists checks_diario_members (

@@ -365,6 +365,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "046_curriculos",
+      "file": "delta-curriculos.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

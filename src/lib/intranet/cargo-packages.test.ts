@@ -73,14 +73,16 @@ describe('cargo packages', () => {
     ])
   })
 
-  it('RH ganha Folha de pagamento além do pacote staff', () => {
+  it('RH ganha Folha e Currículos além do pacote staff', () => {
     const pack = cargoPackageById('rh')
     expect(pack).not.toBeNull()
     if (!pack) return
     expect(modulesForCargo(pack)).toContain('folha')
+    expect(modulesForCargo(pack)).toContain('curriculos')
     expect(extrasBeyondRole(pack.panel_role, pack.extras)).toEqual([
       'folha',
       'checks_diario',
+      'curriculos',
     ])
   })
 
@@ -104,9 +106,9 @@ describe('cargo packages', () => {
     ])
   })
 
-  it('limpeza e equipe RH entram no checks diário', () => {
+  it('limpeza e equipe RH entram no checks diário; equipe RH também em currículos', () => {
     expect(cargoPackageById('limpeza')?.extras).toEqual(['checks_diario'])
-    expect(cargoPackageById('equipe_rh')?.extras).toEqual(['checks_diario'])
+    expect(cargoPackageById('equipe_rh')?.extras).toEqual(['checks_diario', 'curriculos'])
     expect(cargoPackageById('equipe_rh')?.areaIds).toEqual(['rh'])
   })
 
