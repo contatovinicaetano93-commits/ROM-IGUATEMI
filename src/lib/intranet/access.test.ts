@@ -81,6 +81,19 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/api/intranet/notifications', 'staff', [])).toBe(true)
   })
 
+  it('pessoas fica só no admin; staff segue no Flow/Ajuda/Sistemas', () => {
+    expect(canAccessProtectedPath('/pessoas', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/pessoas/novo', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/employees', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/pessoas', 'staff', [])).toBe(false)
+    expect(canAccessProtectedPath('/pessoas/novo', 'staff', [])).toBe(false)
+    expect(canAccessProtectedPath('/api/employees', 'staff', [])).toBe(false)
+    expect(canAccessProtectedPath('/api/employees/x', 'financeiro', [])).toBe(false)
+    expect(canAccessProtectedPath('/flow', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/ajuda', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/sistemas', 'staff', [])).toBe(true)
+  })
+
   it('meu faturamento é self-serve — qualquer papel autenticado, sem grant de dashboard', () => {
     expect(canAccessProtectedPath('/meu-faturamento', 'staff', [])).toBe(true)
     expect(canAccessProtectedPath('/api/kpis/meu-faturamento', 'staff', [])).toBe(true)
