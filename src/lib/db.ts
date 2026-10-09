@@ -154,6 +154,11 @@ function resolveDatabaseUrl(): string {
   return toTransactionPoolerUrl(url)
 }
 
+function databasePoolMax(): number {
+  // Default 1 conn por isolate serverless. Scripts longos sobem via DATABASE_POOL_MAX.
+  return Math.min(Math.max(Number(process.env.DATABASE_POOL_MAX || 1) || 1, 1), 20)
+}
+
 export function getSql(): Sql {
   const url = resolveDatabaseUrl()
 
@@ -161,8 +166,8 @@ export function getSql(): Sql {
     cached?.end({ timeout: 1 }).catch(() => {})
     cached = postgres(url, {
       ssl: 'require',
-      // 1 conn por isolate — várias lambdas × max alto estouram session pooler.
-      max: 1,
+      // Default 1 — várias lambdas × max alto estouram session pooler.
+      max: databasePoolMax(),
       // Transaction pooler: prepared statements quebram no modo transaction.
       prepare: false,
       idle_timeout: 5,
@@ -184,7 +189,7 @@ export function getSqlForUrl(databaseUrl: string): Sql {
   if (!entry) {
     const raw = postgres(url, {
       ssl: 'require',
-      max: 1,
+      max: databasePoolMax(),
       prepare: false,
       idle_timeout: 5,
       max_lifetime: 60 * 2,
