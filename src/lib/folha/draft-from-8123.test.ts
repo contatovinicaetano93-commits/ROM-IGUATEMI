@@ -141,11 +141,13 @@ describe('buildFolhaDraftLine', () => {
     })
     expect(line.taxa_administrativa).toBeCloseTo(2045.134, 2)
     expect(line.meio_a_meio).toBeCloseTo(1450.81, 2)
-    expect(line.outros_descontos).toBeCloseTo(387.08, 2)
+    // Residual Avec (Baru) → coluna própria sem Zig/RH; não reabate.
+    expect(line.folha_extras.consumo_baru).toBeCloseTo(387.08, 2)
+    expect(line.outros_descontos).toBeNull()
     expect(line.flags).toContain('taxa_adm_em_descontos')
     expect(line.proposed_pay).toBeCloseTo(9472.05, 2)
 
-    // Fopag: Baru na coluna própria; não reabate (já no a_pagar).
+    // RH/Zig com o mesmo valor: coluna intacta, pay intacto.
     const withBaru = buildFolhaDraftLine(
       'iguatemi',
       row,
@@ -198,7 +200,9 @@ describe('buildFolhaDraftLine', () => {
         applyTaxExtras: false,
       })
       expect(bare.flags).not.toContain('taxa_adm_em_descontos')
-      expect(bare.outros_descontos).toBeCloseTo(baru, 2)
+      // descontos 8123 = Baru → coluna Baru via Avec; Outros vazio.
+      expect(bare.folha_extras.consumo_baru).toBeCloseTo(baru, 2)
+      expect(bare.outros_descontos).toBeNull()
       expect(bare.proposed_pay).toBeCloseTo(row.net_payable ?? 0, 2)
 
       const withBaru = buildFolhaDraftLine(

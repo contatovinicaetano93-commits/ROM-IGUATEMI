@@ -105,6 +105,11 @@ export function resolveBaruVsOleriteResidual(args: {
    * Não exige residualAlreadyInNet (não há adm↔meio nesses cargos).
    */
   assistantOleriteClosed?: boolean
+  /**
+   * False → não promover residual Avec → coluna Baru (ex.: Beto, residual = W
+   * ≈ descontos_diversos). Default true: residual débito do olerite é Baru.
+   */
+  promoteResidualAsBaru?: boolean
 }): {
   /** Coluna Outros (null se residual = Baru). */
   outrosDescontos: number | null
@@ -125,6 +130,21 @@ export function resolveBaruVsOleriteResidual(args: {
       : null
 
   if (baru == null) {
+    // Avec: residual típico de CONSUMO BARU (dezenas/centenas) → coluna.
+    // Residual grande (Alison ~5k = descontos quase inteiro) fica em Outros —
+    // não inventar Baru. Teto alinhado ao shortfall Baru do desmembrar.
+    const BARU_PROMOTE_CAP = 800
+    if (
+      residual != null &&
+      residual <= BARU_PROMOTE_CAP &&
+      args.promoteResidualAsBaru !== false
+    ) {
+      return {
+        outrosDescontos: null,
+        consumoBaru: roundFolha(residual, 4),
+        baruAlreadyInNet: true,
+      }
+    }
     return {
       outrosDescontos: residual,
       consumoBaru: null,
