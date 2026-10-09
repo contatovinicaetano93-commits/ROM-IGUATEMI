@@ -107,6 +107,7 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/admin/intranet-ensure' ||
     pathname === '/api/admin/revenue-backfill' ||
     pathname === '/api/admin/analytics-backfill' ||
+    pathname === '/api/admin/last-done-backfill' ||
     pathname === '/api/folha/imap-poll' ||
     pathname === '/api/folha/daily-refresh'
   if (!(await isAuthorized(req, { allowHeaderTokens }))) {
