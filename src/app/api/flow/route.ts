@@ -7,6 +7,7 @@ import { persistStoredFile } from '@/lib/flow/files'
 import { notifyIntranet } from '@/lib/cms'
 import { flowAudienceKey } from '@/lib/intranet/notifications'
 import { employeeToFlowUser, listEmployees } from '@/lib/employees'
+import { flowDirectoryForViewer } from '@/lib/flow/directory'
 import { parseArea, parseExpenseType, canAccessArea, defaultPaymentDate } from '@/lib/flow/workflow'
 import type { PaymentMethod, StoredFile } from '@/lib/flow/types'
 
@@ -21,11 +22,7 @@ export async function GET(req: NextRequest) {
       listVisibleExpenses(user),
       listEmployees(),
     ])
-    const users = employees.map(employeeToFlowUser)
-    if (!users.some((item) => item.id === user.id)) {
-      users.unshift(user)
-    }
-    const people = users.map((person) => ({ id: person.id, name: person.name, email: person.email }))
+    const { people, users } = flowDirectoryForViewer(user, employees.map(employeeToFlowUser))
     return ok({ companies, categories, expenses, user, people, users })
   } catch (error) {
     return err(error instanceof Error ? error.message : 'Falha ao carregar o RomFlow', 500)
