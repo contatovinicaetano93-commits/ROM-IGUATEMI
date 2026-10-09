@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { FileText, Search, Upload } from 'lucide-react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
@@ -46,6 +46,9 @@ function formatBytes(n: number): string {
 /** Sugere nome do candidato a partir do arquivo (ex.: PDF de teste do motor). */
 function suggestNameFromFile(fileName: string): string | null {
   const base = fileName.replace(/\.[^.]+$/, '').trim()
+  if (/curriculo[-_]?teste[-_]?motor[-_]?rom[-_]?2/i.test(base)) {
+    return 'Rafael Mendes Oliveira'
+  }
   if (/curriculo[-_]?teste[-_]?motor/i.test(base)) return 'Camila Souza Ribeiro'
   return null
 }
@@ -104,18 +107,6 @@ export default function CurriculosPage() {
   useEffect(() => {
     void load()
   }, [load])
-
-  const counts = useMemo(() => {
-    const map: Record<StatusFilter, number> = {
-      all: items.length,
-      novo: 0,
-      em_analise: 0,
-      aprovado: 0,
-      arquivado: 0,
-    }
-    for (const item of items) map[item.status] += 1
-    return map
-  }, [items])
 
   function onPickFile(next: File | null) {
     setError(null)
@@ -421,7 +412,7 @@ export default function CurriculosPage() {
               value={status}
               onChange={(e) => setStatus(e.target.value as StatusFilter)}
             >
-              <option value="all">Todos ({counts.all})</option>
+              <option value="all">Todos</option>
               {CURRICULO_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {curriculoStatusLabel(s)}

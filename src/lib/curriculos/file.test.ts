@@ -3,6 +3,7 @@ import {
   curriculoBlobPathname,
   guessCurriculoContentType,
   isAllowedCurriculoContentType,
+  isAllowedCurriculoFileUrl,
   safeCurriculoFileName,
 } from './file'
 
@@ -26,5 +27,30 @@ describe('curriculos/file', () => {
     const path = curriculoBlobPathname('João.pdf')
     expect(path.startsWith('curriculos/')).toBe(true)
     expect(path.endsWith('Jo_o.pdf') || path.includes('Jo')).toBe(true)
+  })
+
+  it('aceita só HTTPS blob Vercel sob /curriculos/', () => {
+    expect(
+      isAllowedCurriculoFileUrl(
+        'https://abc123.public.blob.vercel-storage.com/curriculos/cv.pdf',
+      ),
+    ).toBe(true)
+    expect(
+      isAllowedCurriculoFileUrl(
+        'https://abc123.blob.vercel-storage.com/curriculos/foto.jpg',
+      ),
+    ).toBe(true)
+    expect(
+      isAllowedCurriculoFileUrl(
+        'https://abc123.public.blob.vercel-storage.com/other/cv.pdf',
+      ),
+    ).toBe(false)
+    expect(isAllowedCurriculoFileUrl('http://evil.com/curriculos/x.pdf')).toBe(false)
+    expect(isAllowedCurriculoFileUrl('javascript:alert(1)')).toBe(false)
+    expect(
+      isAllowedCurriculoFileUrl(
+        'https://evil.com/curriculos/x.pdf',
+      ),
+    ).toBe(false)
   })
 })

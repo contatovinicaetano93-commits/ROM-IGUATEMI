@@ -59,3 +59,22 @@ export function isAllowedCurriculoContentType(contentType: string, fileName?: st
 export function curriculoBlobPathname(fileName: string): string {
   return `curriculos/${Date.now()}-${safeCurriculoFileName(fileName)}`
 }
+
+/** Aceita só HTTPS em blob Vercel sob `/curriculos/` (bloqueia SSRF via file_url). */
+export function isAllowedCurriculoFileUrl(url: string): boolean {
+  const raw = url.trim()
+  if (!raw || /^javascript:/i.test(raw)) return false
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== 'https:') return false
+  const host = parsed.hostname.toLowerCase()
+  const blobHost =
+    host.endsWith('.public.blob.vercel-storage.com') ||
+    host.endsWith('.blob.vercel-storage.com')
+  if (!blobHost) return false
+  return parsed.pathname.includes('/curriculos/')
+}

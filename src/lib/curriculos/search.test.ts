@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  fold,
   hintKeywordsFromText,
   normalizeKeywords,
   searchTokens,
@@ -11,11 +12,21 @@ describe('curriculos search helpers', () => {
     expect(searchTokens('a b xx')).toEqual(['xx'])
   })
 
+  it('fold remove acentos', () => {
+    expect(fold('Recepção')).toBe('recepcao')
+    expect(fold('MANICURE')).toBe('manicure')
+  })
+
+  it('searchTokens dobra acentos', () => {
+    expect(searchTokens('Recepção manicure')).toEqual(['recepcao', 'manicure'])
+  })
+
   it('normaliza keywords', () => {
     expect(normalizeKeywords([' Manicure ', 'manicure', 'SPA'])).toEqual([
       'manicure',
       'spa',
     ])
+    expect(normalizeKeywords(['Recepção'])).toEqual(['recepcao'])
   })
 
   it('extrai hints de cargo do texto', () => {

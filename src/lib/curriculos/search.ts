@@ -1,8 +1,13 @@
-/** Tokens de busca: min 2 chars, lower, sem duplicata. */
+/** Remove acentos e lower — busca “recepcao” acha “recepção”. */
+export function fold(value: string): string {
+  return value.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+}
+
+/** Tokens de busca: min 2 chars, folded, sem duplicata. */
 export function searchTokens(query: string): string[] {
   const seen = new Set<string>()
   const out: string[] = []
-  for (const raw of query.toLowerCase().split(/[\s,;|/]+/)) {
+  for (const raw of fold(query).split(/[\s,;|/]+/)) {
     const token = raw.trim()
     if (token.length < 2 || seen.has(token)) continue
     seen.add(token)
@@ -16,7 +21,7 @@ export function normalizeKeywords(raw: readonly string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const item of raw) {
-    const key = item.trim().toLowerCase()
+    const key = fold(item.trim())
     if (key.length < 2 || seen.has(key)) continue
     seen.add(key)
     out.push(key)
@@ -44,10 +49,6 @@ const ROLE_HINTS = [
   'estoque',
   'limpeza',
 ] as const
-
-function fold(value: string): string {
-  return value.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
-}
 
 /** Extrai tags óbvias do texto do CV (sem IA). */
 export function hintKeywordsFromText(text: string): string[] {
