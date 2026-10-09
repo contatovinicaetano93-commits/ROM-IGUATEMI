@@ -104,8 +104,15 @@ export default function AtivacoesPage() {
       setItems(json.data?.activations ?? [])
       setPeerOffline(Boolean(json.data?.peer?.offline))
       setPeerUnconfigured(Boolean(json.data?.peer?.unconfigured))
-    } catch {
-      setError('Falha ao carregar ativações')
+    } catch (err) {
+      const timedOut =
+        (err instanceof DOMException && err.name === 'TimeoutError') ||
+        (err instanceof Error && /aborted|timeout/i.test(err.name + err.message))
+      setError(
+        timedOut
+          ? 'Calendário demorou demais — tente de novo em instantes'
+          : 'Falha ao carregar ativações',
+      )
       setItems([])
     } finally {
       setLoading(false)
