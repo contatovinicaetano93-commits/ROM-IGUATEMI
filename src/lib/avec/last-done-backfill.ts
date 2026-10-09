@@ -104,22 +104,30 @@ async function findOrCreateServiceForBackfill(contactId: string, serviceName: st
   })
 }
 
+/** Avec 0002 rejeita janela ≥ 365 dias ("inferior a 365 dias"). */
+export const LAST_DONE_BACKFILL_MAX_DAYS = 364
+/** Fatias curtas evitam timeout HTTP da Avec em janelas longas. */
+const DEFAULT_CHUNK_DAYS = 90
+
 /**
  * One-shot / admin: percorre 0002 e preenche last_done_at com ultima_visita real.
+ * Janelas longas são fatiadas (chunkDays) — a Avec limita período a &lt; 365 dias e
+ * timeouts em ranges grandes.
  */
 export async function runLastDoneBackfill(opts?: {
   daysBack?: number
   maxPages?: number
+  /** Tamanho de cada fatia Avec (7–180, default 90). */
+  chunkDays?: number
 }): Promise<LastDoneBackfillStats> {
-  const daysBack = Math.min(Math.max(opts?.daysBack ?? 180, 7), 366)
+  const daysBack = Math.min(
+    Math.max(opts?.daysBack ?? 180, 7),
+    LAST_DONE_BACKFILL_MAX_DAYS,
+  )
+  const chunkDays = Math.min(Math.max(opts?.chunkDays ?? DEFAULT_CHUNK_DAYS, 7), 180)
   const today = todayIso()
   const from = shiftYmd(today, -daysBack)
-  const params = {
-    inicio: isoToBr(from),
-    fim: isoToBr(today),
-    como_conheceu: '',
-    limit: 250,
-  }
+  const maxPagesPerChunk = opts?.maxPages ?? 80
 
   const stats: LastDoneBackfillStats = {
     rows_seen: 0,
@@ -132,36 +140,52 @@ export async function runLastDoneBackfill(opts?: {
     truncated: false,
   }
 
-  const result = await fetchAllAvecReport('0002', params, opts?.maxPages ?? 80)
-  stats.truncated = Boolean(result.truncated)
+  // Fatias do presente para o passado; apply só sobe last_done_at se a data for mais nova.
+  let chunkEnd = today
+  while (chunkEnd >= from) {
+    let chunkStart = shiftYmd(chunkEnd, -(chunkDays - 1))
+    if (chunkStart < from) chunkStart = from
 
-  for (const row of result.rows) {
-    const att = normalizeAttendanceRow(row)
-    if (!att?.lastVisitDay) continue
-    stats.rows_seen++
-    try {
-      const contact = await upsertContact({
-        avecClientId: att.avecClientId ?? undefined,
-        name: att.clientName,
-        phone: att.phone,
-        channel: 'avec',
-        source: 'avec_last_done_backfill',
-      })
-      if (contact.anonymized_at) continue
-      stats.contacts_touched++
-      const serviceName = att.serviceName || 'Atendimento'
-      const service = await findOrCreateServiceForBackfill(contact.id, serviceName)
-      const outcome = await applyVisitDayToService(service.id, att.lastVisitDay, {
-        professionalName: att.professional,
-        lastPrice: att.price,
-      })
-      if (outcome === 'filled') stats.services_filled++
-      else if (outcome === 'skipped') stats.services_skipped_has_done++
-    } catch (e) {
-      if (stats.errors.length < 30) {
-        stats.errors.push(e instanceof Error ? e.message : String(e))
+    const params = {
+      inicio: isoToBr(chunkStart),
+      fim: isoToBr(chunkEnd),
+      como_conheceu: '',
+      limit: 250,
+    }
+    const result = await fetchAllAvecReport('0002', params, maxPagesPerChunk)
+    if (result.truncated) stats.truncated = true
+
+    for (const row of result.rows) {
+      const att = normalizeAttendanceRow(row)
+      if (!att?.lastVisitDay) continue
+      stats.rows_seen++
+      try {
+        const contact = await upsertContact({
+          avecClientId: att.avecClientId ?? undefined,
+          name: att.clientName,
+          phone: att.phone,
+          channel: 'avec',
+          source: 'avec_last_done_backfill',
+        })
+        if (contact.anonymized_at) continue
+        stats.contacts_touched++
+        const serviceName = att.serviceName || 'Atendimento'
+        const service = await findOrCreateServiceForBackfill(contact.id, serviceName)
+        const outcome = await applyVisitDayToService(service.id, att.lastVisitDay, {
+          professionalName: att.professional,
+          lastPrice: att.price,
+        })
+        if (outcome === 'filled') stats.services_filled++
+        else if (outcome === 'skipped') stats.services_skipped_has_done++
+      } catch (e) {
+        if (stats.errors.length < 30) {
+          stats.errors.push(e instanceof Error ? e.message : String(e))
+        }
       }
     }
+
+    if (chunkStart <= from) break
+    chunkEnd = shiftYmd(chunkStart, -1)
   }
 
   return stats
