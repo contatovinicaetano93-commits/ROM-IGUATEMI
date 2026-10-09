@@ -17,7 +17,7 @@ async function authorize(req: NextRequest) {
 
 /**
  * POST — preenche client_services.last_done_at com ultima_visita real (Avec 0002).
- * Body: { daysBack?: number (7–366, default 180), maxPages?: number }
+ * Body: { daysBack?: number (7–364, default 180), maxPages?: number, chunkDays?: number }
  * Não inventa visitas; só grava datas que a Avec reporta.
  */
 export async function POST(req: NextRequest) {
