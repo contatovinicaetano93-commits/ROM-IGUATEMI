@@ -29,11 +29,16 @@ export async function POST(request: NextRequest) {
     const jsonResponse = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async () => ({
-        allowedContentTypes: [...CURRICULO_ALLOWED_CONTENT_TYPES],
-        addRandomSuffix: true,
-        maximumSizeInBytes: CURRICULO_MAX_BYTES,
-      }),
+      onBeforeGenerateToken: async (pathname) => {
+        if (!pathname.startsWith('curriculos/')) {
+          throw new Error('Pathname de upload inválido')
+        }
+        return {
+          allowedContentTypes: [...CURRICULO_ALLOWED_CONTENT_TYPES],
+          addRandomSuffix: true,
+          maximumSizeInBytes: CURRICULO_MAX_BYTES,
+        }
+      },
     })
     return NextResponse.json(jsonResponse)
   } catch (e) {

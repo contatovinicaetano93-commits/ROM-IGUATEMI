@@ -8,6 +8,7 @@ import {
   curriculoBlobPathname,
   guessCurriculoContentType,
   isAllowedCurriculoContentType,
+  isAllowedCurriculoFileUrl,
   safeCurriculoFileName,
 } from '@/lib/curriculos/file'
 import { createCurriculo, listCurriculos } from '@/lib/curriculos/store'
@@ -142,6 +143,11 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as CreateBody | null
     if (!body || typeof body !== 'object') return err('Dados inválidos', 400)
 
+    const fileUrl = typeof body.file_url === 'string' ? body.file_url : ''
+    if (fileUrl.trim() && !isAllowedCurriculoFileUrl(fileUrl)) {
+      return err('URL do arquivo inválida', 400)
+    }
+
     return createFromFields(auth.session.user, {
       candidateName: typeof body.candidate_name === 'string' ? body.candidate_name : '',
       email: typeof body.email === 'string' ? body.email : null,
@@ -149,7 +155,7 @@ export async function POST(req: NextRequest) {
       desiredRole: typeof body.desired_role === 'string' ? body.desired_role : null,
       keywordsRaw: keywordsFromUnknown(body.keywords),
       notes: typeof body.notes === 'string' ? body.notes : null,
-      fileUrl: typeof body.file_url === 'string' ? body.file_url : '',
+      fileUrl,
       fileName: typeof body.file_name === 'string' ? body.file_name : null,
       fileContentType:
         typeof body.file_content_type === 'string' ? body.file_content_type : null,

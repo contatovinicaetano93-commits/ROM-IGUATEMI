@@ -3,7 +3,8 @@ import 'server-only'
 import { getIntranetSql } from '@/lib/db'
 import { generateCurriculoBriefing } from '@/lib/curriculos/brief'
 import { extractPdfText } from '@/lib/folha/imap-pdf'
-import { normalizeKeywords, searchTokens } from '@/lib/curriculos/search'
+import { isAllowedCurriculoFileUrl } from '@/lib/curriculos/file'
+import { fold, normalizeKeywords, searchTokens } from '@/lib/curriculos/search'
 import {
   isCurriculoStatus,
   type Curriculo,
@@ -84,6 +85,7 @@ async function extractTextFromFileUrl(
   fileName: string | null,
   contentType: string | null,
 ): Promise<string> {
+  if (!isAllowedCurriculoFileUrl(fileUrl)) return ''
   const isPdf =
     (contentType ?? '').includes('pdf') ||
     (fileName ?? '').toLowerCase().endsWith('.pdf') ||
@@ -101,19 +103,20 @@ async function extractTextFromFileUrl(
 }
 
 function haystack(row: Curriculo): string {
-  return [
-    row.candidate_name,
-    row.desired_role,
-    row.email,
-    row.phone,
-    row.briefing,
-    row.extracted_text,
-    row.keywords.join(' '),
-    row.notes,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
+  return fold(
+    [
+      row.candidate_name,
+      row.desired_role,
+      row.email,
+      row.phone,
+      row.briefing,
+      row.extracted_text,
+      row.keywords.join(' '),
+      row.notes,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  )
 }
 
 export async function listCurriculos(opts: {
