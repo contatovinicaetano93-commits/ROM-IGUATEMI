@@ -147,6 +147,16 @@ function isSessionApiPath(pathname: string) {
   return pathname === '/api/auth/session' || pathname === '/api/auth/logout'
 }
 
+/** Gestão de usuários — só admin (espelha `canSeeNavHref` em modules.ts). */
+export function isPessoasPath(pathname: string) {
+  return (
+    pathname === '/pessoas' ||
+    pathname.startsWith('/pessoas/') ||
+    pathname === '/api/employees' ||
+    pathname.startsWith('/api/employees/')
+  )
+}
+
 export function canAccessProtectedPath(
   pathname: string,
   role: AuthRole | null | undefined,
@@ -157,6 +167,8 @@ export function canAccessProtectedPath(
   if (isSessionApiPath(pathname)) return true
   if (role === 'admin') return true
   if (isAdminOpsPath(pathname)) return false
+  // Antes do allow amplo de isIntranetPath — staff não entra em /pessoas via URL direta.
+  if (isPessoasPath(pathname)) return false
   if (isProfessionalStaff(role, opts?.professionalName) && isProfessionalHiddenPath(pathname)) {
     return false
   }
