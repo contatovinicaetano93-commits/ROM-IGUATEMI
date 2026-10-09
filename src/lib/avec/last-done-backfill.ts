@@ -111,8 +111,8 @@ const DEFAULT_CHUNK_DAYS = 90
 
 /**
  * One-shot / admin: percorre 0002 e preenche last_done_at com ultima_visita real.
- * Janelas longas são fatiadas (chunkDays) — a Avec limita período a &lt; 365 dias e
- * timeouts em ranges grandes.
+ * Janelas longas são fatiadas (chunkDays) — a Avec limita período a menos de 365 dias
+ * e timeouta em ranges grandes.
  */
 export async function runLastDoneBackfill(opts?: {
   daysBack?: number
