@@ -50,6 +50,12 @@ const OPERACAO: IntranetSystem[] = [
     description: 'Rotina do dia por pessoa — lançar, foto ao vivo e fiscalizar.',
     group: 'operacao',
   },
+  {
+    href: '/curriculos',
+    label: 'Currículos',
+    description: 'Banco de currículos do RH — upload, busca e status.',
+    group: 'operacao',
+  },
   { href: '/meu-faturamento', label: 'Meu faturamento', description: 'Seu mês no salão (só você).', group: 'operacao' },
   { href: '/contatos', label: 'Contatos', description: 'Base de clientes.', group: 'operacao' },
 ]

@@ -34,6 +34,7 @@ const DOCK_LABELS: Record<string, string> = {
   '/ativacoes': 'Ativações',
   '/checks-diario': 'Checks',
   '/curriculos': 'Currículos',
+  '/folha': 'Folha',
   '/dashboard': 'Visão',
   '/relatorios': 'Relatórios',
   '/empresa': 'Notícias',
@@ -62,6 +63,7 @@ const MORE_CATALOG: readonly BottomMoreItem[] = [
   { href: '/dashboard', label: 'Visão analítica' },
   { href: '/relatorios', label: 'Relatórios' },
   { href: '/financeiro', label: 'Financeiro' },
+  { href: '/folha', label: 'Folha de pagamento' },
   { href: '/estoque', label: 'Estoque' },
   { href: '/auditoria', label: 'Auditoria' },
 ]

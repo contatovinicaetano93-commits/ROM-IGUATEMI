@@ -10,6 +10,13 @@ describe('sanitizeContactReturnTo', () => {
     expect(sanitizeContactReturnTo('/hoje')).toBe('/hoje')
     expect(sanitizeContactReturnTo('/pipeline')).toBe('/pipeline')
     expect(sanitizeContactReturnTo('/flow')).toBe('/flow')
+    expect(sanitizeContactReturnTo('/folha')).toBe('/folha')
+    expect(sanitizeContactReturnTo('/folha/2025-10')).toBe('/folha/2025-10')
+    expect(sanitizeContactReturnTo('/checks-diario')).toBe('/checks-diario')
+    expect(sanitizeContactReturnTo('/curriculos')).toBe('/curriculos')
+    expect(sanitizeContactReturnTo('/ativacoes')).toBe('/ativacoes')
+    expect(sanitizeContactReturnTo('/resumo-do-dia')).toBe('/resumo-do-dia')
+    expect(sanitizeContactReturnTo('/auditoria')).toBe('/auditoria')
   })
 
   it('rejeita open redirect e paths estranhos', () => {

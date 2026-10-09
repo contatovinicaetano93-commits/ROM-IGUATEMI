@@ -47,6 +47,20 @@ describe('resolveBottomNav', () => {
     expect(more.some((item) => item.href === '/financeiro')).toBe(true)
   })
 
+  it('folha no Mais só com módulo folha', () => {
+    expect(resolveBottomNav('staff', []).more.some((item) => item.href === '/folha')).toBe(false)
+    expect(resolveBottomNav('financeiro', []).more.some((item) => item.href === '/folha')).toBe(
+      false,
+    )
+    expect(
+      resolveBottomNav('staff', ['folha']).more.some((item) => item.href === '/folha'),
+    ).toBe(true)
+    expect(
+      resolveBottomNav('financeiro', ['folha']).more.some((item) => item.href === '/folha'),
+    ).toBe(true)
+    expect(resolveBottomNav('admin', []).more.some((item) => item.href === '/folha')).toBe(true)
+  })
+
   it('financeiro: Dia + Financeiro no dock; pipeline/contatos só com extra', () => {
     const { dock, more } = resolveBottomNav('financeiro', [])
     expect(dock.map((item) => item.href)).toEqual(['/', '/resumo-do-dia', '/financeiro', '/relatorios'])
