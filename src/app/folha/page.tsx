@@ -5,6 +5,11 @@ import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { SectionCard } from '../_components/ui'
 import { folhaFaturadoDisplay } from '@/lib/folha/draft-from-8123-surface'
 import type { FolhaDraft, FolhaDraftLine } from '@/lib/folha/draft-from-8123'
+import {
+  folhaApprovedNotifyMessage,
+  folhaResendNotifyMessage,
+  type FolhaNotifyClientPayload,
+} from '@/lib/folha/notify'
 import type { FolhaPeriodStatus, FolhaShellStatus } from '@/lib/folha/types'
 
 function pct(rate: number): string {
@@ -181,6 +186,7 @@ export default function FolhaPage() {
   const [taxSubject, setTaxSubject] = useState('')
   const [taxBody, setTaxBody] = useState('')
   const [actionMsg, setActionMsg] = useState<string | null>(null)
+  const [actionWarn, setActionWarn] = useState(false)
 
   const applyDraft = useCallback((draft: FolhaDraft | null | undefined) => {
     setStatus((prev) =>
@@ -248,6 +254,7 @@ export default function FolhaPage() {
   async function postJson(url: string, body: unknown, method = 'POST') {
     setBusy(true)
     setActionMsg(null)
+    setActionWarn(false)
     setError(null)
     try {
       const res = await fetch(url, {
@@ -375,26 +382,30 @@ export default function FolhaPage() {
     setStatus((prev) =>
       prev ? { ...prev, period_status: data.period_status, period_id: data.period_id } : prev,
     )
-    const notify = data.notify as
-      | { ok?: boolean; skipped?: string; to?: string[]; error?: string }
-      | null
-      | undefined
+    const notify = data.notify as FolhaNotifyClientPayload
     if (next === 'approved' && notify) {
-      if (notify.ok) {
-        setActionMsg(`Aprovado · e-mail enviado a ${(notify.to ?? []).join(', ')}`)
-      } else if (notify.skipped === 'not_configured') {
-        setActionMsg('Aprovado · e-mail não configurado (FOLHA_NOTIFY_EMAIL)')
-      } else {
-        setActionMsg(`Aprovado · falha no e-mail: ${notify.error ?? 'erro'}`)
-      }
+      const msg = folhaApprovedNotifyMessage(notify)
+      setActionMsg(msg.text)
+      setActionWarn(msg.tone === 'warn')
     } else {
       setActionMsg(`Status → ${statusLabel(next)}`)
+      setActionWarn(false)
     }
+  }
+
+  async function onResendNotify() {
+    if (!periodId) return
+    const data = await postJson('/api/folha/notify', { period_id: periodId })
+    if (!data) return
+    const msg = folhaResendNotifyMessage(data.notify as FolhaNotifyClientPayload)
+    setActionMsg(msg.text)
+    setActionWarn(msg.tone === 'warn')
   }
 
   async function onImapPoll() {
     setBusy(true)
     setActionMsg(null)
+    setActionWarn(false)
     setError(null)
     try {
       const periodQs = selectedPeriod || status?.selected_period_id || ''
@@ -463,6 +474,7 @@ export default function FolhaPage() {
     }
     setBusy(true)
     setActionMsg(null)
+    setActionWarn(false)
     setError(null)
     try {
       const q = new URLSearchParams({ period: periodId })
@@ -613,7 +625,13 @@ export default function FolhaPage() {
               {status.message}
             </p>
             {actionMsg ? (
-              <p className="rounded-xl border border-success/25 bg-success/10 px-3 py-2 text-xs font-medium text-success">
+              <p
+                className={`rounded-xl border px-3 py-2 text-xs font-medium ${
+                  actionWarn
+                    ? 'border-warning/30 bg-warning/10 text-warning'
+                    : 'border-success/25 bg-success/10 text-success'
+                }`}
+              >
                 {actionMsg}
               </p>
             ) : null}
@@ -721,6 +739,16 @@ export default function FolhaPage() {
                       className={FOLHA_BTN_SUCCESS}
                     >
                       Marcar pago
+                    </button>
+                  ) : null}
+                  {periodStatus === 'approved' || periodStatus === 'paid' ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void onResendNotify()}
+                      className={FOLHA_BTN_SECONDARY}
+                    >
+                      Reenviar aviso
                     </button>
                   ) : null}
                   {periodStatus === 'approved' || periodStatus === 'ready_for_review' ? (

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildFolhaNotifyHtml, getFolhaNotifyRecipients } from '@/lib/folha/notify'
+import {
+  buildFolhaNotifyHtml,
+  folhaApprovedNotifyMessage,
+  folhaResendNotifyMessage,
+  formatFolhaNotifyError,
+  getFolhaNotifyRecipients,
+} from '@/lib/folha/notify'
 import type { FolhaDraft } from '@/lib/folha/draft-from-8123'
 
 const draft: FolhaDraft = {
@@ -103,5 +109,53 @@ describe('buildFolhaNotifyHtml', () => {
     expect(html).toContain('1ª quinzena')
     expect(html).toContain('Alan')
     expect(html).toContain('DARF')
+  })
+})
+
+describe('formatFolhaNotifyError', () => {
+  it('traduz domínio Resend não verificado', () => {
+    expect(
+      formatFolhaNotifyError(
+        'The romconcept.com.br domain is not verified. Please, add and verify your domain on https://resend.com/domains',
+      ),
+    ).toBe('domínio de envio não verificado no Resend')
+  })
+
+  it('mantém erro genérico', () => {
+    expect(formatFolhaNotifyError('Resend HTTP 500')).toBe('Resend HTTP 500')
+  })
+})
+
+describe('folhaApprovedNotifyMessage', () => {
+  it('não mistura aprovação com falha de e-mail', () => {
+    const msg = folhaApprovedNotifyMessage({
+      ok: false,
+      skipped: 'send_failed',
+      error: 'The romconcept.com.br domain is not verified.',
+    })
+    expect(msg.tone).toBe('warn')
+    expect(msg.text).toMatch(/pagamento ficou gravado/)
+    expect(msg.text).not.toMatch(/resend\.com/)
+  })
+
+  it('confirma envio', () => {
+    const msg = folhaApprovedNotifyMessage({
+      ok: true,
+      to: ['ops@example.com'],
+    })
+    expect(msg.tone).toBe('ok')
+    expect(msg.text).toContain('ops@example.com')
+  })
+})
+
+describe('folhaResendNotifyMessage', () => {
+  it('deixa claro que o status não muda', () => {
+    const msg = folhaResendNotifyMessage({
+      ok: false,
+      skipped: 'send_failed',
+      error: 'timeout',
+    })
+    expect(msg.tone).toBe('warn')
+    expect(msg.text).toMatch(/continua aprovado/)
   })
 })
