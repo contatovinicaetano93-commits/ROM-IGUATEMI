@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
 import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
+import { isAllowedChecksDiarioPhotoUrl } from '@/lib/checks-diario/photo'
 import { completeMyCheck } from '@/lib/checks-diario/service'
 
 function canUseChecks(session: { role: string; modules?: unknown }): boolean {
@@ -20,12 +21,18 @@ export async function POST(req: NextRequest) {
   const taskId = typeof body.task_id === 'string' ? body.task_id : ''
   if (!taskId) return err('Informe a tarefa', 400)
 
+  const photoUrlRaw = typeof body.photo_url === 'string' ? body.photo_url : null
+  if (!isAllowedChecksDiarioPhotoUrl(photoUrlRaw)) {
+    return err('photo_url inválida: use upload do Checks diários (Vercel Blob)', 400)
+  }
+  const photoUrl = photoUrlRaw?.trim() ? photoUrlRaw.trim() : null
+
   try {
     const log = await completeMyCheck({
       session: auth.session,
       taskId,
       note: typeof body.note === 'string' ? body.note : null,
-      photoUrl: typeof body.photo_url === 'string' ? body.photo_url : null,
+      photoUrl,
       photoCapturedAt:
         typeof body.photo_captured_at === 'string' ? body.photo_captured_at : null,
     })

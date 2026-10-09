@@ -15,6 +15,7 @@ import {
   checksDayProgressLabel,
   summarizeChecksPeople,
 } from '@/lib/checks-diario/summary'
+import { checksDiarioBlobPathname } from '@/lib/checks-diario/photo'
 import {
   CHECKS_CARGOS,
   CHECKS_TEAMS,
@@ -212,10 +213,14 @@ export default function ChecksDiarioPage() {
       if (opts.requiresPhoto) {
         if (!opts.file) throw new Error('Tire a foto agora para concluir este check')
         if (!photoCapturedAt) photoCapturedAt = new Date().toISOString()
-        const blob = await upload(opts.file.name || `check-${taskId}.jpg`, opts.file, {
-          access: 'public',
-          handleUploadUrl: '/api/checks-diario/upload',
-        })
+        const blob = await upload(
+          checksDiarioBlobPathname(opts.file.name || `check-${taskId}.jpg`),
+          opts.file,
+          {
+            access: 'public',
+            handleUploadUrl: '/api/checks-diario/upload',
+          },
+        )
         photoUrl = blob.url
       }
       const res = await fetch('/api/checks-diario/complete', {

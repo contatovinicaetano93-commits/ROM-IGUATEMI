@@ -1,6 +1,7 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/lib/auth'
+import { assertChecksDiarioBlobPathname } from '@/lib/checks-diario/photo'
 import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
 
 function canUseChecks(session: { role: string; modules?: unknown }): boolean {
@@ -23,11 +24,14 @@ export async function POST(request: NextRequest) {
     const jsonResponse = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'],
-        addRandomSuffix: true,
-        maximumSizeInBytes: 8 * 1024 * 1024,
-      }),
+      onBeforeGenerateToken: async (pathname) => {
+        assertChecksDiarioBlobPathname(pathname)
+        return {
+          allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'],
+          addRandomSuffix: true,
+          maximumSizeInBytes: 8 * 1024 * 1024,
+        }
+      },
       onUploadCompleted: async () => {},
     })
     return NextResponse.json(jsonResponse)
