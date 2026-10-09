@@ -72,7 +72,8 @@ describe('refreshDraftPreservingExtras', () => {
     })
     expect(refreshed.lines[0]?.folha_extras.darf).toBe(99)
     expect(refreshed.lines[0]?.avec.net_payable).toBe(5100)
-    // Sem U: path B olerite com base charged×2% BR (240). + meio 100 − adm − DARF
+    // Jefferson Romeu: sem extras.U o 8123 charged vira base U → adm×2% BR (240).
+    // + meio 100 − adm − DARF
     expect(refreshed.lines[0]?.proposed_pay).toBe(5100 + 100 - 99 - 240)
   })
 })
