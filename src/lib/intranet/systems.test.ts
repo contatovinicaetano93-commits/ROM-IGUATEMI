@@ -93,4 +93,13 @@ describe('systemsForAccess', () => {
     expect(systemsForAccess('financeiro', ['folha']).map((item) => item.href)).toContain('/folha')
     expect(systemsForAccess('staff', ['folha']).map((item) => item.href)).toContain('/folha')
   })
+
+  it('currículos aparece só com módulo curriculos', () => {
+    expect(systemsForAccess('admin').map((item) => item.href)).toContain('/curriculos')
+    expect(systemsForAccess('staff').map((item) => item.href)).not.toContain('/curriculos')
+    expect(systemsForAccess('staff', ['curriculos']).map((item) => item.href)).toContain('/curriculos')
+    expect(systemsForAccess('financeiro', ['curriculos']).map((item) => item.href)).toContain(
+      '/curriculos',
+    )
+  })
 })
