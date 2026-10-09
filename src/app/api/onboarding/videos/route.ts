@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
 import { requireSession, requireAdmin } from '@/lib/auth'
+import { cachedFetch, MemoryCache } from '@/lib/cache'
 import { listVideos, createVideo } from '@/lib/onboarding'
 
 export async function GET(req: NextRequest) {
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest) {
     const auth = await requireSession(req)
     if (!auth.ok) return err(auth.message, auth.status)
 
-    const videos = await listVideos()
+    const videos = await cachedFetch('onboarding:videos:v1', () => listVideos(), 120)
     return ok(videos)
   } catch (e) {
     return handleError(e)
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
 
     const body = createSchema.parse(await req.json())
     const video = await createVideo(body)
+    MemoryCache.deletePrefix('onboarding:')
     return ok(video, undefined, 201)
   } catch (e) {
     return handleError(e)

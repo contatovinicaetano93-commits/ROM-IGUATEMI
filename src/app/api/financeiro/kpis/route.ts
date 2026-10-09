@@ -4,6 +4,7 @@ import { requireFinance } from '@/lib/auth'
 import { computeFinanceKpis } from '@/lib/finance'
 import { ttlGetOrSet } from '@/lib/ttl-cache'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
+import { isOmieConfigured, isOmieMock } from '@/lib/omie/client'
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
     const data = await ttlGetOrSet(cacheKey, 45_000, async () => {
       const kpis = await computeFinanceKpis({ month, compareMonth })
       const sync = await loadAvecSyncMeta()
-      return { ...kpis, sync }
+      return { ...kpis, sync, omie_configured: isOmieConfigured() || isOmieMock() }
     })
     return okCached(data, 30)
   } catch (e) {
