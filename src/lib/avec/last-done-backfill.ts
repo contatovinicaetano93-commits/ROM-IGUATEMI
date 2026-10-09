@@ -152,36 +152,48 @@ export async function runLastDoneBackfill(opts?: {
       como_conheceu: '',
       limit: 250,
     }
-    const result = await fetchAllAvecReport('0002', params, maxPagesPerChunk)
-    if (result.truncated) stats.truncated = true
+    console.info(
+      `[last-done-backfill] fatia ${params.inicio}→${params.fim} (maxPages=${maxPagesPerChunk})`,
+    )
+    try {
+      const result = await fetchAllAvecReport('0002', params, maxPagesPerChunk)
+      if (result.truncated) stats.truncated = true
+      console.info(
+        `[last-done-backfill] fatia ok rows=${result.rows.length} truncated=${Boolean(result.truncated)}`,
+      )
 
-    for (const row of result.rows) {
-      const att = normalizeAttendanceRow(row)
-      if (!att?.lastVisitDay) continue
-      stats.rows_seen++
-      try {
-        const contact = await upsertContact({
-          avecClientId: att.avecClientId ?? undefined,
-          name: att.clientName,
-          phone: att.phone,
-          channel: 'avec',
-          source: 'avec_last_done_backfill',
-        })
-        if (contact.anonymized_at) continue
-        stats.contacts_touched++
-        const serviceName = att.serviceName || 'Atendimento'
-        const service = await findOrCreateServiceForBackfill(contact.id, serviceName)
-        const outcome = await applyVisitDayToService(service.id, att.lastVisitDay, {
-          professionalName: att.professional,
-          lastPrice: att.price,
-        })
-        if (outcome === 'filled') stats.services_filled++
-        else if (outcome === 'skipped') stats.services_skipped_has_done++
-      } catch (e) {
-        if (stats.errors.length < 30) {
-          stats.errors.push(e instanceof Error ? e.message : String(e))
+      for (const row of result.rows) {
+        const att = normalizeAttendanceRow(row)
+        if (!att?.lastVisitDay) continue
+        stats.rows_seen++
+        try {
+          const contact = await upsertContact({
+            avecClientId: att.avecClientId ?? undefined,
+            name: att.clientName,
+            phone: att.phone,
+            channel: 'avec',
+            source: 'avec_last_done_backfill',
+          })
+          if (contact.anonymized_at) continue
+          stats.contacts_touched++
+          const serviceName = att.serviceName || 'Atendimento'
+          const service = await findOrCreateServiceForBackfill(contact.id, serviceName)
+          const outcome = await applyVisitDayToService(service.id, att.lastVisitDay, {
+            professionalName: att.professional,
+            lastPrice: att.price,
+          })
+          if (outcome === 'filled') stats.services_filled++
+          else if (outcome === 'skipped') stats.services_skipped_has_done++
+        } catch (e) {
+          if (stats.errors.length < 30) {
+            stats.errors.push(e instanceof Error ? e.message : String(e))
+          }
         }
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error(`[last-done-backfill] fatia falhou ${params.inicio}→${params.fim}: ${msg}`)
+      if (stats.errors.length < 30) stats.errors.push(`fatia ${params.inicio}→${params.fim}: ${msg}`)
     }
 
     if (chunkStart <= from) break
