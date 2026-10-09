@@ -108,34 +108,92 @@ function localUnit(): AtivacaoUnit {
   return getRomPanelId()
 }
 
-export async function listBrandActivationsForMonth(month: string): Promise<BrandActivation[]> {
-  await ensureBrandActivationsTable()
+function isMissingRelation(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return /relation .*unit_brand_activations.* does not exist|42P01/i.test(msg)
+}
+
+/** 42703 em `end_time` — tabela v1 (038) ainda sem a coluna. Não é relação ausente. */
+function isMissingEndTimeColumn(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  if (/column .*end_time.* does not exist/i.test(msg)) return true
+  if (!error || typeof error !== 'object') return false
+  const rec = error as { code?: unknown; column_name?: unknown }
+  if (rec.code !== '42703') return false
+  return rec.column_name === 'end_time' || /end_time/i.test(msg)
+}
+
+async function selectLocalMonthRows(month: string): Promise<Record<string, unknown>[]> {
   const sql = getSql()
   const start = `${month}-01`
+  try {
+    return (await sql`
+      select
+        id::text as id,
+        day::text as day,
+        start_time::text as start_time,
+        end_time::text as end_time,
+        brand,
+        condition,
+        notes,
+        status,
+        created_by_employee_id::text as created_by_employee_id,
+        created_by_name,
+        created_by_role,
+        cancelled_by_name,
+        cancelled_at,
+        created_at,
+        updated_at
+      from unit_brand_activations
+      where day >= ${start}::date
+        and day < (${start}::date + interval '1 month')
+      order by day asc, start_time asc, created_at asc
+    `) as Record<string, unknown>[]
+  } catch (error) {
+    // Pré-v2: espelha início como fim, sem ALTER. O ensure no GET trava o calendário.
+    if (!isMissingEndTimeColumn(error)) throw error
+    return (await sql`
+      select
+        id::text as id,
+        day::text as day,
+        start_time::text as start_time,
+        start_time::text as end_time,
+        brand,
+        condition,
+        notes,
+        status,
+        created_by_employee_id::text as created_by_employee_id,
+        created_by_name,
+        created_by_role,
+        cancelled_by_name,
+        cancelled_at,
+        created_at,
+        updated_at
+      from unit_brand_activations
+      where day >= ${start}::date
+        and day < (${start}::date + interval '1 month')
+      order by day asc, start_time asc, created_at asc
+    `) as Record<string, unknown>[]
+  }
+}
+
+/**
+ * Lista do mês — SELECT direto (sem DDL).
+ * DDL de ensure só roda se a tabela ainda não existir; evita lock de ALTER
+ * segurar o GET do calendário até o hard timeout da Vercel (300s).
+ * Schema v1 (coluna end_time ausente) usa o mesmo fallback do peer.
+ */
+export async function listBrandActivationsForMonth(month: string): Promise<BrandActivation[]> {
   const unit = localUnit()
-  const rows = (await sql`
-    select
-      id::text as id,
-      day::text as day,
-      start_time::text as start_time,
-      end_time::text as end_time,
-      brand,
-      condition,
-      notes,
-      status,
-      created_by_employee_id::text as created_by_employee_id,
-      created_by_name,
-      created_by_role,
-      cancelled_by_name,
-      cancelled_at,
-      created_at,
-      updated_at
-    from unit_brand_activations
-    where day >= ${start}::date
-      and day < (${start}::date + interval '1 month')
-    order by day asc, start_time asc, created_at asc
-  `) as Record<string, unknown>[]
-  return rows.map((row) => mapActivationRow(row, { unit, writable: true }))
+  try {
+    const rows = await selectLocalMonthRows(month)
+    return rows.map((row) => mapActivationRow(row, { unit, writable: true }))
+  } catch (error) {
+    if (!isMissingRelation(error)) throw error
+    await ensureBrandActivationsTable()
+    const rows = await selectLocalMonthRows(month)
+    return rows.map((row) => mapActivationRow(row, { unit, writable: true }))
+  }
 }
 
 export async function getBrandActivationById(id: string): Promise<BrandActivation | null> {

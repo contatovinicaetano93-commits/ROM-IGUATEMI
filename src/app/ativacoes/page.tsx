@@ -88,18 +88,31 @@ export default function AtivacoesPage() {
     try {
       const res = await fetch(`/api/ativacoes?month=${encodeURIComponent(m)}`, {
         credentials: 'include',
+        signal: AbortSignal.timeout(20_000),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(json.error ?? 'Falha ao carregar ativações')
+        setError(
+          json.error ??
+            (res.status === 504
+              ? 'Calendário demorou demais — tente de novo em instantes'
+              : 'Falha ao carregar ativações'),
+        )
         setItems([])
         return
       }
       setItems(json.data?.activations ?? [])
       setPeerOffline(Boolean(json.data?.peer?.offline))
       setPeerUnconfigured(Boolean(json.data?.peer?.unconfigured))
-    } catch {
-      setError('Falha ao carregar ativações')
+    } catch (err) {
+      const timedOut =
+        (err instanceof DOMException && err.name === 'TimeoutError') ||
+        (err instanceof Error && /aborted|timeout/i.test(err.name + err.message))
+      setError(
+        timedOut
+          ? 'Calendário demorou demais — tente de novo em instantes'
+          : 'Falha ao carregar ativações',
+      )
       setItems([])
     } finally {
       setLoading(false)
