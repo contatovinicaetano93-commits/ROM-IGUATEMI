@@ -93,6 +93,46 @@ describe('resolveFolhaTaxLineName', () => {
     ).toBe('Alison Alvarez')
   })
 
+  it('alias Alan Folha FERNADO + Amaro → Luiza', () => {
+    const roster = [
+      ...lines,
+      'ALAN FERNADO DE ALBUQUERQUE',
+      'LUIZA ANTONIA AMARO PINTO',
+    ]
+    expect(
+      resolveFolhaTaxLineName({
+        lineNames: roster,
+        cnpj: '11.106.752/0001-58',
+      }),
+    ).toBe('ALAN FERNADO DE ALBUQUERQUE')
+    expect(
+      resolveFolhaTaxLineName({
+        lineNames: roster,
+        cnpj: '43.931.990/0001-94',
+      }),
+    ).toBe('LUIZA ANTONIA AMARO PINTO')
+  })
+
+  it('alias Auxiliadora Alci Bella (IG)', () => {
+    expect(
+      resolveFolhaTaxLineName({
+        lineNames: [
+          ...lines,
+          'Maria Auxiliadora Ribeiro Alves Alci Bella',
+        ],
+        cnpj: '07.038.057/0001-29',
+      }),
+    ).toBe('Maria Auxiliadora Ribeiro Alves Alci Bella')
+  })
+
+  it('strip MANICURE / MAQUIADOR / COMCEPT na razão social', () => {
+    expect(legalNameToMatchQuery('AMARO MAKEUP LTDA')).toBe('AMARO')
+    expect(
+      legalNameToMatchQuery('DIANA DOS SANTOS BELEZA DAS MAOS MANICURE LTDA'),
+    ).toBe('DIANA DOS SANTOS DAS MAOS')
+    expect(legalNameToMatchQuery('D&G HAIR COMCEPT LTDA')).toBe('D&G')
+  })
+
   it('exact vence loose via CNPJ', () => {
     expect(
       resolveFolhaTaxLineName({
