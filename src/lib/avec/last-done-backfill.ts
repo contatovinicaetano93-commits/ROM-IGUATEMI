@@ -108,6 +108,8 @@ async function findOrCreateServiceForBackfill(contactId: string, serviceName: st
 export const LAST_DONE_BACKFILL_MAX_DAYS = 364
 /** Fatias curtas evitam timeout HTTP da Avec em janelas longas. */
 const DEFAULT_CHUNK_DAYS = 90
+/** Upserts DB em paralelo por fatia (evento loop single-thread — ++ em stats é seguro). */
+const DEFAULT_ROW_CONCURRENCY = 10
 
 /**
  * One-shot / admin: percorre 0002 e preenche last_done_at com ultima_visita real.
@@ -119,12 +121,18 @@ export async function runLastDoneBackfill(opts?: {
   maxPages?: number
   /** Tamanho de cada fatia Avec (7–180, default 90). */
   chunkDays?: number
+  /** Paralelismo de upsert por fatia (1–20, default 10). */
+  rowConcurrency?: number
 }): Promise<LastDoneBackfillStats> {
   const daysBack = Math.min(
     Math.max(opts?.daysBack ?? 180, 7),
     LAST_DONE_BACKFILL_MAX_DAYS,
   )
   const chunkDays = Math.min(Math.max(opts?.chunkDays ?? DEFAULT_CHUNK_DAYS, 7), 180)
+  const rowConcurrency = Math.min(
+    Math.max(opts?.rowConcurrency ?? DEFAULT_ROW_CONCURRENCY, 1),
+    20,
+  )
   const today = todayIso()
   const from = shiftYmd(today, -daysBack)
   const maxPagesPerChunk = opts?.maxPages ?? 80
@@ -162,34 +170,43 @@ export async function runLastDoneBackfill(opts?: {
         `[last-done-backfill] fatia ok rows=${result.rows.length} truncated=${Boolean(result.truncated)}`,
       )
 
-      for (const row of result.rows) {
-        const att = normalizeAttendanceRow(row)
-        if (!att?.lastVisitDay) continue
-        stats.rows_seen++
-        try {
-          const contact = await upsertContact({
-            avecClientId: att.avecClientId ?? undefined,
-            name: att.clientName,
-            phone: att.phone,
-            channel: 'avec',
-            source: 'avec_last_done_backfill',
-          })
-          if (contact.anonymized_at) continue
-          stats.contacts_touched++
-          const serviceName = att.serviceName || 'Atendimento'
-          const service = await findOrCreateServiceForBackfill(contact.id, serviceName)
-          const outcome = await applyVisitDayToService(service.id, att.lastVisitDay, {
-            professionalName: att.professional,
-            lastPrice: att.price,
-          })
-          if (outcome === 'filled') stats.services_filled++
-          else if (outcome === 'skipped') stats.services_skipped_has_done++
-        } catch (e) {
-          if (stats.errors.length < 30) {
-            stats.errors.push(e instanceof Error ? e.message : String(e))
+      let next = 0
+      const workers = Array.from({ length: rowConcurrency }, async () => {
+        while (true) {
+          const i = next++
+          if (i >= result.rows.length) break
+          const att = normalizeAttendanceRow(result.rows[i]!)
+          if (!att?.lastVisitDay) continue
+          stats.rows_seen++
+          try {
+            const contact = await upsertContact({
+              avecClientId: att.avecClientId ?? undefined,
+              name: att.clientName,
+              phone: att.phone,
+              channel: 'avec',
+              source: 'avec_last_done_backfill',
+            })
+            if (contact.anonymized_at) continue
+            stats.contacts_touched++
+            const serviceName = att.serviceName || 'Atendimento'
+            const service = await findOrCreateServiceForBackfill(contact.id, serviceName)
+            const outcome = await applyVisitDayToService(service.id, att.lastVisitDay, {
+              professionalName: att.professional,
+              lastPrice: att.price,
+            })
+            if (outcome === 'filled') stats.services_filled++
+            else if (outcome === 'skipped') stats.services_skipped_has_done++
+          } catch (e) {
+            if (stats.errors.length < 30) {
+              stats.errors.push(e instanceof Error ? e.message : String(e))
+            }
           }
         }
-      }
+      })
+      await Promise.all(workers)
+      console.info(
+        `[last-done-backfill] fatia gravada filled=${stats.services_filled} skipped=${stats.services_skipped_has_done} seen=${stats.rows_seen}`,
+      )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       console.error(`[last-done-backfill] fatia falhou ${params.inicio}→${params.fim}: ${msg}`)
