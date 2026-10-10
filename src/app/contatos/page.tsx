@@ -15,6 +15,7 @@ import {
   UserPlus,
   HelpCircle,
   Loader2,
+  Target,
 } from 'lucide-react'
 import posthog from 'posthog-js'
 import { Avatar, PrimaryButton } from '../_components/ui'
@@ -48,7 +49,7 @@ interface Contact {
 }
 
 type ListMode = 'reactivate' | 'ativados' | 'novos' | 'sem_servicos' | 'search'
-type ReactivateQueue = 'overdue' | 'due_soon' | 'scheduled'
+type ReactivateQueue = 'overdue' | 'due_soon' | 'scheduled' | 'no_cadence'
 
 type ContactsSyncMeta = {
   agenda_stale?: boolean
@@ -79,6 +80,11 @@ function serviceLine(c: Contact, queue: ReactivateQueue | null): string {
     if (c.next_scheduled_at) return fmtSchedule(c.next_scheduled_at)
     return action || 'Retorno agendado'
   }
+  if (queue === 'no_cadence') {
+    const days = c.max_overdue_days
+    if (action) return action
+    return days > 0 ? `Definir cadência · há ${days}d` : 'Definir cadência'
+  }
   return action || 'Sem sinal de retorno'
 }
 
@@ -101,6 +107,13 @@ function urgencyBadge(queue: ReactivateQueue | null | 'novos' | 'sem_servicos' |
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-muted/15 px-2 py-0.5 text-[0.65rem] font-semibold text-muted">
         <HelpCircle size={10} /> Sem retorno
+      </span>
+    )
+  }
+  if (queue === 'no_cadence') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] font-semibold text-gold">
+        <Target size={10} /> Sem cadência
       </span>
     )
   }
@@ -190,7 +203,14 @@ function initialQueryFromSearch(searchParams: URLSearchParams): string {
 
 function initialReactivateQueueFromSearch(searchParams: URLSearchParams): ReactivateQueue {
   const queue = searchParams.get('queue')
-  if (queue === 'due_soon' || queue === 'scheduled' || queue === 'overdue') return queue
+  if (
+    queue === 'due_soon' ||
+    queue === 'scheduled' ||
+    queue === 'overdue' ||
+    queue === 'no_cadence'
+  ) {
+    return queue
+  }
   return 'overdue'
 }
 
@@ -237,11 +257,21 @@ function ContatosPageContent() {
     overdue: number
     due_soon: number
     scheduled: number
+    no_cadence: number
     novos: number
     sem_servicos: number
     ativados: number
     base_ativa: number
-  }>({ overdue: 0, due_soon: 0, scheduled: 0, novos: 0, sem_servicos: 0, ativados: 0, base_ativa: 0 })
+  }>({
+    overdue: 0,
+    due_soon: 0,
+    scheduled: 0,
+    no_cadence: 0,
+    novos: 0,
+    sem_servicos: 0,
+    ativados: 0,
+    base_ativa: 0,
+  })
   const [totalInBase, setTotalInBase] = useState<number | null>(null)
   const [syncMeta, setSyncMeta] = useState<ContactsSyncMeta | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -293,6 +323,7 @@ function ContatosPageContent() {
               overdue: asQueueCount(q.overdue) ?? prev.overdue,
               due_soon: asQueueCount(q.due_soon) ?? prev.due_soon,
               scheduled: asQueueCount(q.scheduled) ?? prev.scheduled,
+              no_cadence: asQueueCount(q.no_cadence) ?? prev.no_cadence,
               novos: asQueueCount(q.novos) ?? prev.novos,
               sem_servicos: asQueueCount(q.sem_servicos) ?? prev.sem_servicos,
               ativados: asQueueCount(q.ativados) ?? prev.ativados,
@@ -311,8 +342,8 @@ function ContatosPageContent() {
           limit: mode === 'search' ? '100' : '250',
         })
         if (mode === 'reactivate') {
-          params.set('pending', 'true')
           params.set('queue', queue)
+          if (queue !== 'no_cadence') params.set('pending', 'true')
         } else if (mode === 'ativados') {
           params.set('queue', 'ativados')
         } else if (mode === 'novos') {
@@ -355,6 +386,7 @@ function ContatosPageContent() {
               const overdue = asQueueCount(q.overdue)
               const dueSoon = asQueueCount(q.due_soon)
               const scheduled = asQueueCount(q.scheduled)
+              const noCadence = asQueueCount(q.no_cadence)
               const novos = asQueueCount(q.novos)
               const semServicos = asQueueCount(q.sem_servicos)
               const ativados = asQueueCount(q.ativados)
@@ -362,6 +394,7 @@ function ContatosPageContent() {
               if (overdue != null) next.overdue = overdue
               if (dueSoon != null) next.due_soon = dueSoon
               if (scheduled != null) next.scheduled = scheduled
+              if (noCadence != null) next.no_cadence = noCadence
               if (novos != null) next.novos = novos
               if (semServicos != null) next.sem_servicos = semServicos
               if (ativados != null) next.ativados = ativados
@@ -429,7 +462,9 @@ function ContatosPageContent() {
             ? 'Nenhum atrasado (cadência vencida com visita registrada).'
             : queue === 'due_soon'
               ? `Nenhum vencendo nos próximos ${DUE_SOON_DAYS} dias.`
-              : `Nenhum agendado hoje ou nos próximos ${SCHEDULED_SOON_DAYS} dias.`
+              : queue === 'no_cadence'
+                ? 'Ninguém com visita sem cadência — inventário Avec já tem ritmo de retorno.'
+                : `Nenhum agendado hoje ou nos próximos ${SCHEDULED_SOON_DAYS} dias.`
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-5 py-6 lg:gap-6 lg:px-8 lg:py-8">
@@ -439,7 +474,9 @@ function ContatosPageContent() {
           <h1 className="mt-1 text-xl font-semibold lg:mt-0 lg:text-2xl">Contatos</h1>
           <p className="mt-0.5 text-xs text-muted">
             {mode === 'reactivate'
-              ? 'Reative quem está atrasado, vencendo ou agendado'
+              ? queue === 'no_cadence'
+                ? 'Visita na Avec sem cadência — defina o ritmo e ative o retorno'
+                : 'Reative quem está atrasado, vencendo ou agendado'
               : mode === 'ativados'
                 ? 'Chamados pelo painel — aguardando agenda ou visita na Avec (30 dias)'
                 : mode === 'novos'
@@ -558,6 +595,7 @@ function ContatosPageContent() {
                 { id: 'overdue' as const, label: 'Atrasados', count: queueCounts.overdue },
                 { id: 'due_soon' as const, label: 'Vencendo', count: queueCounts.due_soon },
                 { id: 'scheduled' as const, label: 'Agendados', count: queueCounts.scheduled },
+                { id: 'no_cadence' as const, label: 'Sem cadência', count: queueCounts.no_cadence },
               ] as const
             ).map((q) => {
               const active = queue === q.id
@@ -587,7 +625,9 @@ function ContatosPageContent() {
               ? 'Atrasados: cadência já passou — visita registrada e sem retorno no prazo.'
               : queue === 'due_soon'
                 ? `Vencendo: retorno previsto nos próximos ${DUE_SOON_DAYS} dias (ainda não atrasou).`
-                : `Agendados: agenda Avec + comanda aberta do dia (mesmo sem horário de booking), hoje até +${SCHEDULED_SOON_DAYS}d — janela vem do sync full/agenda (fast cobre só ontem→amanhã). Conta pessoa.`}
+                : queue === 'no_cadence'
+                  ? 'Sem cadência: tem visita (inclui Atendimento/backfill Avec), mas nenhum serviço ativo gera data de retorno. Abra a ficha, defina a cadência do serviço real e use Ativar no WhatsApp — aí a pessoa entra no funil Atrasados/Vencendo.'
+                  : `Agendados: agenda Avec + comanda aberta do dia (mesmo sem horário de booking), hoje até +${SCHEDULED_SOON_DAYS}d — janela vem do sync full/agenda (fast cobre só ontem→amanhã). Conta pessoa.`}
           </p>
         </div>
       )}
@@ -780,13 +820,19 @@ function ContatosPageContent() {
                       aria-label={
                         mode === 'novos' || mode === 'sem_servicos'
                           ? `Chamar ${c.name || 'contato'} no WhatsApp`
-                          : `Reativar ${c.name || 'contato'} no WhatsApp`
+                          : mode === 'reactivate' && queue === 'no_cadence'
+                            ? `Ativar ${c.name || 'contato'} no WhatsApp`
+                            : `Reativar ${c.name || 'contato'} no WhatsApp`
                       }
                       className="flex shrink-0 items-center justify-center gap-1.5 self-center rounded-xl border border-success/40 bg-success/10 px-3 py-2.5 text-xs font-semibold text-success active:scale-[0.98]"
                     >
                       <MessageSquare size={14} />
                       <span className="hidden sm:inline">
-                        {mode === 'novos' || mode === 'sem_servicos' ? 'Chamar' : 'Reativar'}
+                        {mode === 'novos' || mode === 'sem_servicos'
+                          ? 'Chamar'
+                          : mode === 'reactivate' && queue === 'no_cadence'
+                            ? 'Ativar'
+                            : 'Reativar'}
                       </span>
                     </a>
                   ) : (
