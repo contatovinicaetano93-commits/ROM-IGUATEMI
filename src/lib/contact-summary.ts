@@ -58,12 +58,27 @@ export interface ContactQueueCounts extends UrgencyQueueCounts {
   /** Passou da janela Novos e segue sem next_due — fora do funil de cadência. */
   sem_servicos: number
   /**
+   * Reativar → Sem cadência: tem visita (`last_done_at`), mas nenhum serviço ativo
+   * gera `next_due` (cadência nula ou nome placeholder tipo Atendimento).
+   */
+  no_cadence: number
+  /**
    * Entrada no mês (funil CRM / Visão): first_contact/created no mês corrente,
    * status ≠ importado e fora de dumps Avec. Não é fila — só referência + link.
    */
   base_ativa: number
   /** Reativados pelo painel aguardando agenda/visita Avec (30d). */
   ativados: number
+}
+
+function daysBetweenSalon(fromIso: string | null | undefined, toYmd: string): number {
+  if (!fromIso) return 0
+  const from = toSalonDateIso(fromIso)
+  if (!from) return 0
+  const a = Date.parse(`${from}T12:00:00-03:00`)
+  const b = Date.parse(`${toYmd}T12:00:00-03:00`)
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0
+  return Math.max(0, Math.floor((b - a) / 86_400_000))
 }
 
 export interface ContactListResult {
@@ -811,19 +826,154 @@ export async function countBaseAtiva(): Promise<number> {
   return Number(rows[0]?.n) || 0
 }
 
+/**
+ * Inventário com visita, sem ritmo de reativação.
+ * Diferente de Sem serviço: aqui já houve `last_done_at` (inclui Avec backfill / Atendimento).
+ */
+export async function countContactsWithoutCadence(opts?: {
+  channel?: string | null
+  contactIds?: readonly string[] | null
+}): Promise<number> {
+  const sql = getSql()
+  const channel = opts?.channel ?? null
+  const ids = opts?.contactIds ? [...opts.contactIds] : null
+  if (ids && ids.length === 0) return 0
+  const rows = ids
+    ? ((await sql`
+        select count(*)::int as n
+        from contacts c
+        where c.anonymized_at is null
+          and c.status <> 'perdido'
+          and c.status <> 'importado'
+          and (${channel}::text is null or c.channel = ${channel})
+          and c.id in ${sql(ids)}
+          and exists (
+            select 1 from client_services cs
+            where cs.contact_id = c.id and cs.active = true and cs.last_done_at is not null
+          )
+          and not exists (
+            select 1 from client_services cs
+            where cs.contact_id = c.id
+              and cs.active = true
+              and cs.last_done_at is not null
+              and cs.cadence_days is not null
+              and lower(btrim(cs.name)) not in ('atendimento', 'servico', 'serviço', 'visita', 'service')
+          )
+      `) as { n: number }[])
+    : ((await sql`
+        select count(*)::int as n
+        from contacts c
+        where c.anonymized_at is null
+          and c.status <> 'perdido'
+          and c.status <> 'importado'
+          and (${channel}::text is null or c.channel = ${channel})
+          and exists (
+            select 1 from client_services cs
+            where cs.contact_id = c.id and cs.active = true and cs.last_done_at is not null
+          )
+          and not exists (
+            select 1 from client_services cs
+            where cs.contact_id = c.id
+              and cs.active = true
+              and cs.last_done_at is not null
+              and cs.cadence_days is not null
+              and lower(btrim(cs.name)) not in ('atendimento', 'servico', 'serviço', 'visita', 'service')
+          )
+      `) as { n: number }[])
+  return Number(rows[0]?.n ?? 0) || 0
+}
+
+/** Lista Sem cadência — visita mais antiga primeiro (prioridade de ativação). */
+export async function listContactsWithoutCadence(opts?: {
+  limit?: number
+  channel?: string | null
+  contactIds?: readonly string[] | null
+}): Promise<ContactListResult> {
+  const sql = getSql()
+  const channel = opts?.channel ?? null
+  const ids = opts?.contactIds ? [...opts.contactIds] : null
+  const limit = Math.min(Math.max(1, opts?.limit ?? 250), 500)
+  if (ids && ids.length === 0) return { items: [], total: 0 }
+
+  const total = await countContactsWithoutCadence({ channel, contactIds: ids })
+  const rows = ids
+    ? ((await sql`
+        select c.*, mx.last_done as sort_last_done
+        from contacts c
+        join lateral (
+          select max(cs.last_done_at) as last_done
+          from client_services cs
+          where cs.contact_id = c.id and cs.active = true and cs.last_done_at is not null
+        ) mx on mx.last_done is not null
+        where c.anonymized_at is null
+          and c.status <> 'perdido'
+          and c.status <> 'importado'
+          and (${channel}::text is null or c.channel = ${channel})
+          and c.id in ${sql(ids)}
+          and not exists (
+            select 1 from client_services cs
+            where cs.contact_id = c.id
+              and cs.active = true
+              and cs.last_done_at is not null
+              and cs.cadence_days is not null
+              and lower(btrim(cs.name)) not in ('atendimento', 'servico', 'serviço', 'visita', 'service')
+          )
+        order by mx.last_done asc nulls last, c.name asc nulls last
+        limit ${limit}
+      `) as (ContactRow & { sort_last_done: string | null })[])
+    : ((await sql`
+        select c.*, mx.last_done as sort_last_done
+        from contacts c
+        join lateral (
+          select max(cs.last_done_at) as last_done
+          from client_services cs
+          where cs.contact_id = c.id and cs.active = true and cs.last_done_at is not null
+        ) mx on mx.last_done is not null
+        where c.anonymized_at is null
+          and c.status <> 'perdido'
+          and c.status <> 'importado'
+          and (${channel}::text is null or c.channel = ${channel})
+          and not exists (
+            select 1 from client_services cs
+            where cs.contact_id = c.id
+              and cs.active = true
+              and cs.last_done_at is not null
+              and cs.cadence_days is not null
+              and lower(btrim(cs.name)) not in ('atendimento', 'servico', 'serviço', 'visita', 'service')
+          )
+        order by mx.last_done asc nulls last, c.name asc nulls last
+        limit ${limit}
+      `) as (ContactRow & { sort_last_done: string | null })[])
+
+  const today = todayIso()
+  const contacts = rows.map(({ sort_last_done: _sortLastDone, ...c }) => c)
+  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+  const items = withUrgency(contacts, byContact).map((item, i) => {
+    const lastDone = rows[i]?.sort_last_done ?? null
+    const days = daysBetweenSalon(lastDone, today)
+    return {
+      ...item,
+      max_overdue_days: days,
+      top_action: days > 0 ? `Definir cadência · há ${days}d` : 'Definir cadência',
+    }
+  })
+  return { items, total }
+}
+
 /** Totais das filas Contatos (reativar + Sem vínculo + sem serviço + ativados) + entrada no mês. */
 export async function countContactQueues(opts?: {
   channel?: string | null
   day?: string | null
 }): Promise<ContactQueueCounts> {
-  const [urgency, novos, sem_servicos, ativados, base_ativa] = await Promise.all([
+  const [urgency, novos, sem_servicos, no_cadence, ativados, base_ativa] = await Promise.all([
     countUrgencyQueues({ channel: opts?.channel }),
     countNewContactsNotInAvec({ day: opts?.day }),
     countContactsWithoutServices({ day: opts?.day }),
+    countContactsWithoutCadence({ channel: opts?.channel }),
     countPendingActivatedContacts(ACTIVATED_QUEUE_WINDOW_DAYS),
     countBaseAtiva(),
   ])
-  return { ...urgency, novos, sem_servicos, ativados, base_ativa }
+  return { ...urgency, novos, sem_servicos, no_cadence, ativados, base_ativa }
 }
 
 /** Lista contatos na fila Ativados (outreach pelo painel, aguardando Avec). */

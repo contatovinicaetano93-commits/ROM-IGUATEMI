@@ -3,10 +3,12 @@ import { ok, okCached, handleError, err } from '@/lib/api-response'
 import { cachedFetch, MemoryCache } from '@/lib/cache'
 import {
   countContactQueues,
+  countContactsWithoutCadence,
   countOwnedUrgencyQueues,
   listActivatedContacts,
   listContactsOwnedByIds,
   listContactsWithSummary,
+  listContactsWithoutCadence,
   listContactsWithoutServices,
   listNewContactsNotInAvec,
 } from '@/lib/contact-summary'
@@ -74,6 +76,7 @@ export async function GET(req: NextRequest) {
       searchParams.get('no_services') === '1' ||
       searchParams.get('no_services') === 'true' ||
       searchParams.get('queue') === 'sem_servicos'
+    const withoutCadence = searchParams.get('queue') === 'no_cadence'
     const activatedQueue = searchParams.get('queue') === 'ativados'
     const dayRaw = searchParams.get('day')
     const day = dayRaw && /^\d{4}-\d{2}-\d{2}$/.test(dayRaw) ? dayRaw : null
@@ -94,10 +97,14 @@ export async function GET(req: NextRequest) {
 
     if (countsOnly) {
       if (proScope && ownedIds) {
-        const urgency = await countOwnedUrgencyQueues(ownedIds)
+        const [urgency, no_cadence] = await Promise.all([
+          countOwnedUrgencyQueues(ownedIds),
+          countContactsWithoutCadence({ contactIds: ownedIds }),
+        ])
         return okCached(null, 15, {
           queues: {
             ...urgency,
+            no_cadence,
             novos: 0,
             sem_servicos: 0,
             ativados: 0,
@@ -107,7 +114,7 @@ export async function GET(req: NextRequest) {
           professional_scope: proScope,
         })
       }
-      const cacheKey = `contacts:queue-counts:v7:ch=${channel ?? ''}:day=${day ?? 'today'}`
+      const cacheKey = `contacts:queue-counts:v8:ch=${channel ?? ''}:day=${day ?? 'today'}`
       const queues = await cachedFetch(
         cacheKey,
         () => countContactQueues({ channel, day }),
@@ -129,11 +136,43 @@ export async function GET(req: NextRequest) {
           overdue: 0,
           due_soon: 0,
           scheduled: 0,
+          no_cadence: 0,
           novos: 0,
           sem_servicos: 0,
           ativados: 0,
           base_ativa: ownedIds?.length ?? 0,
         },
+        sync: syncPayload,
+        professional_scope: proScope,
+      })
+    }
+
+    if (withoutCadence) {
+      const cacheKey = `contacts:no-cadence:v1:lim=${limit}:ch=${channel ?? ''}:pro=${proScope ?? ''}`
+      const result = await cachedFetch(
+        cacheKey,
+        async () => {
+          const listed = await listContactsWithoutCadence({
+            limit,
+            channel,
+            contactIds: ownedIds,
+          })
+          return {
+            items: listed.items,
+            total: listed.total,
+            queues: { no_cadence: listed.total },
+          }
+        },
+        30,
+      )
+      return okCached(result.items, 30, {
+        total: result.total,
+        limit,
+        status: 'no_cadence',
+        channel: channel ?? 'all',
+        pending: false,
+        queue: 'no_cadence',
+        queues: result.queues,
         sync: syncPayload,
         professional_scope: proScope,
       })
@@ -220,7 +259,7 @@ export async function GET(req: NextRequest) {
     // Carteira do profissional (Reativar / busca / lista padrão).
     // Sempre devolve `queues` — a UI dos badges depende disso (sem queues = Atrasados 0).
     if (proScope && ownedIds) {
-      const [listed, urgency] = await Promise.all([
+      const [listed, urgency, no_cadence] = await Promise.all([
         listContactsOwnedByIds(ownedIds, {
           limit,
           query,
@@ -229,6 +268,7 @@ export async function GET(req: NextRequest) {
           urgencyQueue,
         }),
         countOwnedUrgencyQueues(ownedIds),
+        countContactsWithoutCadence({ contactIds: ownedIds }),
       ])
       let items = listed.items
       if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
@@ -243,6 +283,7 @@ export async function GET(req: NextRequest) {
         queue: urgencyQueue ?? 'all',
         queues: {
           ...urgency,
+          no_cadence,
           novos: 0,
           sem_servicos: 0,
           ativados: 0,
