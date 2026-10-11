@@ -3,7 +3,11 @@ import {
   modulesForCargo,
   type CargoPackage,
 } from '@/lib/intranet/cargo-packages'
-import { GRANTABLE_MODULES, type GrantableModuleKey } from '@/lib/intranet/modules'
+import {
+  canSeeNavHref,
+  GRANTABLE_MODULES,
+  type GrantableModuleKey,
+} from '@/lib/intranet/modules'
 import { PROFESSIONAL_HIDDEN_HREFS } from '@/lib/intranet/professional-nav'
 import { systemsForAccess } from '@/lib/intranet/systems'
 
@@ -19,6 +23,7 @@ const PREVIEW_ORDER = [
   '/pipeline',
   '/ativacoes',
   '/contatos',
+  '/sala-reuniao',
   '/recepcao',
   '/pos-venda',
   '/hoje',
@@ -53,10 +58,13 @@ export function cargoAccessPreviewLabels(pack: CargoPackage): string[] {
     const label = byHref.get(href)
     if (label) labels.push(label)
   }
-  // Garante grantables que por algum motivo não entraram na ordem.
+  // Garante grantables que por algum motivo não entraram na ordem —
+  // só o que canSeeNavHref realmente libera (ex.: profissional sem sala).
   for (const key of granted) {
     const mod = GRANTABLE_MODULES.find((item) => item.key === key)
-    if (mod && !labels.includes(mod.label)) labels.push(mod.label)
+    if (!mod || labels.includes(mod.label)) continue
+    if (!canSeeNavHref(mod.href, pack.panel_role, extras, { professionalName })) continue
+    labels.push(mod.label)
   }
   return labels
 }

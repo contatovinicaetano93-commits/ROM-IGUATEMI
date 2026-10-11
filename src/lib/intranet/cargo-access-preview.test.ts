@@ -6,7 +6,7 @@ import {
 import { cargoPackageById } from '@/lib/intranet/cargo-packages'
 
 describe('cargoAccessPreviewLabels', () => {
-  it('profissional lista agenda, contatos e meu faturamento — sem Balcão/Pós-venda/Operação', () => {
+  it('profissional lista agenda, contatos e meu faturamento — sem Balcão/Pós-venda/Operação/Sala', () => {
     const pack = cargoPackageById('profissional')
     expect(pack).not.toBeNull()
     if (!pack) return
@@ -15,6 +15,7 @@ describe('cargoAccessPreviewLabels', () => {
       'Contatos',
       'Meu faturamento',
     ])
+    expect(cargoAccessPreviewLabels(pack)).not.toContain('Sala de reunião')
   })
 
   it('recepção e pós-venda também ficam em Agenda + Contatos', () => {

@@ -92,6 +92,15 @@ export function isCurriculosPath(pathname: string) {
   )
 }
 
+export function isSalaReuniaoPath(pathname: string) {
+  return (
+    pathname === '/sala-reuniao' ||
+    pathname.startsWith('/sala-reuniao/') ||
+    pathname === '/api/sala-reuniao' ||
+    pathname.startsWith('/api/sala-reuniao/')
+  )
+}
+
 export function isFolhaPath(pathname: string) {
   return (
     pathname === '/folha' ||
@@ -187,5 +196,9 @@ export function canAccessProtectedPath(
   if (isFolhaPath(pathname)) return hasPanelModule(role, extras, 'folha')
   if (isChecksDiarioPath(pathname)) return hasPanelModule(role, extras, 'checks_diario')
   if (isCurriculosPath(pathname)) return hasPanelModule(role, extras, 'curriculos')
+  if (isSalaReuniaoPath(pathname)) {
+    if (isProfessionalStaff(role, opts?.professionalName)) return false
+    return hasPanelModule(role, extras, 'sala_reuniao')
+  }
   return false
 }

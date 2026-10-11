@@ -26,5 +26,6 @@ alter table intranet_employee_modules
     'relatorios',
     'dashboard',
     'checks_diario',
-    'curriculos'
+    'curriculos',
+    'sala_reuniao'
   ));

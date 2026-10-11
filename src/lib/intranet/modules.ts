@@ -1,6 +1,7 @@
 import type { AuthRole } from '@/lib/auth'
 import {
   isProfessionalHiddenPath,
+  isProfessionalStaff,
   shouldHideOpsShellNav,
 } from '@/lib/intranet/professional-nav'
 
@@ -15,6 +16,7 @@ export type GrantableModuleKey =
   | 'dashboard'
   | 'checks_diario'
   | 'curriculos'
+  | 'sala_reuniao'
 
 export type GrantableModule = {
   key: GrantableModuleKey
@@ -33,16 +35,17 @@ export const GRANTABLE_MODULES: readonly GrantableModule[] = [
   { key: 'dashboard', href: '/dashboard', label: 'Visão analítica' },
   { key: 'checks_diario', href: '/checks-diario', label: 'Checks diários' },
   { key: 'curriculos', href: '/curriculos', label: 'Currículos' },
+  { key: 'sala_reuniao', href: '/sala-reuniao', label: 'Sala de reunião' },
 ] as const
 
 const ALL_KEYS: readonly GrantableModuleKey[] = GRANTABLE_MODULES.map((item) => item.key)
 
 const ROLE_MODULES: Record<AuthRole, readonly GrantableModuleKey[]> = {
   admin: ALL_KEYS,
-  staff: ['pipeline', 'contatos'],
-  mkt: ['pipeline', 'contatos', 'ativacoes'],
-  financeiro: ['financeiro', 'estoque', 'relatorios'],
-  estoque: ['estoque'],
+  staff: ['pipeline', 'contatos', 'sala_reuniao'],
+  mkt: ['pipeline', 'contatos', 'ativacoes', 'sala_reuniao'],
+  financeiro: ['financeiro', 'estoque', 'relatorios', 'sala_reuniao'],
+  estoque: ['estoque', 'sala_reuniao'],
 }
 
 /** Pacote fixo do papel (sem extras). */
@@ -124,5 +127,9 @@ export function canSeeNavHref(
   }
   const key = moduleKeyFromHref(href)
   if (!key) return true
+  // Profissionais (staff + professional_name) não usam a sala de reunião.
+  if (key === 'sala_reuniao' && isProfessionalStaff(role, opts?.professionalName)) {
+    return false
+  }
   return hasPanelModule(role, extras, key)
 }

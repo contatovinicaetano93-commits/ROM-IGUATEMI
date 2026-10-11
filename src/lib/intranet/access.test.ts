@@ -59,6 +59,21 @@ describe('canAccessProtectedPath', () => {
     expect(canAccessProtectedPath('/curriculos', 'mkt', [])).toBe(false)
   })
 
+  it('sala de reunião no pacote de todos; profissional bloqueado', () => {
+    expect(canAccessProtectedPath('/sala-reuniao', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/sala-reuniao', 'admin', [])).toBe(true)
+    expect(canAccessProtectedPath('/sala-reuniao', 'staff', [])).toBe(true)
+    expect(canAccessProtectedPath('/api/sala-reuniao', 'financeiro', [])).toBe(true)
+    expect(canAccessProtectedPath('/sala-reuniao', 'estoque', [])).toBe(true)
+    expect(canAccessProtectedPath('/sala-reuniao', 'mkt', [])).toBe(true)
+    expect(
+      canAccessProtectedPath('/sala-reuniao', 'staff', [], { professionalName: 'Alison' }),
+    ).toBe(false)
+    expect(
+      canAccessProtectedPath('/api/sala-reuniao', 'staff', [], { professionalName: 'Alison' }),
+    ).toBe(false)
+  })
+
   it('estoque não entra em financeiro nem Visão analítica', () => {
     expect(canAccessProtectedPath('/estoque', 'estoque', [])).toBe(true)
     expect(canAccessProtectedPath('/hoje', 'estoque', [])).toBe(true)

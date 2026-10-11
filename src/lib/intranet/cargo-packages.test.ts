@@ -63,6 +63,7 @@ describe('cargo packages', () => {
       'relatorios',
       'dashboard',
       'checks_diario',
+      'sala_reuniao',
     ])
     expect(extrasBeyondRole(pack.panel_role, pack.extras)).toEqual([
       'pipeline',
@@ -99,6 +100,7 @@ describe('cargo packages', () => {
       'estoque',
       'relatorios',
       'checks_diario',
+      'sala_reuniao',
     ])
     expect(extrasBeyondRole(pack.panel_role, pack.extras)).toEqual([
       'pipeline',

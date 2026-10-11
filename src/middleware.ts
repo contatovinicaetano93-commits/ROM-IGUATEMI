@@ -22,6 +22,8 @@ function isProtectedPage(pathname: string) {
     pathname.startsWith('/checks-diario/') ||
     pathname === '/curriculos' ||
     pathname.startsWith('/curriculos/') ||
+    pathname === '/sala-reuniao' ||
+    pathname.startsWith('/sala-reuniao/') ||
     pathname === '/dashboard' ||
     pathname === '/contatos' ||
     pathname.startsWith('/contatos/') ||
@@ -145,6 +147,8 @@ export const config = {
     '/checks-diario/:path*',
     '/curriculos',
     '/curriculos/:path*',
+    '/sala-reuniao',
+    '/sala-reuniao/:path*',
     '/dashboard',
     '/contatos',
     '/contatos/:path*',

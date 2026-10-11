@@ -38,9 +38,19 @@ describe('hasPanelModule', () => {
 
 describe('roleModulePack / effectiveModules', () => {
   it('exporta o pacote fixo do papel', () => {
-    expect(roleModulePack('estoque')).toEqual(['estoque'])
-    expect(effectiveModules('staff', ['dashboard'])).toEqual(['pipeline', 'contatos', 'dashboard'])
-    expect(effectiveModules('mkt', [])).toEqual(['pipeline', 'contatos', 'ativacoes'])
+    expect(roleModulePack('estoque')).toEqual(['estoque', 'sala_reuniao'])
+    expect(effectiveModules('staff', ['dashboard'])).toEqual([
+      'pipeline',
+      'contatos',
+      'dashboard',
+      'sala_reuniao',
+    ])
+    expect(effectiveModules('mkt', [])).toEqual([
+      'pipeline',
+      'contatos',
+      'ativacoes',
+      'sala_reuniao',
+    ])
     expect(hasPanelModule('mkt', [], 'ativacoes')).toBe(true)
     expect(hasPanelModule('staff', ['ativacoes'], 'ativacoes')).toBe(true)
     expect(hasPanelModule('staff', [], 'ativacoes')).toBe(false)
@@ -49,6 +59,18 @@ describe('roleModulePack / effectiveModules', () => {
     expect(hasPanelModule('financeiro', ['folha'], 'folha')).toBe(true)
     expect(hasPanelModule('staff', ['curriculos'], 'curriculos')).toBe(true)
     expect(hasPanelModule('staff', [], 'curriculos')).toBe(false)
+    expect(hasPanelModule('staff', [], 'sala_reuniao')).toBe(true)
+    expect(hasPanelModule('financeiro', [], 'sala_reuniao')).toBe(true)
+  })
+})
+
+describe('canSeeNavHref sala_reuniao', () => {
+  it('pacote libera; profissional fica de fora', () => {
+    expect(canSeeNavHref('/sala-reuniao', 'staff', [])).toBe(true)
+    expect(canSeeNavHref('/sala-reuniao', 'financeiro', [])).toBe(true)
+    expect(
+      canSeeNavHref('/sala-reuniao', 'staff', [], { professionalName: 'Alison' }),
+    ).toBe(false)
   })
 })
 
