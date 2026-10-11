@@ -56,6 +56,12 @@ const OPERACAO: IntranetSystem[] = [
     description: 'Banco de currículos do RH — upload, busca e status.',
     group: 'operacao',
   },
+  {
+    href: '/sala-reuniao',
+    label: 'Sala de reunião',
+    description: 'Reserve horários da sala da unidade.',
+    group: 'operacao',
+  },
   { href: '/meu-faturamento', label: 'Meu faturamento', description: 'Seu mês no salão (só você).', group: 'operacao' },
   { href: '/contatos', label: 'Contatos', description: 'Base de clientes.', group: 'operacao' },
 ]

@@ -13,6 +13,7 @@ export const INTRANET_NAV = [
   { href: '/ativacoes', label: 'Ativações', short: 'Ativações' },
   { href: '/checks-diario', label: 'Checks diários', short: 'Checks' },
   { href: '/curriculos', label: 'Currículos', short: 'Currículos' },
+  { href: '/sala-reuniao', label: 'Sala de reunião', short: 'Sala' },
   { href: '/dashboard', label: 'Visão analítica', short: 'Visão' },
   { href: '/contatos', label: 'Contatos', short: 'Contatos' },
 ] as const

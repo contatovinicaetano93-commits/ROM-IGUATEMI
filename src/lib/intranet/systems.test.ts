@@ -102,4 +102,13 @@ describe('systemsForAccess', () => {
       '/curriculos',
     )
   })
+
+  it('sala de reunião no pacote; profissional não vê', () => {
+    expect(systemsForAccess('admin').map((item) => item.href)).toContain('/sala-reuniao')
+    expect(systemsForAccess('staff').map((item) => item.href)).toContain('/sala-reuniao')
+    expect(systemsForAccess('financeiro').map((item) => item.href)).toContain('/sala-reuniao')
+    expect(
+      systemsForAccess('staff', [], { professionalName: 'Alison' }).map((item) => item.href),
+    ).not.toContain('/sala-reuniao')
+  })
 })

@@ -373,6 +373,14 @@
         "brasil",
         "iguatemi"
       ]
+    },
+    {
+      "id": "047_sala_reuniao",
+      "file": "delta-sala-reuniao.sql",
+      "panels": [
+        "brasil",
+        "iguatemi"
+      ]
     }
   ]
 }

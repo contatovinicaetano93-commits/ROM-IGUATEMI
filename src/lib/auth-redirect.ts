@@ -28,6 +28,7 @@ const ALLOWED_RETURN_PREFIXES = [
   '/ativacoes',
   '/checks-diario',
   '/curriculos',
+  '/sala-reuniao',
   '/auditoria',
   '/recepcao',
   '/pos-venda',
