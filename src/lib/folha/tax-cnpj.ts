@@ -26,14 +26,24 @@ const FOLHA_TAX_CNPJ_ALIASES: Readonly<Record<string, readonly string[]>> = {
   '43011350000166': ['Marcelo Sabino Luis Junior'],
   // MARIA APARECIDA RODRIGUES SOUSA → Maria Aparecida Rodrigues
   '33581108000174': ['Maria Aparecida Rodrigues'],
-  // MARIA AUXILIADORA RIBEIRO ALVES MANICURE → … Alci
-  '07038057000129': ['Maria Auxiliadora Ribeiro Alves Alci'],
+  // MARIA AUXILIADORA RIBEIRO ALVES MANICURE → Alci / Alci Bella (IG)
+  '07038057000129': [
+    'Maria Auxiliadora Ribeiro Alves Alci',
+    'Maria Auxiliadora Ribeiro Alves Alci Bella',
+  ],
   // MARIA LUIZA BRITO SILVA CARVALHO CABELEI → Maria Luiza Brito Silva Carvalho
   '19037228000184': ['Maria Luiza Brito Silva Carvalho'],
-  // ALBUQUERQUE CABELEIREIROS → Alan Fernando (só se único nas linhas)
+  // ALBUQUERQUE CABELEIREIROS → Alan (Folha BR grava FERNADO)
   '11106752000158': [
     'Alan Fernando De Albuquerque',
     'Alan  Fernando De Albuquerque',
+    'ALAN FERNADO DE ALBUQUERQUE',
+    'Alan Fernado De Albuquerque',
+  ],
+  // AMARO MAKEUP LTDA → Luiza Antonia Amaro Pinto (BR)
+  '43931990000194': [
+    'LUIZA ANTONIA AMARO PINTO',
+    'Luiza Antonia Amaro Pinto',
   ],
 }
 
@@ -85,7 +95,7 @@ export function legalNameToMatchQuery(legalName: string): string {
     ' ',
   )
   s = s.replace(
-    /\b(CABELEIREIR(?:O|A|OS|AS)|CAB(?:ELEIREIRO)?|SERV(?:ICOS?)?|COM[EÉ]RCIO|BELEZA|MAKEUP|EST[EÉ]TICA|HAIR|COMPANY|CONCEPT|DESENVOLVIMENTO|EDUCA[CÇ][AÃ]O|BEM[\s-]?ESTAR|SIGNATURA)\b/gi,
+    /\b(CABELEIREIR(?:O|A|OS|AS)|CAB(?:ELEIREIRO)?|SERV(?:ICOS?)?|COM[EÉ]RCIO|BELEZA|MAKEUP|MAQUIADOR(?:A)?|MAQUIAGEM|MANICURE|BARBEIRO|EST[EÉ]TICA|HAIR|COMPANY|CONCEPT|COMCEPT|DESENVOLVIMENTO|EDUCA[CÇ][AÃ]O|BEM[\s-]?ESTAR|SIGNATURA)\b/gi,
     ' ',
   )
   s = s.replace(/\s*[-–—,/]+\s*/g, ' ')
