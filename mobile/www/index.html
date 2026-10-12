@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="viewport-fit=cover, width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="color-scheme" content="dark light" />
+    <title>ROM Iguatemi</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      main {
+        min-height: 100%;
+        display: grid;
+        place-content: center;
+        gap: 0.75rem;
+        padding: 2rem;
+        text-align: center;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        letter-spacing: 0.04em;
+      }
+      p {
+        margin: 0;
+        opacity: 0.75;
+        font-size: 0.95rem;
+      }
+      a {
+        color: #93c5fd;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ROM Iguatemi</h1>
+      <p>Abrindo a intranet…</p>
+      <p>
+        Se nada acontecer,
+        <a href="https://rom-iguatemi.vercel.app">toque aqui</a>.
+      </p>
+    </main>
+    <script>
+      setTimeout(function () {
+        if (!window.Capacitor) {
+          window.location.replace('https://rom-iguatemi.vercel.app')
+        }
+      }, 400)
+    </script>
+  </body>
+</html>

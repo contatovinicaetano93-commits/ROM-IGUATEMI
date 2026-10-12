@@ -1,0 +1,25 @@
+{
+  "name": "rom-iguatemi-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shell nativo Capacitor — ROM Iguatemi Intranet (App Store / Play)",
+  "scripts": {
+    "sync": "capacitor sync",
+    "open:android": "capacitor open android",
+    "open:ios": "capacitor open ios",
+    "add:android": "capacitor add android",
+    "add:ios": "capacitor add ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.1.0",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
+    "@capacitor/splash-screen": "^7.0.3",
+    "@capacitor/status-bar": "^7.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "typescript": "^5.9.2"
+  }
+}

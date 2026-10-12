@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ROM Iguatemi</string>
+    <string name="title_activity_main">ROM Iguatemi</string>
+    <string name="package_name">com.rom.iguatemi</string>
+    <string name="custom_url_scheme">com.rom.iguatemi</string>
+</resources>
