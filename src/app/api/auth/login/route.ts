@@ -10,6 +10,10 @@ import {
   type AuthSession,
 } from '@/lib/auth'
 import { useSecureCookies } from '@/lib/env'
+<<<<<<< HEAD
+=======
+import { LoginRequestSchema } from '@/lib/schemas'
+>>>>>>> 4acd783 (fix(security): harden secrets/deploy surface toward BR parity)
 import { checkLoginRateLimit } from '@/lib/rate-limiter'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { findEmployeeByEmail } from '@/lib/employees'
@@ -26,10 +30,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null)
-  const parsedUser =
-    typeof body?.user === 'string' ? body.user : typeof body?.username === 'string' ? body.username : ''
-  const password = typeof body?.password === 'string' ? body.password : ''
-  const legacyToken = typeof body?.token === 'string' ? body.token : ''
+
+  const validation = LoginRequestSchema.safeParse(body)
+  if (!validation.success) {
+    return err(validation.error.issues[0]?.message || 'Dados inválidos', 400)
+  }
+
+  const { user: parsedUser, password, token: legacyToken } = validation.data
 
   const user = parsedUser || getAdminUser()
   const pass = password || legacyToken || ''

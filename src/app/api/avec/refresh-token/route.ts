@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
-import { isCronAuthorized } from '@/lib/cron-auth'
-import { isAuthorized } from '@/lib/auth'
+import { authorizeAvecRefreshToken } from '@/lib/avec/refresh-token-auth'
 import { isAvecLoginConfigured, mintAvecApiToken } from '@/lib/avec/refresh-token'
 import {
   loadRuntimeAvecApiToken,
@@ -16,14 +15,8 @@ export const maxDuration = 60
 /**
  * Renova JWT Avec (~12h) via Cognito + amplify/signin.
  * Cron Vercel: a cada 3 horas (30 every-3h * * * — offset vs BR :00).
- * Também aceita admin autenticado (force=1).
+ * Também aceita admin autenticado (force=1) — paridade BR (requireAdmin).
  */
-async function authorize(req: NextRequest) {
-  if (isCronAuthorized(req)) return { cron: true as const }
-  if (await isAuthorized(req)) return { cron: false as const }
-  return null
-}
-
 async function execute(req: NextRequest) {
   if (!isAvecLoginConfigured()) {
     await recordAvecTokenRefreshResult({
@@ -83,7 +76,7 @@ async function execute(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await authorize(req)
+    const auth = await authorizeAvecRefreshToken(req)
     if (!auth) return err('Não autorizado', 401)
     return await execute(req)
   } catch (e) {
@@ -93,7 +86,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await authorize(req)
+    const auth = await authorizeAvecRefreshToken(req)
     if (!auth) return err('Não autorizado', 401)
     return await execute(req)
   } catch (e) {

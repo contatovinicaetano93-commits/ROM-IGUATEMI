@@ -8,11 +8,11 @@ const nextConfig: NextConfig = {
     useTypeScriptCli: false,
   },
   serverExternalPackages: ['postgres', 'imapflow', 'mailparser', 'pdf-parse'],
-  // secrets/ overlay + db/*.sql + migrations.json no bundle serverless (Vercel).
+  // Garante db/*.sql + migrations.json no bundle serverless (Vercel).
+  // Nunca incluir ./secrets/** — connection strings ficam só em env Vercel.
   outputFileTracingIncludes: {
-    '/*': ['./secrets/**/*', './db/**/*'],
-    '/api/*': ['./secrets/**/*', './db/**/*'],
-    '/api/**/*': ['./secrets/**/*', './db/**/*'],
+    '/*': ['./db/**/*'],
+    '/api/**/*': ['./db/**/*'],
   },
   async rewrites() {
     return [
