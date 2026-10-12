@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { secretsEqual } from '@/lib/cron-auth'
-import { isProduction } from '@/lib/env'
+import { isProduction, isVercelDeploy } from '@/lib/env'
 import type { GrantableModuleKey } from '@/lib/intranet/modules'
 import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
 
@@ -145,11 +145,15 @@ export function canViewRevenue(role: AuthRole | null | undefined) {
   return role === 'admin'
 }
 
-/** Segredo HMAC da sessão — NÃO usar a senha do usuário (permite rotação sem misturar com Bearer). */
+/**
+ * Segredo HMAC da sessão — NÃO usar a senha do usuário (permite rotação sem misturar com Bearer).
+ * Em produção/preview Vercel: exige `ROM_SESSION_SECRET` (fail closed — sem fallback).
+ * Dev local: fallback legado na senha admin só para DX.
+ */
 export function getSessionSigningSecret() {
   const dedicated = process.env.ROM_SESSION_SECRET?.trim()
   if (dedicated) return dedicated
-  // Fallback legado: senha admin (cookies antigos continuam válidos até relogin com secret dedicado).
+  if (isVercelDeploy()) return ''
   return getAdminPassword()
 }
 
@@ -431,39 +435,45 @@ export async function requireAdmin(req: NextRequest) {
   return createRoleValidator(['admin'], 'Acesso restrito ao admin operacional')(req)
 }
 
-function requireModule(
+/**
+ * Handler-level ACL por módulo (defense-in-depth além do middleware).
+ * Admin sempre passa; demais precisam do pacote do papel ou extra concedido.
+ */
+export async function requirePanelModule(
   req: NextRequest,
   key: GrantableModuleKey,
-  restrictionMessage: string,
+  restrictionMessage?: string,
 ) {
-  return (async () => {
-    const auth = await requireSession(req)
-    if (!auth.ok) return auth
-    if (!hasPanelModule(auth.session.role, auth.session.modules, key)) {
-      return { ok: false as const, status: 403 as const, message: restrictionMessage }
+  const auth = await requireSession(req)
+  if (!auth.ok) return auth
+  if (!hasPanelModule(auth.session.role, auth.session.modules, key)) {
+    return {
+      ok: false as const,
+      status: 403 as const,
+      message: restrictionMessage ?? `Acesso restrito ao módulo ${key}`,
     }
-    return auth
-  })()
+  }
+  return auth
 }
 
 /** Painel Financeiro — papel financeiro/admin ou extra do colaborador. */
 export async function requireFinance(req: NextRequest) {
-  return requireModule(req, 'financeiro', 'Acesso restrito ao financeiro')
+  return requirePanelModule(req, 'financeiro', 'Acesso restrito ao financeiro')
 }
 
 /** Overview de Relatórios — pacote financeiro ou extra relatorios. */
 export async function requireRelatorios(req: NextRequest) {
-  return requireModule(req, 'relatorios', 'Acesso restrito aos relatórios')
+  return requirePanelModule(req, 'relatorios', 'Acesso restrito aos relatórios')
 }
 
 /** Painel Estoque — papel estoque/financeiro/admin ou extra. */
 export async function requireStock(req: NextRequest) {
-  return requireModule(req, 'estoque', 'Acesso restrito ao estoque')
+  return requirePanelModule(req, 'estoque', 'Acesso restrito ao estoque')
 }
 
 /** Visão analítica / KPIs — admin ou extra Rom Adm. */
 export async function requireDashboard(req: NextRequest) {
-  return requireModule(req, 'dashboard', 'Acesso restrito à visão analítica')
+  return requirePanelModule(req, 'dashboard', 'Acesso restrito à visão analítica')
 }
 
 /** Publicação de notícias/eventos/banners — admin ou marketing. */

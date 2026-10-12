@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireSession } from '@/lib/auth'
+import { requirePanelModule } from '@/lib/auth'
 import { getContactById, logEvent } from '@/lib/contacts'
 import { listServices, pickLastVisit } from '@/lib/services'
 import { enrichServices } from '@/lib/recommendations'
@@ -16,7 +16,7 @@ type Ctx = { params: Promise<{ id: string }> }
 
 export async function GET(req: NextRequest, ctx: Ctx) {
   try {
-    const auth = await requireSession(req)
+    const auth = await requirePanelModule(req, 'contatos')
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { id } = await ctx.params

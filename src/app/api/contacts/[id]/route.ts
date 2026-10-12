@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireSession } from '@/lib/auth'
+import { requirePanelModule } from '@/lib/auth'
 import {
   getContactById,
   updateContact,
@@ -49,7 +49,7 @@ function isUnsetPreference(value: string | null | undefined) {
 
 export async function GET(req: NextRequest, ctx: Ctx) {
   try {
-    const auth = await requireSession(req)
+    const auth = await requirePanelModule(req, 'contatos')
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { id } = await ctx.params
@@ -146,7 +146,7 @@ const patchSchema = z.object({
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   try {
-    const auth = await requireSession(req)
+    const auth = await requirePanelModule(req, 'contatos')
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { id } = await ctx.params

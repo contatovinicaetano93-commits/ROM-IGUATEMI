@@ -82,3 +82,30 @@ describe('validateDeploymentEnv', () => {
     expect(result.warnings.some((w) => w.includes('ROM_SESSION_SECRET'))).toBe(true)
   })
 })
+
+describe('ROM_SESSION_SECRET fail-closed (deployment)', () => {
+  const env = process.env
+  beforeEach(() => {
+    process.env = { ...env }
+  })
+  afterEach(() => {
+    process.env = env
+  })
+
+  it('alerta quando ausente em preview', () => {
+    process.env.ROM_PANEL = 'iguatemi'
+    process.env.NEXT_PUBLIC_ROM_PANEL = 'iguatemi'
+    process.env.DATABASE_URL = 'postgres://x'
+    process.env.AVEC_API_TOKEN = 'token'
+    process.env.AVEC_UNIT_ID = '1'
+    process.env.VERCEL_ENV = 'preview'
+    delete process.env.ROM_SESSION_SECRET
+    delete process.env.VERCEL_URL
+    delete process.env.VERCEL_PROJECT_PRODUCTION_URL
+    delete process.env.ROM_EXPECTED_DB_HOST
+
+    const result = validateDeploymentEnv()
+    expect(result.ok).toBe(false)
+    expect(result.warnings.some((w) => w.includes('ROM_SESSION_SECRET'))).toBe(true)
+  })
+})

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireSession } from '@/lib/auth'
+import { requirePanelModule } from '@/lib/auth'
 import { listActionItems } from '@/lib/salon/recommendations'
 import {
   filterByOwnedContactIds,
@@ -10,7 +10,7 @@ import {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireSession(req)
+    const auth = await requirePanelModule(req, 'contatos')
     if (!auth.ok) return err(auth.message, auth.status)
 
     const proScope = await resolveSessionProfessionalScope(auth.session)

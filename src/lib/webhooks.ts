@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { secretsEqual } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
 
 function headerSecret(req: NextRequest, name: string) {
@@ -20,7 +21,7 @@ export function verifyWhatsAppWebhook(req: NextRequest): { ok: true } | { ok: fa
     headerSecret(req, 'x-webhook-secret') ||
     headerSecret(req, 'authorization').replace(/^Bearer\s+/i, '')
 
-  if (got !== expected) return { ok: false, reason: 'Secret inválido' }
+  if (!secretsEqual(got, expected)) return { ok: false, reason: 'Secret inválido' }
   return { ok: true }
 }
 
@@ -36,7 +37,7 @@ export function verifyAvecWebhook(req: NextRequest): { ok: true } | { ok: false;
     headerSecret(req, 'x-webhook-secret') ||
     headerSecret(req, 'authorization').replace(/^Bearer\s+/i, '')
 
-  if (got !== expected) return { ok: false, reason: 'Secret inválido' }
+  if (!secretsEqual(got, expected)) return { ok: false, reason: 'Secret inválido' }
   return { ok: true }
 }
 
@@ -47,7 +48,7 @@ export function verifyTelegramWebhook(req: NextRequest): { ok: true } | { ok: fa
     return { ok: true }
   }
 
-  if (headerSecret(req, 'x-telegram-bot-api-secret-token') !== expected) {
+  if (!secretsEqual(headerSecret(req, 'x-telegram-bot-api-secret-token'), expected)) {
     return { ok: false, reason: 'Secret inválido' }
   }
   return { ok: true }
@@ -60,7 +61,7 @@ export function verifyTelegramStaffWebhook(req: NextRequest): { ok: true } | { o
     return { ok: true }
   }
 
-  if (headerSecret(req, 'x-telegram-bot-api-secret-token') !== expected) {
+  if (!secretsEqual(headerSecret(req, 'x-telegram-bot-api-secret-token'), expected)) {
     return { ok: false, reason: 'Secret inválido' }
   }
   return { ok: true }
@@ -90,7 +91,7 @@ export function verifyTelegramFinanceWebhook(req: NextRequest): { ok: true } | {
     return { ok: true }
   }
 
-  if (headerSecret(req, 'x-telegram-bot-api-secret-token') !== expected) {
+  if (!secretsEqual(headerSecret(req, 'x-telegram-bot-api-secret-token'), expected)) {
     return { ok: false, reason: 'Secret inválido' }
   }
   return { ok: true }
