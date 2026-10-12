@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireAuth } from '@/lib/auth'
+import { requirePanelModule } from '@/lib/auth'
 import { MemoryCache } from '@/lib/cache'
 import { logReactivationOutreach } from '@/lib/salon/reactivation-kpi'
 
@@ -17,7 +17,7 @@ const schema = z.object({
 /** POST — registra outreach de reativação via WhatsApp (antes de abrir o wa.me). */
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requireAuth(req)
+    const auth = await requirePanelModule(req, 'contatos')
     if (!auth.ok) return err(auth.message, auth.status)
 
     const body = schema.parse(await req.json())

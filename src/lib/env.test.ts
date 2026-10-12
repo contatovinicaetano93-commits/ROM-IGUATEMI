@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { isProduction, isVercelDeploy } from '@/lib/env'
+import { isProduction, isVercelDeploy, useSecureCookies } from '@/lib/env'
 
 const ENV_KEYS = ['VERCEL', 'VERCEL_ENV', 'NODE_ENV'] as const
 
@@ -56,5 +56,17 @@ describe('isProduction', () => {
     expect(isProduction()).toBe(false)
     setEnv({ VERCEL_ENV: 'production', NODE_ENV: 'production' })
     expect(isProduction()).toBe(true)
+  })
+})
+
+describe('useSecureCookies', () => {
+  it('é true em preview Vercel', () => {
+    setEnv({ VERCEL: '1', VERCEL_ENV: 'preview', NODE_ENV: 'production' })
+    expect(useSecureCookies()).toBe(true)
+  })
+
+  it('é false em dev local', () => {
+    setEnv({ VERCEL: undefined, VERCEL_ENV: undefined, NODE_ENV: 'development' })
+    expect(useSecureCookies()).toBe(false)
   })
 })

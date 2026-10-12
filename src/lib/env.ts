@@ -18,3 +18,11 @@ export function isVercelDeploy() {
   const env = process.env.VERCEL_ENV
   return env === 'production' || env === 'preview'
 }
+
+/**
+ * Cookie `Secure` em HTTPS da Vercel (preview + production) e em qualquer
+ * `NODE_ENV=production` fora da Vercel. Preview não usa `isProduction()`.
+ */
+export function useSecureCookies() {
+  return isVercelDeploy() || process.env.NODE_ENV === 'production'
+}

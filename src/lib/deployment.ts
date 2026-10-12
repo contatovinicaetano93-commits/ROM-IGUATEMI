@@ -109,9 +109,10 @@ export function validateDeploymentEnv(resolvedDatabaseUrl?: string | null): Depl
     warnings.push('AVEC_UNIT_ID ausente — sync sem filtro de site (risco de misturar unidades).')
   }
 
-  if (!process.env.ROM_SESSION_SECRET?.trim() && process.env.VERCEL_ENV === 'production') {
+  const vercelEnv = process.env.VERCEL_ENV
+  if (!process.env.ROM_SESSION_SECRET?.trim() && (vercelEnv === 'production' || vercelEnv === 'preview')) {
     warnings.push(
-      'CRÍTICO: ROM_SESSION_SECRET ausente em produção — sessões usam fallback da senha admin; defina um segredo dedicado e peça relogin.',
+      'CRÍTICO: ROM_SESSION_SECRET ausente em produção/preview — sessões falham fechado (sem fallback da senha admin); defina um segredo dedicado e peça relogin.',
     )
   }
 

@@ -59,6 +59,15 @@ async function probeKpiLayers() {
   }
 }
 
+/**
+ * Liveness público — só processo/HTTP.
+ * Monitores de uptime devem checar `ok` aqui.
+ * Sync/ops/migrations: health autenticado (`getHealthStatus` / `?slim=1` com sessão).
+ */
+export function getLivenessHealthStatus() {
+  return { ok: true as const, liveness: true as const }
+}
+
 /** Contagem YTD de métricas diárias — prova que o acumulado/comparativo tem base. */
 async function probeDailyMetricsYtd() {
   try {

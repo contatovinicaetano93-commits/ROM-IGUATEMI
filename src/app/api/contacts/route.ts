@@ -16,7 +16,7 @@ import { upsertContact, logEvent, updateContact } from '@/lib/contacts'
 import { addService } from '@/lib/services'
 import { SERVICE_CATEGORIES } from '@/lib/services'
 import { compareByOverdueThenName } from '@/lib/salon/urgency'
-import { requireAuth, requireSession } from '@/lib/auth'
+import { requirePanelModule } from '@/lib/auth'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 import {
   listContactIdsOwnedByProfessional,
@@ -57,7 +57,7 @@ function parseUrgencyQueue(raw: string | null): UrgencyQueue | null {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireSession(req)
+    const auth = await requirePanelModule(req, 'contatos')
     if (!auth.ok) return err(auth.message, auth.status)
 
     const { searchParams } = new URL(req.url)
@@ -350,7 +350,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requireAuth(req)
+    const auth = await requirePanelModule(req, 'contatos')
     if (!auth.ok) return err(auth.message, auth.status)
 
     const body = await req.json()
