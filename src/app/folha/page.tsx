@@ -636,28 +636,37 @@ export default function FolhaPage() {
                   </select>
                 </label>
 
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border bg-card-elevated/80 px-3.5 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(periodStatus)}`}
-                  >
-                    {statusLabel(periodStatus)}
-                  </span>
-                  <span className="text-sm font-semibold text-foreground">
-                    Paga {formatDayBr(status.pay_date)}
-                  </span>
-                  <span className="text-xs font-medium text-foreground/80">{draft.quinzena.label}</span>
-                  <span className="text-xs text-muted">
-                    {formatDayBr(draft.quinzena.from)} – {formatDayBr(draft.quinzena.to)}
-                  </span>
-                  <span className="text-xs text-muted">
-                    8123 {formatDayBr(draft.quinzena.from)}–{formatDayBr(draft.reference_day)}
-                  </span>
-                  <span className="text-xs text-muted">
-                    {visibleLines.length}/{draft.line_count} na lista
-                  </span>
-                  <span className="ml-auto rounded-xl border border-gold/30 bg-gold/10 px-2.5 py-1 text-sm font-semibold tabular-nums text-gold-strong">
-                    Total {formatMoney(draft.total_proposed_pay)}
-                  </span>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border bg-card-elevated/80 px-3.5 py-3">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(periodStatus)}`}
+                    >
+                      {statusLabel(periodStatus)}
+                    </span>
+                    <span className="text-sm font-semibold text-foreground">
+                      Paga {formatDayBr(status.pay_date)}
+                    </span>
+                    <span className="text-xs font-medium text-foreground/80">{draft.quinzena.label}</span>
+                    <span className="text-xs text-muted">
+                      {formatDayBr(draft.quinzena.from)} – {formatDayBr(draft.quinzena.to)}
+                    </span>
+                    <span className="text-xs text-muted">
+                      8123 {formatDayBr(draft.quinzena.from)}–{formatDayBr(draft.reference_day)}
+                    </span>
+                    <span className="text-xs text-muted">
+                      {visibleLines.length}/{draft.line_count} na lista
+                    </span>
+                    <span className="ml-auto rounded-xl border border-gold/30 bg-gold/10 px-2.5 py-1 text-sm font-semibold tabular-nums text-gold-strong">
+                      Total {formatMoney(draft.total_proposed_pay)}
+                    </span>
+                  </div>
+                  {periodStatus === 'draft' || periodStatus === 'ready_for_review' ? (
+                    <p className="px-1 text-[11px] leading-snug text-muted">
+                      Quinzena em curso: o motor recalcula sozinho 4×/dia (8123 + Zig) e o IMAP
+                      busca DARF/DAS a cada 10 min. Deixe em conferência — só aprove perto do
+                      pagamento (Q1 ~dia 20).
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -1226,6 +1235,10 @@ export default function FolhaPage() {
             </p>
             <ul className="list-disc space-y-1.5 pl-5 text-foreground/90">
               <li>Pagamentos: dia 05 (2ª quinzena anterior) e dia 20 (1ª quinzena)</li>
+              <li>
+                Quinzena em curso: refresh automático 4×/dia (8123 + Zig) + IMAP a cada 10
+                min — fecha conforme os dados surgem; não aprove Q1 antes do ~dia 20
+              </li>
               <li>
                 Taxa serviços U: {pct(rules.assistant_service_tax_rate)} (≠ cartão)
               </li>

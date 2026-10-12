@@ -455,9 +455,10 @@ async function tryApplyZigAfterRefresh(
 }
 
 /**
- * Cron diário: recalcula rascunhos abertos (draft / ready_for_review)
- * da quinzena em curso (hoje entre from e to) — Avec 8123 + Zig Baru.
- * Sem cola Fopag. Não reabre Q2 fechada nem toca aprovado/pago.
+ * Cron (várias vezes ao dia): recalcula rascunhos abertos
+ * (draft / ready_for_review) da quinzena em curso (hoje entre from e to)
+ * — Avec 8123 + Zig Baru. Sem cola Fopag. Não reabre Q2 fechada nem
+ * toca aprovado/pago. Idempotente se disparar de novo no mesmo dia.
  */
 export async function runFolhaDailyRefresh(
   panel: RomPanelId,

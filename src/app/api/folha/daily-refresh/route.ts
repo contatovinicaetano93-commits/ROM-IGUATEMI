@@ -7,8 +7,12 @@ import { canAccessFolha } from '@/lib/folha/access'
 import { runFolhaDailyRefresh } from '@/lib/folha/service'
 
 /**
- * GET — cron diário (CRON_SECRET) ou sessão com módulo folha.
- * Recalcula rascunhos abertos a partir do 8123 / Avec da quinzena.
+ * GET — cron (CRON_SECRET) ou sessão com módulo folha.
+ * Recalcula rascunhos abertos (draft / ready_for_review) da quinzena em
+ * curso a partir do 8123 / Avec + Zig Baru.
+ *
+ * Cadência Vercel: 4×/dia (11:45 / 15:45 / 19:45 / 23:45 UTC) — fecha a
+ * Q1 conforme o 8123 e o IMAP vão surgindo; não toca aprovado/pago.
  */
 export async function GET(req: NextRequest) {
   try {
