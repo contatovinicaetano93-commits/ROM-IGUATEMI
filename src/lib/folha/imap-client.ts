@@ -46,8 +46,9 @@ export function readFolhaImapConfig(
   const port = portRaw ? Number(portRaw) : 993
   if (!Number.isFinite(port) || port <= 0) return null
   const lookbackRaw = Number(env.FOLHA_IMAP_LOOKBACK_DAYS ?? '14')
+  // Teto 90: cobre quinzena de agosto a partir de out/início de out (~64d até 1/ago).
   const lookbackDays =
-    Number.isFinite(lookbackRaw) && lookbackRaw > 0 ? Math.min(lookbackRaw, 60) : 14
+    Number.isFinite(lookbackRaw) && lookbackRaw > 0 ? Math.min(lookbackRaw, 90) : 14
   return {
     host,
     port,

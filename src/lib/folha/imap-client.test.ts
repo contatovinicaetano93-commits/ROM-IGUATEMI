@@ -35,14 +35,24 @@ describe('readFolhaImapConfig', () => {
     })
   })
 
-  it('lookbackDays respeita FOLHA_IMAP_LOOKBACK_DAYS (teto 60)', () => {
+  it('lookbackDays respeita FOLHA_IMAP_LOOKBACK_DAYS (teto 90)', () => {
+    const cfg = readFolhaImapConfig({
+      FOLHA_IMAP_HOST: 'imap.example.com',
+      FOLHA_IMAP_USER: 'folha@x.com',
+      FOLHA_IMAP_PASS: 'secret',
+      FOLHA_IMAP_LOOKBACK_DAYS: '120',
+    } as unknown as NodeJS.ProcessEnv)
+    expect(cfg?.lookbackDays).toBe(90)
+  })
+
+  it('lookbackDays aceita 90 sem cortar', () => {
     const cfg = readFolhaImapConfig({
       FOLHA_IMAP_HOST: 'imap.example.com',
       FOLHA_IMAP_USER: 'folha@x.com',
       FOLHA_IMAP_PASS: 'secret',
       FOLHA_IMAP_LOOKBACK_DAYS: '90',
     } as unknown as NodeJS.ProcessEnv)
-    expect(cfg?.lookbackDays).toBe(60)
+    expect(cfg?.lookbackDays).toBe(90)
   })
 })
 

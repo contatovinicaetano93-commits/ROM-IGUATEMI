@@ -998,15 +998,23 @@ export function buildFolhaDraftLine(
    * já é estornado via descontos_diversos; Baru do RH ainda abate.
    *
    * Assistente/manicure: descontos 8123 já fecha a_pagar (Baru±parc embutidos).
+   * Sem Baru RH/Zig: promove residual Avec → coluna (exceto Beto = W).
    */
   const debitResidualForBaru =
     olerite.embeddedCreditResidual != null ? null : olerite.outrosResiduais
+  const rhDescDiversosHint = folha_extras.descontos_diversos
+  const residualIsDiversosW =
+    debitResidualForBaru != null &&
+    rhDescDiversosHint != null &&
+    rhDescDiversosHint > 0.02 &&
+    Math.abs(debitResidualForBaru - rhDescDiversosHint) <= 2
   const baruSplit = resolveBaruVsOleriteResidual({
     outrosResiduais: debitResidualForBaru,
     consumoBaru: folha_extras.consumo_baru,
     residualAlreadyInNet:
       embeddedInDescontos && olerite.embeddedCreditResidual == null,
     assistantOleriteClosed,
+    promoteResidualAsBaru: !residualIsDiversosW,
   })
   folha_extras = {
     ...folha_extras,

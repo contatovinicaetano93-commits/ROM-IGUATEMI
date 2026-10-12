@@ -67,8 +67,13 @@ async function reapplyDocument(
 ): Promise<{ applied: boolean; markSeen: boolean; error?: string }> {
   try {
     const cnpj = cnpjFromStoredTaxDoc(doc)
+    // Preferir o período pedido no poll (`?period=`); senão o gravado no doc.
+    const targetPeriod = periodId || doc.period_id
+    if (!targetPeriod) {
+      return { applied: false, markSeen: false, error: 'period_id ausente' }
+    }
     const result = await applyFolhaTaxParsedToPeriod(panel, {
-      periodId: doc.period_id ?? periodId,
+      periodId: targetPeriod,
       kind: doc.kind,
       amount: doc.amount,
       professionalName: doc.professional_name,
