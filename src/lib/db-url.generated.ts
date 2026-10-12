@@ -1,6 +1,5 @@
 /**
- * Gerado no install da Vercel a partir de secrets/database-url.txt.
- * Stub local = null (usa DATABASE_URL / overlay).
- * Não editar à mão no deploy — o script de install sobrescreve.
+ * Stub permanente no git — connection string só via env Vercel.
+ * Não editar com URL real; scripts/v-install.sh não bakeia mais aqui.
  */
 export const DEPLOY_DATABASE_URL: string | null = null
