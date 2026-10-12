@@ -8,7 +8,7 @@ import {
   isAuthEnabled,
   isStaffAuthConfigured,
 } from '@/lib/auth'
-import { isProduction } from '@/lib/env'
+import { useSecureCookies } from '@/lib/env'
 import { findEmployeeById } from '@/lib/employees'
 
 export async function GET(req: NextRequest) {
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
           res.cookies.set(AUTH_COOKIE, await createV3SessionToken(session), {
             httpOnly: true,
             sameSite: 'lax',
-            secure: isProduction(),
+            secure: useSecureCookies(),
             path: '/',
             maxAge: 60 * 60 * 24 * 30,
           })

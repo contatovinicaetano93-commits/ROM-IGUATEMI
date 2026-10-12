@@ -217,7 +217,7 @@ export default function ChecksDiarioPage() {
           checksDiarioBlobPathname(opts.file.name || `check-${taskId}.jpg`),
           opts.file,
           {
-            access: 'public',
+            access: 'private',
             handleUploadUrl: '/api/checks-diario/upload',
           },
         )
@@ -892,7 +892,7 @@ function PersonDayCard({
                 ) : null}
                 {task.logs_today[0]?.photo_url ? (
                   <a
-                    href={task.logs_today[0].photo_url}
+                    href={`/api/checks-diario/logs/${task.logs_today[0].id}/photo`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs text-gold-strong underline"

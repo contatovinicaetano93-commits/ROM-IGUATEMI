@@ -170,7 +170,7 @@ export default function CurriculosPage() {
     const fileName = safeCurriculoFileName(formFile.name)
     const contentType = guessCurriculoContentType(fileName, formFile.type)
     const blob = await upload(curriculoBlobPathname(fileName), formFile, {
-      access: 'public',
+      access: 'private',
       handleUploadUrl: '/api/curriculos/upload',
       contentType,
       multipart: formFile.size > 2 * 1024 * 1024,
@@ -464,7 +464,7 @@ export default function CurriculosPage() {
                   </div>
                   <div className="flex shrink-0 flex-col gap-2 md:items-end">
                     <a
-                      href={item.file_url}
+                      href={`/api/curriculos/${item.id}/file`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-sm underline"

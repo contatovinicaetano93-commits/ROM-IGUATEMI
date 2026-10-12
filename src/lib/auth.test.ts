@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  AUTH_COOKIE,
   buildAuthSession,
   canViewRevenue,
   createSessionToken,
   createV3SessionToken,
+  getSessionSigningSecret,
   isAuthEnabled,
   isStaffAuthConfigured,
+  requirePanelModule,
   validateCredentials,
 } from '@/lib/auth'
+import type { NextRequest } from 'next/server'
 
 const ENV_KEYS = [
   'ROM_ADMIN_USER',
@@ -113,5 +117,141 @@ describe('auth dual login', () => {
     expect(session.modules).toEqual(['financeiro'])
     const token = await createV3SessionToken(session)
     expect(token).toMatch(/^v3\.\d+\.[A-Za-z0-9_-]+\.[0-9a-f]{64}$/)
+  })
+})
+
+
+describe('session signing secret fail-closed', () => {
+  const keys = ['ROM_SESSION_SECRET', 'ROM_ADMIN_PASSWORD', 'VERCEL', 'VERCEL_ENV', 'NODE_ENV'] as const
+  const snap = new Map<string, string | undefined>()
+
+  function set(vars: Partial<Record<(typeof keys)[number], string | undefined>>) {
+    for (const key of keys) {
+      if (!snap.has(key)) snap.set(key, process.env[key])
+      const value = vars[key]
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+
+  afterEach(() => {
+    for (const key of keys) {
+      const prev = snap.get(key)
+      if (prev === undefined) delete process.env[key]
+      else process.env[key] = prev
+    }
+    snap.clear()
+  })
+
+  it('exige ROM_SESSION_SECRET em preview/production Vercel (sem fallback da senha)', async () => {
+    set({
+      ROM_ADMIN_PASSWORD: 'admin-pass',
+      ROM_SESSION_SECRET: undefined,
+      VERCEL: '1',
+      VERCEL_ENV: 'preview',
+      NODE_ENV: 'production',
+    })
+    expect(getSessionSigningSecret()).toBe('')
+  })
+
+  it('aceita ROM_SESSION_SECRET dedicado em Vercel', async () => {
+    set({
+      ROM_ADMIN_PASSWORD: 'admin-pass',
+      ROM_SESSION_SECRET: 'dedicated-secret',
+      VERCEL: '1',
+      VERCEL_ENV: 'production',
+      NODE_ENV: 'production',
+    })
+    expect(getSessionSigningSecret()).toBe('dedicated-secret')
+  })
+
+  it('em dev local ainda faz fallback na senha admin', async () => {
+    set({
+      ROM_ADMIN_PASSWORD: 'admin-pass',
+      ROM_SESSION_SECRET: undefined,
+      VERCEL: undefined,
+      VERCEL_ENV: undefined,
+      NODE_ENV: 'development',
+    })
+    expect(getSessionSigningSecret()).toBe('admin-pass')
+  })
+})
+
+describe('requirePanelModule', () => {
+  const keys = [
+    'ROM_ADMIN_USER',
+    'ROM_ADMIN_PASSWORD',
+    'ROM_STAFF_USER',
+    'ROM_STAFF_PASSWORD',
+    'ROM_FINANCE_USER',
+    'ROM_FINANCE_PASSWORD',
+    'ROM_SESSION_SECRET',
+    'VERCEL',
+    'VERCEL_ENV',
+    'NODE_ENV',
+  ] as const
+  const snap = new Map<string, string | undefined>()
+
+  function set(vars: Partial<Record<(typeof keys)[number], string | undefined>>) {
+    for (const key of keys) {
+      if (!snap.has(key)) snap.set(key, process.env[key])
+      const value = vars[key]
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+
+  afterEach(() => {
+    for (const key of keys) {
+      const prev = snap.get(key)
+      if (prev === undefined) delete process.env[key]
+      else process.env[key] = prev
+    }
+    snap.clear()
+  })
+
+  it('bloqueia financeiro sem módulo contatos', async () => {
+    set({
+      ROM_ADMIN_USER: 'admin',
+      ROM_ADMIN_PASSWORD: 'admin-pass',
+      ROM_STAFF_USER: undefined,
+      ROM_STAFF_PASSWORD: undefined,
+      ROM_FINANCE_USER: 'fin',
+      ROM_FINANCE_PASSWORD: 'fin-pass',
+      ROM_SESSION_SECRET: 'test-session-secret',
+      VERCEL: undefined,
+      VERCEL_ENV: undefined,
+      NODE_ENV: 'test',
+    })
+const session = buildAuthSession('fin', 'financeiro')
+    const token = await createV3SessionToken(session)
+    const req = {
+      cookies: { get: (name: string) => (name === AUTH_COOKIE ? { value: token } : undefined) },
+    } as unknown as NextRequest
+    const result = await requirePanelModule(req, 'contatos')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.status).toBe(403)
+  })
+
+  it('permite staff com módulo contatos no pacote', async () => {
+    set({
+      ROM_ADMIN_USER: 'admin',
+      ROM_ADMIN_PASSWORD: 'admin-pass',
+      ROM_STAFF_USER: 'staff',
+      ROM_STAFF_PASSWORD: 'staff-pass',
+      ROM_FINANCE_USER: undefined,
+      ROM_FINANCE_PASSWORD: undefined,
+      ROM_SESSION_SECRET: 'test-session-secret',
+      VERCEL: undefined,
+      VERCEL_ENV: undefined,
+      NODE_ENV: 'test',
+    })
+const session = buildAuthSession('staff', 'staff')
+    const token = await createV3SessionToken(session)
+    const req = {
+      cookies: { get: (name: string) => (name === AUTH_COOKIE ? { value: token } : undefined) },
+    } as unknown as NextRequest
+    const result = await requirePanelModule(req, 'contatos')
+    expect(result.ok).toBe(true)
   })
 })

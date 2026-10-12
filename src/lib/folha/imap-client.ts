@@ -11,6 +11,12 @@ import {
 } from '@/lib/folha/imap-mailbox'
 import { extractPdfText } from '@/lib/folha/imap-pdf'
 
+/** Produção Vercel (ou NODE_ENV=production fora da Vercel) — usa o env passado (testável). */
+function isProdDeploy(env: NodeJS.ProcessEnv): boolean {
+  if (env.VERCEL_ENV) return env.VERCEL_ENV === 'production'
+  return env.NODE_ENV === 'production'
+}
+
 export const FOLHA_IMAP_FETCH_CAP = 40
 
 export type FolhaImapConfig = {
@@ -49,13 +55,22 @@ export function readFolhaImapConfig(
   // Teto 90: cobre quinzena de agosto a partir de out/início de out (~64d até 1/ago).
   const lookbackDays =
     Number.isFinite(lookbackRaw) && lookbackRaw > 0 ? Math.min(lookbackRaw, 90) : 14
+  const wantsInsecureTls = env.FOLHA_IMAP_TLS_INSECURE === '1'
+  // Fail-closed em produção: nunca desliga verificação TLS.
+  let rejectUnauthorized = !wantsInsecureTls
+  if (wantsInsecureTls && isProdDeploy(env)) {
+    console.error(
+      '[folha/imap] FOLHA_IMAP_TLS_INSECURE=1 bloqueado em produção — TLS verify forçado',
+    )
+    rejectUnauthorized = true
+  }
   return {
     host,
     port,
     user,
     pass,
     mailbox: env.FOLHA_IMAP_MAILBOX?.trim() || 'INBOX',
-    rejectUnauthorized: env.FOLHA_IMAP_TLS_INSECURE === '1' ? false : true,
+    rejectUnauthorized,
     lookbackDays,
   }
 }

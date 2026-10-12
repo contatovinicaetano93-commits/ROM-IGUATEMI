@@ -9,7 +9,7 @@ import {
   validateCredentials,
   type AuthSession,
 } from '@/lib/auth'
-import { isProduction } from '@/lib/env'
+import { useSecureCookies } from '@/lib/env'
 import { checkLoginRateLimit } from '@/lib/rate-limiter'
 import { getPostHogClient } from '@/lib/posthog-server'
 import { findEmployeeByEmail } from '@/lib/employees'
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
   res.cookies.set(AUTH_COOKIE, await createV3SessionToken(session), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: isProduction(),
+    secure: useSecureCookies(),
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
   })

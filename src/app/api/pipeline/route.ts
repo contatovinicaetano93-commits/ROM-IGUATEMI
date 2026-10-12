@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { ok, err, handleError } from '@/lib/api-response'
-import { requireSession } from '@/lib/auth'
+import { requirePanelModule } from '@/lib/auth'
 import { cachedFetch } from '@/lib/cache'
 import { listTodayPipeline } from '@/lib/services'
 import { countDistinctContactIds } from '@/lib/salon/headcount'
@@ -14,7 +14,7 @@ export const maxDuration = 20
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireSession(req)
+    const auth = await requirePanelModule(req, 'pipeline')
     if (!auth.ok) return err(auth.message, auth.status)
 
     const dayParam = req.nextUrl.searchParams.get('day')
