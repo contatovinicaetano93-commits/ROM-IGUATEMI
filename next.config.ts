@@ -2,6 +2,11 @@ import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
 
 const nextConfig: NextConfig = {
+  // Next 16.4 defaults experimental.useTypeScriptCli=true (full tsc).
+  // Keep the previous API checker so *.test.ts noise does not fail CI builds.
+  experimental: {
+    useTypeScriptCli: false,
+  },
   serverExternalPackages: ['postgres', 'imapflow', 'mailparser', 'pdf-parse'],
   // secrets/ overlay + db/*.sql + migrations.json no bundle serverless (Vercel).
   outputFileTracingIncludes: {
