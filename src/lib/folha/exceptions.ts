@@ -55,8 +55,9 @@ export type FolhaPersonRules = {
    */
   meioAMeioRate: number | null
   /**
-   * Fração fixa do base do assistente que vai ao assistente
-   * (Walter 30% / Dani 35%). Quando setado, meio a meio = 1 − rate.
+   * Repasse / remessa do assistente sobre serviços como pro (Walter 30%).
+   * Também usado como ganho nomeado quando não há faixa Romeu.
+   * Meio a meio só deriva de (1 − rate) se `meioAMeioRate` estiver null.
    */
   assistantRemitRate: number | null
   /** Comissão do profissional (Walter 60% / Dani 55%) — contrato. */
@@ -101,10 +102,10 @@ const BRUNNA_TAX_SPLIT: FolhaServiceTaxSplit = {
  */
 export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
   {
-    // Salão sempre 5%; pro recebe de volta 5% do desc. assistente.
-    // Se a comissão do assistente > 10%, o pro arca o excedente (Avec já desconta
-    // o valor cheio); o salão não passa de 5%. Fopag às vezes formula meio=50% —
-    // ignorar a coluna e usar esta alíquota.
+    // RH: salão arca 5% do desconto assistente (meio a meio = 5%).
+    // Ex.: comissão do assistente 13% → salão 5%, profissional arca os 8%
+    // restantes (Avec já desconta o valor cheio). Fopag às vezes mostra
+    // meio=50% — ignorar a coluna e usar esta alíquota.
     id: 'pedro_diello',
     aliases: ['pedro diello', 'pedro e f diello'],
     meioAMeioRate: 0.05,
@@ -118,7 +119,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
-    // BR: meio a meio 5% (salão 5%; pro arca o restante se assistente > 10%).
+    // BR — mesma regra Diello (RH): salão 5%; se assistente 13%, pro arca 8%.
     id: 'dayana',
     aliases: [
       'dayana marques silva pinto',
@@ -138,7 +139,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
-    // IG: mesma lógica Diello/Dayana — meio 5% (Fopag coluna pode mostrar 50%).
+    // IG — mesma regra Diello/Dayana (RH): salão 5%; pro arca o restante.
     id: 'gildenice',
     aliases: [
       'gildenice teixeira de medeiros',
@@ -169,6 +170,8 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
     suppressEsteticistaBonus: false,
   },
   {
+    // RH: meio a meio 60%; comissão do profissional 60%.
+    // Remessa sobre serviços assistente como pro = 30% (não o padrão 20%).
     id: 'walter_leal',
     aliases: [
       'walter martinho leal filho cabeleireiro',
@@ -176,7 +179,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
       'walter leal',
       'walter',
     ],
-    meioAMeioRate: null,
+    meioAMeioRate: 0.6,
     assistantRemitRate: 0.3,
     proCommissionRate: 0.6,
     serviceTaxSplit: null,
@@ -188,7 +191,7 @@ export const FOLHA_NAMED_EXCEPTIONS: readonly FolhaPersonRules[] = [
   },
   {
     // 55% = comissão do contrato (pct_salao / Avec). Meio a meio = 50% padrão.
-    // NÃO confundir com Walter (assistente 30% → meio 70%).
+    // NÃO confundir com Walter (meio 60% + remessa 30%).
     id: 'dani_rocha',
     aliases: ['daniela machado rocha', 'dani rocha', 'dani machado rocha'],
     meioAMeioRate: null,
@@ -468,12 +471,16 @@ export function resolveFolhaPersonRules(
   return best
 }
 
-/** Taxa de meio a meio efetiva para o profissional. */
+/**
+ * Taxa de meio a meio efetiva para o profissional.
+ * Preferência: `meioAMeioRate` explícito (Walter 60%, Diello 5%).
+ * Senão, se só há `assistantRemitRate`, meio = 1 − repasse.
+ */
 export function resolveMeioAMeioRate(rules: FolhaPersonRules | null): number {
+  if (rules?.meioAMeioRate != null) return rules.meioAMeioRate
   if (rules?.assistantRemitRate != null) {
     return 1 - rules.assistantRemitRate
   }
-  if (rules?.meioAMeioRate != null) return rules.meioAMeioRate
   return MEIO_A_MEIO_RATE
 }
 
@@ -605,9 +612,12 @@ export function romeuAssistantPaySplit(
   return romeuAssistantMetaTopUp(monthAccumulated)
 }
 
-/** Remessa V/U padrão (20%), sem override nomeado hoje. */
+/**
+ * Remessa = fatia dos serviços assistente como pro que vai ao profissional.
+ * Padrão 20%. Walter: usa `assistantRemitRate` (30%) — RH: não é 20%.
+ */
 export function resolveRemitRate(rules: FolhaPersonRules | null): number {
-  void rules
+  if (rules?.assistantRemitRate != null) return rules.assistantRemitRate
   return ASSISTANT_AS_PRO_REMIT_RATE
 }
 
