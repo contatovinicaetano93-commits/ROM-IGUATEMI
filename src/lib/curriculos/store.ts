@@ -3,6 +3,7 @@ import 'server-only'
 import { getIntranetSql } from '@/lib/db'
 import { generateCurriculoBriefing } from '@/lib/curriculos/brief'
 import { extractPdfText } from '@/lib/folha/imap-pdf'
+import { readBlobBytes } from '@/lib/blob/private'
 import { isAllowedCurriculoFileUrl } from '@/lib/curriculos/file'
 import { fold, normalizeKeywords, searchTokens } from '@/lib/curriculos/search'
 import {
@@ -92,10 +93,9 @@ async function extractTextFromFileUrl(
     fileUrl.toLowerCase().includes('.pdf')
   if (!isPdf) return ''
   try {
-    const res = await fetch(fileUrl)
-    if (!res.ok) return ''
-    const buf = Buffer.from(await res.arrayBuffer())
-    const { text } = await extractPdfText(buf, fileName ?? 'curriculo.pdf')
+    const blob = await readBlobBytes(fileUrl)
+    if (!blob) return ''
+    const { text } = await extractPdfText(blob.buffer, fileName ?? 'curriculo.pdf')
     return text.trim()
   } catch {
     return ''
@@ -167,6 +167,9 @@ export async function createCurriculo(input: {
   if (!name) throw new Error('Nome do candidato é obrigatório')
   const fileUrl = input.fileUrl.trim()
   if (!fileUrl) throw new Error('Arquivo do currículo é obrigatório')
+  if (!isAllowedCurriculoFileUrl(fileUrl)) {
+    throw new Error('URL do arquivo inválida: use upload de Currículos (Vercel Blob)')
+  }
 
   const extracted = await extractTextFromFileUrl(
     fileUrl,
@@ -208,6 +211,16 @@ export async function createCurriculo(input: {
   const created = rows[0]
   if (!created) throw new Error('Falha ao gravar currículo')
   return mapCurriculo(created)
+}
+
+export async function getCurriculoById(id: string): Promise<Curriculo | null> {
+  await ensureCurriculosTables()
+  const sql = getIntranetSql()
+  const rows = (await sql`
+    select * from curriculos where id = ${id}::uuid limit 1
+  `) as Array<Record<string, unknown>>
+  const row = rows[0]
+  return row ? mapCurriculo(row) : null
 }
 
 export async function updateCurriculoStatus(

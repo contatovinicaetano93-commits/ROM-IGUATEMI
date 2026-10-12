@@ -2,6 +2,7 @@ import { put } from '@vercel/blob'
 import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
+import { BLOB_PRIVATE_ACCESS } from '@/lib/blob/private'
 import { canUseCurriculos } from '@/lib/curriculos/access'
 import {
   CURRICULO_SERVER_UPLOAD_MAX_BYTES,
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest) {
       }
 
       const blob = await put(curriculoBlobPathname(fileName), file, {
-        access: 'public',
+        access: BLOB_PRIVATE_ACCESS,
         addRandomSuffix: true,
         contentType: resolvedType,
       })

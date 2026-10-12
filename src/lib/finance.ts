@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db'
+import { isAllowedFinanceReceiptUrl } from '@/lib/finance/receipt-url'
 import {
   ensureFiscalSplitTable,
   getFiscalSplitSummary,
@@ -142,11 +143,72 @@ export async function listExpenses(from: string, to: string): Promise<FinanceExp
   }
 }
 
+export async function getExpenseById(id: string): Promise<FinanceExpense | null> {
+  const sql = getSql()
+  try {
+    const rows = await sql`
+      select
+        id, category_id, description, amount::float as amount,
+        expense_date::text as expense_date, notes, receipt_url, created_at,
+        coalesce(source, 'manual') as source,
+        external_id, omie_status, omie_cnpj_kind
+      from finance_expenses
+      where id = ${id}::uuid
+      limit 1
+    `
+    const row = (rows as FinanceExpense[])[0]
+    return row ?? null
+  } catch {
+    try {
+      const rows = await sql`
+        select
+          id, category_id, description, amount::float as amount,
+          expense_date::text as expense_date, notes, receipt_url, created_at,
+          coalesce(source, 'manual') as source,
+          external_id, omie_status
+        from finance_expenses
+        where id = ${id}::uuid
+        limit 1
+      `
+      const row = (rows as Omit<FinanceExpense, 'omie_cnpj_kind'>[])[0]
+      if (!row) return null
+      return {
+        ...row,
+        omie_cnpj_kind: row.source === 'omie' ? 'servicos' : null,
+      }
+    } catch {
+      const rows = await sql`
+        select
+          id, category_id, description, amount::float as amount,
+          expense_date::text as expense_date, notes, receipt_url, created_at
+        from finance_expenses
+        where id = ${id}::uuid
+        limit 1
+      `
+      const row = (rows as Omit<
+        FinanceExpense,
+        'source' | 'external_id' | 'omie_status' | 'omie_cnpj_kind'
+      >[])[0]
+      if (!row) return null
+      return {
+        ...row,
+        source: 'manual',
+        external_id: null,
+        omie_status: null,
+        omie_cnpj_kind: null,
+      }
+    }
+  }
+}
+
 export async function createExpense(input: CreateExpenseInput): Promise<FinanceExpense> {
   const sql = getSql()
   const description = input.description.trim()
   if (!description) throw new Error('Descrição é obrigatória')
   if (!(input.amount > 0)) throw new Error('Valor precisa ser maior que zero')
+  if (!isAllowedFinanceReceiptUrl(input.receiptUrl)) {
+    throw new Error('URL do recibo inválida: use upload do Financeiro (Vercel Blob)')
+  }
 
   const rows = (await sql`
     insert into finance_expenses (category_id, description, amount, expense_date, notes, receipt_url, created_by)
