@@ -53,6 +53,12 @@ import {
   markSyncBudgetExhausted,
 } from '@/lib/avec/sync-budget'
 import {
+  CLIENT_DUMP_MIN_GAP_MS,
+  catalogPaginationAfterIncompleteUpsert,
+  getCatalogMaxPagesPerRun,
+  shouldRunClientCatalogDump,
+} from '@/lib/avec/sync-catalog'
+import {
   isPostgresStatementTimeoutError,
   noteStatementTimeoutSoftFail,
 } from '@/lib/avec/db-statement-timeout'
@@ -509,17 +515,25 @@ async function resolveSalonContinueStartPages(
   return {}
 }
 
-/** Catálogo 0004 é pesado (~50k upserts) — no máximo 1×/dia no cron. */
-const CLIENT_DUMP_MIN_GAP_MS = 20 * 60 * 60_000
-
 async function shouldSyncClientCatalog(): Promise<boolean> {
-  if (process.env.AVEC_SYNC_CLIENTS === '1' || process.env.AVEC_SYNC_CLIENTS === 'true') {
-    return true
-  }
-  if (process.env.AVEC_SYNC_CLIENTS === '0' || process.env.AVEC_SYNC_CLIENTS === 'false') {
-    return false
-  }
   const sql = getSql()
+  // Preferir run com lote 0004 pendente; senão o último com progresso de clients.
+  const pendingRows = (await sql`
+    select created_at, stats
+    from avec_sync_runs
+    where kind = 'full'
+      and status in ('ok', 'partial')
+      and coalesce(stats->'pagination'->'0004'->>'hasMore', 'false') = 'true'
+    order by created_at desc
+    limit 1
+  `) as { created_at: string; stats: AvecSyncStats | string }[]
+  if (pendingRows[0]) {
+    return shouldRunClientCatalogDump({
+      envFlag: process.env.AVEC_SYNC_CLIENTS,
+      lastRun: pendingRows[0],
+      minGapMs: CLIENT_DUMP_MIN_GAP_MS,
+    })
+  }
   const rows = (await sql`
     select created_at, stats
     from avec_sync_runs
@@ -529,10 +543,11 @@ async function shouldSyncClientCatalog(): Promise<boolean> {
     order by created_at desc
     limit 1
   `) as { created_at: string; stats: AvecSyncStats | string }[]
-  const last = rows[0]
-  if (!last?.created_at) return true
-  const age = Date.now() - new Date(last.created_at).getTime()
-  return age >= CLIENT_DUMP_MIN_GAP_MS
+  return shouldRunClientCatalogDump({
+    envFlag: process.env.AVEC_SYNC_CLIENTS,
+    lastRun: rows[0] ?? null,
+    minGapMs: CLIENT_DUMP_MIN_GAP_MS,
+  })
 }
 
 /** Cache por contato no decorrer de um sync — evita N+1 listServices por linha Avec. */
@@ -686,13 +701,16 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
   }
   try {
     const params = { limit: 250, site: avecSiteParam() }
-    const result = await fetchSyncReport('0004', params)
-    warnIfTruncated(stats, '0004', result)
+    // Fatia curta por invocação — dump IG inteiro estoura maxDuration=800.
+    const maxPages = getCatalogMaxPagesPerRun()
+    const result = await fetchSyncReport('0004', params, maxPages)
     await snapshotReport('0004', params, result.rows, stats, syncRunId)
 
+    let abortedMidUpsert = false
     for (const row of result.rows) {
       if (!hasSyncBudgetForHeavyStep()) {
         markSyncBudgetExhausted(stats, 'catálogo 0004 mid-upsert (<30s)')
+        abortedMidUpsert = true
         break
       }
       try {
@@ -712,10 +730,28 @@ async function syncClients(stats: AvecSyncStats, syncRunId?: string) {
       } catch (e) {
         if (isPostgresStatementTimeoutError(e)) {
           noteStatementTimeoutSoftFail(stats, 'catálogo 0004 upsert')
+          abortedMidUpsert = true
           break
         }
         stats.errors.push(`cliente: ${e instanceof Error ? e.message : String(e)}`)
       }
+    }
+
+    if (abortedMidUpsert && result.pagesFetched > 0) {
+      // Não avança cursor — próxima cron refaz o mesmo lote (upsert idempotente).
+      if (!stats.pagination) stats.pagination = {}
+      stats.pagination['0004'] = catalogPaginationAfterIncompleteUpsert({
+        startPage: result.startPage,
+        endPage: result.endPage,
+        maxPages: result.maxPages,
+        limit: result.limit,
+        rowsThisBatch: result.rows.length,
+      })
+      stats.warnings.push(
+        'Catálogo 0004: lote incompleto por orçamento — próxima cron retoma a mesma página',
+      )
+    } else {
+      warnIfTruncated(stats, '0004', result)
     }
   } catch (e) {
     if (isPostgresStatementTimeoutError(e)) {
@@ -1620,7 +1656,16 @@ async function runAvecSyncUnlocked(
     // sync continua — fetchAvecReport ainda tenta force-refresh no 401
   })
 
-  const startPages = await resolveSalonContinueStartPages(continueFrom, stage)
+  // Catalog cron: retoma 0004 pendente sem ?continue=1 (paridade estoque page batches).
+  let effectiveContinue = continueFrom
+  if (mode === 'full' && stage === 'catalog' && continueFrom === undefined) {
+    const pending = await resolveSalonContinueStartPages('auto', 'catalog')
+    if (pending['0004'] != null) {
+      effectiveContinue = pending
+    }
+  }
+
+  const startPages = await resolveSalonContinueStartPages(effectiveContinue, stage)
   syncStartPages = Object.keys(startPages).length > 0 ? startPages : null
   try {
     return await runAvecSyncBody(mode, stage, scope)
@@ -1682,19 +1727,14 @@ async function runAvecSyncBody(
   step(`begin ${run.id}`)
 
   try {
-    // Catalog-only: se o dump 0004 já rodou nas últimas 20h, evita heal+lock pesado
-    // (cron 2×/dia ainda acorda a fatia — sai cedo com purge leve).
+    // Catalog-only: se o dump 0004 já fechou nas últimas 20h (sem hasMore), sai cedo.
+    // Purge fica no cron /api/avec/purge-snapshots — não no mesmo lambda do 0004.
     if (runCatalog && !runOps && !runAgenda) {
       const dumpClients = await shouldSyncClientCatalog()
       if (!dumpClients) {
         stats.warnings.push(
           'Catálogo 0004 adiado — já sincronizado nas últimas 20h (DB leve; force com AVEC_SYNC_CLIENTS=1)',
         )
-        try {
-          await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
-        } catch {
-          /* ignore */
-        }
         step('catalog deferred')
         const finished = await finishAvecSyncRun(run.id, 'ok', stats)
         await logEvent({
@@ -1708,8 +1748,16 @@ async function runAvecSyncBody(
       }
     }
 
-    await healImportadoStatus(stats)
-    step('healed')
+    // Heal só no 1º lote do catalog (página 1) — em resume pula UPDATE massivo.
+    const catalogResumePage = syncStartPages?.['0004']
+    const skipHealForCatalogResume =
+      runCatalog && !runOps && !runAgenda && catalogResumePage != null && catalogResumePage > 1
+    if (!skipHealForCatalogResume) {
+      await healImportadoStatus(stats)
+      step('healed')
+    } else {
+      step('heal skipped (catalog resume)')
+    }
     // Catálogo 0004 só depois do core (P1/agenda/caixa) — não pode comer o budget primeiro.
     if (mode === 'fast') {
       // Caixa PRIMEIRO e sozinho — se o cron estourar maxDuration depois,
@@ -1827,15 +1875,18 @@ async function runAvecSyncBody(
       } else {
         markSyncBudgetExhausted(stats, 'antes do catálogo 0004')
       }
-      if (!syncBudgetExhausted() && hasSyncBudgetForHeavyStep()) {
-        // Limpeza silenciosa — não vira warning (senão full ok marca "partial").
-        try {
-          await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
-        } catch (purgeErr) {
-          if (isPostgresStatementTimeoutError(purgeErr)) {
-            noteStatementTimeoutSoftFail(stats, 'purge pós-catálogo')
+      // Purge NÃO roda no catalog — cron dedicado /api/avec/purge-snapshots.
+      // Rodar purge+0004 no mesmo lambda estourava maxDuration (abandoned_partial_timeout).
+      if (runOps || runAgenda) {
+        if (!syncBudgetExhausted() && hasSyncBudgetForHeavyStep()) {
+          try {
+            await purgeAvecStorageBloat({ keepSnapshotDays: 0, keepSyncRunDays: 2 })
+          } catch (purgeErr) {
+            if (isPostgresStatementTimeoutError(purgeErr)) {
+              noteStatementTimeoutSoftFail(stats, 'purge pós-catálogo')
+            }
+            /* ignore demais */
           }
-          /* ignore demais */
         }
       }
     }

@@ -492,7 +492,9 @@ export async function fetchAllAvecReport(
   for (let i = 0; i < maxPages; i++) {
     const page = startPage + i
     if (deadlineAt != null && Date.now() >= deadlineAt) {
+      // Soft-abort: marcar hasMore para Continuar sync / cron catalog retomar.
       truncated = true
+      hasMore = true
       break
     }
     let payload: unknown
@@ -502,6 +504,7 @@ export async function fetchAllAvecReport(
       // Com deadline: abort limpo — devolve o que já veio em vez de matar o sync.
       if (deadlineAt != null && isAvecFetchAbortError(e)) {
         truncated = true
+        hasMore = true
         break
       }
       throw e
@@ -518,7 +521,8 @@ export async function fetchAllAvecReport(
     }
   }
 
-  const nextPage = hasMore ? endPage + 1 : null
+  // Deadline antes da 1ª página: retoma startPage; senão, página seguinte ao último fetch.
+  const nextPage = hasMore ? (pagesFetched > 0 ? endPage + 1 : startPage) : null
   return {
     rows: all,
     truncated,

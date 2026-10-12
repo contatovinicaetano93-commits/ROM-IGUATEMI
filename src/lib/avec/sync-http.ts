@@ -10,6 +10,7 @@ import {
   type AvecSyncScope,
   type AvecSyncStage,
 } from '@/lib/avec/sync'
+import { catalog0004PendingNextPage, parseCatalogStats } from '@/lib/avec/sync-catalog'
 import { requireAdmin, isAuthEnabled } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isProduction } from '@/lib/env'
@@ -39,7 +40,7 @@ function fullStageNote(stage: AvecSyncStage): string {
     case 'agenda':
       return 'Sync full/agenda — appointments/attendances/caixa/cancel/noshow'
     case 'catalog':
-      return 'Sync full/catalog — catálogo 0004 + purge'
+      return 'Sync full/catalog — catálogo 0004 (lotes; resume automático)'
     case 'all':
       return 'Sync full — catálogo + P1/P2/P3'
     default: {
@@ -135,7 +136,12 @@ export async function executeAvecSync(
       finishedOnly: true,
       ...(effectiveMode === 'full' ? { stage: effectiveStage } : {}),
     })
-    if (last?.created_at) {
+    // Catalog com 0004.hasMore: não aplicar min-gap de 5h — próximo cron continua o lote.
+    const catalogResumePending =
+      effectiveMode === 'full' &&
+      effectiveStage === 'catalog' &&
+      catalog0004PendingNextPage(parseCatalogStats(last?.stats)) != null
+    if (last?.created_at && !catalogResumePending) {
       const age = Date.now() - new Date(last.created_at).getTime()
       const minGap =
         opts?.webhook && effectiveMode === 'fast'

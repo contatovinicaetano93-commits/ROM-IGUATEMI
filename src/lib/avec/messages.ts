@@ -106,6 +106,8 @@ export function isSoftAvecSyncWarning(warning: string): boolean {
   // Truncamento que PULA métricas (recorrentes/agenda reconcile) é HARD.
   // Catálogo 0004 adiado de propósito (ritmo leve).
   if (/Catálogo 0004 adiado/i.test(warning)) return true
+  // Lote 0004 incompleto por orçamento — resume na próxima cron (não pinta partial).
+  if (/Catálogo 0004:\s*lote incompleto/i.test(warning)) return true
   // P3 sem taxa explícita — informativo.
   if (/sem retorno|retorno local indisponível/i.test(warning)) return true
   // Estoque: paginação parcial limpa por orçamento.
