@@ -19,7 +19,7 @@
     },
     {
       "path": "/api/avec/sync/full/catalog",
-      "schedule": "10 11,23 * * *"
+      "schedule": "10 */2 * * *"
     },
     {
       "path": "/api/avec/sync/director-visits",
