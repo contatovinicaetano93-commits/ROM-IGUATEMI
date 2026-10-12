@@ -1,6 +1,7 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireFinance } from '@/lib/auth'
+import { assertFinanceReceiptBlobPathname } from '@/lib/finance/receipt-url'
 
 export async function POST(request: NextRequest) {
   const auth = await requireFinance(request)
@@ -12,14 +13,27 @@ export async function POST(request: NextRequest) {
     const jsonResponse = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'],
-        addRandomSuffix: true,
-      }),
+      onBeforeGenerateToken: async (pathname) => {
+        assertFinanceReceiptBlobPathname(pathname)
+        return {
+          allowedContentTypes: [
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'image/heic',
+            'application/pdf',
+          ],
+          addRandomSuffix: true,
+          maximumSizeInBytes: 8 * 1024 * 1024,
+        }
+      },
       onUploadCompleted: async () => {},
     })
     return NextResponse.json(jsonResponse)
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Erro no upload' }, { status: 400 })
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Erro no upload' },
+      { status: 400 },
+    )
   }
 }

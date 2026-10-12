@@ -54,6 +54,28 @@ describe('readFolhaImapConfig', () => {
     } as unknown as NodeJS.ProcessEnv)
     expect(cfg?.lookbackDays).toBe(90)
   })
+
+  it('FOLHA_IMAP_TLS_INSECURE=1 só fora de produção', () => {
+    const insecureDev = readFolhaImapConfig({
+      FOLHA_IMAP_HOST: 'imap.example.com',
+      FOLHA_IMAP_USER: 'folha@x.com',
+      FOLHA_IMAP_PASS: 'secret',
+      FOLHA_IMAP_TLS_INSECURE: '1',
+      NODE_ENV: 'development',
+      VERCEL_ENV: 'development',
+    } as unknown as NodeJS.ProcessEnv)
+    expect(insecureDev?.rejectUnauthorized).toBe(false)
+
+    const insecureProd = readFolhaImapConfig({
+      FOLHA_IMAP_HOST: 'imap.example.com',
+      FOLHA_IMAP_USER: 'folha@x.com',
+      FOLHA_IMAP_PASS: 'secret',
+      FOLHA_IMAP_TLS_INSECURE: '1',
+      VERCEL_ENV: 'production',
+      NODE_ENV: 'production',
+    } as unknown as NodeJS.ProcessEnv)
+    expect(insecureProd?.rejectUnauthorized).toBe(true)
+  })
 })
 
 describe('folha IMAP source keys', () => {

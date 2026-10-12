@@ -74,7 +74,10 @@ export function isAllowedCurriculoFileUrl(url: string): boolean {
   const host = parsed.hostname.toLowerCase()
   const blobHost =
     host.endsWith('.public.blob.vercel-storage.com') ||
+    host.endsWith('.private.blob.vercel-storage.com') ||
     host.endsWith('.blob.vercel-storage.com')
   if (!blobHost) return false
-  return parsed.pathname.includes('/curriculos/')
+  if (parsed.username || parsed.password) return false
+  const path = decodeURIComponent(parsed.pathname)
+  return path.includes('/curriculos/') && !path.includes('..')
 }

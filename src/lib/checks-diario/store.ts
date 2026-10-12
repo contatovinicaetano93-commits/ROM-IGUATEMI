@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getIntranetSql } from '@/lib/db'
+import { isAllowedChecksDiarioPhotoUrl } from '@/lib/checks-diario/photo'
 import {
   parseChecksCargoId,
   type ChecksCargoId,
@@ -323,6 +324,16 @@ export async function listLogsForDay(employeeIds: string[], day: string) {
   return (rows as Record<string, unknown>[]).map(mapLog)
 }
 
+export async function getChecksLogById(id: string): Promise<ChecksDiarioLog | null> {
+  await ensureChecksDiarioTables()
+  const sql = getIntranetSql()
+  const rows = await sql`
+    select * from checks_diario_logs where id = ${id}::uuid limit 1
+  `
+  const row = (rows as Record<string, unknown>[])[0]
+  return row ? mapLog(row) : null
+}
+
 export async function createChecksTask(args: {
   employeeId: string
   title: string
@@ -422,6 +433,9 @@ export async function createChecksLog(args: {
   if (task.requires_photo) {
     assertLivePhotoCapture(args.photoCapturedAt)
     if (!args.photoUrl?.trim()) throw new Error('Foto obrigatória neste check')
+  }
+  if (!isAllowedChecksDiarioPhotoUrl(args.photoUrl)) {
+    throw new Error('photo_url inválida: use upload do Checks diários (Vercel Blob)')
   }
   const day = args.day ?? todayIsoSaoPaulo()
   const sql = getIntranetSql()

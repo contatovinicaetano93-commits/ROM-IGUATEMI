@@ -22,6 +22,7 @@ function isVercelBlobStorageHost(hostname: string): boolean {
   const host = hostname.toLowerCase()
   return (
     host.endsWith('.public.blob.vercel-storage.com') ||
+    host.endsWith('.private.blob.vercel-storage.com') ||
     host.endsWith('.blob.vercel-storage.com')
   )
 }
