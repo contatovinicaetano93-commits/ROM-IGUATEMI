@@ -62,6 +62,6 @@ Qualquer `--force`, `DROP`, `TRUNCATE` ou push direto para `main` precisa de jus
 
 Se for pegar tarefa nova, estes são reais e estão sem dono:
 
-- **`maxDuration = 800` em `/api/avec/sync` exige Fluid Compute na Vercel.** Rotas logam `warnIfLongMaxDuration` no cold start. Se Fluid não estiver ligado, todo sync full morre em 300s.
+- **Fluid Compute está ON** (`vercel.json` `fluid:true` + `resourceConfig.fluid`); RED de Classic=300s é `classic_300s_hits` em `/api/health`. **Problema aberto:** `full/catalog` ainda estoura maxDuration=800 (timeouts recorrentes) — não baixar para 300.
 - **Lint ainda não é gate bloqueante** (passivo atual: `no-explicit-any` + `react-hooks/refs`).
 - **O Iguatemi não tem `reminders/financeiro`** (lembrete WhatsApp semanal de despesas que o Brasil tem). Não portar a rota nem o cron — exige decisão humana (passa a poder mandar mensagem para a equipe do Iguatemi). A allowlist morta `/api/reminders/financeiro` no middleware foi removida; `aftercare` permanece.
