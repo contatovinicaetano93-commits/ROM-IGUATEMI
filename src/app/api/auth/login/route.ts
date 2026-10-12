@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
   res.cookies.set(AUTH_COOKIE, await createV3SessionToken(session), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: useSecureCookies(),
+    secure: isProduction(),
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
   })
