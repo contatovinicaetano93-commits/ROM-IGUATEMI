@@ -443,6 +443,44 @@ export default function FolhaPage() {
     }
   }
 
+  async function onDailyRefresh() {
+    setBusy(true)
+    setActionMsg(null)
+    setActionWarn(false)
+    setError(null)
+    try {
+      const res = await fetch('/api/folha/daily-refresh', {
+        credentials: 'include',
+        signal: AbortSignal.timeout(120_000),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok && res.status !== 207) {
+        setError(
+          typeof json === 'object' && json && 'error' in json
+            ? String((json as { error?: string }).error ?? 'Falha no refresh diário')
+            : 'Falha no refresh diário',
+        )
+        return
+      }
+      const d = json.data as {
+        results?: { period_id?: string; outcome?: string }[]
+      } | null
+      const results = d?.results ?? []
+      const okCount = results.filter((r) => r.outcome === 'refreshed').length
+      const errCount = results.filter((r) => r.outcome === 'error').length
+      setActionMsg(
+        `Refresh diário: ${results.length} quinzena(s) · ${okCount} ok${
+          errCount ? ` · ${errCount} erro(s)` : ''
+        }`,
+      )
+      await load(selectedPeriod || undefined)
+    } catch {
+      setError('Falha no refresh diário')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function onTaxIngest() {
     if (!periodId || !taxBody.trim()) {
       setError('Cole o corpo do e-mail fiscal')
@@ -680,9 +718,9 @@ export default function FolhaPage() {
                   </div>
                   {periodStatus === 'draft' || periodStatus === 'ready_for_review' ? (
                     <p className="px-1 text-[11px] leading-snug text-muted">
-                      Quinzena em curso: o motor recalcula sozinho 4×/dia (8123 + Zig) e o IMAP
-                      busca DARF/DAS a cada 10 min. Deixe em conferência — só aprove perto do
-                      pagamento (Q1 ~dia 20).
+                      Quinzena em curso: refresh automático 1×/dia de manhã (8123 + Zig) e IMAP
+                      1×/dia. Mid-day: use «Recalcular quinzena» / «Buscar DARF/DAS». Só aprove
+                      perto do pagamento (Q1 ~dia 20).
                     </p>
                   ) : null}
                 </div>
@@ -695,6 +733,14 @@ export default function FolhaPage() {
                     className={FOLHA_BTN_PRIMARY}
                   >
                     Atualizar do 8123
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onDailyRefresh()}
+                    className={FOLHA_BTN_SECONDARY}
+                  >
+                    Recalcular quinzena (cron diário)
                   </button>
                   <button
                     type="button"
@@ -1264,8 +1310,8 @@ export default function FolhaPage() {
             <ul className="list-disc space-y-1.5 pl-5 text-foreground/90">
               <li>Pagamentos: dia 05 (2ª quinzena anterior) e dia 20 (1ª quinzena)</li>
               <li>
-                Quinzena em curso: refresh automático 4×/dia (8123 + Zig) + IMAP a cada 10
-                min — fecha conforme os dados surgem; não aprove Q1 antes do ~dia 20
+                Quinzena em curso: refresh automático 1×/dia (8123 + Zig) + IMAP 1×/dia —
+                mid-day pelos botões da Folha; não aprove Q1 antes do ~dia 20
               </li>
               <li>
                 Taxa serviços U: {pct(rules.assistant_service_tax_rate)} (≠ cartão)

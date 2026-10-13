@@ -105,7 +105,7 @@ export default function AdminPage() {
   const [schedule, setSchedule] = useState<ScheduleRow[]>([])
   const [avec, setAvec] = useState<AvecStatus | null>(null)
   const [health, setHealth] = useState<HealthStatus | null>(null)
-  const [syncing, setSyncing] = useState(false)
+  const [syncing, setSyncing] = useState<string | null>(null)
   const [backfilling, setBackfilling] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [seedMsg, setSeedMsg] = useState<string | null>(null)
@@ -184,19 +184,19 @@ export default function AdminPage() {
     }
   }
 
-  async function runAvecSync() {
-    setSyncing(true)
+  async function runAvecSyncStage(stage: string, path: string) {
+    setSyncing(stage)
     setSyncMsg(null)
     try {
-      const res = await apiFetch('/api/avec/sync', { method: 'POST', cache: 'no-store' })
+      const res = await apiFetch(path, { method: 'POST', cache: 'no-store' })
       const json = await res.json()
-      if (json.error) setSyncMsg(`Erro: ${json.error}`)
-      else setSyncMsg(`Sync ${json.data?.status ?? 'ok'} — recarregando…`)
+      if (json.error) setSyncMsg(`${stage}: ${json.error}`)
+      else setSyncMsg(`${stage}: ${json.data?.status ?? 'ok'} — recarregando…`)
       await load()
     } catch (e) {
-      setSyncMsg(String(e))
+      setSyncMsg(`${stage}: ${String(e)}`)
     } finally {
-      setSyncing(false)
+      setSyncing(null)
     }
   }
 
@@ -570,19 +570,47 @@ export default function AdminPage() {
               </button>
               {connMsg && <p className="text-xs text-muted">{connMsg}</p>}
               <p className="rounded-xl border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground/80">
-                <span className="font-semibold text-gold">Tempo real:</span> webhook{' '}
+                <span className="font-semibold text-gold">Cadência lean:</span> cron 1×/dia de manhã
+                (pacote staggered, offset BR). Mid-day: use os botões por seção. Webhook{' '}
                 <code className="text-[0.7rem]">/api/webhooks/avec</code> (header{' '}
-                <code className="text-[0.7rem]">x-avec-secret</code>). Cron: fast ~20 min (offset
-                BR), full 2×/dia, estoque horário, token 3h; webhook dispara sync em tempo real.
+                <code className="text-[0.7rem]">x-avec-secret</code>) dispara só sync fast. Evite
+                disparar full em sequência — cada um consome egress Neon.
               </p>
-              <PrimaryButton type="button" onClick={runAvecSync} disabled={syncing || !avec.configured}>
-                {syncing ? 'Sincronizando…' : 'Rodar sync agora (POST)'}
-              </PrimaryButton>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    { id: 'fast', label: 'Sync fast', path: '/api/avec/sync' },
+                    { id: 'ops', label: 'Full ops (KPIs)', path: '/api/avec/sync/full/ops' },
+                    { id: 'agenda', label: 'Full agenda', path: '/api/avec/sync/full/agenda' },
+                    { id: 'catalog', label: 'Full catalog', path: '/api/avec/sync/full/catalog' },
+                    {
+                      id: 'director',
+                      label: 'Director visitas 0011',
+                      path: '/api/avec/sync/director-visits?force=1',
+                    },
+                    {
+                      id: 'director0021',
+                      label: 'Director 0021',
+                      path: '/api/avec/sync/director-0021?force=1',
+                    },
+                  ] as const
+                ).map((btn) => (
+                  <button
+                    key={btn.id}
+                    type="button"
+                    disabled={syncing !== null || !avec.configured}
+                    onClick={() => void runAvecSyncStage(btn.label, btn.path)}
+                    className="rounded-2xl border border-border bg-surface px-3 py-2.5 text-xs font-semibold text-foreground/90 disabled:opacity-60 lg:hover:border-gold/40 lg:hover:text-gold"
+                  >
+                    {syncing === btn.label ? 'Sincronizando…' : btn.label}
+                  </button>
+                ))}
+              </div>
               {syncMsg && <p className="text-xs text-muted">{syncMsg}</p>}
               <button
                 type="button"
                 onClick={runPurgeSnapshots}
-                disabled={purging || syncing}
+                disabled={purging || syncing !== null}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold text-foreground/90 lg:hover:bg-card"
               >
                 {purging ? 'Limpando banco…' : 'Liberar espaço (purge snapshots)'}
@@ -591,7 +619,7 @@ export default function AdminPage() {
               <PrimaryButton
                 type="button"
                 onClick={runRevenueYearBackfill}
-                disabled={backfilling || syncing || !avec.configured}
+                disabled={backfilling || syncing !== null || !avec.configured}
               >
                 {backfilling ? 'Puxando métricas do ano…' : 'Puxar métricas do ano (Financeiro)'}
               </PrimaryButton>

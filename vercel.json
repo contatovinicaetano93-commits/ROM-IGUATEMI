@@ -2,64 +2,64 @@
   "fluid": true,
   "crons": [
     {
+      "path": "/api/avec/purge-snapshots",
+      "schedule": "25 10 * * *"
+    },
+    {
       "path": "/api/avec/refresh-token",
-      "schedule": "30 */6 * * *"
+      "schedule": "30 10 * * *"
     },
     {
       "path": "/api/avec/sync",
-      "schedule": "45 */2 * * *"
+      "schedule": "45 10 * * *"
     },
     {
-      "path": "/api/avec/sync/full/ops",
-      "schedule": "35 14 * * *"
-    },
-    {
-      "path": "/api/avec/sync/full/agenda",
-      "schedule": "55 14 * * *"
-    },
-    {
-      "path": "/api/avec/sync/full/catalog",
-      "schedule": "10 12 * * *"
-    },
-    {
-      "path": "/api/avec/sync/director-visits",
-      "schedule": "20 14 * * *"
-    },
-    {
-      "path": "/api/avec/sync/director-0021",
-      "schedule": "35 14 * * *"
+      "path": "/api/financeiro/omie/sync",
+      "schedule": "0 11 * * *"
     },
     {
       "path": "/api/estoque/sync",
-      "schedule": "20 10,22 * * *"
+      "schedule": "15 11 * * *"
     },
     {
       "path": "/api/estoque/sync?mode=full",
+      "schedule": "35 11 * * *"
+    },
+    {
+      "path": "/api/avec/sync/full/catalog",
       "schedule": "55 11 * * *"
     },
     {
-      "path": "/api/avec/purge-snapshots",
-      "schedule": "25 7 * * *"
+      "path": "/api/avec/sync/full/ops",
+      "schedule": "15 12 * * *"
+    },
+    {
+      "path": "/api/avec/sync/full/agenda",
+      "schedule": "40 12 * * *"
+    },
+    {
+      "path": "/api/avec/sync/director-visits",
+      "schedule": "5 13 * * *"
+    },
+    {
+      "path": "/api/avec/sync/director-0021",
+      "schedule": "30 13 * * *"
+    },
+    {
+      "path": "/api/folha/daily-refresh",
+      "schedule": "55 13 * * *"
+    },
+    {
+      "path": "/api/folha/imap-poll",
+      "schedule": "15 14 * * *"
+    },
+    {
+      "path": "/api/reminders/aftercare",
+      "schedule": "45 14 * * *"
     },
     {
       "path": "/api/director-report",
       "schedule": "15 11 * * 2"
-    },
-    {
-      "path": "/api/reminders/aftercare",
-      "schedule": "40 */6 * * *"
-    },
-    {
-      "path": "/api/financeiro/omie/sync",
-      "schedule": "45 8 * * *"
-    },
-    {
-      "path": "/api/folha/imap-poll",
-      "schedule": "20 * * * *"
-    },
-    {
-      "path": "/api/folha/daily-refresh",
-      "schedule": "45 15 * * *"
     }
   ]
 }

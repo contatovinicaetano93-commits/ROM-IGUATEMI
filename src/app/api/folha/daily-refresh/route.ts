@@ -11,8 +11,8 @@ import { runFolhaDailyRefresh } from '@/lib/folha/service'
  * Recalcula rascunhos abertos (draft / ready_for_review) da quinzena em
  * curso a partir do 8123 / Avec + Zig Baru.
  *
- * Cadência Vercel: 4×/dia (11:45 / 15:45 / 19:45 / 23:45 UTC) — fecha a
- * Q1 conforme o 8123 e o IMAP vão surgindo; não toca aprovado/pago.
+ * Cadência Vercel: 1×/dia (13:55 UTC / 10:55 America/Sao_Paulo) — mid-day
+ * via botão na Folha; não toca aprovado/pago.
  */
 export async function GET(req: NextRequest) {
   try {

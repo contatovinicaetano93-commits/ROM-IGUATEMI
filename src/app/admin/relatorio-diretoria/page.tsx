@@ -201,6 +201,8 @@ export default function RelatorioDiretoriaPage() {
   const [stockLoading, setStockLoading] = useState(false)
   const [stockError, setStockError] = useState<string | null>(null)
   const [visitStatus, setVisitStatus] = useState<DirectorVisitStatusPayload | null>(null)
+  const [directorSyncing, setDirectorSyncing] = useState(false)
+  const [directorSyncMsg, setDirectorSyncMsg] = useState<string | null>(null)
 
   /** Carrega só a etapa da aba ativa — 0011 não espera 0021 (causa do timeout). */
   const load = useCallback(async () => {
@@ -364,6 +366,31 @@ export default function RelatorioDiretoriaPage() {
       setVisitStatus(null)
     }
   }, [tab, quarter, compare])
+
+  const runDirectorVisitsSync = useCallback(async () => {
+    setDirectorSyncing(true)
+    setDirectorSyncMsg(null)
+    try {
+      const res = await apiFetch('/api/avec/sync/director-visits?force=1', {
+        method: 'POST',
+        cache: 'no-store',
+        clientCache: false,
+        timeoutMs: 720_000,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.error) {
+        setDirectorSyncMsg(json.error ?? `Falha no sync (${res.status})`)
+        return
+      }
+      const status = (json.data as { status?: string } | undefined)?.status ?? 'ok'
+      setDirectorSyncMsg(`Sync visitas: ${status}`)
+      await loadVisitStatus()
+    } catch (e) {
+      setDirectorSyncMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDirectorSyncing(false)
+    }
+  }, [loadVisitStatus])
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -721,41 +748,55 @@ export default function RelatorioDiretoriaPage() {
             />
           </div>
 
-          {visitStatus && (
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface/60 px-4 py-3 text-xs text-muted">
-              <span className="font-medium text-foreground">Cobertura 0002:</span>
-              {coverageQuarters0011.map((q) => {
-                const cov = visitCoverageByQuarter.get(q)
-                const tone =
-                  cov && !cov.truncated && cov.row_count > 0
-                    ? 'border-success/40 bg-success/10 text-success'
-                    : cov?.truncated
-                      ? 'border-warning/40 bg-warning/10 text-warning'
-                      : 'border-border bg-card text-muted'
-                const label =
-                  cov && !cov.truncated && cov.row_count > 0
-                    ? `${q}: ${cov.row_count}`
-                    : cov?.truncated
-                      ? `${q}: truncado`
-                      : `${q}: pendente`
-                return (
-                  <span key={q} className={`rounded-full border px-2.5 py-1 ${tone}`}>
-                    {label}
+          <div className="space-y-2">
+            {visitStatus && (
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface/60 px-4 py-3 text-xs text-muted">
+                <span className="font-medium text-foreground">Cobertura 0002:</span>
+                {coverageQuarters0011.map((q) => {
+                  const cov = visitCoverageByQuarter.get(q)
+                  const tone =
+                    cov && !cov.truncated && cov.row_count > 0
+                      ? 'border-success/40 bg-success/10 text-success'
+                      : cov?.truncated
+                        ? 'border-warning/40 bg-warning/10 text-warning'
+                        : 'border-border bg-card text-muted'
+                  const label =
+                    cov && !cov.truncated && cov.row_count > 0
+                      ? `${q}: ${cov.row_count}`
+                      : cov?.truncated
+                        ? `${q}: truncado`
+                        : `${q}: pendente`
+                  return (
+                    <span key={q} className={`rounded-full border px-2.5 py-1 ${tone}`}>
+                      {label}
+                    </span>
+                  )
+                })}
+                {visitStatus.ready_for_default_0011 === false && (
+                  <span className="text-warning">
+                    Default 0011 ainda sem base selecionada completa.
                   </span>
-                )
-              })}
-              {visitStatus.ready_for_default_0011 === false && (
-                <span className="text-warning">
-                  Default 0011 ainda sem base selecionada completa.
-                </span>
-              )}
-              {missingVisitCoverage.length > 0 && (
-                <span className="text-muted">
-                  Comparativo pode vir parcial: faltam {missingVisitCoverage.join(', ')}.
-                </span>
-              )}
+                )}
+                {missingVisitCoverage.length > 0 && (
+                  <span className="text-muted">
+                    Comparativo pode vir parcial: faltam {missingVisitCoverage.join(', ')}.
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={directorSyncing}
+                onClick={() => void runDirectorVisitsSync()}
+                className="inline-flex items-center gap-2 rounded-2xl border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-semibold text-gold disabled:opacity-60"
+              >
+                <RefreshCw size={14} className={directorSyncing ? 'animate-spin' : ''} />
+                {directorSyncing ? 'Sincronizando visitas…' : 'Sincronizar visitas 0011 agora'}
+              </button>
+              {directorSyncMsg ? <span className="text-xs text-muted">{directorSyncMsg}</span> : null}
             </div>
-          )}
+          </div>
 
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted">
             <span className="text-foreground">
