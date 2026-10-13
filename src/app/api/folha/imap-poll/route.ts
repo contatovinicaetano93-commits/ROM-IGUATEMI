@@ -16,9 +16,9 @@ import { todayIsoSaoPaulo } from '@/lib/folha/period'
  * GET — cron (CRON_SECRET) ou sessão com módulo folha.
  * Lookback nas pastas de trabalho (texto + PDF) e aplica DARF/DAS/mensalidade no Q1 (dia 20).
  *
- * Cron Vercel dispara a cada 10 min; IMAP só abre 1×/dia (12:00 UTC BR / 12:10 UTC IG)
- * ou a cada 10 min nos 5 dias até o pagamento Q1 (20) e Q2 (05).
- * `?force=1` (cron) ou clique no painel ignoram a cadência.
+ * Cron Vercel 1×/dia (14:00 UTC BR / 14:15 UTC IG). Fora da pay-watch só abre
+ * nesse slot; na janela Q1/Q2 o tick diário abre a caixa. Mid-day: botão Folha
+ * ou `?force=1`.
  */
 export async function GET(req: NextRequest) {
   try {

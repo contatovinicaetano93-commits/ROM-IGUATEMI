@@ -1,6 +1,6 @@
 import { isAvecConfigured } from '@/lib/avec/client'
 
-/** Eventos que disparam pull Avec fast (agenda/caixa do dia). Full fica só no cron 2×/dia. */
+/** Eventos que disparam pull Avec fast (agenda/caixa do dia). Full fica no cron 1×/dia / botões. */
 const FAST_EVENTS = new Set([
   'appointment.created',
   'appointment.updated',
@@ -42,7 +42,7 @@ async function postSyncFast(baseUrl: string) {
  * Só dispara fast sync em background (agenda/atendidos/receita do dia).
  * NÃO recomputa Agendados a partir do ROM aqui: se o fast for pulado (gap),
  * o recompute local sobrescrevia o KPI 0051 com um snapshot incompleto.
- * Full (P1/P2/P3/catálogo) NÃO dispara aqui — só cron 2×/dia (evita 403/DB).
+ * Full (P1/P2/P3/catálogo) NÃO dispara aqui — só cron 1×/dia / botões admin.
  */
 export async function runAvecWebhookSideEffects(event: string) {
   if (!isAvecConfigured()) return

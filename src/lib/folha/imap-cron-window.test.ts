@@ -44,16 +44,16 @@ describe('folha IMAP cron window', () => {
     })
   })
 
-  it('cron: 1×/dia fora da janela; a cada tick dentro', () => {
-    const dailyNoonBr = new Date('2026-10-10T12:00:00.000Z')
-    const dailyNoonIg = new Date('2026-10-10T12:10:00.000Z')
-    const offSlot = new Date('2026-10-10T12:20:00.000Z')
-    const watchTick = new Date('2026-10-18T03:40:00.000Z')
+  it('cron: 1×/dia fora da janela; qualquer tick na pay-watch', () => {
+    const dailySlotBr = new Date('2026-10-10T14:00:00.000Z')
+    const dailySlotIg = new Date('2026-10-10T14:15:00.000Z')
+    const offSlot = new Date('2026-10-10T14:20:00.000Z')
+    const watchTick = new Date('2026-10-18T14:00:00.000Z')
 
     expect(
       decideFolhaImapCronRun({
         today: '2026-10-10',
-        now: dailyNoonBr,
+        now: dailySlotBr,
         panel: 'brasil',
       }),
     ).toMatchObject({ shouldPoll: true, trigger: 'daily_slot', cadence: 'daily' })
@@ -61,7 +61,7 @@ describe('folha IMAP cron window', () => {
     expect(
       decideFolhaImapCronRun({
         today: '2026-10-10',
-        now: dailyNoonIg,
+        now: dailySlotIg,
         panel: 'brasil',
       }),
     ).toMatchObject({ shouldPoll: false, trigger: 'skip' })
@@ -69,7 +69,7 @@ describe('folha IMAP cron window', () => {
     expect(
       decideFolhaImapCronRun({
         today: '2026-10-10',
-        now: dailyNoonIg,
+        now: dailySlotIg,
         panel: 'iguatemi',
       }),
     ).toMatchObject({ shouldPoll: true, trigger: 'daily_slot' })
