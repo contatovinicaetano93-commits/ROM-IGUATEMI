@@ -7,7 +7,7 @@
     },
     {
       "path": "/api/avec/sync",
-      "schedule": "10,30,50 * * * *"
+      "schedule": "45 * * * *"
     },
     {
       "path": "/api/avec/sync/full/ops",
@@ -19,7 +19,7 @@
     },
     {
       "path": "/api/avec/sync/full/catalog",
-      "schedule": "10 */2 * * *"
+      "schedule": "10 */6 * * *"
     },
     {
       "path": "/api/avec/sync/director-visits",
@@ -31,7 +31,7 @@
     },
     {
       "path": "/api/estoque/sync",
-      "schedule": "5 */3 * * *"
+      "schedule": "20 */6 * * *"
     },
     {
       "path": "/api/estoque/sync?mode=full",
@@ -47,7 +47,7 @@
     },
     {
       "path": "/api/reminders/aftercare",
-      "schedule": "40 */2 * * *"
+      "schedule": "40 */4 * * *"
     },
     {
       "path": "/api/financeiro/omie/sync",
@@ -55,11 +55,11 @@
     },
     {
       "path": "/api/folha/imap-poll",
-      "schedule": "*/10 * * * *"
+      "schedule": "20,50 * * * *"
     },
     {
       "path": "/api/folha/daily-refresh",
-      "schedule": "45 11,15,19,23 * * *"
+      "schedule": "45 11,23 * * *"
     }
   ]
 }
