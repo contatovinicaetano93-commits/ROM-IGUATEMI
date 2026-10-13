@@ -680,7 +680,7 @@ function ContatosPageContent() {
         <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground/90">
           {syncMeta.never_synced
             ? 'Nenhum sync Avec registrado — agendados até +7d podem estar vazios até o primeiro full/agenda.'
-            : 'Agenda +7d pode estar incompleta: full/agenda desatualizado e sync fast >1h. O fast cobre só ontem/hoje/amanhã; agendamentos da semana dependem do cron full/agenda (2×/dia).'}
+            : 'Agenda +7d pode estar incompleta: full/agenda desatualizado. O fast cobre só ontem/hoje/amanhã; agendamentos da semana dependem do cron full/agenda (1×/dia) ou do botão Admin.'}
         </div>
       )}
 

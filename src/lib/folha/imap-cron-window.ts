@@ -1,18 +1,20 @@
 /**
  * Cadência do cron IMAP Folha.
  *
- * Vercel só aceita cron estático — a cada 10 min dispara sempre.
- * A rota conecta na caixa 1×/dia; nos 5 dias até o pagamento Q1 (dia 20)
- * e Q2 (dia 05) passa a cada 10 min.
+ * Vercel dispara 1×/dia (vercel.json: BR 14:00 UTC, IG 14:15 UTC).
+ * Fora da janela de pagamento: só abre no slot diário.
+ * Nos 5 dias até Q1 (dia 20) / Q2 (dia 05): qualquer tick do cron abre
+ * (ainda 1×/dia no schedule lean — mid-day via botão na Folha).
  */
 import type { RomPanelId } from '@/lib/brand'
 import { defaultFolhaTaxQuinzena, listRecentQuinzenas } from '@/lib/folha/period'
 
 export const FOLHA_IMAP_PAY_WATCH_LEAD_DAYS = 5
-export const FOLHA_IMAP_CRON_DAILY_UTC_HOUR = 12
+/** Alinhado a `vercel.json` → `/api/folha/imap-poll`. */
+export const FOLHA_IMAP_CRON_DAILY_UTC_HOUR = 14
 export const FOLHA_IMAP_CRON_DAILY_UTC_MINUTE: Record<RomPanelId, number> = {
   brasil: 0,
-  iguatemi: 10,
+  iguatemi: 15,
 }
 
 export type FolhaImapCronCadence = 'frequent' | 'daily'
