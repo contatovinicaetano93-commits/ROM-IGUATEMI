@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { Plus, X, Trash2, Download, Camera, Paperclip, FileText, RefreshCw } from 'lucide-react'
-import { upload } from '@vercel/blob/client'
+import { uploadPiiBlob } from '@/lib/blob/upload-pii'
 import { financeReceiptBlobPathname } from '@/lib/finance/receipt-url'
 import { CountBadge, PrimaryButton } from '../_components/ui'
 import {
@@ -1412,8 +1412,7 @@ function AddExpenseSheet({
     setReceiptUploading(true)
     setReceiptErr(null)
     try {
-      const blob = await upload(financeReceiptBlobPathname(file.name), file, {
-        access: 'private',
+      const blob = await uploadPiiBlob(financeReceiptBlobPathname(file.name), file, {
         handleUploadUrl: '/api/financeiro/upload',
       })
       setReceiptUrl(blob.url)

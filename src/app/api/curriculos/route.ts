@@ -1,8 +1,7 @@
-import { put } from '@vercel/blob'
 import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
-import { BLOB_PRIVATE_ACCESS } from '@/lib/blob/private'
+import { putPiiBlob, rewriteBlobUploadError } from '@/lib/blob/private'
 import { canUseCurriculos } from '@/lib/curriculos/access'
 import {
   CURRICULO_SERVER_UPLOAD_MAX_BYTES,
@@ -122,8 +121,7 @@ export async function POST(req: NextRequest) {
         return err('Upload indisponível: BLOB_READ_WRITE_TOKEN não configurado', 503)
       }
 
-      const blob = await put(curriculoBlobPathname(fileName), file, {
-        access: BLOB_PRIVATE_ACCESS,
+      const blob = await putPiiBlob(curriculoBlobPathname(fileName), file, {
         addRandomSuffix: true,
         contentType: resolvedType,
       })
@@ -162,7 +160,8 @@ export async function POST(req: NextRequest) {
         typeof body.file_content_type === 'string' ? body.file_content_type : null,
     })
   } catch (error) {
-    console.error('[curriculos/POST]', error instanceof Error ? error.message : error)
-    return err(error instanceof Error ? error.message : 'Falha ao criar currículo', 400)
+    const rewritten = rewriteBlobUploadError(error)
+    console.error('[curriculos/POST]', rewritten.message)
+    return err(rewritten.message, 400)
   }
 }

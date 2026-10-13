@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { upload } from '@vercel/blob/client'
+import { uploadPiiBlob } from '@/lib/blob/upload-pii'
 import { Camera, CheckCircle2, Circle, Plus, Settings2, Users } from 'lucide-react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { IntranetPageSkeleton } from '../_components/intranet/IntranetPageSkeleton'
@@ -213,11 +213,10 @@ export default function ChecksDiarioPage() {
       if (opts.requiresPhoto) {
         if (!opts.file) throw new Error('Tire a foto agora para concluir este check')
         if (!photoCapturedAt) photoCapturedAt = new Date().toISOString()
-        const blob = await upload(
+        const blob = await uploadPiiBlob(
           checksDiarioBlobPathname(opts.file.name || `check-${taskId}.jpg`),
           opts.file,
           {
-            access: 'private',
             handleUploadUrl: '/api/checks-diario/upload',
           },
         )

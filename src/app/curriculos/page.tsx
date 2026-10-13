@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { upload } from '@vercel/blob/client'
 import { FileText, Search, Upload } from 'lucide-react'
+import { uploadPiiBlob } from '@/lib/blob/upload-pii'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { IntranetPageSkeleton } from '../_components/intranet/IntranetPageSkeleton'
 import { PanelButton, SectionCard } from '../_components/ui'
@@ -169,8 +169,7 @@ export default function CurriculosPage() {
   }> {
     const fileName = safeCurriculoFileName(formFile.name)
     const contentType = guessCurriculoContentType(fileName, formFile.type)
-    const blob = await upload(curriculoBlobPathname(fileName), formFile, {
-      access: 'private',
+    const blob = await uploadPiiBlob(curriculoBlobPathname(fileName), formFile, {
       handleUploadUrl: '/api/curriculos/upload',
       contentType,
       multipart: formFile.size > 2 * 1024 * 1024,
