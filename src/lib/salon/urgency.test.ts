@@ -20,8 +20,29 @@ function service(overrides: Partial<ClientService> & Pick<ClientService, 'name'>
   }
 }
 
-describe('urgencyForServices — max_overdue_days', () => {
-  it('calcula o maior atraso em dias', () => {
+describe('urgencyForServices — cadência da última visita', () => {
+  it('usa só o serviço com last_done mais recente (ignora SKU antigo)', () => {
+    const result = urgencyForServices([
+      service({
+        id: 'a',
+        name: 'PCT TERAPIA CAPILAR 8S novo',
+        cadence_days: 30,
+        last_done_at: new Date(Date.now() - 4 * 86_400_000).toISOString(),
+      }),
+      service({
+        id: 'b',
+        name: 'PCT TERAPIA CAPILAR 12S antigo',
+        category: 'tratamento',
+        cadence_days: 30,
+        last_done_at: new Date(Date.now() - 90 * 86_400_000).toISOString(),
+      }),
+    ])
+
+    expect(result.overdue).toBe(0)
+    expect(result.max_overdue_days).toBe(0)
+  })
+
+  it('marca atrasado pela última visita além da cadência', () => {
     const result = urgencyForServices([
       service({
         id: 'a',
@@ -38,8 +59,8 @@ describe('urgencyForServices — max_overdue_days', () => {
       }),
     ])
 
-    expect(result.overdue).toBe(2)
-    expect(result.max_overdue_days).toBeGreaterThanOrEqual(40)
+    expect(result.overdue).toBe(1)
+    expect(result.max_overdue_days).toBeGreaterThanOrEqual(10)
   })
 })
 
