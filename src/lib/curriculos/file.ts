@@ -15,11 +15,75 @@ export const CURRICULO_ACCEPT =
 export const CURRICULO_MAX_BYTES = 10 * 1024 * 1024
 /** Limite prático do body da função na Vercel para upload multipart no servidor. */
 export const CURRICULO_SERVER_UPLOAD_MAX_BYTES = 4 * 1024 * 1024
+/** Máximo de arquivos no anexo em lote (mesmo fluxo createCurriculo por item). */
+export const CURRICULO_BATCH_MAX = 20
 
 export function safeCurriculoFileName(name: string): string {
   const base = name.trim().replace(/[^\w.\-]+/g, '_').replace(/_+/g, '_')
   const cleaned = base.replace(/^\.+/, '').slice(0, 80)
   return cleaned || 'curriculo.pdf'
+}
+
+/**
+ * Nome do candidato a partir do arquivo (lote / quando o campo Nome fica vazio).
+ * Mantém aliases dos PDFs de teste do motor.
+ */
+export function candidateNameFromFileName(fileName: string): string {
+  const base = fileName.replace(/\.[^.]+$/, '').trim()
+  if (/curriculo[-_]?teste[-_]?motor[-_]?rom[-_]?2/i.test(base)) {
+    return 'Rafael Mendes Oliveira'
+  }
+  if (/curriculo[-_]?teste[-_]?motor/i.test(base)) return 'Camila Souza Ribeiro'
+  const human = base
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
+  return human || 'Candidato'
+}
+
+export type CurriculoBatchPickResult =
+  | { ok: true; files: File[] }
+  | { ok: false; error: string; files: File[] }
+
+/** Valida lista do `<input multiple>` — formato, tamanho e teto de lote. */
+export function pickCurriculoBatchFiles(
+  list: FileList | File[] | null | undefined,
+  opts?: { maxFiles?: number; maxBytes?: number },
+): CurriculoBatchPickResult {
+  const maxFiles = opts?.maxFiles ?? CURRICULO_BATCH_MAX
+  const maxBytes = opts?.maxBytes ?? CURRICULO_MAX_BYTES
+  const raw = list ? Array.from(list) : []
+  if (raw.length === 0) {
+    return { ok: false, error: 'Escolha ao menos um PDF ou foto de currículo.', files: [] }
+  }
+  if (raw.length > maxFiles) {
+    return {
+      ok: false,
+      error: `No máximo ${maxFiles} currículos por vez. Selecione menos arquivos.`,
+      files: [],
+    }
+  }
+  const files: File[] = []
+  for (const file of raw) {
+    if (file.size > maxBytes) {
+      return {
+        ok: false,
+        error: `"${file.name}" acima de ${Math.round(maxBytes / (1024 * 1024))} MB. Compacte ou envie separado.`,
+        files: [],
+      }
+    }
+    const contentType = guessCurriculoContentType(file.name, file.type)
+    if (!isAllowedCurriculoContentType(contentType, file.name)) {
+      return {
+        ok: false,
+        error: `"${file.name}" inválido. Use PDF, JPG, PNG, WEBP ou HEIC.`,
+        files: [],
+      }
+    }
+    files.push(file)
+  }
+  return { ok: true, files }
 }
 
 export function guessCurriculoContentType(

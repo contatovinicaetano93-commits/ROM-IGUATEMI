@@ -8,11 +8,12 @@ import { IntranetPageSkeleton } from '../_components/intranet/IntranetPageSkelet
 import { PanelButton, SectionCard } from '../_components/ui'
 import {
   CURRICULO_ACCEPT,
-  CURRICULO_MAX_BYTES,
+  CURRICULO_BATCH_MAX,
   CURRICULO_SERVER_UPLOAD_MAX_BYTES,
+  candidateNameFromFileName,
   curriculoBlobPathname,
   guessCurriculoContentType,
-  isAllowedCurriculoContentType,
+  pickCurriculoBatchFiles,
   safeCurriculoFileName,
 } from '@/lib/curriculos/file'
 import {
@@ -43,16 +44,6 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** Sugere nome do candidato a partir do arquivo (ex.: PDF de teste do motor). */
-function suggestNameFromFile(fileName: string): string | null {
-  const base = fileName.replace(/\.[^.]+$/, '').trim()
-  if (/curriculo[-_]?teste[-_]?motor[-_]?rom[-_]?2/i.test(base)) {
-    return 'Rafael Mendes Oliveira'
-  }
-  if (/curriculo[-_]?teste[-_]?motor/i.test(base)) return 'Camila Souza Ribeiro'
-  return null
-}
-
 export default function CurriculosPage() {
   const [items, setItems] = useState<Curriculo[]>([])
   const [booted, setBooted] = useState(false)
@@ -63,6 +54,7 @@ export default function CurriculosPage() {
   const [debouncedQ, setDebouncedQ] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [saving, setSaving] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const formActionRef = useRef<HTMLDivElement>(null)
@@ -73,7 +65,7 @@ export default function CurriculosPage() {
   const [desiredRole, setDesiredRole] = useState('')
   const [keywords, setKeywords] = useState('')
   const [notes, setNotes] = useState('')
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQ(q.trim()), 300)
@@ -108,40 +100,34 @@ export default function CurriculosPage() {
     void load()
   }, [load])
 
-  function onPickFile(next: File | null) {
+  function onPickFiles(list: FileList | null) {
     setError(null)
-    if (!next) {
-      setFile(null)
-      return
-    }
-    if (next.size > CURRICULO_MAX_BYTES) {
-      setFile(null)
-      setError('Arquivo acima de 10 MB. Compacte o PDF ou envie uma foto menor.')
+    setNotice(null)
+    const picked = pickCurriculoBatchFiles(list)
+    if (!picked.ok) {
+      setFiles([])
+      setError(picked.error)
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
-    const contentType = guessCurriculoContentType(next.name, next.type)
-    if (!isAllowedCurriculoContentType(contentType, next.name)) {
-      setFile(null)
-      setError('Formato inválido. Use PDF, JPG, PNG, WEBP ou HEIC (foto do celular).')
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      return
-    }
-    setFile(next)
-    // Só escolher o arquivo não dispara o motor — ainda falta Nome + Anexar.
-    if (!name.trim()) {
-      const suggested = suggestNameFromFile(next.name)
-      if (suggested) setName(suggested)
+    setFiles(picked.files)
+    // Um arquivo: sugere nome no campo se estiver vazio. Lote: nome por arquivo no envio.
+    if (picked.files.length === 1 && !name.trim()) {
+      setName(candidateNameFromFileName(picked.files[0]!.name))
     }
   }
 
-  async function uploadViaServer(formFile: File): Promise<{
-    file_url: string
-    file_name: string
-    file_content_type: string
-  } | null> {
+  function resolveCandidateName(file: File, batch: boolean): string {
+    if (!batch && name.trim()) return name.trim()
+    return candidateNameFromFileName(file.name)
+  }
+
+  async function uploadViaServer(
+    formFile: File,
+    candidateName: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
     const fd = new FormData()
-    fd.set('candidate_name', name.trim())
+    fd.set('candidate_name', candidateName)
     fd.set('email', email.trim())
     fd.set('phone', phone.trim())
     fd.set('desired_role', desiredRole.trim())
@@ -156,10 +142,9 @@ export default function CurriculosPage() {
     })
     const json = await res.json().catch(() => ({}))
     if (!res.ok) {
-      setError(json.error ?? 'Não foi possível salvar o currículo')
-      return null
+      return { ok: false, error: json.error ?? `Falha em ${formFile.name}` }
     }
-    return { file_url: 'ok', file_name: formFile.name, file_content_type: formFile.type }
+    return { ok: true }
   }
 
   async function uploadViaBlob(formFile: File): Promise<{
@@ -177,78 +162,113 @@ export default function CurriculosPage() {
     return { url: blob.url, name: fileName, contentType }
   }
 
+  async function uploadOne(
+    formFile: File,
+    candidateName: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (formFile.size <= CURRICULO_SERVER_UPLOAD_MAX_BYTES) {
+      return uploadViaServer(formFile, candidateName)
+    }
+    try {
+      const blob = await uploadViaBlob(formFile)
+      const res = await fetch('/api/curriculos', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate_name: candidateName,
+          email: email.trim() || null,
+          phone: phone.trim() || null,
+          desired_role: desiredRole.trim() || null,
+          keywords,
+          notes: notes.trim() || null,
+          file_url: blob.url,
+          file_name: blob.name,
+          file_content_type: blob.contentType,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        return { ok: false, error: json.error ?? `Falha em ${formFile.name}` }
+      }
+      return { ok: true }
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : 'Falha no upload'
+      const message =
+        raw.includes('Failed to  retrieve the client token') ||
+        raw.includes('Failed to retrieve the client token')
+          ? 'Falha ao autorizar o upload. Recarregue e tente de novo.'
+          : raw
+      return { ok: false, error: `${formFile.name}: ${message}` }
+    }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!file) {
-      setError('Escolha o PDF ou foto do currículo e depois clique em Anexar currículo.')
+    if (files.length === 0) {
+      setError('Escolha até 20 PDFs/fotos e clique em Anexar.')
       formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
-    if (!name.trim()) {
-      setError('Preencha o Nome do candidato (campo no topo do formulário) e clique em Anexar currículo.')
+    const batch = files.length > 1
+    if (!batch && !name.trim()) {
+      setError('Preencha o Nome do candidato (ou deixe o sugerido pelo arquivo) e clique em Anexar.')
       nameInputRef.current?.focus()
-      nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
+
     setSaving(true)
     setError(null)
     setNotice(null)
+    setProgress({ done: 0, total: files.length })
+
+    let okCount = 0
+    const failures: string[] = []
+
     try {
-      // Preferência: multipart no servidor (cookies + um único POST). Arquivos > 4 MB vão pelo Blob client.
-      if (file.size <= CURRICULO_SERVER_UPLOAD_MAX_BYTES) {
-        const ok = await uploadViaServer(file)
-        if (!ok) {
-          formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          return
-        }
-      } else {
-        const blob = await uploadViaBlob(file)
-        const res = await fetch('/api/curriculos', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            candidate_name: name.trim(),
-            email: email.trim() || null,
-            phone: phone.trim() || null,
-            desired_role: desiredRole.trim() || null,
-            keywords,
-            notes: notes.trim() || null,
-            file_url: blob.url,
-            file_name: blob.name,
-            file_content_type: blob.contentType,
-          }),
-        })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          setError(json.error ?? 'Não foi possível salvar o currículo')
-          formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          return
-        }
+      // Fila sequencial: mesmo createCurriculo (extrai texto + briefing) por arquivo.
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]!
+        const candidateName = resolveCandidateName(file, batch)
+        const result = await uploadOne(file, candidateName)
+        if (result.ok) okCount += 1
+        else failures.push(result.error)
+        setProgress({ done: i + 1, total: files.length })
       }
 
-      setNotice('Currículo anexado e indexado para busca.')
-      setName('')
-      setEmail('')
-      setPhone('')
-      setDesiredRole('')
-      setKeywords('')
-      setNotes('')
-      setFile(null)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      await load()
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : 'Falha no upload'
-      setError(
-        raw.includes('Failed to  retrieve the client token') ||
-          raw.includes('Failed to retrieve the client token')
-          ? 'Falha ao autorizar o upload. Recarregue a página e tente de novo com PDF ou foto.'
-          : raw,
-      )
-      formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (okCount > 0) {
+        setNotice(
+          okCount === files.length
+            ? files.length === 1
+              ? 'Currículo anexado e indexado para busca.'
+              : `${okCount} currículos anexados e indexados para busca.`
+            : `${okCount} de ${files.length} anexados. ${failures.length} falharam.`,
+        )
+        if (okCount === files.length) {
+          setName('')
+          setEmail('')
+          setPhone('')
+          setDesiredRole('')
+          setKeywords('')
+          setNotes('')
+          setFiles([])
+          if (fileInputRef.current) fileInputRef.current.value = ''
+        } else {
+          // Mantém arquivos para retry manual; limpa só se quiser — deixa lista.
+          setFiles([])
+          if (fileInputRef.current) fileInputRef.current.value = ''
+        }
+        await load()
+      }
+      if (failures.length > 0) {
+        setError(failures.slice(0, 5).join(' · ') + (failures.length > 5 ? '…' : ''))
+        formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      } else {
+        formActionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
     } finally {
       setSaving(false)
+      setProgress(null)
     }
   }
 
@@ -278,10 +298,12 @@ export default function CurriculosPage() {
     )
   }
 
+  const batch = files.length > 1
+
   return (
     <IntranetPage
       title="Currículos"
-      subtitle="Anexe CVs, leia o briefing e filtre por palavras-chave da vaga."
+      subtitle="Anexe CVs (até 20 de uma vez), leia o briefing e filtre por palavras-chave da vaga."
     >
       {error ? <p className="mb-3 text-sm text-red-700">{error}</p> : null}
       {notice ? <p className="mb-3 text-sm text-emerald-800">{notice}</p> : null}
@@ -290,14 +312,18 @@ export default function CurriculosPage() {
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block text-sm">
-              Nome *
+              Nome {batch ? '(opcional no lote)' : '*'}
               <input
                 ref={nameInputRef}
                 className="mt-1 w-full rounded border px-3 py-2"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="ex.: Camila Souza Ribeiro"
-                required
+                placeholder={
+                  batch
+                    ? 'No lote, cada arquivo usa o nome do PDF'
+                    : 'ex.: Camila Souza Ribeiro'
+                }
+                required={!batch}
               />
             </label>
             <label className="block text-sm">
@@ -346,28 +372,44 @@ export default function CurriculosPage() {
             />
           </label>
           <div className="block text-sm">
-            <span className="font-medium">Arquivo (PDF ou foto, até 10 MB) *</span>
+            <span className="font-medium">
+              Arquivos (PDF ou foto, até 10 MB cada · máx. {CURRICULO_BATCH_MAX}) *
+            </span>
             <div className="mt-1 flex flex-col gap-2 rounded border border-dashed border-border bg-card/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                {file ? (
+                {files.length === 0 ? (
+                  <p className="text-sm text-muted">
+                    Escolha um ou vários PDFs/fotos — o motor lê cada um e adiciona na lista.
+                  </p>
+                ) : files.length === 1 ? (
                   <p className="truncate text-sm text-foreground">
-                    {file.name}{' '}
-                    <span className="text-muted">({formatBytes(file.size)})</span>
+                    {files[0]!.name}{' '}
+                    <span className="text-muted">({formatBytes(files[0]!.size)})</span>
                   </p>
                 ) : (
-                  <p className="text-sm text-muted">
-                    Escolha o PDF do currículo ou uma foto tirada do celular.
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-sm text-foreground">
+                      {files.length} arquivos selecionados
+                    </p>
+                    <ul className="max-h-28 overflow-y-auto text-xs text-muted">
+                      {files.map((f) => (
+                        <li key={`${f.name}-${f.size}-${f.lastModified}`} className="truncate">
+                          {f.name} ({formatBytes(f.size)}) → {candidateNameFromFileName(f.name)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
               <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-card">
-                {file ? 'Trocar arquivo' : 'Escolher arquivo'}
+                {files.length ? 'Trocar arquivos' : 'Escolher arquivos'}
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept={CURRICULO_ACCEPT}
+                  multiple
                   className="sr-only"
-                  onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
+                  onChange={(e) => onPickFiles(e.target.files)}
                 />
               </label>
             </div>
@@ -375,19 +417,33 @@ export default function CurriculosPage() {
           <div ref={formActionRef} className="space-y-2">
             {error ? <p className="text-sm text-red-700">{error}</p> : null}
             {notice ? <p className="text-sm text-emerald-800">{notice}</p> : null}
-            {!file || !name.trim() ? (
+            {progress ? (
               <p className="text-xs text-muted">
-                {!file
-                  ? 'Escolha o arquivo e, se o Nome estiver vazio, preencha no topo. Depois clique em Anexar currículo para o motor ler.'
-                  : 'Arquivo pronto. Preencha o Nome no topo do formulário e clique em Anexar currículo — só então o motor lê o PDF.'}
+                Processando {progress.done}/{progress.total}…
+              </p>
+            ) : files.length === 0 ? (
+              <p className="text-xs text-muted">
+                Selecione até {CURRICULO_BATCH_MAX} arquivos e clique em Anexar — o motor lê cada
+                PDF e gera o briefing.
+              </p>
+            ) : batch ? (
+              <p className="text-xs text-muted">
+                Lote: cada arquivo vira um currículo (nome do PDF). Cargo/tags/obs. valem para
+                todos. Envio em fila, um a um.
               </p>
             ) : (
               <p className="text-xs text-muted">
-                Pronto: ao clicar, o motor lê o PDF, gera o briefing e lista abaixo.
+                Pronto: ao clicar, o motor lê o arquivo, gera o briefing e lista abaixo.
               </p>
             )}
             <PanelButton type="submit" disabled={saving}>
-              {saving ? 'Lendo e salvando…' : 'Anexar currículo'}
+              {saving
+                ? progress
+                  ? `Lendo ${progress.done}/${progress.total}…`
+                  : 'Lendo e salvando…'
+                : batch
+                  ? `Anexar ${files.length} currículos`
+                  : 'Anexar currículo'}
             </PanelButton>
           </div>
         </form>
