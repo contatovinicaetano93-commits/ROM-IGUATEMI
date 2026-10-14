@@ -6,6 +6,13 @@ import {
 } from '@/lib/director-report/match-pro'
 import { findEmployeeById } from '@/lib/employees'
 
+/** Nome Avec “só deste profissional” — listas `A,B` não viram variante de carteira. */
+export function isSoloProfessionalName(raw: string | null | undefined): boolean {
+  const name = raw?.trim()
+  if (!name) return false
+  return splitProfessionalNameList(name).length === 1
+}
+
 /**
  * Nome Avec vinculado ao colaborador logado.
  * Com `professional_name`, a carteira é só clientes ligados a esse nome
@@ -94,6 +101,9 @@ export async function listMatchingProfessionalNameVariants(
   for (const row of rows) {
     const candidate = row.name?.trim()
     if (!candidate) continue
+    // Listas Avec multi-pro não entram como variante — senão um
+    // "Atendimento" compartilhado puxa o cliente pra carteira errada.
+    if (!isSoloProfessionalName(candidate)) continue
     if (professionalNameOwns(candidate, name)) matched.add(candidate)
   }
   return [...matched]
@@ -101,7 +111,7 @@ export async function listMatchingProfessionalNameVariants(
 
 /**
  * Contatos do profissional: preferência (cabelo/manicure) ou serviço/visita
- * em qualquer variante de nome Avec que case com o vínculo do colaborador.
+ * solo (não lista `A,B`) com procedimento real — não Atendimento genérico.
  */
 export async function listContactIdsOwnedByProfessional(
   professionalName: string,
@@ -125,6 +135,13 @@ export async function listContactIdsOwnedByProfessional(
       where c.anonymized_at is null
         and cs.professional_name is not null
         and trim(cs.professional_name) in ${sql(variants)}
+        and position(',' in cs.professional_name) = 0
+        and position(';' in cs.professional_name) = 0
+        and position('/' in cs.professional_name) = 0
+        and position('|' in cs.professional_name) = 0
+        and lower(btrim(cs.name)) not in (
+          'atendimento', 'servico', 'serviço', 'visita', 'service'
+        )
       union
       select csv.contact_id as id
       from client_service_visits csv
@@ -132,6 +149,13 @@ export async function listContactIdsOwnedByProfessional(
       where c.anonymized_at is null
         and csv.professional_name is not null
         and trim(csv.professional_name) in ${sql(variants)}
+        and position(',' in csv.professional_name) = 0
+        and position(';' in csv.professional_name) = 0
+        and position('/' in csv.professional_name) = 0
+        and position('|' in csv.professional_name) = 0
+        and lower(btrim(csv.service_name)) not in (
+          'atendimento', 'servico', 'serviço', 'visita', 'service'
+        )
     ) owned
   `) as { id: string }[]
   return rows.map((row) => row.id)
@@ -162,6 +186,13 @@ export async function contactBelongsToProfessional(
         and c.anonymized_at is null
         and cs.professional_name is not null
         and trim(cs.professional_name) in ${sql(variants)}
+        and position(',' in cs.professional_name) = 0
+        and position(';' in cs.professional_name) = 0
+        and position('/' in cs.professional_name) = 0
+        and position('|' in cs.professional_name) = 0
+        and lower(btrim(cs.name)) not in (
+          'atendimento', 'servico', 'serviço', 'visita', 'service'
+        )
     )
     or exists (
       select 1 from client_service_visits csv
@@ -170,6 +201,13 @@ export async function contactBelongsToProfessional(
         and c.anonymized_at is null
         and csv.professional_name is not null
         and trim(csv.professional_name) in ${sql(variants)}
+        and position(',' in csv.professional_name) = 0
+        and position(';' in csv.professional_name) = 0
+        and position('/' in csv.professional_name) = 0
+        and position('|' in csv.professional_name) = 0
+        and lower(btrim(csv.service_name)) not in (
+          'atendimento', 'servico', 'serviço', 'visita', 'service'
+        )
     )
     limit 1
   `) as { ok: number }[]

@@ -20,6 +20,7 @@ import { requirePanelModule } from '@/lib/auth'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 import {
   listContactIdsOwnedByProfessional,
+  listMatchingProfessionalNameVariants,
   resolveSessionProfessionalScope,
 } from '@/lib/intranet/professional-scope'
 import { z } from 'zod'
@@ -94,11 +95,12 @@ export async function GET(req: NextRequest) {
 
     const proScope = await resolveSessionProfessionalScope(auth.session)
     const ownedIds = proScope ? await listContactIdsOwnedByProfessional(proScope) : null
+    const proVariants = proScope ? await listMatchingProfessionalNameVariants(proScope) : []
 
     if (countsOnly) {
       if (proScope && ownedIds) {
         const [urgency, no_cadence] = await Promise.all([
-          countOwnedUrgencyQueues(ownedIds),
+          countOwnedUrgencyQueues(ownedIds, { professionalVariants: proVariants }),
           countContactsWithoutCadence({ contactIds: ownedIds }),
         ])
         return okCached(null, 15, {
@@ -266,8 +268,9 @@ export async function GET(req: NextRequest) {
           pendingOnly,
           orderBy: sort === 'name' ? 'name' : 'urgency',
           urgencyQueue,
+          professionalName: proScope,
         }),
-        countOwnedUrgencyQueues(ownedIds),
+        countOwnedUrgencyQueues(ownedIds, { professionalVariants: proVariants }),
         countContactsWithoutCadence({ contactIds: ownedIds }),
       ])
       let items = listed.items

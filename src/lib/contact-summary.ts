@@ -11,6 +11,7 @@ import {
   listPendingActivatedContacts,
 } from '@/lib/salon/reactivation-kpi'
 import { compareByOverdueThenName, urgencyForServices } from '@/lib/salon/urgency'
+import { professionalNameOwns } from '@/lib/intranet/professional-scope'
 
 export interface ContactListItem extends ContactRow {
   overdue: number
@@ -144,7 +145,10 @@ async function fetchContactsByIds(ids: string[]): Promise<ContactRow[]> {
 }
 
 /** Carrega serviços só dos contatos pedidos — colunas de urgência (sem notes/payloads pesados). */
-async function loadServicesByContactIds(ids: string[]): Promise<Map<string, ClientService[]>> {
+async function loadServicesByContactIds(
+  ids: string[],
+  opts?: { professionalName?: string | null },
+): Promise<Map<string, ClientService[]>> {
   const byContact = new Map<string, ClientService[]>()
   if (ids.length === 0) return byContact
   const sql = getSql()
@@ -159,15 +163,17 @@ async function loadServicesByContactIds(ids: string[]): Promise<Map<string, Clie
       scheduled_at,
       product,
       active,
-      created_at
+      created_at,
+      professional_name
     from client_services
     where active = true and contact_id in ${sql(ids)}
-  `) as Omit<ClientService, 'notes' | 'professional_name' | 'last_price'>[]
+  `) as Omit<ClientService, 'notes' | 'last_price'>[]
+  const proScope = opts?.professionalName?.trim() || null
   for (const s of services) {
+    if (proScope && !professionalNameOwns(s.professional_name, proScope)) continue
     const row: ClientService = {
       ...s,
       notes: null,
-      professional_name: null,
       last_price: null,
     }
     const list = byContact.get(row.contact_id) ?? []
@@ -994,23 +1000,23 @@ export async function listActivatedContacts(opts?: {
   return { items, total }
 }
 
-/**
- * Contagens Atrasados/Vencendo/Agendados da carteira do profissional.
- * Agrega no SQL — não carrega client_services inteiro em JS só para badges.
- */
 export async function countOwnedUrgencyQueues(
   ownedContactIds: readonly string[],
+  opts?: { professionalVariants?: readonly string[] | null },
 ): Promise<UrgencyQueueCounts> {
   if (ownedContactIds.length === 0) {
     return { overdue: 0, due_soon: 0, scheduled: 0 }
   }
   const sql = getSql()
   const ids = [...ownedContactIds]
+  const variants = (opts?.professionalVariants ?? []).map((v) => v.trim()).filter(Boolean)
+  const filterByPro = variants.length > 0
   const rows = (await sql`
     with svc as (
       select
         contact_id,
         scheduled_at,
+        last_done_at,
         case
           when cadence_days is null or last_done_at is null then null
           -- Placeholder Avec (Atendimento etc.) — ver isCadencePlaceholderServiceName
@@ -1020,16 +1026,22 @@ export async function countOwnedUrgencyQueues(
       from client_services
       where active = true
         and contact_id in ${sql(ids)}
+        and (
+          ${filterByPro} = false
+          or trim(coalesce(professional_name, '')) in ${sql(variants.length ? variants : [''])}
+        )
     ),
-    per_contact as (
+    latest as (
+      select distinct on (contact_id)
+        contact_id,
+        next_due
+      from svc
+      where next_due is not null
+      order by contact_id, last_done_at desc nulls last
+    ),
+    scheduled as (
       select
         contact_id,
-        count(*) filter (where next_due is not null and next_due < now())::int as overdue,
-        count(*) filter (
-          where next_due is not null
-            and next_due >= now()
-            and next_due <= now() + (${DUE_SOON_DAYS} * interval '1 day')
-        )::int as due_soon,
         count(*) filter (
           where scheduled_at is not null
             and (scheduled_at at time zone 'America/Sao_Paulo')::date
@@ -1040,6 +1052,20 @@ export async function countOwnedUrgencyQueues(
         )::int as scheduled_soon
       from svc
       group by contact_id
+    ),
+    per_contact as (
+      select
+        coalesce(l.contact_id, s.contact_id) as contact_id,
+        case when l.next_due is not null and l.next_due < now() then 1 else 0 end as overdue,
+        case
+          when l.next_due is not null
+            and l.next_due >= now()
+            and l.next_due <= now() + (${DUE_SOON_DAYS} * interval '1 day')
+          then 1 else 0
+        end as due_soon,
+        coalesce(s.scheduled_soon, 0) as scheduled_soon
+      from latest l
+      full outer join scheduled s on s.contact_id = l.contact_id
     )
     select
       count(*) filter (where pc.overdue > 0)::int as overdue,
@@ -1052,6 +1078,11 @@ export async function countOwnedUrgencyQueues(
   return rows[0] ?? { overdue: 0, due_soon: 0, scheduled: 0 }
 }
 
+/**
+ * Lista só os contatos do profissional (ids já resolvidos pelo ownership).
+ * Usado quando o colaborador tem `professional_name` — não vê a base da unidade.
+ */
+
 export async function listContactsOwnedByIds(
   ownedContactIds: readonly string[],
   opts?: {
@@ -1060,6 +1091,7 @@ export async function listContactsOwnedByIds(
     orderBy?: 'urgency' | 'name'
     pendingOnly?: boolean
     urgencyQueue?: 'overdue' | 'due_soon' | 'scheduled' | null
+    professionalName?: string | null
   },
 ): Promise<ContactListResult> {
   if (ownedContactIds.length === 0) return { items: [], total: 0 }
@@ -1085,7 +1117,9 @@ export async function listContactsOwnedByIds(
     })
   }
 
-  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id))
+  const byContact = await loadServicesByContactIds(contacts.map((c) => c.id), {
+    professionalName: opts?.professionalName,
+  })
   let items = withUrgency(contacts, byContact)
 
   if (opts?.pendingOnly) {
