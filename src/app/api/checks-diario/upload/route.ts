@@ -1,6 +1,7 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/lib/auth'
+import { rewriteBlobUploadError } from '@/lib/blob/access'
 import { assertChecksDiarioBlobPathname } from '@/lib/checks-diario/photo'
 import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
 
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(jsonResponse)
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Erro no upload' },
+      { error: rewriteBlobUploadError(e).message },
       { status: 400 },
     )
   }

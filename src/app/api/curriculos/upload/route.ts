@@ -1,6 +1,7 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSession } from '@/lib/auth'
+import { rewriteBlobUploadError } from '@/lib/blob/access'
 import { canUseCurriculos } from '@/lib/curriculos/access'
 import {
   CURRICULO_ALLOWED_CONTENT_TYPES,
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json(jsonResponse)
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Erro no upload'
+    const message = rewriteBlobUploadError(e).message
     console.error('[curriculos/upload]', message)
     return NextResponse.json({ error: message }, { status: 400 })
   }
