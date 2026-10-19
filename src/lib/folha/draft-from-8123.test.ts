@@ -217,7 +217,7 @@ describe('buildFolhaDraftLine', () => {
     }
   })
 
-  it('BR cabeleireiro: taxa adm motor 5% quando 8123 veio 0', () => {
+  it('BR cabeleireiro: a_pagar 0123 = rateio → exibe adm 5%, não reabate no líquido', () => {
     const line = buildFolhaDraftLine(
       'brasil',
       {
@@ -241,7 +241,64 @@ describe('buildFolhaDraftLine', () => {
     )
     expect(line.taxa_administrativa).toBe(500)
     expect(line.taxa_administrativa_rate).toBe(0.05)
-    expect(line.proposed_pay).toBe(4500)
+    // rateio (charged/2) = a_pagar → líquido = 0123, adm só conferência
+    expect(line.proposed_pay).toBe(5000)
+    expect(line.flags).not.toContain('taxa_adm_motor')
+  })
+
+  it('Out Q1 pro: a_pagar = ss+prod+assist+outros+cartão → não +meio −adm', () => {
+    // Alan BR 01–15/10: motor antigo somava meio−adm e furava o 0123.
+    const line = buildFolhaDraftLine(
+      'brasil',
+      {
+        name: 'ALAN FERNADO DE ALBUQUERQUE',
+        role: 'Cabeleireiro',
+        charged: 93020.00011014938,
+        service_share: 51160.999905347824,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: -1281.720004454255,
+        card_fee: -1367.1004881113768,
+        admin_fee: 0,
+        assistant_discount: -12699.60000360012,
+        other_discounts: -7120.479919433594,
+        net_payable: 28692.099489748478,
+        house_share: 41859.00020480156,
+      },
+      undefined,
+      { applyTaxExtras: false },
+    )
+    expect(line.meio_a_meio).toBeCloseTo(6349.8, 1)
+    expect(line.proposed_pay).toBeCloseTo(28692.1, 1)
+    expect(line.flags).not.toContain('taxa_adm_motor')
+  })
+
+  it('Maykon IG Out Q1: líquido Avec fechado → não credita leftover olerite', () => {
+    // descontos 8123 ≈ (adm−meio)+residual; leftover Tamires inventava +6031 no pay.
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'MAYKON LUIZ DOS SANTOS CARDOZO',
+        role: 'Cabeleireiro',
+        charged: 73037.19426345825,
+        service_share: 39900.95664334297,
+        product_share: 24.49999976158142,
+        other_share: null,
+        tip: 0,
+        product_spend: -2537.3700162768364,
+        card_fee: -987.0979097783566,
+        admin_fee: 0,
+        assistant_discount: -6420.719379425049,
+        other_discounts: -8053.700042724609,
+        net_payable: 21926.569294899702,
+        house_share: 33111.7376203537,
+      },
+      { consumo_baru: 120 },
+      { applyTaxExtras: true },
+    )
+    expect(line.proposed_pay).toBeCloseTo(21926.57, 1)
+    expect(line.flags).not.toContain('taxa_adm_motor')
   })
 
   it('Alison BR Q2: adm 5% + a_pagar já neteado (descontos=0) → não reabate; +Baru = olerite', () => {

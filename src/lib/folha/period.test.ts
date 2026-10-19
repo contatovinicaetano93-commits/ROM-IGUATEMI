@@ -81,20 +81,33 @@ describe('folha period pay dates', () => {
     expect(defaultFolhaTaxQuinzena('2026-10-21').id).toBe('2026-11-q1')
   })
 
-  it('cron diário: em 01–15/10 só Q1/10 (Q2/09 já fechada)', () => {
+  it('cron diário: até o pagamento (Q2/09 paga 05/10; Q1/10 paga 20/10)', () => {
     expect(folhaQuinzenasForDailyRefresh('2026-10-01').map((q) => q.id)).toEqual([
+      '2026-09-q2',
+    ])
+    expect(folhaQuinzenasForDailyRefresh('2026-10-05').map((q) => q.id)).toEqual([
+      '2026-09-q2',
+    ])
+    expect(folhaQuinzenasForDailyRefresh('2026-10-06').map((q) => q.id)).toEqual([
       '2026-10-q1',
     ])
-    expect(folhaQuinzenasForDailyRefresh('2026-10-04').map((q) => q.id)).toEqual([
+    expect(folhaQuinzenasForDailyRefresh('2026-10-19').map((q) => q.id)).toEqual([
       '2026-10-q1',
     ])
-    expect(folhaQuinzenasForDailyRefresh('2026-10-10').map((q) => q.id)).toEqual([
+    expect(folhaQuinzenasForDailyRefresh('2026-10-20').map((q) => q.id)).toEqual([
       '2026-10-q1',
+    ])
+    // Dia 21: Q1 já paga → passa a Q2/10 (paga 05/11)
+    expect(folhaQuinzenasForDailyRefresh('2026-10-21').map((q) => q.id)).toEqual([
+      '2026-10-q2',
     ])
   })
 
-  it('cron diário: em 20/09 só Q2/09 (em curso)', () => {
+  it('cron diário: no dia 20/09 ainda Q1 (paga 20); dia 21 → Q2', () => {
     expect(folhaQuinzenasForDailyRefresh('2026-09-20').map((q) => q.id)).toEqual([
+      '2026-09-q1',
+    ])
+    expect(folhaQuinzenasForDailyRefresh('2026-09-21').map((q) => q.id)).toEqual([
       '2026-09-q2',
     ])
   })
@@ -125,6 +138,7 @@ describe('folha period pay dates', () => {
         referenceDay: '2026-10-03',
       }),
     ).toBe(false)
+    // Após o fim da janela, se reference já é o `to`, não há gap de dias
     const q2 = quinzenaForDay('2026-09-30')
     expect(
       shouldRefreshInProgressFolhaDraft({
@@ -134,5 +148,14 @@ describe('folha period pay dates', () => {
         referenceDay: '2026-09-30',
       }),
     ).toBe(false)
+    // Ainda no prazo de pagamento: rascunho sem reference continua elegível
+    expect(
+      shouldRefreshInProgressFolhaDraft({
+        status: 'ready_for_review',
+        quinzena: q1,
+        today: '2026-10-19',
+        referenceDay: null,
+      }),
+    ).toBe(true)
   })
 })

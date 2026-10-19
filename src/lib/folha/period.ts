@@ -163,16 +163,18 @@ export function resolveFolhaQuinzena(opts?: {
 }
 
 /**
- * Quinzenas que o cron diário deve recalcular: só a que está em curso
- * (hoje entre `from` e `to`). Quinzena já fechada (ex.: Q2/09 em 04/10)
- * fica congelada para conferência/pagamento — não reabrir o 8123.
+ * Quinzenas que o cron diário deve recalcular: a cujo pagamento ainda não
+ * passou (`defaultFolhaQuinzena`), desde o início da janela até o dia do
+ * pagamento (inclui 16–20 na Q1 e 1–5 na virada da Q2). Assim o 8123/0123
+ * continua atualizando depois do dia 15 — antes o cron parava e a intranet
+ * ficava com rascunho parcial/desatualizado.
  */
 export function folhaQuinzenasForDailyRefresh(
   today = todayIsoSaoPaulo(),
 ): FolhaQuinzena[] {
-  const calendar = quinzenaForDay(today)
-  if (today < calendar.from || today > calendar.to) return []
-  return [calendar]
+  const target = defaultFolhaQuinzena(today)
+  if (today < target.from || today > target.payDate) return []
+  return [target]
 }
 
 export type FolhaOpenStatus =
@@ -183,8 +185,8 @@ export type FolhaOpenStatus =
   | 'paid'
 
 /**
- * Rascunho aberto de quinzena em curso, com 8123 defasado em relação a hoje.
- * Não mexe em aprovado/pago nem em período já fechado.
+ * Rascunho aberto até o dia do pagamento, com 8123 defasado em relação a hoje.
+ * Não mexe em aprovado/pago.
  */
 export function shouldRefreshInProgressFolhaDraft(args: {
   status: FolhaOpenStatus
@@ -199,7 +201,10 @@ export function shouldRefreshInProgressFolhaDraft(args: {
       return false
     case 'draft':
     case 'ready_for_review': {
-      if (args.today < args.quinzena.from || args.today > args.quinzena.to) {
+      if (
+        args.today < args.quinzena.from ||
+        args.today > args.quinzena.payDate
+      ) {
         return false
       }
       const expectedEnd = clampQuinzenaFetchEnd(args.quinzena, args.today)
