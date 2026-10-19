@@ -658,6 +658,59 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(68976.53, 1)
   })
 
+  it('Romeu BR: a_pagar fechado + crédito (meio−adm)+residual → pay = net (não estorna)', () => {
+    // Out Q1 2026: other ≈ (meio−adm) + residual; Fopag/0123 = a_pagar.
+    // Estornar residual cortava ~R$13.642 no proposed_pay.
+    const row = {
+      name: 'ROMEU FELIPE',
+      role: 'Cabeleireiro',
+      charged: 53219,
+      service_share: 41950,
+      product_share: 0,
+      other_share: null,
+      tip: 0,
+      product_spend: -2749.67,
+      card_fee: -327.6499,
+      admin_fee: 0,
+      assistant_discount: -5855.4733,
+      other_discounts: 13909.2303,
+      // rateio(41950−327.6499) + product + assist + other
+      net_payable: 46926.4371,
+      house_share: null,
+    }
+    const line = buildFolhaDraftLine('brasil', row, undefined, {
+      applyTaxExtras: true,
+    })
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.folha_extras.descontos_diversos).toBeNull()
+    expect(line.proposed_pay).toBeCloseTo(row.net_payable, 2)
+  })
+
+  it('Walter BR: a_pagar fechado + crédito (meio−adm)+residual → pay = net', () => {
+    const row = {
+      name: 'WALTER MARTINHO LEAL FILHO CABELEIREIRO',
+      role: 'Cabeleireiro',
+      charged: 112364.872,
+      service_share: 67420.9232,
+      product_share: 0,
+      other_share: null,
+      tip: 0,
+      product_spend: -1435.05,
+      card_fee: -1672.0368,
+      admin_fee: 0,
+      assistant_discount: -11696.702,
+      other_discounts: 2320.3699,
+      // rateio(67420.9232−1672.0368) + product + assist + other
+      net_payable: 54937.5043,
+      house_share: null,
+    }
+    const line = buildFolhaDraftLine('brasil', row, undefined, {
+      applyTaxExtras: true,
+    })
+    expect(line.flags).toContain('taxa_adm_em_descontos')
+    expect(line.proposed_pay).toBeCloseTo(row.net_payable, 2)
+  })
+
   it('Joanides: crédito (meio−adm)−Baru embutido → líquido = a_pagar', () => {
     const row = {
       name: 'JOANIDES MENDES PONTES JUNIOR',

@@ -1060,7 +1060,10 @@ export function buildFolhaDraftLine(
    * Coluna W (taxa_servicos) permanece o valor verdadeiro U×alíquota.
    *
    * Crédito residual (Brunna): descontos ≈ (meio − adm) + residual — a_pagar
-   * já somou o residual; estornar via descontos_diversos no pay.
+   * já somou o residual; estornar via descontos_diversos no pay **só se**
+   * o líquido Avec NÃO fecha (senão Romeu/Walter BR Out Q1: −13k/−2k
+   * fantasma vs 0123/Fopag). Crédito órfão sem meio/adm (Romeu remessa
+   * charged=0) continua estornando — `embeddedAdminMeio` falso.
    *
    * Assistente/multiplicador: U/V/W na Fopag são conferência / repasse ao
    * profissional — não entram no líquido do assistente (só no pro).
@@ -1090,7 +1093,10 @@ export function buildFolhaDraftLine(
     }
   }
 
+  const skipCreditResidualEstorno =
+    aPagarIsAvecLiquid && olerite.embeddedAdminMeio
   if (
+    !skipCreditResidualEstorno &&
     olerite.embeddedCreditResidual != null &&
     olerite.embeddedCreditResidual > 0.02
   ) {
