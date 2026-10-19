@@ -292,6 +292,37 @@ export function aPagarAlreadyNetsAdminMeio(args: {
 }
 
 /**
+ * `a_pagar` 8123/0123 já é o líquido Avec: rateio_após_cartão + rateio
+ * produtos + product_spend + assistente + outros (valores assinados).
+ * Quando casa, o motor NÃO pode recreditar meio nem reabater taxa adm —
+ * senão a intranet diverge do relatório 0123 (Out Q1: Alan/Walter/Brunna).
+ * `product_share` entra na soma (Daniel Viana Out Q1: drift = product_share).
+ */
+export function aPagarMatchesAvecLiquid(args: {
+  netPayable: number | null | undefined
+  rateioAposCartao: number | null
+  /** Rateio de produtos 8123 (soma no a_pagar; não confundir com product_spend). */
+  productShare?: number | null | undefined
+  productSpend: number | null | undefined
+  assistantDiscount: number | null | undefined
+  otherDiscounts: number | null | undefined
+  /** Tolerância em R$ (ruído Avec — Janderson ~R$9). */
+  tol?: number
+}): boolean {
+  if (args.netPayable == null || args.rateioAposCartao == null) return false
+  const expected = roundFolha(
+    args.rateioAposCartao +
+      n(args.productShare) +
+      n(args.productSpend) +
+      n(args.assistantDiscount) +
+      n(args.otherDiscounts),
+    4,
+  )
+  if (expected == null) return false
+  return Math.abs(args.netPayable - expected) <= (args.tol ?? 25)
+}
+
+/**
  * Remonta um fat. líquido aproximado para preview Y:
  * a_pagar + magnitudes dos abatimentos 8123 (produto, adm, assistente, outros, cartão).
  * Não usa meio a meio aqui — o calc reaplica M = L/2.
@@ -438,6 +469,14 @@ export function buildFolhaDraftLine(
   const assistantMag = deductionMagnitude(row.assistant_discount)
   const meio_a_meio =
     assistantMag == null ? null : roundFolha(assistantMag * meioRate, 4)
+  const otherDiscountsSignedEarly =
+    row.other_discounts == null || Number.isNaN(row.other_discounts)
+      ? null
+      : row.other_discounts
+  const otherDiscountsMagEarly =
+    otherDiscountsSignedEarly == null
+      ? null
+      : Math.abs(otherDiscountsSignedEarly)
 
   const adminRatePreview = resolveGrossAdminFeeRate(panel, cargo, person)
   const assistantAdminRate =
@@ -446,9 +485,9 @@ export function buildFolhaDraftLine(
       : null
   const serviceTaxRate = resolveProfessionalServiceTaxRate(panel, person)
   /**
-   * Diello/Dayana/Gildenice: 8123 real embute meio a 50% (Fopag); motor RH é 5%.
-   * Se o a_pagar casar com a forma 50%, desmembra nela e aplica delta no pay.
-   * Se o 8123 já veio no formato motor (5%), não reaplica o delta.
+   * Diello/Dayana/Gildenice: 8123 pode embutir meio a 50% (Fopag/Avec).
+   * Se o a_pagar casar com a forma 50% e a alíquota motor divergir, desmembra
+   * nela. Com alíquota 50% alinhada à Avec, sheet ≡ motor (sem delta).
    */
   const sheetMeioRate = usesNamedMeioOverride(person) ? 0.5 : meioRate
   const sheetMeio =
@@ -533,8 +572,61 @@ export function buildFolhaDraftLine(
   const aPagarNetsAdminMeio = useSheetMeioShape
     ? aPagarNetsSheet || aPagarNetsMotor
     : aPagarNetsMotor
-  const embeddedInDescontos = olerite.embeddedAdminMeio || aPagarNetsAdminMeio
-  const meioCreditedInNet = olerite.meioCreditedInNet || aPagarNetsAdminMeio
+  /**
+   * Líquido 0123/8123 já fechado nos componentes Avec.
+   * `aPagarIsAvecLiquid` vale para todo cargo — o meio já está no a_pagar
+   * (Guilherme colorista / Jefferson multiplicador Out Q1).
+   * `avecLiquidClosed` (pros) ainda suprime adm motor + leftover olerite;
+   * assistente/multiplicador/colorista ficam de fora desse flag para o
+   * path Baru/parc do olerite continuar decidindo com `embeddedInDescontos`.
+   * Lucas Campos Q2 sem meta ainda cobra adm motor (caderno RH).
+   */
+  const assistantLikeCargo =
+    cargo === 'assistente' || cargo === 'multiplicador' || cargo === 'colorista'
+  const lucasQ2NeedsMotorAdm =
+    person?.id === 'lucas_campos' &&
+    opts?.applyTaxExtras === false &&
+    quinzenaMetaHit(
+      person,
+      extras?.faturado_mes ?? null,
+      extras?.faturado_ano_anterior_mes ?? null,
+    ) !== true
+  const aPagarIsAvecLiquid = aPagarMatchesAvecLiquid({
+    netPayable: row.net_payable,
+    rateioAposCartao: rateio_apos_cartao,
+    productShare: row.product_share,
+    productSpend: row.product_spend,
+    assistantDiscount: row.assistant_discount,
+    otherDiscounts: row.other_discounts,
+  })
+  const avecLiquidClosed =
+    aPagarIsAvecLiquid &&
+    !person?.isRomeuAssistant &&
+    !assistantLikeCargo
+  /**
+   * Olerite “embutido” (residual/Baru) só com desmembramento real.
+   * `avecLiquidClosed` NÃO marca embedded — senão o path de leftover
+   * credita `outros` de novo no pay (Maykon IG Out Q1: +6k fantasma).
+   */
+  const embeddedInDescontos =
+    olerite.embeddedAdminMeio || aPagarNetsAdminMeio
+  /**
+   * Meio já no a_pagar quando o líquido Avec fecha.
+   * Assistente/multiplicador/colorista com descontos=0 ainda precisa de
+   * +meio (Lucas Romeu / Islayquiel) — só confia no a_pagar se `other`
+   * já trouxe alguma camada (Guilherme / Jefferson Out Q1).
+   */
+  const meioCreditedFromClosedAvec =
+    aPagarIsAvecLiquid &&
+    (!assistantLikeCargo ||
+      (otherDiscountsMagEarly != null && otherDiscountsMagEarly > 0.02))
+  const meioCreditedInNet =
+    olerite.meioCreditedInNet ||
+    aPagarNetsAdminMeio ||
+    avecLiquidClosed ||
+    meioCreditedFromClosedAvec
+  /** Fecha taxa adm motor no pay (0123), sem ativar leftover olerite. */
+  const suppressMotorAdm = avecLiquidClosed && !lucasQ2NeedsMotorAdm
 
   const admin = resolveLineAdminFee({
     panel,
@@ -542,18 +634,21 @@ export function buildFolhaDraftLine(
     charged: row.charged,
     adminFee8123: row.admin_fee,
     person,
-    embeddedInDescontos,
+    embeddedInDescontos: embeddedInDescontos || suppressMotorAdm,
   })
   /**
    * Meio no proposed_pay só se a_pagar ainda não creditou
    * (nem via descontos ≈ meio−adm, nem via descontos ≈ +meio,
-   * nem via a_pagar já fechado com adm/meio e descontos=0).
-   * Diello/Dayana/Gildenice com a_pagar na forma 50%: delta (motor 5% − planilha 50%).
+   * nem via a_pagar já fechado com adm/meio e descontos=0,
+   * nem via líquido 0123 = soma dos componentes Avec).
+   * Delta planilha↔motor só quando o a_pagar NÃO está fechado na Avec
+   * (senão Diello Out Q1 perde ~R$2.295 vs 0123/Fopag).
    */
   let meioForProposedPay: number | null =
     embeddedInDescontos || meioCreditedInNet ? null : meio_a_meio
   if (
     useSheetMeioShape &&
+    !aPagarIsAvecLiquid &&
     (embeddedInDescontos || meioCreditedInNet) &&
     meio_a_meio != null &&
     sheetMeio != null
@@ -582,13 +677,14 @@ export function buildFolhaDraftLine(
    */
   const rhTaxaAdm =
     !embeddedInDescontos &&
+    !suppressMotorAdm &&
+    !aPagarIsAvecLiquid &&
     typeof extras?.taxa_administrativa === 'number' &&
     extras.taxa_administrativa > 0.02
       ? extras.taxa_administrativa
       : null
 
-  const isAssistantLike =
-    cargo === 'assistente' || cargo === 'multiplicador' || cargo === 'colorista'
+  const isAssistantLike = assistantLikeCargo
   /**
    * Cargos cujo 8123 `descontos` pode embutir Baru/parc (sem adm↔meio de pro).
    * Inclui manicure: other≈Baru (Gisele/Deise).
@@ -668,8 +764,16 @@ export function buildFolhaDraftLine(
   // Alana vs Monique (mesmo shape 8123 crédito+Baru Zig): só a Fopag decide.
   // Y ≈ a_pagar → Baru só coluna. G ≈ a_pagar + Baru → idem (G embute S).
   // G ≈ a_pagar (Monique) → Baru ainda abate.
+  /**
+   * Q1 (dia 20): se o a_pagar já fecha na Avec e não há Y Fopag explícito,
+   * o líquido a pagar é o próprio a_pagar — Baru Zig sticky não reabate
+   * (Letícia/Alana/Monique Out Q1: Y Fopag = net). Q2 mantém o comportamento
+   * antigo (sem seed) para o Zig ainda abater quando Y ≠ net.
+   */
   const liquidoRef =
-    opts?.liquidoReferencia ?? extras?.liquido_referencia ?? null
+    opts?.liquidoReferencia ??
+    extras?.liquido_referencia ??
+    (aPagarIsAvecLiquid && applyTaxExtras ? row.net_payable : null)
   const fatLiquidoRef =
     opts?.fatLiquidoReferencia ?? extras?.fat_liquido_referencia ?? null
   if (
@@ -956,7 +1060,10 @@ export function buildFolhaDraftLine(
    * Coluna W (taxa_servicos) permanece o valor verdadeiro U×alíquota.
    *
    * Crédito residual (Brunna): descontos ≈ (meio − adm) + residual — a_pagar
-   * já somou o residual; estornar via descontos_diversos no pay.
+   * já somou o residual; estornar via descontos_diversos no pay **só se**
+   * o líquido Avec NÃO fecha (senão Romeu/Walter BR Out Q1: −13k/−2k
+   * fantasma vs 0123/Fopag). Crédito órfão sem meio/adm (Romeu remessa
+   * charged=0) continua estornando — `embeddedAdminMeio` falso.
    *
    * Assistente/multiplicador: U/V/W na Fopag são conferência / repasse ao
    * profissional — não entram no líquido do assistente (só no pro).
@@ -986,7 +1093,10 @@ export function buildFolhaDraftLine(
     }
   }
 
+  const skipCreditResidualEstorno =
+    aPagarIsAvecLiquid && olerite.embeddedAdminMeio
   if (
+    !skipCreditResidualEstorno &&
     olerite.embeddedCreditResidual != null &&
     olerite.embeddedCreditResidual > 0.02
   ) {
@@ -1117,9 +1227,14 @@ export function buildFolhaDraftLine(
    * Tamires: Avec descontos embutiu residual > Baru, mas Fopag só abate S=Baru
    * (sem W). a_pagar ficou baixo demais em (residual − Baru) — creditar de volta
    * o leftover não coberto por descontos_diversos.
+   *
+   * NÃO aplicar quando `avecLiquidClosed`: a_pagar 8123/0123 já é o líquido
+   * Avec (rateio+produto+assist+outros). Creditar residual de novo inventa
+   * fantasma (Maykon IG Out Q1: +R$6.031 em outros → pay 27.958 vs 21.926).
    */
   if (
     embeddedInDescontos &&
+    !avecLiquidClosed &&
     baruSplit.baruAlreadyInNet &&
     olerite.outrosResiduais != null &&
     baruSplit.consumoBaru != null &&
@@ -1194,7 +1309,7 @@ export function buildFolhaDraftLine(
   ) {
     flags.push('taxa_adm_motor')
   }
-  if (embeddedInDescontos && taxaAdmDisplay != null) {
+  if ((embeddedInDescontos || suppressMotorAdm) && taxaAdmDisplay != null) {
     flags.push('taxa_adm_em_descontos')
   }
 
