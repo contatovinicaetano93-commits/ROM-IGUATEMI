@@ -612,21 +612,19 @@ export function buildFolhaDraftLine(
     olerite.embeddedAdminMeio || aPagarNetsAdminMeio
   /**
    * Meio já no a_pagar quando o líquido Avec fecha.
-   * Assistente Romeu com descontos=0 ainda precisa de +meio − adm motor
-   * (Lucas Rodrigues Q2) — só confia no a_pagar se `other` já trouxe
-   * alguma camada (Jefferson Policarpo Out Q1).
+   * Assistente/multiplicador/colorista com descontos=0 ainda precisa de
+   * +meio (Lucas Romeu / Islayquiel) — só confia no a_pagar se `other`
+   * já trouxe alguma camada (Guilherme / Jefferson Out Q1).
    */
-  const romeuMeioAlreadyInPay =
-    Boolean(person?.isRomeuAssistant) &&
+  const meioCreditedFromClosedAvec =
     aPagarIsAvecLiquid &&
-    otherDiscountsMagEarly != null &&
-    otherDiscountsMagEarly > 0.02
+    (!assistantLikeCargo ||
+      (otherDiscountsMagEarly != null && otherDiscountsMagEarly > 0.02))
   const meioCreditedInNet =
     olerite.meioCreditedInNet ||
     aPagarNetsAdminMeio ||
     avecLiquidClosed ||
-    (aPagarIsAvecLiquid && !person?.isRomeuAssistant) ||
-    romeuMeioAlreadyInPay
+    meioCreditedFromClosedAvec
   /** Fecha taxa adm motor no pay (0123), sem ativar leftover olerite. */
   const suppressMotorAdm = avecLiquidClosed && !lucasQ2NeedsMotorAdm
 
