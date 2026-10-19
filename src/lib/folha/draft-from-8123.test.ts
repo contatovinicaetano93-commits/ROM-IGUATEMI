@@ -274,6 +274,83 @@ describe('buildFolhaDraftLine', () => {
     expect(line.flags).not.toContain('taxa_adm_motor')
   })
 
+  it('Diello IG Out Q1: a_pagar Avec fechado → proposed_pay = net (meio 50%, sem delta)', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'Pedro E F Diello',
+        role: 'Cabeleireiro',
+        charged: 40929.99991607666,
+        service_share: 19968.1,
+        product_share: null,
+        other_share: null,
+        tip: 0,
+        product_spend: -1061.5400043800473,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: -5099.900017738342,
+        other_discounts: -596.8401641845703,
+        net_payable: 13209.81977223605,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: true },
+    )
+    expect(line.meio_a_meio_rate).toBe(0.5)
+    expect(line.meio_a_meio).toBeCloseTo(2549.95, 1)
+    expect(line.proposed_pay).toBeCloseTo(13209.82, 1)
+  })
+
+  it('Daniel Viana Out Q1: product_share no líquido fechado → não credita leftover Baru', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'DANIEL VIANA MARTINS',
+        role: 'Cabeleireiro',
+        charged: 26408,
+        service_share: 12025,
+        product_share: 117.9,
+        other_share: 0,
+        tip: 0,
+        product_spend: -269.71,
+        card_fee: -272.308,
+        admin_fee: 0,
+        assistant_discount: -2639.9,
+        other_discounts: -1783.34,
+        net_payable: 7177.642,
+        house_share: null,
+      },
+      { consumo_baru: 120 },
+      { applyTaxExtras: true },
+    )
+    expect(line.proposed_pay).toBeCloseTo(7177.64, 1)
+  })
+
+  it('Guilherme colorista Out Q1: a_pagar fechado → não recredita meio', () => {
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'GUILHERME MACHADO SOUZA',
+        role: 'Colorista',
+        charged: 1640,
+        service_share: 2404,
+        product_share: 0,
+        other_share: 0,
+        tip: 0,
+        product_spend: 0,
+        card_fee: 0,
+        admin_fee: 0,
+        assistant_discount: -164,
+        other_discounts: -116.5300064086914,
+        net_payable: 2123.4699959754944,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: true },
+    )
+    expect(line.proposed_pay).toBeCloseTo(2123.47, 1)
+  })
+
   it('Maykon IG Out Q1: líquido Avec fechado → não credita leftover olerite', () => {
     // descontos 8123 ≈ (adm−meio)+residual; leftover Tamires inventava +6031 no pay.
     const line = buildFolhaDraftLine(
@@ -650,7 +727,7 @@ describe('buildFolhaDraftLine', () => {
     expect(line.proposed_pay).toBeCloseTo(542.1, 0)
   })
 
-  it('Diello: 8123 a 50% meio; motor 5% → ajusta delta, não reabate adm/Baru', () => {
+  it('Diello: 8123 a 50% meio (= motor) → proposed_pay = a_pagar; Baru embutido', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',
       {
@@ -673,11 +750,12 @@ describe('buildFolhaDraftLine', () => {
       { consumo_baru: 529.52 },
       { applyTaxExtras: false },
     )
-    expect(line.meio_a_meio).toBeCloseTo(212.73, 2)
+    expect(line.meio_a_meio).toBeCloseTo(2127.3, 2)
+    expect(line.meio_a_meio_rate).toBe(0.5)
     expect(line.flags).toContain('taxa_adm_em_descontos')
     expect(line.flags).not.toContain('taxa_adm_motor')
-    // 11599.01 − (2127.3 − 212.73) = 9684.44
-    expect(line.proposed_pay).toBeCloseTo(9684.44, 0)
+    // a_pagar Avec fechado + Baru já no other → pay = net
+    expect(line.proposed_pay).toBeCloseTo(11599.01, 0)
   })
 
   it('Jefferson: other≈Baru embutido → coluna Baru, líquido = a_pagar', () => {

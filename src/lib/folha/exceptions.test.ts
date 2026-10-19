@@ -39,18 +39,18 @@ function row(
 }
 
 describe('resolveFolhaPersonRules', () => {
-  it('casa Pedro Diello (5%) e não Pedro Cardi (assistente Romeu)', () => {
+  it('casa Pedro Diello (50%) e não Pedro Cardi (assistente Romeu)', () => {
     expect(resolveFolhaPersonRules('Pedro Diello')?.id).toBe('pedro_diello')
     expect(resolveFolhaPersonRules('Pedro Henrique Sousa Cardi')?.id).toBe(
       'romeu_assistant',
     )
   })
 
-  it('casa Dayana/Gildenice 5%, Romeu 50%, Walter meio 60% + remessa 30%, Dani 55%', () => {
-    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Dayana Marques'))).toBe(0.05)
-    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daiana'))).toBe(0.05)
+  it('casa Dayana/Gildenice/Diello 50%, Romeu 50%, Walter meio 60% + remessa 30%, Dani 55%', () => {
+    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Dayana Marques'))).toBe(0.5)
+    expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Daiana'))).toBe(0.5)
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Gildenice Teixeira'))).toBe(
-      0.05,
+      0.5,
     )
     expect(resolveFolhaPersonRules('Gildenice')?.id).toBe('gildenice')
     expect(resolveMeioAMeioRate(resolveFolhaPersonRules('Romeu Felipe'))).toBe(0.5)
@@ -256,10 +256,10 @@ describe('IG não-Romeu — taxa adm assistente 3%', () => {
 })
 
 describe('meio a meio nomeado no draft + calc', () => {
-  it('Pedro Diello devolve 5%', () => {
+  it('Pedro Diello devolve 50% (Avec/Fopag)', () => {
     const line = buildFolhaDraftLine('brasil', row('Pedro Diello'))
-    expect(line.meio_a_meio).toBe(50)
-    expect(line.meio_a_meio_rate).toBe(0.05)
+    expect(line.meio_a_meio).toBe(500)
+    expect(line.meio_a_meio_rate).toBe(0.5)
     expect(line.exception_id).toBe('pedro_diello')
   })
 
