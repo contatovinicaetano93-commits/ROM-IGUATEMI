@@ -246,6 +246,105 @@ describe('buildFolhaDraftLine', () => {
     expect(line.flags).not.toContain('taxa_adm_motor')
   })
 
+  it('BR maquiador: other só adm no fat. líquido → pay abate gap para bruto', () => {
+    // other < adm×bruto → ainda na base líquida; gap = 5%×(C−rateio)
+    const charged = 5309.74
+    const rateio = 3161.95
+    const product = -2.64
+    const other = -(rateio * 0.05) // só adm no fat. líquido
+    const net = rateio + product + other
+    const line = buildFolhaDraftLine(
+      'brasil',
+      {
+        name: 'PIERRE TAWAN ALVES FRANCA',
+        role: 'Maquiador',
+        charged,
+        service_share: 3267.69,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: product,
+        card_fee: -105.74,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: other,
+        net_payable: net,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: true },
+    )
+    expect(line.taxa_administrativa).toBeCloseTo(charged * 0.05, 2)
+    expect(line.flags).toContain('maquiador_adm_no_bruto')
+    expect(line.proposed_pay).toBeCloseTo(
+      net - 0.05 * (charged - rateio),
+      1,
+    )
+  })
+
+  it('BR maquiador: other já com adm no bruto → não duplica gap', () => {
+    const charged = 5309.74
+    const rateio = 3161.95
+    const product = -2.64
+    const extras = 170.31 // mensalidade + baru
+    const other = -(charged * 0.05 + extras)
+    const net = rateio + product + other
+    const line = buildFolhaDraftLine(
+      'brasil',
+      {
+        name: 'PIERRE TAWAN ALVES FRANCA',
+        role: 'Maquiador',
+        charged,
+        service_share: 3267.69,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: product,
+        card_fee: -105.74,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: other,
+        net_payable: net,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: true },
+    )
+    expect(line.flags).not.toContain('maquiador_adm_no_bruto')
+    expect(line.proposed_pay).toBeCloseTo(net, 2)
+  })
+
+  it('IG maquiador: adm já no bruto → não abate gap', () => {
+    const charged = 1180
+    const rateio = 687.48
+    const other = -82.6 // = charged × 7%
+    const net = rateio + other
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      {
+        name: 'ANA LUIZA DUTRA VAZ',
+        role: 'Maquiador',
+        charged,
+        service_share: 708,
+        product_share: 0,
+        other_share: null,
+        tip: 0,
+        product_spend: 0,
+        card_fee: -20.52,
+        admin_fee: 0,
+        assistant_discount: 0,
+        other_discounts: other,
+        net_payable: net,
+        house_share: null,
+      },
+      undefined,
+      { applyTaxExtras: true },
+    )
+    expect(line.taxa_administrativa).toBeCloseTo(82.6, 2)
+    expect(line.flags).not.toContain('maquiador_adm_no_bruto')
+    expect(line.proposed_pay).toBeCloseTo(net, 2)
+  })
+
   it('Out Q1 pro: a_pagar = ss+prod+assist+outros+cartão → não +meio −adm', () => {
     // Alan BR 01–15/10: motor antigo somava meio−adm e furava o 0123.
     const line = buildFolhaDraftLine(

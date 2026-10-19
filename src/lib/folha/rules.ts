@@ -127,7 +127,7 @@ export function folhaRulesSummary(panel: RomPanelId): FolhaRulesSummary {
       cabeleireiro:
         'Taxa adm: BR 5% / IG 7% sobre faturado bruto. IG Brunna/Joah/Marcela = 5%. Meio a meio + abatimentos.',
       maquiador:
-        'Taxa adm: BR 5% / IG 7% sobre faturado − produto (IG Brunna/Joah/Marcela 5%).',
+        'Taxa adm: BR 5% / IG 7% sobre faturado bruto (C). BR: Fopag Out Q1 usou fat. líquido por engano — motor corrige o gap. IG já estava certo.',
       manicure:
         'Faturado − produto. Sem taxa adm — exceto quem tem depilação.',
       esteticista:

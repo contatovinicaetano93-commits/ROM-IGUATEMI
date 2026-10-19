@@ -103,6 +103,11 @@ export type FolhaDraftFlag =
   | 'taxa_adm_motor'
   /** Taxa adm (e meio) já no 8123 `descontos` — só conferência na coluna. */
   | 'taxa_adm_em_descontos'
+  /**
+   * Maquiador: a_pagar/Fopag usou adm sobre fat. líquido; pay abate o gap
+   * para ficar sobre faturado bruto. Só BR — IG já estava certo.
+   */
+  | 'maquiador_adm_no_bruto'
 
 export type FolhaDraftLine = {
   name: string
@@ -320,6 +325,58 @@ export function aPagarMatchesAvecLiquid(args: {
   )
   if (expected == null) return false
   return Math.abs(args.netPayable - expected) <= (args.tol ?? 25)
+}
+
+/**
+ * Maquiador: adm correta = alíquota × faturado bruto.
+ * Fopag BR Out Q1 usou fat. líquido (rateio) — gap = rate × (C − rateio).
+ */
+export function maquiadorAdmGapBrutoVsFatLiquido(args: {
+  charged: number | null | undefined
+  rateioAposCartao: number | null | undefined
+  adminRate: number | null | undefined
+}): number | null {
+  if (
+    args.charged == null ||
+    args.rateioAposCartao == null ||
+    args.adminRate == null
+  ) {
+    return null
+  }
+  if (args.charged <= 0.02 || args.adminRate <= 0) return null
+  const gap = args.adminRate * (args.charged - args.rateioAposCartao)
+  if (gap <= 0.02) return null
+  return roundFolha(gap, 4)
+}
+
+/**
+ * Só Brasil: Fopag/Avec embutiu adm do maquiador sobre fat. líquido.
+ * Iguatemi já vinha correto (adm sobre bruto) — não mexe.
+ * Se `other` já comporta adm×bruto (Avec corrigido), não abate de novo.
+ */
+export function shouldAbateMaquiadorAdmGapToBruto(args: {
+  panel: RomPanelId
+  cargo: FolhaCargo
+  charged: number | null | undefined
+  rateioAposCartao: number | null | undefined
+  adminRate: number | null | undefined
+  otherDiscounts?: number | null | undefined
+  aPagarIsAvecLiquid: boolean
+  embeddedInDescontos: boolean
+}): boolean {
+  if (args.panel !== 'brasil') return false
+  if (args.cargo !== 'maquiador') return false
+  if (!args.aPagarIsAvecLiquid && !args.embeddedInDescontos) return false
+  const gap = maquiadorAdmGapBrutoVsFatLiquido(args)
+  if (gap == null || args.charged == null || args.adminRate == null) {
+    return false
+  }
+  const admBruto = args.charged * args.adminRate
+  const otherMag =
+    args.otherDiscounts == null ? null : Math.abs(args.otherDiscounts)
+  // other já cabe adm no bruto → Avec/Fopag já corrigiu; não duplicar gap
+  if (otherMag != null && otherMag + 0.5 >= admBruto) return false
+  return true
 }
 
 /**
@@ -1311,6 +1368,38 @@ export function buildFolhaDraftLine(
   }
   if ((embeddedInDescontos || suppressMotorAdm) && taxaAdmDisplay != null) {
     flags.push('taxa_adm_em_descontos')
+  }
+
+  /**
+   * Maquiador: coluna adm já mostra C×alíquota, mas a_pagar/Fopag BR pode
+   * ter embutido só rateio×alíquota. Abate o gap no pay (Pierre Out Q1:
+   * −R$107 = 5%×(5309−3162)). Só BR — IG não aplica.
+   */
+  const maquiadorAdmGap = shouldAbateMaquiadorAdmGapToBruto({
+    panel,
+    cargo,
+    charged: row.charged,
+    rateioAposCartao: rateio_apos_cartao,
+    adminRate: admin.rate ?? resolveGrossAdminFeeRate(panel, cargo, person),
+    otherDiscounts: row.other_discounts,
+    aPagarIsAvecLiquid,
+    embeddedInDescontos,
+  })
+    ? maquiadorAdmGapBrutoVsFatLiquido({
+        charged: row.charged,
+        rateioAposCartao: rateio_apos_cartao,
+        adminRate: admin.rate ?? resolveGrossAdminFeeRate(panel, cargo, person),
+      })
+    : null
+  if (maquiadorAdmGap != null) {
+    extrasForProposedPay = {
+      ...extrasForProposedPay,
+      taxa_administrativa: roundFolha(
+        n(extrasForProposedPay.taxa_administrativa) + maquiadorAdmGap,
+        4,
+      ),
+    }
+    flags.push('maquiador_adm_no_bruto')
   }
 
   const fatLiquido = reconstructFatLiquidoFrom8123(row)
