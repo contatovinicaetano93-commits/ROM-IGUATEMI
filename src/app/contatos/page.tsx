@@ -622,7 +622,7 @@ function ContatosPageContent() {
           </div>
           <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
             {queue === 'overdue'
-              ? 'Atrasados: cadência já passou — visita registrada e sem retorno no prazo.'
+              ? 'Atrasados: a última visita real já passou da cadência — sem retorno no prazo.'
               : queue === 'due_soon'
                 ? `Vencendo: retorno previsto nos próximos ${DUE_SOON_DAYS} dias (ainda não atrasou).`
                 : queue === 'no_cadence'

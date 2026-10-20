@@ -34,17 +34,31 @@ export function compareByOverdueThenName(
   return compareByNamePtBr(a.name, b.name)
 }
 
+/**
+ * Urgência do contato pela cadência da última visita real.
+ * Pacotes/SKUs antigos do mesmo cliente não mantêm "Atrasado" se a pessoa
+ * voltou depois (ex.: Eugenia veio sábado no PCT novo — PCT velho some do badge).
+ */
 export function urgencyForServices(services: ClientService[]): UrgencySummary {
   const enriched = enrichServices(services)
   const recommendations = computeRecommendations(enriched)
 
-  const overdueServices = enriched.filter((s) => s.state === 'overdue')
-  const overdue = overdueServices.length
-  const max_overdue_days = overdueServices.reduce(
-    (max, s) => Math.max(max, Math.abs(s.days_until ?? 0)),
-    0,
-  )
-  const due_soon = enriched.filter((s) => s.state === 'due_soon').length
+  // Um relógio por contato: o serviço real com last_done_at mais recente.
+  let latestDone: (typeof enriched)[number] | null = null
+  for (const s of enriched) {
+    if (s.state === 'no_cadence' || !s.last_done_at || !s.cadence_days) continue
+    if (
+      !latestDone?.last_done_at ||
+      new Date(s.last_done_at).getTime() >= new Date(latestDone.last_done_at).getTime()
+    ) {
+      latestDone = s
+    }
+  }
+
+  const overdue = latestDone?.state === 'overdue' ? 1 : 0
+  const max_overdue_days =
+    latestDone?.state === 'overdue' ? Math.abs(latestDone.days_until ?? 0) : 0
+  const due_soon = latestDone?.state === 'due_soon' ? 1 : 0
   const salonToday = todayIso()
   const scheduledUntil = addIsoDays(salonToday, SCHEDULED_SOON_DAYS)
   // Inclui o dia civil inteiro (mesmo horário já passado) até +SCHEDULED_SOON_DAYS.

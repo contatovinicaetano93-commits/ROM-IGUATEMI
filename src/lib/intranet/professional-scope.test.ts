@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   filterByOwnedContactIds,
   filterByProfessionalName,
+  isSoloProfessionalName,
   professionalNameOwns,
   professionalNamesMatch,
   professionalScopeCacheKey,
@@ -77,5 +78,14 @@ describe('professionalScopeCacheKey', () => {
     expect(professionalScopeCacheKey(null)).toBe('all')
     expect(professionalScopeCacheKey('José Silva')).toBe(professionalScopeCacheKey('jose silva'))
     expect(professionalScopeCacheKey('Alison')).not.toBe('all')
+  })
+})
+
+describe('isSoloProfessionalName', () => {
+  it('aceita nome único e rejeita lista Avec multi-pro', () => {
+    expect(isSoloProfessionalName('Nathan Elias Magalhães Lima')).toBe(true)
+    expect(isSoloProfessionalName('JANDER,Nathan Elias Magalhães Lima')).toBe(false)
+    expect(isSoloProfessionalName('DORA / ROMEU FELIPE')).toBe(false)
+    expect(isSoloProfessionalName(null)).toBe(false)
   })
 })
