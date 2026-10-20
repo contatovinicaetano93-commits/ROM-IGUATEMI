@@ -297,11 +297,55 @@ export function aPagarAlreadyNetsAdminMeio(args: {
 }
 
 /**
+ * Sentinelas Fopag (11.11 / 22.22 / 33.33) — não são impostos reais.
+ * Brunna IG Out Q1: abater 66,66 inventava drift vs 0123.
+ */
+export function isFolhaTaxPlaceholder(
+  value: number | null | undefined,
+): boolean {
+  if (value == null || Number.isNaN(value)) return false
+  return [11.11, 22.22, 33.33].some((p) => Math.abs(value - p) < 0.005)
+}
+
+function sanitizeTaxExtra(value: number | null | undefined): number | null {
+  if (value == null || Number.isNaN(value)) return null
+  if (isFolhaTaxPlaceholder(value)) return null
+  return value
+}
+
+/**
+ * Quando o `a_pagar` já fecha no líquido Avec:
+ * - impostos (DAS/DARF/mens) nunca rebatem no pay
+ * - Baru/parc só em Q1 (`stripBaru`): em Q2 o Zig ainda pode abater
+ *   (Alison/Monique — Y Fopag ≠ net).
+ */
+export function stripClosedLiquidPayExtras(
+  extras: FolhaDraftLine['folha_extras'],
+  opts?: { stripBaru?: boolean },
+): FolhaDraftLine['folha_extras'] {
+  const next: FolhaDraftLine['folha_extras'] = {
+    ...extras,
+    darf: null,
+    das: null,
+    mensalidade_contabilidade: null,
+  }
+  if (opts?.stripBaru) {
+    return { ...next, consumo_baru: null, parc: null }
+  }
+  return next
+}
+
+/**
  * `a_pagar` 8123/0123 já é o líquido Avec: rateio_após_cartão + rateio
  * produtos + product_spend + assistente + outros (valores assinados).
  * Quando casa, o motor NÃO pode recreditar meio nem reabater taxa adm —
  * senão a intranet diverge do relatório 0123 (Out Q1: Alan/Walter/Brunna).
  * `product_share` entra na soma (Daniel Viana Out Q1: drift = product_share).
+ *
+ * Fallbacks de rateio (Nathan Out Q1: `service_share` truncado):
+ * 1) rateio atual (service_share − cartão)
+ * 2) charged/2 − cartão
+ * 3) (charged − house_share) − cartão
  */
 export function aPagarMatchesAvecLiquid(args: {
   netPayable: number | null | undefined
@@ -311,20 +355,35 @@ export function aPagarMatchesAvecLiquid(args: {
   productSpend: number | null | undefined
   assistantDiscount: number | null | undefined
   otherDiscounts: number | null | undefined
+  charged?: number | null | undefined
+  cardFee?: number | null | undefined
+  houseShare?: number | null | undefined
   /** Tolerância em R$ (ruído Avec — Janderson ~R$9). */
   tol?: number
 }): boolean {
-  if (args.netPayable == null || args.rateioAposCartao == null) return false
-  const expected = roundFolha(
-    args.rateioAposCartao +
-      n(args.productShare) +
-      n(args.productSpend) +
-      n(args.assistantDiscount) +
-      n(args.otherDiscounts),
-    4,
-  )
-  if (expected == null) return false
-  return Math.abs(args.netPayable - expected) <= (args.tol ?? 25)
+  if (args.netPayable == null) return false
+  const card = deductionMagnitude(args.cardFee) ?? 0
+  const rateios: Array<number | null> = [args.rateioAposCartao]
+  if (args.charged != null && !Number.isNaN(args.charged)) {
+    rateios.push(roundFolha(args.charged / 2 - card, 4))
+    if (args.houseShare != null && !Number.isNaN(args.houseShare)) {
+      rateios.push(roundFolha(args.charged - args.houseShare - card, 4))
+    }
+  }
+  const tol = args.tol ?? 25
+  const extrasSum =
+    n(args.productShare) +
+    n(args.productSpend) +
+    n(args.assistantDiscount) +
+    n(args.otherDiscounts)
+  for (const rateio of rateios) {
+    if (rateio == null) continue
+    const expected = roundFolha(rateio + extrasSum, 4)
+    if (expected != null && Math.abs(args.netPayable - expected) <= tol) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
@@ -655,6 +714,9 @@ export function buildFolhaDraftLine(
     productSpend: row.product_spend,
     assistantDiscount: row.assistant_discount,
     otherDiscounts: row.other_discounts,
+    charged: row.charged,
+    cardFee: row.card_fee,
+    houseShare: row.house_share,
   })
   const avecLiquidClosed =
     aPagarIsAvecLiquid &&
@@ -895,10 +957,12 @@ export function buildFolhaDraftLine(
 
   let folha_extras: FolhaDraftLine['folha_extras'] = {
     parc: extras?.parc ?? null,
-    darf: extras?.darf ?? null,
-    das: extras?.das ?? null,
+    darf: sanitizeTaxExtra(extras?.darf),
+    das: sanitizeTaxExtra(extras?.das),
     div_ativa: extras?.div_ativa ?? null,
-    mensalidade_contabilidade: extras?.mensalidade_contabilidade ?? null,
+    mensalidade_contabilidade: sanitizeTaxExtra(
+      extras?.mensalidade_contabilidade,
+    ),
     descontos_diversos: extras?.descontos_diversos ?? null,
     consumo_baru: extras?.consumo_baru ?? null,
     produtos_black: extras?.produtos_black ?? null,
@@ -1400,6 +1464,18 @@ export function buildFolhaDraftLine(
       ),
     }
     flags.push('maquiador_adm_no_bruto')
+  }
+
+  /**
+   * Hard gate: a_pagar já = líquido Avec → impostos nunca rebatem.
+   * Q1 (dia 20): Baru/parc também só coluna (Francine/Diego/Lucas Out Q1).
+   * Q2: Zig Baru ainda abate quando Y ≠ net (Alison/Monique).
+   * Nathan: match via charged−house fecha avecLiquidClosed → sem crédito residual.
+   */
+  if (aPagarIsAvecLiquid) {
+    extrasForProposedPay = stripClosedLiquidPayExtras(extrasForProposedPay, {
+      stripBaru: applyTaxExtras,
+    })
   }
 
   const fatLiquido = reconstructFatLiquidoFrom8123(row)
