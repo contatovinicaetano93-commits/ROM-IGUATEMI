@@ -53,7 +53,7 @@ describe('buildFolhaTaxSpreadsheetTemplate', () => {
     const { buffer, filename } = await buildFolhaTaxSpreadsheetTemplate()
     expect(filename).toMatch(/\.xlsx$/)
     const wb = new ExcelJS.Workbook()
-    await wb.xlsx.load(buffer)
+    await wb.xlsx.load(buffer as never)
     const row = wb.worksheets[0]?.getRow(1)
     expect(row?.getCell(1).value).toBe('Profissional')
     expect(row?.getCell(3).value).toBe('DARF')

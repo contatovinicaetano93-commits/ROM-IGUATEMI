@@ -127,11 +127,15 @@ export async function parseFolhaTaxSpreadsheet(
   buffer: ArrayBuffer | Buffer | Uint8Array,
 ): Promise<FolhaTaxSpreadsheetParseResult> {
   const wb = new ExcelJS.Workbook()
+  // ExcelJS tipa `load` com Buffer próprio (≠ Node Buffer); Uint8Array cobre os três inputs.
   const bytes =
     buffer instanceof ArrayBuffer
-      ? Buffer.from(buffer)
-      : Buffer.from(buffer)
-  await wb.xlsx.load(bytes)
+      ? new Uint8Array(buffer)
+      : buffer instanceof Uint8Array
+        ? buffer
+        : new Uint8Array(buffer)
+  // exceljs declara Buffer próprio ≠ Node Buffer — never evita o choque de tipos.
+  await wb.xlsx.load(bytes as never)
   const ws = wb.worksheets[0]
   if (!ws) {
     throw new Error('Planilha vazia — nenhuma aba encontrada')
