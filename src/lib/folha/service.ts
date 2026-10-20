@@ -57,6 +57,10 @@ import {
 } from '@/lib/folha/zig-consumo'
 import { resolveFolhaTaxLineName } from '@/lib/folha/tax-cnpj'
 import {
+  parseFolhaTaxSpreadsheet,
+  type FolhaTaxSpreadsheetParseResult,
+} from '@/lib/folha/tax-spreadsheet'
+import {
   filterFolhaProfessionalsForPanel,
   folhaPeriodNeedsUnitScope,
 } from '@/lib/folha/unit-scope'
@@ -702,6 +706,129 @@ export async function resendFolhaPeriodNotify(args: {
     actor: args.actor,
   })
   return { draft, period, notify }
+}
+
+export type FolhaTaxSpreadsheetApplyReport = {
+  parsed: FolhaTaxSpreadsheetParseResult
+  applied: number
+  unmatched: Array<{ sheetRow: number; name: string | null; reason: string }>
+  updatedNames: string[]
+}
+
+/**
+ * Aplica planilha .xlsx de impostos/contabilidade (Q1).
+ * Sobrescreve DARF/DAS/mensalidade quando a célula tem valor (>0, não sentinela).
+ */
+export async function applyFolhaTaxSpreadsheetToPeriod(
+  panel: RomPanelId,
+  args: {
+    periodId: string
+    buffer: ArrayBuffer | Buffer | Uint8Array
+    actor?: string | null
+  },
+): Promise<{
+  draft: FolhaDraft
+  period: FolhaPeriodRow
+  report: FolhaTaxSpreadsheetApplyReport
+}> {
+  const period = await getFolhaPeriod(args.periodId)
+  if (!period) throw new Error('Período da Folha não encontrado')
+  if (period.status === 'paid') {
+    throw new Error('Período já pago — reabra para editar')
+  }
+  if (period.lines.length === 0) {
+    throw new Error('Rascunho vazio — atualize do 8123 antes de importar impostos')
+  }
+
+  const quinzena = parseFolhaPeriodId(args.periodId)
+  const applyTax = quinzena
+    ? acceptsFolhaTaxExtras(quinzena.half)
+    : period.half === 1
+  if (!applyTax) {
+    throw new Error(
+      'DARF/DAS/mensalidade só entram no pagamento do dia 20 (1ª quinzena)',
+    )
+  }
+
+  const parsed = await parseFolhaTaxSpreadsheet(args.buffer)
+  if (parsed.rows.length === 0) {
+    throw new Error(
+      'Nenhuma linha com DARF/DAS/mensalidade na planilha (confira cabeçalho e valores)',
+    )
+  }
+
+  const lineNames = period.lines.map((l) => l.name)
+  let lines = period.lines
+  const unmatched: FolhaTaxSpreadsheetApplyReport['unmatched'] = []
+  const updatedNames: string[] = []
+  let applied = 0
+
+  for (const row of parsed.rows) {
+    const hitName = resolveFolhaTaxLineName({
+      lineNames,
+      professionalName: row.professionalName,
+      cnpj: row.cnpj,
+    })
+    if (!hitName) {
+      unmatched.push({
+        sheetRow: row.sheetRow,
+        name: row.professionalName,
+        reason:
+          !row.professionalName && !row.cnpj
+            ? 'sem_nome_nem_cnpj'
+            : 'sem_match_unico',
+      })
+      continue
+    }
+
+    const extras: FolhaLineExtrasPatch = {}
+    if (row.darf != null) extras.darf = row.darf
+    if (row.das != null) extras.das = row.das
+    if (row.mensalidade_contabilidade != null) {
+      extras.mensalidade_contabilidade = row.mensalidade_contabilidade
+    }
+    if (Object.keys(extras).length === 0) continue
+
+    const result = applyExtrasToDraftLines({
+      panel,
+      lines,
+      sourceProfessionals: period.source_professionals,
+      professionalName: hitName,
+      extras,
+      applyTaxExtras: true,
+    })
+    if (!result.matched) {
+      unmatched.push({
+        sheetRow: row.sheetRow,
+        name: row.professionalName,
+        reason: 'linha_nao_encontrada',
+      })
+      continue
+    }
+    lines = result.lines
+    applied += 1
+    if (!updatedNames.includes(hitName)) updatedNames.push(hitName)
+  }
+
+  if (applied === 0) {
+    throw new Error(
+      `Nenhuma linha aplicada (${unmatched.length} sem match). Confira nomes/CNPJ na Folha.`,
+    )
+  }
+
+  const updated = await saveFolhaPeriodLines({
+    id: period.id,
+    lines,
+    totalProposedPay: sumProposedPay(lines),
+    updatedBy: args.actor ?? null,
+  })
+  if (!updated) throw new Error('Falha ao salvar impostos da planilha')
+
+  return {
+    draft: periodRowToDraft(panel, updated),
+    period: updated,
+    report: { parsed, applied, unmatched, updatedNames },
+  }
 }
 
 /** Aplica DARF/DAS/mensalidade na linha (Q1); só preenche campo ainda null. */
