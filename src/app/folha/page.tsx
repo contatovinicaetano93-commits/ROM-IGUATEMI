@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { IntranetPage } from '../_components/intranet/IntranetPage'
 import { SectionCard } from '../_components/ui'
 import { folhaFaturadoDisplay } from '@/lib/folha/draft-from-8123-surface'
@@ -187,6 +187,7 @@ export default function FolhaPage() {
   const [mensalidadeInput, setMensalidadeInput] = useState('')
   const [taxSubject, setTaxSubject] = useState('')
   const [taxBody, setTaxBody] = useState('')
+  const taxSheetInputRef = useRef<HTMLInputElement>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [actionWarn, setActionWarn] = useState(false)
 
@@ -507,6 +508,103 @@ export default function FolhaPage() {
     setTaxBody('')
   }
 
+  async function onTaxSpreadsheetFile(file: File | null) {
+    if (!file) return
+    if (!periodId) {
+      setError('Selecione uma quinzena')
+      return
+    }
+    if (!taxExtrasAllowed) {
+      setError('Planilha de impostos só na 1ª quinzena (pagamento dia 20)')
+      return
+    }
+    setBusy(true)
+    setActionMsg(null)
+    setActionWarn(false)
+    setError(null)
+    try {
+      const body = new FormData()
+      body.set('period_id', periodId)
+      body.set('file', file)
+      const res = await fetch('/api/folha/tax-spreadsheet', {
+        method: 'POST',
+        credentials: 'include',
+        body,
+        signal: AbortSignal.timeout(60_000),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(
+          typeof json === 'object' && json && 'error' in json
+            ? String((json as { error?: string }).error ?? 'Falha ao importar planilha')
+            : 'Falha ao importar planilha',
+        )
+        return
+      }
+      const d = json.data as {
+        applied?: number
+        unmatched?: { sheetRow?: number; name?: string | null }[]
+        draft?: FolhaDraft
+        period_id?: string
+        period_status?: FolhaPeriodStatus
+      }
+      if (d.draft) applyDraft(d.draft)
+      setStatus((prev) =>
+        prev
+          ? {
+              ...prev,
+              period_status: d.period_status ?? prev.period_status,
+              period_id: d.period_id ?? prev.period_id,
+            }
+          : prev,
+      )
+      const miss = d.unmatched?.length ?? 0
+      setActionMsg(
+        `Planilha impostos: ${d.applied ?? 0} linha(s) aplicada(s)${
+          miss ? ` · ${miss} sem match` : ''
+        }`,
+      )
+      if (miss > 0) setActionWarn(true)
+    } catch {
+      setError('Falha ao importar planilha de impostos')
+    } finally {
+      setBusy(false)
+      if (taxSheetInputRef.current) taxSheetInputRef.current.value = ''
+    }
+  }
+
+  async function onDownloadTaxTemplate() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/folha/tax-spreadsheet', {
+        credentials: 'include',
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        setError(
+          typeof json === 'object' && json && 'error' in json
+            ? String((json as { error?: string }).error ?? 'Falha ao baixar modelo')
+            : 'Falha ao baixar modelo',
+        )
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'folha-impostos-modelo.xlsx'
+      a.click()
+      URL.revokeObjectURL(url)
+      setActionMsg('Modelo de impostos baixado')
+    } catch {
+      setError('Falha ao baixar modelo de impostos')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function onExportExcel() {
     if (!periodId) {
       setError('Selecione uma quinzena')
@@ -768,6 +866,24 @@ export default function FolhaPage() {
                   >
                     Buscar DARF/DAS/mensalidade (IMAP)
                   </button>
+                  <button
+                    type="button"
+                    disabled={busy || !taxExtrasAllowed}
+                    onClick={() => taxSheetInputRef.current?.click()}
+                    className={FOLHA_BTN_SECONDARY}
+                    title="Anexa .xlsx com Profissional | DARF | DAS | Mensalidade"
+                  >
+                    Anexar planilha impostos
+                  </button>
+                  <input
+                    ref={taxSheetInputRef}
+                    type="file"
+                    accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    className="hidden"
+                    onChange={(e) =>
+                      void onTaxSpreadsheetFile(e.target.files?.[0] ?? null)
+                    }
+                  />
                   {periodStatus === 'draft' || periodStatus === 'ready_for_review' ? (
                     <button
                       type="button"
@@ -1044,14 +1160,40 @@ export default function FolhaPage() {
 
                 <div className="space-y-2.5 rounded-2xl border border-border bg-surface p-3.5">
                   <p className="text-xs font-semibold text-foreground">
-                    Colar e-mail fiscal (DARF/DAS/mensalidade)
+                    Impostos e contabilidade (DARF / DAS / mensalidade)
                   </p>
                   {!taxExtrasAllowed ? (
                     <p className="text-xs text-muted">
-                      Abre a 1ª quinzena (paga dia 20) para colar/aplicar impostos — e-mails até o
-                      dia 15.
+                      Abre a 1ª quinzena (paga dia 20) para importar impostos — planilha ou e-mail.
                     </p>
-                  ) : null}
+                  ) : (
+                    <p className="text-xs text-muted">
+                      Planilha: colunas <span className="text-foreground">Profissional</span> (ou
+                      CNPJ) + <span className="text-foreground">DARF</span> +{' '}
+                      <span className="text-foreground">DAS</span> +{' '}
+                      <span className="text-foreground">Mensalidade</span>. Preenche a grade;
+                      células vazias não apagam valor já lançado.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busy || !taxExtrasAllowed}
+                      onClick={() => taxSheetInputRef.current?.click()}
+                      className={FOLHA_BTN_PRIMARY}
+                    >
+                      Anexar planilha (.xlsx)
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void onDownloadTaxTemplate()}
+                      className={FOLHA_BTN_SECONDARY}
+                    >
+                      Baixar modelo
+                    </button>
+                  </div>
+                  <p className="text-[11px] font-medium text-muted">Ou colar e-mail fiscal</p>
                   <input
                     className={`${FOLHA_INPUT} text-xs`}
                     placeholder="Assunto (opcional)"
