@@ -152,6 +152,8 @@ function flagLabel(flag: FolhaDraftLine['flags'][number]): string {
       return 'Taxa adm pelo motor (8123 zerado)'
     case 'taxa_adm_em_descontos':
       return 'Taxa adm já no descontos 8123 (só conferência)'
+    case 'maquiador_adm_no_bruto':
+      return 'Taxa adm maquiador ajustada para faturado bruto'
     default: {
       const _exhaustive: never = flag
       return _exhaustive
