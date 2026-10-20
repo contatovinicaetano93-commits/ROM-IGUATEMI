@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  aPagarMatchesAvecLiquid,
   buildFolhaDraftFrom8123,
   buildFolhaDraftLine,
   deductionMagnitude,
+  isFolhaTaxPlaceholder,
   reconstructFatLiquidoFrom8123,
 } from '@/lib/folha/draft-from-8123'
 import { quinzenaForDay } from '@/lib/folha/period'
@@ -1577,6 +1579,84 @@ describe('buildFolhaDraftLine', () => {
     // Sem meta: motor BR 5% sobre 20k ainda abate.
     expect(miss.folha_extras.taxa_administrativa).toBeCloseTo(1000, 4)
     expect(miss.proposed_pay).toBeCloseTo(9000, 2)
+  })
+
+  it('a_pagar fechado no 0123: Baru/DAS só coluna — não rebatem no pay', () => {
+    // Francine-shaped: service_share − cartão + assist + other = a_pagar
+    const francine: CommissionProfessionalRow = {
+      name: 'FRANCINE DA SILVA COUTO',
+      role: 'Cabeleireiro',
+      charged: 20_000,
+      service_share: 10_000,
+      product_share: 0,
+      other_share: null,
+      tip: 0,
+      product_spend: 0,
+      card_fee: -200,
+      admin_fee: 0,
+      assistant_discount: -500,
+      other_discounts: -800,
+      net_payable: 8500, // 10000-200-500-800
+      house_share: 10_000,
+    }
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      francine,
+      { consumo_baru: 548.26, das: 487.9, darf: 100 },
+    )
+    expect(line.folha_extras.consumo_baru).toBeCloseTo(548.26, 2)
+    expect(line.folha_extras.das).toBeCloseTo(487.9, 2)
+    expect(line.proposed_pay).toBeCloseTo(8500, 2)
+  })
+
+  it('Nathan: service_share truncado → match via charged−house−cartão; pay=a_pagar', () => {
+    const nathan: CommissionProfessionalRow = {
+      name: 'Nathan Elias Magalhães Lima',
+      role: 'Cabeleireiro',
+      charged: 19816.702697753906,
+      service_share: 4009.200050354004,
+      product_share: 0,
+      other_share: null,
+      tip: 0,
+      product_spend: 0,
+      card_fee: -173.49556958675385,
+      admin_fee: 0,
+      assistant_discount: -1256.1513757705688,
+      other_discounts: -1297.6500282287598,
+      net_payable: 7374.303223252296,
+      house_share: 9715.102500915527,
+    }
+    expect(
+      aPagarMatchesAvecLiquid({
+        netPayable: nathan.net_payable,
+        rateioAposCartao: 3835.7045,
+        productShare: 0,
+        productSpend: 0,
+        assistantDiscount: nathan.assistant_discount,
+        otherDiscounts: nathan.other_discounts,
+        charged: nathan.charged,
+        cardFee: nathan.card_fee,
+        houseShare: nathan.house_share,
+      }),
+    ).toBe(true)
+    const line = buildFolhaDraftLine('iguatemi', nathan, { consumo_baru: 146.05 })
+    expect(line.folha_extras.consumo_baru).toBeCloseTo(146.05, 2)
+    expect(line.proposed_pay).toBeCloseTo(7374.3032, 2)
+  })
+
+  it('sentinelas Fopag 11.11/22.22/33.33 não entram como imposto', () => {
+    expect(isFolhaTaxPlaceholder(11.11)).toBe(true)
+    expect(isFolhaTaxPlaceholder(22.22)).toBe(true)
+    expect(isFolhaTaxPlaceholder(33.33)).toBe(true)
+    expect(isFolhaTaxPlaceholder(487.9)).toBe(false)
+    const line = buildFolhaDraftLine(
+      'iguatemi',
+      jefferson,
+      { darf: 11.11, das: 22.22, mensalidade_contabilidade: 33.33 },
+    )
+    expect(line.folha_extras.darf).toBeNull()
+    expect(line.folha_extras.das).toBeNull()
+    expect(line.folha_extras.mensalidade_contabilidade).toBeNull()
   })
 })
 
