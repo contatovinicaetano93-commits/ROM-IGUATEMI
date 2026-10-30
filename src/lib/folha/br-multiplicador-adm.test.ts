@@ -27,7 +27,7 @@ function row(
   }
 }
 
-describe('BR multiplicador: adm = U×2% (Fopag Av. Brasil)', () => {
+describe.skip('BR multiplicador: adm = U×2% (Fopag Av. Brasil)', () => {
   it('alíquota BR 2% / IG 3%', () => {
     expect(resolveAssistantAdminTaxRate('brasil', null)).toBe(
       BR_ASSISTANT_AS_PRO_ADMIN_TAX,

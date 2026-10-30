@@ -54,10 +54,9 @@ describe('applyExtrasToDraftLines', () => {
     expect(result.matched).toBe(true)
     expect(result.lines[0]?.folha_extras.valor_a_pagar_profissional).toBe(200)
     expect(result.lines[0]?.folha_extras.taxa_servicos).toBe(30)
-    // Assistente: U/V/W só conferência. + meio 100 − adm U×2% BR (20) − DARF 50
-    // (não charged×3% IG nem charged×2% residual do rascunho sem U)
-    expect(result.lines[0]?.proposed_pay).toBe(5000 + 100 - 50 - 20)
-    expect(result.lines[0]?.taxa_administrativa).toBeCloseTo(20, 2)
+    // Jefferson 15%: 12000×0.15 − 100 − DARF 50 −K+50%K (029 assist −200+100).
+    expect(result.lines[0]?.proposed_pay).toBeCloseTo(1_550, 2)
+    expect(result.lines[0]?.folha_extras.darf).toBe(50)
   })
 })
 
@@ -72,9 +71,9 @@ describe('refreshDraftPreservingExtras', () => {
     })
     expect(refreshed.lines[0]?.folha_extras.darf).toBe(99)
     expect(refreshed.lines[0]?.avec.net_payable).toBe(5100)
-    // Jefferson Romeu: sem extras.U o 8123 charged vira base U → adm×2% BR (240).
-    // + meio 100 − adm − DARF
-    expect(refreshed.lines[0]?.proposed_pay).toBe(5100 + 100 - 99 - 240)
+    // FOPAG ROM: DARF manual preservado; −K+50%K do 029 assist (−200+100).
+    expect(refreshed.lines[0]?.proposed_pay).not.toBeNull()
+    expect(refreshed.lines[0]?.proposed_pay).toBeCloseTo(1_600 - 99, 2)
   })
 })
 

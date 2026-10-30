@@ -1,1709 +1,348 @@
+/**
+ * Rascunho Folha — motor FOPAG ROM (apresentações RH 27/10/2026).
+ * proposed_pay = passos 1–6 (Avec + alíquota Planilha Base) ± manuais.
+ */
 import { describe, expect, it } from 'vitest'
 import {
-  aPagarMatchesAvecLiquid,
   buildFolhaDraftFrom8123,
   buildFolhaDraftLine,
-  deductionMagnitude,
-  isFolhaTaxPlaceholder,
-  reconstructFatLiquidoFrom8123,
+  deriveReport041From8123,
+  proposePayFromFopagRom,
 } from '@/lib/folha/draft-from-8123'
-import { quinzenaForDay } from '@/lib/folha/period'
+import { roundFopagRom } from '@/lib/folha/fopag-rom-calc'
 import type { CommissionProfessionalRow } from '@/lib/salon/commission-metrics'
 
-const jefferson: CommissionProfessionalRow = {
-  name: 'JEFFERSON POLICARPO DOS SANTOS',
-  role: 'MULTIPLICADOR',
-  charged: 12000,
-  service_share: null,
-  product_share: null,
-  other_share: null,
-  tip: 50,
-  product_spend: -114.12,
-  card_fee: null,
-  admin_fee: null,
-  assistant_discount: -150,
-  other_discounts: -707.19,
-  net_payable: 6032.64,
-  house_share: 4000,
+function pro(
+  partial: Partial<CommissionProfessionalRow> & { name: string },
+): CommissionProfessionalRow {
+  return {
+    name: partial.name,
+    role: partial.role ?? 'Cabeleireiro',
+    charged: partial.charged ?? null,
+    service_share: partial.service_share ?? null,
+    product_share: partial.product_share ?? null,
+    other_share: partial.other_share ?? null,
+    tip: partial.tip ?? null,
+    product_spend: partial.product_spend ?? null,
+    card_fee: partial.card_fee ?? null,
+    admin_fee: partial.admin_fee ?? null,
+    assistant_discount: partial.assistant_discount ?? null,
+    other_discounts: partial.other_discounts ?? null,
+    net_payable: partial.net_payable ?? null,
+    house_share: partial.house_share ?? null,
+  }
 }
 
-const manicureComAdm: CommissionProfessionalRow = {
-  name: 'Manicure Teste',
-  role: 'Manicure',
-  charged: 5000,
-  service_share: null,
-  product_share: null,
-  other_share: null,
-  tip: null,
-  product_spend: -100,
-  card_fee: null,
-  admin_fee: -50,
-  assistant_discount: null,
-  other_discounts: null,
-  net_payable: 2350,
-  house_share: null,
-}
-
-describe('deductionMagnitude', () => {
-  it('abs de negativo Avec; null permanece null', () => {
-    expect(deductionMagnitude(-150)).toBe(150)
-    expect(deductionMagnitude(null)).toBeNull()
+describe('deriveReport041From8123', () => {
+  it('inverte taxa 5% do rateio de produtos', () => {
+    expect(deriveReport041From8123(100)).toBeCloseTo(2000, 5)
+  })
+  it('sem rateio → 0', () => {
+    expect(deriveReport041From8123(null)).toBe(0)
   })
 })
 
-describe('quinzenaForDay', () => {
-  it('1–15 = q1; 16+ = q2', () => {
-    expect(quinzenaForDay('2026-05-10').id).toBe('2026-05-q1')
-    expect(quinzenaForDay('2026-05-16').id).toBe('2026-05-q2')
-    expect(quinzenaForDay('2026-05-31').to).toBe('2026-05-31')
+describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
+  it('FL/LP com alíquota 50% e manuais', () => {
+    // 0123=20000, 041=2000 → product_share = 100; 029=-400; 026=-300
+    const pay = proposePayFromFopagRom({
+      panel: 'brasil',
+      name: 'ADRIANA ROSA DE JESUS ABRANCHES', // 50% na Planilha Base
+      cargo: 'Cabeleireiro',
+      charged: 20_000,
+      productShare: 100,
+      cardFee: -400,
+      productSpend: -300,
+      extras: {
+        parc: null,
+        darf: null,
+        das: 100,
+        div_ativa: null,
+        mensalidade_contabilidade: null,
+        descontos_diversos: null,
+        consumo_baru: 50,
+        produtos_black: null,
+        servicos_assistente_como_pro: null,
+        valor_a_pagar_profissional: null,
+        taxa_servicos: null,
+        taxa_administrativa: null,
+        esteticista_bonus: null,
+        romeu_comissao_parcela: null,
+        devolucao_taxa_adm_q1: null,
+        acumulado_mes: null,
+        faturado_mes: null,
+        faturado_mesmo_periodo_ano_anterior: null,
+        taxa_adm_q1: null,
+        liquido_referencia: null,
+        fat_liquido_referencia: null,
+        faturado_referencia: null,
+      },
+    })
+    // FL 10500 − 026 300 − adm 5%×20000 − DAS 100 − Baru 50 = 9050
+    expect(roundFopagRom(pay, 2)).toBe(9_050)
+  })
+
+  it('sem alíquota RH → null', () => {
+    const pay = proposePayFromFopagRom({
+      panel: 'brasil',
+      name: 'PROFISSIONAL INEXISTENTE XYZ',
+      charged: 10_000,
+      productShare: 0,
+      cardFee: -100,
+      productSpend: null,
+      extras: {
+        parc: null,
+        darf: null,
+        das: null,
+        div_ativa: null,
+        mensalidade_contabilidade: null,
+        descontos_diversos: null,
+        consumo_baru: null,
+        produtos_black: null,
+        servicos_assistente_como_pro: null,
+        valor_a_pagar_profissional: null,
+        taxa_servicos: null,
+        taxa_administrativa: null,
+        esteticista_bonus: null,
+        romeu_comissao_parcela: null,
+        devolucao_taxa_adm_q1: null,
+        acumulado_mes: null,
+        faturado_mes: null,
+        faturado_mesmo_periodo_ano_anterior: null,
+        taxa_adm_q1: null,
+        liquido_referencia: null,
+        fat_liquido_referencia: null,
+        faturado_referencia: null,
+      },
+    })
+    expect(pay).toBeNull()
+  })
+
+  it('029 desconto assistente: −K + 50% crédito (não confundir com cartão)', () => {
+    const emptyExtras = {
+      parc: null,
+      darf: null,
+      das: null,
+      div_ativa: null,
+      mensalidade_contabilidade: null,
+      descontos_diversos: null,
+      consumo_baru: null,
+      produtos_black: null,
+      servicos_assistente_como_pro: null,
+      valor_a_pagar_profissional: null,
+      taxa_servicos: null,
+      taxa_administrativa: null,
+      esteticista_bonus: null,
+      romeu_comissao_parcela: null,
+      devolucao_taxa_adm_q1: null,
+      acumulado_mes: null,
+      faturado_mes: null,
+      faturado_mesmo_periodo_ano_anterior: null,
+      taxa_adm_q1: null,
+      liquido_referencia: null,
+      fat_liquido_referencia: null,
+      faturado_referencia: null,
+    }
+    // Adriana 50%: FL 10500 − 026 300 − adm 1000 = 9200
+    const without = proposePayFromFopagRom({
+      panel: 'brasil',
+      name: 'ADRIANA ROSA DE JESUS ABRANCHES',
+      cargo: 'Cabeleireiro',
+      charged: 20_000,
+      productShare: 100,
+      cardFee: -400,
+      productSpend: -300,
+      assistantDiscount: null,
+      extras: emptyExtras,
+    })
+    expect(roundFopagRom(without, 2)).toBe(9_200)
+    // Com K=1000 → 9200 − 1000 + 500 = 8700
+    const withAssist = proposePayFromFopagRom({
+      panel: 'brasil',
+      name: 'ADRIANA ROSA DE JESUS ABRANCHES',
+      cargo: 'Cabeleireiro',
+      charged: 20_000,
+      productShare: 100,
+      cardFee: -400,
+      productSpend: -300,
+      assistantDiscount: -1_000,
+      extras: emptyExtras,
+    })
+    expect(roundFopagRom(withAssist, 2)).toBe(8_700)
   })
 })
 
-describe('buildFolhaDraftLine', () => {
-  it('proposed_pay = a_pagar 8123 + meio a meio quando sem extras fiscais', () => {
-    const line = buildFolhaDraftLine('brasil', jefferson)
-    // multiplicador: sem taxa adm sobre C; soma meio a meio
-    expect(line.proposed_pay).toBe(6032.64 + 75)
-    expect(line.meio_a_meio).toBe(75)
-    expect(line.flags).toContain('assistente_com_desconto')
-    expect(line.flags).toContain('assistente_romeu')
-    expect(line.exception_id).toBe('romeu_assistant')
-    expect(line.folha_extras.darf).toBeNull()
-  })
-
-  it('abate DARF/DAS em cima do a_pagar sem recalcular comissão', () => {
-    const line = buildFolhaDraftLine('brasil', jefferson, { darf: 100, das: 86.05 })
-    expect(line.proposed_pay).toBe(6032.64 + 75 - 100 - 86.05)
-  })
-
-  it('Q2 (paga dia 05) ignora DARF/DAS/mensalidade no proposed_pay', () => {
+describe('buildFolhaDraftLine — FOPAG ROM', () => {
+  it('Alan BR 55%: proposed_pay pelo motor, não pelo a_pagar', () => {
     const line = buildFolhaDraftLine(
       'brasil',
-      jefferson,
-      { darf: 100, das: 86.05, mensalidade_contabilidade: 120 },
-      { applyTaxExtras: false },
-    )
-    expect(line.folha_extras.darf).toBeNull()
-    expect(line.folha_extras.das).toBeNull()
-    expect(line.folha_extras.mensalidade_contabilidade).toBeNull()
-    expect(line.proposed_pay).toBe(6032.64 + 75)
-  })
-
-  it('IG: taxa_adm=0 mas descontos já neteiam adm−meio → exibe 7%, não reabate', () => {
-    // Carina-shaped: other = adm − meio (560.56 = 1511.58 − 951.02)
-    const carina = {
-      name: 'CARINA FERNANDA DE FREITAS FERREIRA',
-      role: 'Cabeleireiro',
-      charged: 21594,
-      service_share: null,
-      product_share: null,
-      other_share: null,
-      tip: null,
-      product_spend: -1195.62,
-      card_fee: -256.48,
-      admin_fee: 0,
-      assistant_discount: -1902.04,
-      other_discounts: -560.56,
-      net_payable: 6599.6981,
-      house_share: null,
-    }
-    const line = buildFolhaDraftLine('iguatemi', carina, undefined, {
-      applyTaxExtras: false,
-    })
-    expect(line.taxa_administrativa).toBe(1511.58)
-    expect(line.taxa_administrativa_rate).toBe(0.07)
-    expect(line.taxa_administrativa_source).toBe('motor')
-    expect(line.meio_a_meio).toBeCloseTo(951.02, 2)
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.flags).not.toContain('taxa_adm_motor')
-    // a_pagar Avec já fechado — não +meio nem −adm de novo
-    expect(line.proposed_pay).toBeCloseTo(6599.6981, 3)
-  })
-
-  it('Ana Matsumoto IG: recibo 9472 com adm embutida em descontos', () => {
-    const row = {
-      name: 'ANA CRISTINA MATSUMOTO',
-      role: 'Cabeleireiro',
-      charged: 29216.2,
-      service_share: 14608.1,
-      product_share: 0,
-      other_share: null,
-      tip: 0,
-      product_spend: -840.13,
-      card_fee: -412.9,
-      admin_fee: 0,
-      assistant_discount: -2901.62,
-      // 387.08 (BARU) + 2045.13 (adm) − 1450.81 (meio)
-      other_discounts: -981.4,
-      net_payable: 9472.05,
-      house_share: 14608.1,
-    }
-    const line = buildFolhaDraftLine('iguatemi', row, undefined, {
-      applyTaxExtras: false,
-    })
-    expect(line.taxa_administrativa).toBeCloseTo(2045.134, 2)
-    expect(line.meio_a_meio).toBeCloseTo(1450.81, 2)
-    // Residual Avec (Baru) → coluna própria sem Zig/RH; não reabate.
-    expect(line.folha_extras.consumo_baru).toBeCloseTo(387.08, 2)
-    expect(line.outros_descontos).toBeNull()
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.proposed_pay).toBeCloseTo(9472.05, 2)
-
-    // RH/Zig com o mesmo valor: coluna intacta, pay intacto.
-    const withBaru = buildFolhaDraftLine(
-      'iguatemi',
-      row,
-      { consumo_baru: 387.08 },
-      { applyTaxExtras: false },
-    )
-    expect(withBaru.folha_extras.consumo_baru).toBeCloseTo(387.08, 2)
-    expect(withBaru.outros_descontos).toBeNull()
-    expect(withBaru.proposed_pay).toBeCloseTo(9472.05, 2)
-  })
-
-  it('manicure/assistente: descontos = Baru sem embed → coluna Baru, a_pagar intacto', () => {
-    const cases: CommissionProfessionalRow[] = [
-      {
-        name: 'Andressa Erica Batista de Oliveira',
-        role: 'Manicure',
-        charged: 6449,
-        service_share: null,
-        product_share: null,
-        other_share: null,
-        tip: null,
-        product_spend: -65.12,
-        card_fee: -151.55,
-        admin_fee: 0,
-        assistant_discount: null,
-        other_discounts: -208.71,
-        net_payable: 3021.51,
-        house_share: null,
-      },
-      {
-        name: 'ARIANE CRISTINA DOS SANTOS',
-        role: 'MULTIPLICADOR',
-        charged: 26780.5,
-        service_share: null,
-        product_share: null,
-        other_share: null,
-        tip: null,
-        product_spend: null,
-        card_fee: null,
-        admin_fee: 0,
-        assistant_discount: null,
-        other_discounts: -136.26,
-        net_payable: 2541.79,
-        house_share: null,
-      },
-    ]
-    for (const row of cases) {
-      const baru = Math.abs(row.other_discounts ?? 0)
-      const bare = buildFolhaDraftLine('iguatemi', row, undefined, {
-        applyTaxExtras: false,
-      })
-      expect(bare.flags).not.toContain('taxa_adm_em_descontos')
-      // descontos 8123 = Baru → coluna Baru via Avec; Outros vazio.
-      expect(bare.folha_extras.consumo_baru).toBeCloseTo(baru, 2)
-      expect(bare.outros_descontos).toBeNull()
-      expect(bare.proposed_pay).toBeCloseTo(row.net_payable ?? 0, 2)
-
-      const withBaru = buildFolhaDraftLine(
-        'iguatemi',
-        row,
-        { consumo_baru: baru },
-        { applyTaxExtras: false },
-      )
-      expect(withBaru.folha_extras.consumo_baru).toBeCloseTo(baru, 2)
-      expect(withBaru.outros_descontos).toBeNull()
-      expect(withBaru.proposed_pay).toBeCloseTo(row.net_payable ?? 0, 2)
-    }
-  })
-
-  it('BR cabeleireiro: a_pagar 0123 = rateio → exibe adm 5%, não reabate no líquido', () => {
-    const line = buildFolhaDraftLine(
-      'brasil',
-      {
-        name: 'Profissional BR Teste',
+      pro({
+        name: 'ALAN FERNADO DE ALBUQUERQUE',
         role: 'Cabeleireiro',
-        charged: 10000,
-        service_share: null,
-        product_share: null,
-        other_share: null,
-        tip: null,
-        product_spend: null,
-        card_fee: null,
-        admin_fee: 0,
-        assistant_discount: null,
-        other_discounts: null,
-        net_payable: 5000,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: false },
+        charged: 20_000,
+        product_share: 100,
+        card_fee: -400,
+        product_spend: -300,
+        net_payable: 1, // a_pagar ignorado pelo motor novo
+      }),
     )
-    expect(line.taxa_administrativa).toBe(500)
-    expect(line.taxa_administrativa_rate).toBe(0.05)
-    // rateio (charged/2) = a_pagar → líquido = 0123, adm só conferência
-    expect(line.proposed_pay).toBe(5000)
-    expect(line.flags).not.toContain('taxa_adm_motor')
+    // FL 11400 − 026 300 − adm 5%×20000 = 10100
+    expect(line.proposed_pay).toBeCloseTo(10_100, 2)
   })
 
-  it('BR maquiador: other só adm no fat. líquido → pay abate gap para bruto', () => {
-    // other < adm×bruto → ainda na base líquida; gap = 5%×(C−rateio)
-    const charged = 5309.74
-    const rateio = 3161.95
-    const product = -2.64
-    const other = -(rateio * 0.05) // só adm no fat. líquido
-    const net = rateio + product + other
-    const line = buildFolhaDraftLine(
+  it('assistente com U não recebe passo 7 automático', () => {
+    const row = pro({
+      name: 'GABRIELA DA SILVA SANTOS',
+      role: 'MULTIPLICADOR',
+      charged: 12_000,
+      product_share: 0,
+      product_spend: -100,
+      card_fee: 0,
+      net_payable: 1,
+    })
+    const sem = buildFolhaDraftLine('iguatemi', row)
+    const com = buildFolhaDraftLine('iguatemi', row, {
+      servicos_assistente_como_pro: 4930.04,
+    })
+    expect(com.folha_extras.valor_a_pagar_profissional).toBeCloseTo(986.008, 2)
+    expect(com.proposed_pay).toBeCloseTo(sem.proposed_pay ?? 0, 2)
+  })
+
+  it('Auricaliane inclui V−W no líquido', () => {
+    const row = pro({
+      name: 'AURICALIANE DA SILVA DANTAS',
+      role: 'MULTIPLICADOR',
+      charged: 3438.72,
+      product_share: 0,
+      card_fee: 0,
+      product_spend: 0,
+      net_payable: 1,
+    })
+    const sem = buildFolhaDraftLine('brasil', row, undefined, {
+      applyTaxExtras: false,
+    })
+    const com = buildFolhaDraftLine(
       'brasil',
-      {
-        name: 'PIERRE TAWAN ALVES FRANCA',
-        role: 'Maquiador',
-        charged,
-        service_share: 3267.69,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: product,
-        card_fee: -105.74,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: other,
-        net_payable: net,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: true },
+      row,
+      { servicos_assistente_como_pro: 3304 },
+      { applyTaxExtras: false },
     )
-    expect(line.taxa_administrativa).toBeCloseTo(charged * 0.05, 2)
-    expect(line.flags).toContain('maquiador_adm_no_bruto')
-    expect(line.proposed_pay).toBeCloseTo(
-      net - 0.05 * (charged - rateio),
+    expect(com.folha_extras.valor_a_pagar_profissional).toBeCloseTo(991.2, 1)
+    expect((com.proposed_pay ?? 0) - (sem.proposed_pay ?? 0)).toBeCloseTo(
+      991.2 - 99.12,
       1,
     )
   })
 
-  it('BR maquiador: other já com adm no bruto → não duplica gap', () => {
-    const charged = 5309.74
-    const rateio = 3161.95
-    const product = -2.64
-    const extras = 170.31 // mensalidade + baru
-    const other = -(charged * 0.05 + extras)
-    const net = rateio + product + other
-    const line = buildFolhaDraftLine(
-      'brasil',
-      {
-        name: 'PIERRE TAWAN ALVES FRANCA',
-        role: 'Maquiador',
-        charged,
-        service_share: 3267.69,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: product,
-        card_fee: -105.74,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: other,
-        net_payable: net,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: true },
-    )
-    expect(line.flags).not.toContain('maquiador_adm_no_bruto')
-    expect(line.proposed_pay).toBeCloseTo(net, 2)
-  })
-
-  it('IG maquiador: adm já no bruto → não abate gap', () => {
-    const charged = 1180
-    const rateio = 687.48
-    const other = -82.6 // = charged × 7%
-    const net = rateio + other
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'ANA LUIZA DUTRA VAZ',
-        role: 'Maquiador',
-        charged,
-        service_share: 708,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: 0,
-        card_fee: -20.52,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: other,
-        net_payable: net,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: true },
-    )
-    expect(line.taxa_administrativa).toBeCloseTo(82.6, 2)
-    expect(line.flags).not.toContain('maquiador_adm_no_bruto')
-    expect(line.proposed_pay).toBeCloseTo(net, 2)
-  })
-
-  it('Out Q1 pro: a_pagar = ss+prod+assist+outros+cartão → não +meio −adm', () => {
-    // Alan BR 01–15/10: motor antigo somava meio−adm e furava o 0123.
-    const line = buildFolhaDraftLine(
-      'brasil',
-      {
-        name: 'ALAN FERNADO DE ALBUQUERQUE',
-        role: 'Cabeleireiro',
-        charged: 93020.00011014938,
-        service_share: 51160.999905347824,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: -1281.720004454255,
-        card_fee: -1367.1004881113768,
-        admin_fee: 0,
-        assistant_discount: -12699.60000360012,
-        other_discounts: -7120.479919433594,
-        net_payable: 28692.099489748478,
-        house_share: 41859.00020480156,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
-    expect(line.meio_a_meio).toBeCloseTo(6349.8, 1)
-    expect(line.proposed_pay).toBeCloseTo(28692.1, 1)
-    expect(line.flags).not.toContain('taxa_adm_motor')
-  })
-
-  it('Diello IG Out Q1: a_pagar Avec fechado → proposed_pay = net (meio 50%, sem delta)', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'Pedro E F Diello',
-        role: 'Cabeleireiro',
-        charged: 40929.99991607666,
-        service_share: 19968.1,
-        product_share: null,
-        other_share: null,
-        tip: 0,
-        product_spend: -1061.5400043800473,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: -5099.900017738342,
-        other_discounts: -596.8401641845703,
-        net_payable: 13209.81977223605,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: true },
-    )
-    expect(line.meio_a_meio_rate).toBe(0.5)
-    expect(line.meio_a_meio).toBeCloseTo(2549.95, 1)
-    expect(line.proposed_pay).toBeCloseTo(13209.82, 1)
-  })
-
-  it('Daniel Viana Out Q1: product_share no líquido fechado → não credita leftover Baru', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'DANIEL VIANA MARTINS',
-        role: 'Cabeleireiro',
-        charged: 26408,
-        service_share: 12025,
-        product_share: 117.9,
-        other_share: 0,
-        tip: 0,
-        product_spend: -269.71,
-        card_fee: -272.308,
-        admin_fee: 0,
-        assistant_discount: -2639.9,
-        other_discounts: -1783.34,
-        net_payable: 7177.642,
-        house_share: null,
-      },
-      { consumo_baru: 120 },
-      { applyTaxExtras: true },
-    )
-    expect(line.proposed_pay).toBeCloseTo(7177.64, 1)
-  })
-
-  it('Guilherme colorista Out Q1: a_pagar fechado → não recredita meio', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'GUILHERME MACHADO SOUZA',
-        role: 'Colorista',
-        charged: 1640,
-        service_share: 2404,
-        product_share: 0,
-        other_share: 0,
-        tip: 0,
-        product_spend: 0,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: -164,
-        other_discounts: -116.5300064086914,
-        net_payable: 2123.4699959754944,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: true },
-    )
-    expect(line.proposed_pay).toBeCloseTo(2123.47, 1)
-  })
-
-  it('Maykon IG Out Q1: líquido Avec fechado → não credita leftover olerite', () => {
-    // descontos 8123 ≈ (adm−meio)+residual; leftover Tamires inventava +6031 no pay.
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'MAYKON LUIZ DOS SANTOS CARDOZO',
-        role: 'Cabeleireiro',
-        charged: 73037.19426345825,
-        service_share: 39900.95664334297,
-        product_share: 24.49999976158142,
-        other_share: null,
-        tip: 0,
-        product_spend: -2537.3700162768364,
-        card_fee: -987.0979097783566,
-        admin_fee: 0,
-        assistant_discount: -6420.719379425049,
-        other_discounts: -8053.700042724609,
-        net_payable: 21926.569294899702,
-        house_share: 33111.7376203537,
-      },
-      { consumo_baru: 120 },
-      { applyTaxExtras: true },
-    )
-    expect(line.proposed_pay).toBeCloseTo(21926.57, 1)
-    expect(line.flags).not.toContain('taxa_adm_motor')
-  })
-
-  it('Alison BR Q2: adm 5% + a_pagar já neteado (descontos=0) → não reabate; +Baru = olerite', () => {
-    const row = {
-      tip: 0,
-      name: 'ALISON ALVAREZ',
-      role: 'Cabeleireiro',
-      charged: 41399.00002908707,
-      card_fee: -588.0097188055515,
-      admin_fee: 0,
-      house_share: 20825.500014543533,
-      net_payable: 14583.246296279132,
-      product_share: 0,
-      other_share: 0,
-      product_spend: -1262.890000499785,
-      service_share: 20573.500014543533,
-      other_discounts: 0,
-      assistant_discount: -4139.3539989590645,
-    }
-    const bare = buildFolhaDraftLine('brasil', row, undefined, {
-      applyTaxExtras: false,
-    })
-    expect(bare.taxa_administrativa_rate).toBe(0.05)
-    expect(bare.taxa_administrativa).toBeCloseTo(2069.95, 1)
-    expect(bare.rateio_apos_cartao).toBeCloseTo(19985.48, 1)
-    expect(bare.flags).toContain('taxa_adm_em_descontos')
-    expect(bare.flags).not.toContain('taxa_adm_motor')
-    // a_pagar Avec já fechou adm/meio; falta só Baru do olerite
-    expect(bare.proposed_pay).toBeCloseTo(14583.25, 1)
-
-    const withBaru = buildFolhaDraftLine(
-      'brasil',
-      row,
-      { consumo_baru: 324.65 },
-      { applyTaxExtras: false },
-    )
-    expect(withBaru.folha_extras.consumo_baru).toBe(324.65)
-    expect(withBaru.proposed_pay).toBeCloseTo(14258.6, 0)
-  })
-
-  it('Brunna IG: taxa adm 5% (exceção), não 7%', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'Brunna Fabricio Da Silva',
-        role: 'Cabeleireiro',
-        charged: 10000,
-        service_share: null,
-        product_share: null,
-        other_share: null,
-        tip: null,
-        product_spend: null,
-        card_fee: null,
-        admin_fee: 0,
-        assistant_discount: null,
-        other_discounts: null,
-        net_payable: 5000,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
-    expect(line.taxa_administrativa).toBe(500)
-    expect(line.taxa_administrativa_rate).toBe(0.05)
-  })
-
-  it('manicure com taxa adm no 8123 → flag (caderno: sem taxa adm)', () => {
-    const line = buildFolhaDraftLine('brasil', manicureComAdm)
-    expect(line.flags).toContain('manicure_com_taxa_adm')
-    expect(line.cargo).toBe('manicure')
-  })
-
-  it('U informado deriva V 20% e W 3% BR (conferência; assistente não soma V−W no líquido)', () => {
-    const line = buildFolhaDraftLine('brasil', jefferson, {
-      servicos_assistente_como_pro: 1000,
-    })
-    expect(line.folha_extras.valor_a_pagar_profissional).toBe(200)
-    expect(line.folha_extras.taxa_servicos).toBe(30)
-    // Fopag: U/V/W no assistente são repasse ao pro — líquido = a_pagar + meio
-    expect(line.proposed_pay).toBe(6032.64 + 75)
-  })
-
-  it('U no IG: W 4% e taxa adm assistente 3% (incl. Romeu)', () => {
-    const line = buildFolhaDraftLine('iguatemi', jefferson, {
-      servicos_assistente_como_pro: 1000,
-    })
-    expect(line.folha_extras.taxa_servicos).toBe(40)
-    expect(line.folha_extras.taxa_adm_assistente).toBe(30)
-  })
-
-  it('Gabriela Romeu: descontos = meio − adm 3%; líquido = a_pagar (sem recreditar meio)', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'GABRIELA DA SILVA SANTOS',
-        role: 'MULTIPLICADOR',
-        charged: 5076,
-        service_share: 1557,
-        product_share: 7.3,
-        other_share: null,
-        tip: 0,
-        product_spend: -86.63,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: -430,
-        // +67.10 = 215 (meio) − 147.90 (taxa adm 3%)
-        other_discounts: 67.1,
-        net_payable: 1114.77,
-        house_share: 3589.7,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
-    expect(line.flags).toContain('assistente_romeu')
-    expect(line.taxa_administrativa).toBeCloseTo(147.9, 1)
-    expect(line.taxa_administrativa_rate).toBe(0.03)
-    expect(line.meio_a_meio).toBeCloseTo(215, 1)
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.proposed_pay).toBeCloseTo(1114.77, 2)
-  })
-
-  it('Daniel: descontos shortfall W → Tx adm 7% embutida; líquido = a_pagar; com U bate olerite', () => {
-    const row = {
-      name: 'DANIEL CHABARIBERY',
-      role: 'Cabeleireiro',
-      charged: 50480.0000038147,
-      service_share: 25240.00000190735,
-      product_share: 0,
-      other_share: 0,
-      tip: 0,
-      product_spend: -1317.4000057578087,
-      card_fee: -688.0939008593559,
-      admin_fee: 0,
-      assistant_discount: -4704.110007047653,
-      other_discounts: -1116.1701164245605,
-      net_payable: 17414.22597181797,
-      house_share: 25240.00000190735,
-    }
-    const line = buildFolhaDraftLine('iguatemi', row, undefined, {
-      applyTaxExtras: false,
-    })
-    expect(line.taxa_administrativa).toBeCloseTo(3533.6, 1)
-    expect(line.meio_a_meio).toBeCloseTo(2352.055, 2)
-    expect(line.rateio_apos_cartao).toBeCloseTo(24551.91, 1)
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.proposed_pay).toBeCloseTo(17414.23, 2)
-
-    // U = Dailza 420 + Evandro 1220.01 → V 328 − W 65.6 − shortfall ≈ PDF 17611.26
-    const withU = buildFolhaDraftLine(
-      'iguatemi',
-      row,
-      { servicos_assistente_como_pro: 1640.01 },
-      { applyTaxExtras: false },
-    )
-    expect(withU.folha_extras.valor_a_pagar_profissional).toBeCloseTo(328.002, 2)
-    expect(withU.folha_extras.taxa_servicos).toBeCloseTo(65.6, 1)
-    expect(withU.proposed_pay).toBeCloseTo(17611.26, 1)
-  })
-
-  it('Lucas Romeu: descontos=0 → Tx adm 81.90 (3% de 2730); proposed = a_pagar + meio − adm', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'LUCAS RODRIGUES DE SOUZA',
-        role: 'MULTIPLICADOR',
-        charged: 2730,
-        service_share: 1044.0000014305115,
-        product_share: 0,
-        other_share: 0,
-        tip: 0,
-        product_spend: -74.04000253975391,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: -221,
-        other_discounts: 0,
-        net_payable: 748.9599988907576,
-        house_share: 1911,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
-    expect(line.flags).toContain('assistente_romeu')
-    expect(line.flags).toContain('meta_romeu_pendente')
-    expect(line.taxa_administrativa).toBeCloseTo(81.9, 2)
-    expect(line.taxa_administrativa_rate).toBe(0.03)
-    expect(line.taxa_administrativa_source).toBe('motor')
-    expect(line.meio_a_meio).toBeCloseTo(110.5, 2)
-    // 748.96 + 110.5 − 81.90 = 777.56
-    expect(line.proposed_pay).toBeCloseTo(777.56, 2)
-    expect(line.flags).not.toContain('taxa_adm_em_descontos')
-  })
-
-  it('Amanda (assistente sem meio): NÃO abate 3%×faturado; proposed = a_pagar', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'AMANDA DOS SANTOS ARAUJO',
-        role: 'MULTIPLICADOR',
-        charged: 20761.5,
-        service_share: 2025.75,
-        product_share: null,
-        other_share: null,
-        tip: 0,
-        product_spend: -12.3,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: null,
-        other_discounts: 0,
-        net_payable: 2013.45,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
-    expect(line.taxa_administrativa).toBeNull()
-    expect(line.flags).not.toContain('taxa_adm_motor')
-    expect(line.proposed_pay).toBeCloseTo(2013.45, 2)
-  })
-
-  it('Rafaella (pro sem assistente): descontos ≈ adm → não reabate 7%', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'Rafaella Edwiges Bernardo Nunes',
-        role: 'Cabeleireiro',
-        charged: 17112,
-        service_share: null,
-        product_share: null,
-        other_share: null,
-        tip: 0,
-        product_spend: -20.34,
-        card_fee: null,
-        admin_fee: 0,
-        assistant_discount: null,
-        other_discounts: -1197.84,
-        net_payable: 8787.75,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.proposed_pay).toBeCloseTo(8787.75, 2)
-  })
-
-  it('Brunna Q2 Fopag: crédito (meio−adm)+residual → estorna residual; +V −W −Baru = 68976.53', () => {
-    const row = {
-      name: 'BRUNNA FABRICIO DA SILVA',
-      role: 'Cabeleireiro',
-      charged: 125630,
-      service_share: 87941,
-      product_share: 0,
-      other_share: 0,
-      tip: 0,
-      product_spend: -4693.53,
-      card_fee: -3451.49,
-      admin_fee: 0,
-      assistant_discount: -14313.44,
-      other_discounts: 2118.54,
-      // a_pagar já inclui crédito descontos 2118.54
-      net_payable: 68636.492,
-      house_share: 37700,
-    }
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      row,
-      {
-        servicos_assistente_como_pro: 10500.02,
-        consumo_baru: 201.68,
-      },
-      { applyTaxExtras: false },
-    )
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.taxa_administrativa).toBeCloseTo(6281.5, 1)
-    expect(line.meio_a_meio).toBeCloseTo(7156.72, 2)
-    expect(line.outros_descontos).toBeCloseTo(1243.32, 2)
-    expect(line.folha_extras.valor_a_pagar_profissional).toBeCloseTo(2100.004, 2)
-    expect(line.folha_extras.taxa_servicos).toBeCloseTo(315.0006, 3)
-    // 68636.492 − 1243.32 + 2100.004 − 315.0006 − 201.68 ≈ 68976.50
-    expect(line.proposed_pay).toBeCloseTo(68976.53, 1)
-  })
-
-  it('Romeu BR: a_pagar fechado + crédito (meio−adm)+residual → pay = net (não estorna)', () => {
-    // Out Q1 2026: other ≈ (meio−adm) + residual; Fopag/0123 = a_pagar.
-    // Estornar residual cortava ~R$13.642 no proposed_pay.
-    const row = {
-      name: 'ROMEU FELIPE',
-      role: 'Cabeleireiro',
-      charged: 53219,
-      service_share: 41950,
-      product_share: 0,
-      other_share: null,
-      tip: 0,
-      product_spend: -2749.67,
-      card_fee: -327.6499,
-      admin_fee: 0,
-      assistant_discount: -5855.4733,
-      other_discounts: 13909.2303,
-      // rateio(41950−327.6499) + product + assist + other
-      net_payable: 46926.4371,
-      house_share: null,
-    }
-    const line = buildFolhaDraftLine('brasil', row, undefined, {
-      applyTaxExtras: true,
-    })
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.folha_extras.descontos_diversos).toBeNull()
-    expect(line.proposed_pay).toBeCloseTo(row.net_payable, 2)
-  })
-
-  it('Walter BR: a_pagar fechado + crédito (meio−adm)+residual → pay = net', () => {
-    const row = {
-      name: 'WALTER MARTINHO LEAL FILHO CABELEIREIRO',
-      role: 'Cabeleireiro',
-      charged: 112364.872,
-      service_share: 67420.9232,
-      product_share: 0,
-      other_share: null,
-      tip: 0,
-      product_spend: -1435.05,
-      card_fee: -1672.0368,
-      admin_fee: 0,
-      assistant_discount: -11696.702,
-      other_discounts: 2320.3699,
-      // rateio(67420.9232−1672.0368) + product + assist + other
-      net_payable: 54937.5043,
-      house_share: null,
-    }
-    const line = buildFolhaDraftLine('brasil', row, undefined, {
-      applyTaxExtras: true,
-    })
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.proposed_pay).toBeCloseTo(row.net_payable, 2)
-  })
-
-  it('Joanides: crédito (meio−adm)−Baru embutido → líquido = a_pagar', () => {
-    const row = {
-      name: 'JOANIDES MENDES PONTES JUNIOR',
-      role: 'Cabeleireiro',
-      charged: 105021.796,
-      service_share: 62113.077,
-      product_share: 0,
-      other_share: null,
-      tip: 0,
-      product_spend: -1708.8,
-      card_fee: -1482.3015,
-      admin_fee: 0,
-      assistant_discount: -11626.7316,
-      other_discounts: 363.18,
-      net_payable: 47658.4246,
-      house_share: null,
-    }
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      row,
-      { consumo_baru: 199.1 },
-      { applyTaxExtras: false },
-    )
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.flags).not.toContain('taxa_adm_motor')
-    expect(line.taxa_administrativa).toBeCloseTo(5251.09, 1)
-    expect(line.folha_extras.consumo_baru).toBeCloseTo(199.1, 1)
-    expect(line.outros_descontos).toBeNull()
-    expect(line.proposed_pay).toBeCloseTo(47658.42, 1)
-
-    // extras.taxa_administrativa fantasma de rascunho antigo NÃO reabate
-    const stale = buildFolhaDraftLine(
-      'iguatemi',
-      row,
-      { consumo_baru: 199.1, taxa_administrativa: 5251.09 },
-      { applyTaxExtras: false },
-    )
-    expect(stale.folha_extras.taxa_administrativa).toBeNull()
-    expect(stale.proposed_pay).toBeCloseTo(47658.42, 1)
-  })
-
-  it('Romeu Felipe: crédito órfão 8123 + U/V/W = líquido Fopag', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'ROMEU FELIPE',
-        role: 'Cabeleireiro',
-        charged: 0,
-        service_share: 0,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: -683.51,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: 1444.01,
-        net_payable: 760.5,
-        house_share: null,
-      },
-      { servicos_assistente_como_pro: 7660.04 },
-      { applyTaxExtras: false },
-    )
-    expect(line.folha_extras.valor_a_pagar_profissional).toBeCloseTo(1532.008, 2)
-    expect(line.folha_extras.taxa_servicos).toBeCloseTo(306.4016, 3)
-    // 760.5 − 1444.01 + 1532.008 − 306.4016 ≈ 542.10
-    expect(line.proposed_pay).toBeCloseTo(542.1, 0)
-  })
-
-  it('Diello: 8123 a 50% meio (= motor) → proposed_pay = a_pagar; Baru embutido', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'Pedro E F Diello',
-        role: 'Cabeleireiro',
-        charged: 36950,
-        service_share: 18360,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: -1012.96,
-        card_fee: -516.2054,
-        admin_fee: 0,
-        assistant_discount: -4254.6,
-        // (adm7% − meio50%) + Baru = 988.72
-        other_discounts: -988.72,
-        net_payable: 11599.01,
-        house_share: null,
-      },
-      { consumo_baru: 529.52 },
-      { applyTaxExtras: false },
-    )
-    expect(line.meio_a_meio).toBeCloseTo(2127.3, 2)
-    expect(line.meio_a_meio_rate).toBe(0.5)
-    expect(line.flags).toContain('taxa_adm_em_descontos')
-    expect(line.flags).not.toContain('taxa_adm_motor')
-    // a_pagar Avec fechado + Baru já no other → pay = net
-    expect(line.proposed_pay).toBeCloseTo(11599.01, 0)
-  })
-
-  it('Jefferson: other≈Baru embutido → coluna Baru, líquido = a_pagar', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'JEFFERSON SCARAFICCI GOIABEIRA',
-        role: 'Assistente',
-        charged: 5000,
-        service_share: 2000,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: 0,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: -386.21,
-        net_payable: 2066.84,
-        house_share: null,
-      },
-      { consumo_baru: 386.21 },
-      { applyTaxExtras: false },
-    )
-    expect(line.folha_extras.consumo_baru).toBeCloseTo(386.21, 2)
-    expect(line.folha_extras.taxa_administrativa).toBeNull()
-    expect(line.proposed_pay).toBeCloseTo(2066.84, 2)
-  })
-
-  it('Wesley: other≈Baru+parc → não reabate nenhum dos dois', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'WESLEY SANTOS DE MOURA',
-        role: 'MULTIPLICADOR',
-        charged: 27031,
-        service_share: 2703,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: 0,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: -384.63,
-        net_payable: 2318.5,
-        house_share: null,
-      },
-      { consumo_baru: 326.88, parc: 57.75 },
-      { applyTaxExtras: false },
-    )
-    expect(line.folha_extras.consumo_baru).toBeCloseTo(326.88, 2)
-    expect(line.folha_extras.parc).toBeCloseTo(57.75, 2)
-    expect(line.proposed_pay).toBeCloseTo(2318.5, 2)
-  })
-
-  it('Beto: residual≈desc_diversos embutido → não reabate W', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'BETO FORTES',
-        role: 'Cabeleireiro',
-        charged: 33045.6,
-        service_share: 16469.3,
-        product_share: 5.35,
-        other_share: null,
-        tip: 0,
-        product_spend: -510.92,
-        card_fee: -400.22,
-        admin_fee: 0,
-        assistant_discount: -3293.86,
-        other_discounts: -1916.26,
-        net_payable: 10353.39,
-        house_share: null,
-      },
-      { descontos_diversos: 1250 },
-      { applyTaxExtras: false },
-    )
-    expect(line.outros_descontos).toBeCloseTo(1250, 0)
-    expect(line.folha_extras.descontos_diversos).toBeCloseTo(1250, 0)
-    expect(line.proposed_pay).toBeCloseTo(10353.39, 1)
-  })
-
-  it('Daniel Souza: produto Fopag já em descontos 8123 → não reabate', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'DANIEL SOUZA DA SILVA',
-        role: 'Assistente',
-        charged: 0,
-        service_share: 2460,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: 0,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: -63.44,
-        net_payable: 2397.36,
-        house_share: null,
-      },
-      { produto_referencia: 63.44, liquido_referencia: 2397.36 },
-      { applyTaxExtras: false },
-    )
-    expect(line.proposed_pay).toBeCloseTo(2397.36, 2)
-  })
-
-  it('Diana: produto Fopag > Avec → abate delta no líquido', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'DIANA DOS ANJOS SANTOS',
-        role: 'Manicure',
-        charged: 6675,
-        service_share: 4005,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: -9.5,
-        card_fee: -174,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: 0,
-        net_payable: 3891.0973,
-        house_share: null,
-      },
-      { produto_referencia: 42.68 },
-      { applyTaxExtras: false },
-    )
-    // 3891.0973 − (42.68 − 9.5) = 3857.9173
-    expect(line.proposed_pay).toBeCloseTo(3857.92, 1)
-  })
-
-  it('Alana: a_pagar ≈ líquido Fopag → Baru só coluna (não reabate)', () => {
-    const row = {
-      tip: 0,
-      name: 'ALANA SOARES DE SOUSA',
-      role: 'Assistente',
-      charged: 0,
-      service_share: 2127.5,
-      product_share: 0,
-      other_share: 0,
-      product_spend: 0,
-      card_fee: -48.85,
-      admin_fee: 0,
-      assistant_discount: 0,
-      other_discounts: 396.8,
-      net_payable: 2475.45,
-      house_share: 0,
-    }
-    const withoutHint = buildFolhaDraftLine(
-      'iguatemi',
-      row,
-      { consumo_baru: 91.76 },
-      { applyTaxExtras: false },
-    )
-    // Sem referência Fopag, Baru do Zig ainda abate (Monique/Alana indistinguíveis no 8123).
-    expect(withoutHint.proposed_pay).toBeCloseTo(2383.69, 1)
-
-    const withY = buildFolhaDraftLine(
-      'iguatemi',
-      row,
-      { consumo_baru: 91.76 },
-      { applyTaxExtras: false, liquidoReferencia: 2475.44 },
-    )
-    expect(withY.folha_extras.consumo_baru).toBeCloseTo(91.76, 2)
-    expect(withY.proposed_pay).toBeCloseTo(2475.45, 1)
-
-    // G Fopag = a_pagar + Baru → mesmo racional (Baru embutido em G).
-    const withG = buildFolhaDraftLine(
-      'iguatemi',
-      row,
-      { consumo_baru: 91.76 },
-      { applyTaxExtras: false, fatLiquidoReferencia: 2567.2 },
-    )
-    expect(withG.proposed_pay).toBeCloseTo(2475.45, 1)
-  })
-
-  it('Monique: G Fopag ≈ a_pagar → Baru do Zig ainda abate', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        tip: 0,
-        name: 'MONIQUE EVELYN CORDEIRO GOMES',
-        role: 'Assistente',
-        charged: 0,
-        service_share: 2021.8325,
-        product_share: 0,
-        other_share: 0,
-        product_spend: -0.37,
-        card_fee: -8.585,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: 85.86,
-        net_payable: 2098.7375,
-        house_share: 0,
-      },
-      { consumo_baru: 51.84 },
-      {
-        applyTaxExtras: false,
-        liquidoReferencia: 2046.9,
-        fatLiquidoReferencia: 2099.11,
-      },
-    )
-    expect(line.folha_extras.consumo_baru).toBeCloseTo(51.84, 2)
-    // 2098.74 − 51.84 ≈ 2046.9 (Y Fopag)
-    expect(line.proposed_pay).toBeCloseTo(2046.9, 1)
-  })
-
-  it('Carey: produto ≈ Baru não fecha olerite — Baru ainda abate', () => {
-    const line = buildFolhaDraftLine(
-      'brasil',
-      {
-        name: 'CAREY DOS SANTOS CASTRO',
-        role: 'MULTIPLICADOR',
-        charged: 14448,
-        service_share: null,
-        product_share: null,
-        other_share: null,
-        tip: null,
-        product_spend: -69.76,
-        card_fee: null,
-        admin_fee: 0,
-        assistant_discount: null,
-        other_discounts: null,
-        net_payable: 1515.04,
-        house_share: null,
-      },
-      {
-        consumo_baru: 70.11,
-        servicos_assistente_como_pro: 700,
-        taxa_administrativa: 14,
-        produto_referencia: 69.76,
-        fat_liquido_referencia: 1584.8,
-        liquido_referencia: 1430.93,
-        faturado_referencia: 14448,
-      },
-      { applyTaxExtras: false },
-    )
-    expect(line.proposed_pay).toBeCloseTo(1430.93, 1)
-  })
-
-  it('Camila Ornelas: charged×2% → coluna adm; pay já neteia (other≈J+Baru)', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        tip: 0,
-        name: 'CAMILA ORNELAS SANTOS',
-        role: 'Colorista',
-        charged: 2000,
-        card_fee: 0,
-        admin_fee: 0,
-        house_share: 1400,
-        net_payable: 2629.57,
-        other_share: 0,
-        product_share: 0,
-        product_spend: -33.44,
-        service_share: 2947.02,
-        other_discounts: -284.01,
-        assistant_discount: 0,
-      },
-      { consumo_baru: 244.01 },
-      { applyTaxExtras: false },
-    )
-    expect(line.exception_id).toBe('camila_ornelas')
-    expect(line.folha_extras.taxa_adm_assistente).toBeCloseTo(40, 2)
-    expect(line.taxa_administrativa).toBeCloseTo(40, 2)
-    expect(line.proposed_pay).toBeCloseTo(2629.57, 1)
-  })
-
-  it('Tatiana Moura: charged×2% = other → coluna adm sem reabater', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        tip: 0,
-        name: 'TATIANA CRISTINA DOS SANTOS MOURA',
-        role: 'MULTIPLICADOR',
-        charged: 650,
-        card_fee: 0,
-        admin_fee: 0,
-        house_share: 455,
-        net_payable: 2932.35,
-        other_share: 0,
-        product_share: 0,
-        product_spend: -29.05,
-        service_share: 2974.4,
-        other_discounts: -13,
-        assistant_discount: 0,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
-    expect(line.exception_id).toBe('tatiana_moura')
-    expect(line.taxa_administrativa).toBeCloseTo(13, 2)
-    expect(line.proposed_pay).toBeCloseTo(2932.35, 1)
-  })
-
-  it('Auricaliane (catálogo): earn-in-pay V=U×30% − W no líquido', () => {
-    const line = buildFolhaDraftLine(
-      'brasil',
-      {
-        name: 'AURICALIANE DA SILVA DANTAS',
-        role: 'MULTIPLICADOR',
-        charged: 3438.72,
-        service_share: null,
-        product_share: null,
-        other_share: null,
-        tip: null,
-        product_spend: null,
-        card_fee: null,
-        admin_fee: 0,
-        assistant_discount: null,
-        other_discounts: null,
-        net_payable: 2879.65,
-        house_share: null,
-      },
-      {
-        servicos_assistente_como_pro: 3304,
-        descontos_diversos: 77.05,
-      },
-      { applyTaxExtras: false },
-    )
-    expect(line.exception_id).toBe('auricaliane')
-    expect(line.folha_extras.valor_a_pagar_profissional).toBeCloseTo(991.2, 1)
-    expect(line.proposed_pay).toBeCloseTo(3628.6, 1)
-  })
-
-  it('Francyele: V=850 sem U → coluna conferência; pay = a_pagar', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        tip: 0,
-        name: 'FRANCYELE DE SOUZA OLIVEIRA SANTOS',
-        role: 'Assistente',
-        charged: 1452,
-        card_fee: 0,
-        admin_fee: 0,
-        house_share: 1166.9,
-        net_payable: 2153.52,
-        other_share: 0,
-        product_share: 30.1,
-        product_spend: -46.78,
-        service_share: 2170.2,
-        other_discounts: 0,
-        assistant_discount: 0,
-      },
-      { valor_a_pagar_profissional: 850 },
-      { applyTaxExtras: false },
-    )
-    expect(line.folha_extras.valor_a_pagar_profissional).toBe(850)
-    expect(line.proposed_pay).toBeCloseTo(2153.52, 1)
-  })
-
-  it('Dailza: taxa_adm_assistente da Fopag (420×3%) só coluna', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        tip: 0,
-        name: 'DAILZA MAGALHAES DOS SANTOS',
-        role: 'Assistente',
-        charged: 706,
-        card_fee: -68.86,
-        admin_fee: 0,
-        house_share: 565.7,
-        net_payable: 3111.52,
-        other_share: 0,
-        product_share: 14.3,
-        product_spend: 0,
-        service_share: 2511,
-        other_discounts: 655.08,
-        assistant_discount: 0,
-      },
-      { taxa_adm_assistente: 12.6 },
-      { applyTaxExtras: false },
-    )
-    expect(line.taxa_administrativa).toBeCloseTo(12.6, 2)
-    expect(line.proposed_pay).toBeCloseTo(3111.52, 1)
-  })
-
-  it('Diana manicure: other≈C×7% → coluna adm (depilação) sem reabater pay', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'DIANA DOS SANTOS CAVALCANTI BELEZA DAS MÃOS',
-        role: 'Manicure',
-        charged: 17430,
-        service_share: 10458,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: -252.53,
-        card_fee: -290.71,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: -1220.1,
-        net_payable: 8694.66,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
-    expect(line.taxa_administrativa).toBeCloseTo(1220.1, 1)
-    expect(line.flags).toContain('manicure_com_taxa_adm')
-    expect(line.proposed_pay).toBeCloseTo(8694.66, 1)
-  })
-
-  it('Gabriela Martins: split 2%+3% (W=U×3%) e Baru ainda abate', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'GABRIELA MARTINS DA SILVA',
-        role: 'Assistente',
-        charged: 5811,
-        service_share: 3735.9,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: -67.34,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: -100,
-        net_payable: 3609.11,
-        house_share: null,
-      },
-      {
-        consumo_baru: 188.3,
-        servicos_assistente_como_pro: 5000.02,
-      },
-      { applyTaxExtras: false },
-    )
-    expect(line.exception_id).toBe('gabriela_martins')
-    expect(line.folha_extras.taxa_servicos).toBeCloseTo(150.0006, 2)
-    expect(line.folha_extras.taxa_adm_assistente).toBeCloseTo(100.0004, 2)
-    expect(line.taxa_administrativa).toBeCloseTo(100.0004, 2)
-    expect(line.proposed_pay).toBeCloseTo(3420.81, 1)
-  })
-
-  it('Edijane: sem meio/descontos NÃO inventa taxa adm 3%', () => {
-    const line = buildFolhaDraftLine(
-      'iguatemi',
-      {
-        name: 'EDIJANE MARIA DE MACEDO',
-        role: 'MULTIPLICADOR',
-        charged: 2165,
-        service_share: 5600,
-        product_share: 0,
-        other_share: null,
-        tip: 0,
-        product_spend: 0,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: 0,
-        net_payable: 5616.25,
-        house_share: null,
-      },
-      undefined,
-      { applyTaxExtras: false },
-    )
-    expect(line.taxa_administrativa).toBeNull()
-    expect(line.flags).not.toContain('taxa_adm_motor')
-    expect(line.proposed_pay).toBeCloseTo(5616.25, 2)
-  })
-
-  it('Romeu Q2: acumulado_mes → top-up meta no líquido; U não altera pay do assistente', () => {
-    const base = {
+  it('Q2 soma a parcela de meta Romeu no proposed_pay', () => {
+    const row = pro({
       name: 'GABRIELA DA SILVA SANTOS',
       role: 'MULTIPLICADOR',
-      charged: 5676,
-      service_share: 1557,
-      product_share: 7.3,
-      other_share: null,
-      tip: 0,
-      product_spend: -86.63,
+      charged: 10_000,
+      product_share: 0,
       card_fee: 0,
-      admin_fee: 0,
-      assistant_discount: -430,
-      other_discounts: 67.1,
-      net_payable: 1114.77,
-      house_share: 3589.7,
-    }
-    const withU = buildFolhaDraftLine(
-      'iguatemi',
-      base,
-      { servicos_assistente_como_pro: 4930.04 },
-      { applyTaxExtras: false },
-    )
-    // U/V/W ficam na conferência, mas não entram no líquido do assistente
-    expect(withU.folha_extras.valor_a_pagar_profissional).toBeCloseTo(986.008, 2)
-    expect(withU.proposed_pay).toBeCloseTo(1114.77, 2)
-
-    // Sep IG Gabriela: Total 10230.03 → top-up 1023.003 (10%) no dia 05
-    const withMeta = buildFolhaDraftLine(
-      'iguatemi',
-      base,
-      { servicos_assistente_como_pro: 4930.04, acumulado_mes: 10_230.03 },
-      { applyTaxExtras: false },
-    )
-    expect(withMeta.flags).not.toContain('meta_romeu_pendente')
-    expect(withMeta.folha_extras.romeu_comissao_parcela).toBeCloseTo(1023.003, 5)
-    expect(withMeta.proposed_pay).toBeCloseTo(1114.77 + 1023.003, 2)
-
-    // Q1: top-up não entra (30% já no Avec)
-    const q1 = buildFolhaDraftLine(
-      'iguatemi',
-      base,
-      { acumulado_mes: 10_230.03 },
-      { applyTaxExtras: true },
-    )
-    expect(q1.folha_extras.romeu_comissao_parcela).toBeNull()
-    expect(q1.proposed_pay).toBeCloseTo(1114.77, 2)
-
-    // Faixa 30%: top-up 0 no Q2
-    const lucas = buildFolhaDraftLine(
-      'iguatemi',
-      { ...base, name: 'LUCAS RODRIGUES DE SOUZA' },
-      { acumulado_mes: 4980 },
-      { applyTaxExtras: false },
-    )
-    expect(lucas.folha_extras.romeu_comissao_parcela).toBe(0)
-    expect(lucas.proposed_pay).toBeCloseTo(1114.77, 2)
-  })
-
-  it('descarta bônus esteticista já gravado nos extras (RH: sem bônus)', () => {
-    const liria: CommissionProfessionalRow = {
-      name: 'Liria Pereira Colman',
-      role: 'Esteticista',
-      charged: 5968,
-      service_share: null,
-      product_share: null,
-      other_share: null,
-      tip: null,
-      product_spend: null,
-      card_fee: null,
-      admin_fee: -417.76,
-      assistant_discount: null,
-      other_discounts: null,
-      net_payable: 2598.12,
-      house_share: null,
-    }
-    const staleBonus = 596.8
-    const line = buildFolhaDraftLine('iguatemi', liria, {
-      esteticista_bonus: staleBonus,
-    })
-    expect(line.folha_extras.esteticista_bonus).toBeNull()
-    expect(line.proposed_pay).toBeCloseTo(2598.12, 2)
-
-    const cleared = buildFolhaDraftLine(
-      'iguatemi',
-      { ...liria, name: 'Esteticista Teste' },
-      { esteticista_bonus: staleBonus },
-    )
-    expect(cleared.folha_extras.esteticista_bonus).toBeNull()
-  })
-
-  it('Brasil Q2: Jefferson 17958.05 → top-up 10%; Gabriela 24700.03 → 20% (faixa, não célula E14)', () => {
-    const jeff = buildFolhaDraftLine(
-      'brasil',
-      {
-        name: 'JEFFERSON POLICARPO DOS SANTOS',
-        role: 'MULTIPLICADOR',
-        charged: null,
-        service_share: 500,
-        product_share: 0,
-        other_share: 0,
-        tip: 0,
-        product_spend: 0,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: 0,
-        other_discounts: 0,
-        net_payable: 2000,
-        house_share: 1000,
-      },
-      { acumulado_mes: 17_958.05 },
-      { applyTaxExtras: false },
-    )
-    expect(jeff.folha_extras.romeu_comissao_parcela).toBeCloseTo(1795.805, 5)
-    // Path B só com meio; aqui descontos=0 e sem meio → não inventa 3%×charged
-    expect(jeff.proposed_pay).toBeCloseTo(2000 + 1795.805, 2)
-
-    const gabi = buildFolhaDraftLine(
-      'brasil',
-      {
-        name: 'GABRIELA DA SILVA SANTOS',
-        role: 'MULTIPLICADOR',
-        charged: null,
-        service_share: 6000,
-        product_share: 0,
-        other_share: 0,
-        tip: 0,
-        product_spend: 0,
-        card_fee: 0,
-        admin_fee: 0,
-        assistant_discount: 0,
-        // a_pagar já neteia J = U×2% (other ≈ adm)
-        other_discounts: -(21_290.03 * 0.02),
-        net_payable: 3000,
-        house_share: 15000,
-      },
-      { acumulado_mes: 24_700.03, servicos_assistente_como_pro: 21_290.03 },
-      { applyTaxExtras: false },
-    )
-    expect(gabi.folha_extras.romeu_comissao_parcela).toBeCloseTo(4940.006, 5)
-    // U/V/W conferência (W BR=3%); J embutido; líquido = a_pagar + top-up
-    expect(gabi.folha_extras.taxa_servicos).toBeCloseTo(21_290.03 * 0.03, 2)
-    expect(gabi.folha_extras.taxa_adm_assistente).toBeCloseTo(21_290.03 * 0.02, 2)
-    expect(gabi.proposed_pay).toBeCloseTo(3000 + 4940.006, 2)
-  })
-
-  it('sem a_pagar → proposed_pay null (não inventa 0)', () => {
-    const line = buildFolhaDraftLine('brasil', {
-      ...jefferson,
-      net_payable: null,
-    })
-    expect(line.proposed_pay).toBeNull()
-    expect(line.flags).toContain('sem_a_pagar')
-  })
-
-  it('Lucas Campos Q2: meta +14% → devolve adm Q1 e isenta adm Q2', () => {
-    const lucasRow: CommissionProfessionalRow = {
-      name: 'Lucas Campos De Macedo',
-      role: 'Cabeleireiro',
-      charged: 20_000,
-      service_share: null,
-      product_share: null,
-      other_share: null,
-      tip: null,
-      product_spend: null,
-      card_fee: null,
-      admin_fee: 0,
-      assistant_discount: null,
-      other_discounts: null,
-      net_payable: 10_000,
-      house_share: null,
-    }
-    const hit = buildFolhaDraftLine(
-      'brasil',
-      lucasRow,
-      {
-        faturado_ano_anterior_mes: 10_000,
-        faturado_mes: 11_400,
-        taxa_adm_q1: 500,
-      },
-      { applyTaxExtras: false },
-    )
-    expect(hit.exception_id).toBe('lucas_campos')
-    expect(hit.folha_extras.meta_quinzena_alvo).toBe(11_400)
-    expect(hit.folha_extras.devolucao_taxa_adm_q1).toBe(500)
-    expect(hit.folha_extras.taxa_administrativa).toBeNull()
-    expect(hit.proposed_pay).toBeCloseTo(10_500, 2)
-    expect(hit.flags).not.toContain('meta_quinzena_pendente')
-
-    const miss = buildFolhaDraftLine(
-      'brasil',
-      lucasRow,
-      {
-        faturado_ano_anterior_mes: 10_000,
-        faturado_mes: 11_399.99,
-        taxa_adm_q1: 500,
-      },
-      { applyTaxExtras: false },
-    )
-    expect(miss.folha_extras.devolucao_taxa_adm_q1).toBeNull()
-    // Sem meta: motor BR 5% sobre 20k ainda abate.
-    expect(miss.folha_extras.taxa_administrativa).toBeCloseTo(1000, 4)
-    expect(miss.proposed_pay).toBeCloseTo(9000, 2)
-  })
-
-  it('a_pagar fechado no 0123: Baru/DAS só coluna — não rebatem no pay', () => {
-    // Francine-shaped: service_share − cartão + assist + other = a_pagar
-    const francine: CommissionProfessionalRow = {
-      name: 'FRANCINE DA SILVA COUTO',
-      role: 'Cabeleireiro',
-      charged: 20_000,
-      service_share: 10_000,
-      product_share: 0,
-      other_share: null,
-      tip: 0,
       product_spend: 0,
-      card_fee: -200,
-      admin_fee: 0,
-      assistant_discount: -500,
-      other_discounts: -800,
-      net_payable: 8500, // 10000-200-500-800
-      house_share: 10_000,
-    }
-    const line = buildFolhaDraftLine(
+      net_payable: 1,
+    })
+    const sem = buildFolhaDraftLine('iguatemi', row, undefined, {
+      applyTaxExtras: false,
+    })
+    const com = buildFolhaDraftLine(
       'iguatemi',
-      francine,
-      { consumo_baru: 548.26, das: 487.9, darf: 100 },
+      row,
+      { acumulado_mes: 10230.03 },
+      { applyTaxExtras: false },
     )
-    expect(line.folha_extras.consumo_baru).toBeCloseTo(548.26, 2)
-    expect(line.folha_extras.das).toBeCloseTo(487.9, 2)
-    expect(line.proposed_pay).toBeCloseTo(8500, 2)
+    expect(com.folha_extras.romeu_comissao_parcela).toBeCloseTo(1023.003, 3)
+    expect(com.proposed_pay).toBeCloseTo((sem.proposed_pay ?? 0) + 1023.003, 2)
   })
 
-  it('Nathan: service_share truncado → match via charged−house−cartão; pay=a_pagar', () => {
-    const nathan: CommissionProfessionalRow = {
-      name: 'Nathan Elias Magalhães Lima',
-      role: 'Cabeleireiro',
-      charged: 19816.702697753906,
-      service_share: 4009.200050354004,
-      product_share: 0,
-      other_share: null,
-      tip: 0,
-      product_spend: 0,
-      card_fee: -173.49556958675385,
-      admin_fee: 0,
-      assistant_discount: -1256.1513757705688,
-      other_discounts: -1297.6500282287598,
-      net_payable: 7374.303223252296,
-      house_share: 9715.102500915527,
-    }
-    expect(
-      aPagarMatchesAvecLiquid({
-        netPayable: nathan.net_payable,
-        rateioAposCartao: 3835.7045,
-        productShare: 0,
-        productSpend: 0,
-        assistantDiscount: nathan.assistant_discount,
-        otherDiscounts: nathan.other_discounts,
-        charged: nathan.charged,
-        cardFee: nathan.card_fee,
-        houseShare: nathan.house_share,
+  it('crédito residual do olerite e delta de produto não abatem o LP', () => {
+    const brunna = buildFolhaDraftLine(
+      'iguatemi',
+      pro({
+        name: 'BRUNNA FABRICIO DA SILVA',
+        role: 'Cabeleireiro',
+        charged: 125_630,
+        product_share: 0,
+        card_fee: 0,
+        product_spend: 0,
+        admin_fee: 0,
+        assistant_discount: -14313.44,
+        other_discounts: 2118.54,
+        net_payable: 1,
       }),
-    ).toBe(true)
-    const line = buildFolhaDraftLine('iguatemi', nathan, { consumo_baru: 146.05 })
-    expect(line.folha_extras.consumo_baru).toBeCloseTo(146.05, 2)
-    expect(line.proposed_pay).toBeCloseTo(7374.3032, 2)
+    )
+    // FL 70%×125630 − K+meio − adm Brunna 5%×C; residual olerite não entra.
+    expect(brunna.proposed_pay).toBeCloseTo(
+      125_630 * 0.7 - 14313.44 * 0.5 - 125_630 * 0.05,
+      2,
+    )
+
+    const diana = buildFolhaDraftLine(
+      'iguatemi',
+      pro({
+        name: 'DIANA DOS ANJOS SANTOS',
+        role: 'Manicure',
+        charged: 10_000,
+        product_share: 0,
+        card_fee: 0,
+        product_spend: -100,
+        net_payable: 1,
+      }),
+      { produto_referencia: 500 },
+    )
+    const dianaSem = buildFolhaDraftLine(
+      'iguatemi',
+      pro({
+        name: 'DIANA DOS ANJOS SANTOS',
+        role: 'Manicure',
+        charged: 10_000,
+        product_share: 0,
+        card_fee: 0,
+        product_spend: -100,
+        net_payable: 1,
+      }),
+    )
+    expect(diana.proposed_pay).toBeCloseTo(dianaSem.proposed_pay ?? 0, 2)
   })
 
-  it('sentinelas Fopag 11.11/22.22/33.33 não entram como imposto', () => {
-    expect(isFolhaTaxPlaceholder(11.11)).toBe(true)
-    expect(isFolhaTaxPlaceholder(22.22)).toBe(true)
-    expect(isFolhaTaxPlaceholder(33.33)).toBe(true)
-    expect(isFolhaTaxPlaceholder(487.9)).toBe(false)
+  it('impostos/Baru digitados abatem', () => {
     const line = buildFolhaDraftLine(
-      'iguatemi',
-      jefferson,
-      { darf: 11.11, das: 22.22, mensalidade_contabilidade: 33.33 },
+      'brasil',
+      pro({
+        name: 'ALAN FERNADO DE ALBUQUERQUE',
+        charged: 20_000,
+        product_share: 100,
+        card_fee: -400,
+        product_spend: null,
+        net_payable: 9999,
+      }),
+      { das: 200, consumo_baru: 50 },
     )
-    expect(line.folha_extras.darf).toBeNull()
-    expect(line.folha_extras.das).toBeNull()
-    expect(line.folha_extras.mensalidade_contabilidade).toBeNull()
+    // FL 11400 − adm 1000 − DAS 200 − Baru 50 = 10150
+    expect(line.proposed_pay).toBeCloseTo(10_150, 2)
   })
 })
 
 describe('buildFolhaDraftFrom8123', () => {
-  it('monta rascunho ordenado com total', () => {
+  it('monta rascunho com nomes da Planilha Base', () => {
     const draft = buildFolhaDraftFrom8123({
       panel: 'brasil',
-      referenceDay: '2026-05-15',
-      professionals: [jefferson, manicureComAdm],
+      referenceDay: '2026-09-15',
+      professionals: [
+        pro({
+          name: 'ALAN FERNADO DE ALBUQUERQUE',
+          charged: 10_000,
+          product_share: 0,
+          card_fee: -100,
+          net_payable: 50,
+        }),
+      ],
     })
     expect(draft.source).toBe('8123')
-    expect(draft.line_count).toBe(2)
-    expect(draft.quinzena.half).toBe(1)
-    // jefferson: +meio a meio 75; manicure: admin_fee 8123 −50 → taxa adm 50 (source 8123)
-    expect(draft.total_proposed_pay).toBe(6032.64 + 75 + 2350)
-    expect(draft.lines[0].name <= draft.lines[1].name).toBe(true)
-  })
-
-  it('isola nomes exclusivos da outra unidade', () => {
-    const mixed: CommissionProfessionalRow[] = [
-      jefferson,
-      { ...jefferson, name: 'Alison Alvarez', net_payable: 100 },
-      { ...jefferson, name: 'Beto Fortes', net_payable: 200 },
-    ]
-    const br = buildFolhaDraftFrom8123({
-      panel: 'brasil',
-      referenceDay: '2026-05-15',
-      professionals: mixed,
-    })
-    expect(br.lines.some((l) => l.name === 'Alison Alvarez')).toBe(true)
-    expect(br.lines.some((l) => l.name === 'Beto Fortes')).toBe(false)
-    expect(br.lines.some((l) => l.name === jefferson.name)).toBe(true)
-
-    const ig = buildFolhaDraftFrom8123({
-      panel: 'iguatemi',
-      referenceDay: '2026-05-15',
-      professionals: mixed,
-    })
-    expect(ig.lines.some((l) => l.name === 'Alison Alvarez')).toBe(false)
-    expect(ig.lines.some((l) => l.name === 'Beto Fortes')).toBe(true)
-    expect(ig.lines.some((l) => l.name === jefferson.name)).toBe(true)
-  })
-})
-
-describe('reconstructFatLiquidoFrom8123', () => {
-  it('soma a_pagar + magnitudes dos abatimentos', () => {
-    const g = reconstructFatLiquidoFrom8123(jefferson)
-    expect(g).toBe(6032.64 + 114.12 + 150 + 707.19)
+    expect(draft.line_count).toBe(1)
+    expect(draft.lines[0].proposed_pay).not.toBeNull()
+    expect(draft.total_proposed_pay).not.toBeNull()
   })
 })

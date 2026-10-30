@@ -1,0 +1,1805 @@
+{
+  "brasil": [
+    {
+      "name": "ADRIANA ROSA DE JESUS ABRANCHES",
+      "cpf": "041.920.476-83",
+      "cnpj": "68.033.878/0001-67",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "ALAN FERNADO DE ALBUQUERQUE",
+      "cpf": "264.848.278-42",
+      "cnpj": "11.106.752/0001-58",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.55
+    },
+    {
+      "name": "ALBERTO DO NASCIMENTO TAVARES",
+      "cpf": "308.442.628-70",
+      "cnpj": "23.225.433/0001-40",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "ALCIDES ALEX DE MELO ALMEIDA",
+      "cpf": "384.188.088-61",
+      "cnpj": "49.676.528/0001-74",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "ALINE BISPO PEREIRA",
+      "cpf": "456.348.558-61",
+      "cnpj": "69.059.543/0001-80",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "ALINE JABUR",
+      "cpf": "363.281.168-70",
+      "cnpj": "56.124.809/0001-80",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.55
+    },
+    {
+      "name": "ALISON ALVAREZ",
+      "cpf": "034.353.516-59",
+      "cnpj": "14.435.894/0001-57",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Andrea Costa Cabral",
+      "cpf": "136.792.938-52",
+      "cnpj": "15.791.956/0001-26",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "AURICALIANE DA SILVA DANTAS",
+      "cpf": "126.743.994-73",
+      "cnpj": "34.972.508/0001-73",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "BRUNA DA SILVA MELO DOMINGUES",
+      "cpf": "456.499.338-04",
+      "cnpj": "54.591.909/0001-90",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "BRUNA NUNES DA SILVA",
+      "cpf": "423.041.198-75",
+      "cnpj": "20.245.295/0001-73",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "Bruno Franca de Souza",
+      "cpf": "392.203.418-75",
+      "cnpj": "47.712.101/0001-59",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "CAMYLLA RODRIGUES FERREIRA",
+      "cpf": "403.443.748-07",
+      "cnpj": "60.540.140/0001-84",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "CAREY DOS SANTOS CASTRO",
+      "cpf": "493.268.788-56",
+      "cnpj": "46.840.545/0001-07",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "CESAR AUGUSTO JOSE SILVA",
+      "cpf": "425.270.618-18",
+      "cnpj": "47.911.108/0001-08",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "CLAUDIONOR ALMEIDA DE SOUZA",
+      "cpf": "049.652.035-00",
+      "cnpj": "54.464.434/0001-71",
+      "cargo": "Assistente",
+      "comissao": 0.13
+    },
+    {
+      "name": "CLEITIANA ALMEIDA DE ARRUDA",
+      "cpf": "425.237.408-18",
+      "cnpj": "27.643.076/0001-91",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "DARCY MITIKO CAVALHEIRO",
+      "cpf": "685.687.978-49",
+      "cnpj": "64.315.510/0001-30",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "DAYANA MARQUES SILVA PINTO",
+      "cpf": "228.768.848-01",
+      "cnpj": "21.299.405/0001-42",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "DEBORA SOUZA GUIMARAES",
+      "cpf": "863.467.085-62",
+      "cnpj": "50.953.905/0001-54",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "Diego Marcorio Santana",
+      "cpf": "217.540.798-57",
+      "cnpj": "24.070.623/0001-07",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "DIOGO MARCELO PITARO",
+      "cpf": "392.711.778-19",
+      "cnpj": "27.679.368/0001-84",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "DOUGLAS AGNALDO DA SILVA BARBOSA",
+      "cpf": "390.718.648-63",
+      "cnpj": "68.422.224/0001-25",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "EDILANDIA COSTA DE ALMEIDA",
+      "cpf": "554.846.608-90",
+      "cnpj": "52.271.167/0001-90",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "ELIANE FERREIRA COSTA",
+      "cpf": "018.318.619-25",
+      "cnpj": "22.166.146/0001-44",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "ELISEU VICENTE DA CONCEICAO",
+      "cpf": "365.631.578-74",
+      "cnpj": "48.375.082/0001-85",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "ELVIS TEIXEIRA DOS SANTOS",
+      "cpf": "414.276.058-07",
+      "cnpj": "28.310.756/0001-56",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "ERISMAR FERREIRA DA SILVA",
+      "cpf": "704.468.894-23",
+      "cnpj": "42.952.951/0001-00",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "FERNANDA GOMES",
+      "cpf": "322.211.208-84",
+      "cnpj": "18.905.105/0001-55",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Fernando Nantes Romero",
+      "cpf": "011.658.271-58",
+      "cnpj": "11.528.656/0001-06",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "FILIPE BATISTA DE OLIVEIRA",
+      "cpf": "105.132.634-62",
+      "cnpj": "51.805.325/0001-82",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "FRANCINE DA SILVA COUTO",
+      "cpf": "340.973.238-14",
+      "cnpj": "10.767.240/0001-70",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "GABRIEL CORREIA DE LOIOLA",
+      "cpf": "479.751.198-22",
+      "cnpj": "45.090.332/0001-42",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "GABRIEL LEANDRO PETARNELA",
+      "cpf": "385.348.508-10",
+      "cnpj": "27.623.030/0001-00",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Gabriela Santos",
+      "cpf": "326.361.668-40",
+      "cnpj": "34.368.298/0001-09",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "Geyza Melo de Araujo",
+      "cpf": "082.277.903-05",
+      "cnpj": "46.474.900/0001-71",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "GHABRYEL FLORES MARTINS",
+      "cpf": "034.103.270-02",
+      "cnpj": "30.828.708/0001-04",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "GISELE GREYCE LIMA FAGLIONI",
+      "cpf": "365.624.018-36",
+      "cnpj": "51.728.448/0001-67",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "GUILHERME MACHADO SILVA",
+      "cpf": "329.850.658-36",
+      "cnpj": "36.286.511/0001-69",
+      "cargo": "Colorista",
+      "comissao": 0.15
+    },
+    {
+      "name": "GUSTAVO COLONNO",
+      "cpf": "337.361.328-08",
+      "cnpj": "42.351.027/0001-79",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "HENRIQUE TENÓRIO DA SILVA",
+      "cpf": "043.887.814-01",
+      "cnpj": "52.049.420/0001-66",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "ISABELA RAMALHO DA SILVA",
+      "cpf": "467.043.568-00",
+      "cnpj": "62.211.942/0001-76",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "Islayquiel Rodrigues de Sena",
+      "cpf": "060.844.143-03",
+      "cnpj": "61.486.162/0001-76",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "IZABELLA KAUANNY DO PRADO SANTOS",
+      "cpf": "544.315.188-60",
+      "cnpj": "59.658.721/0001-36",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "JACQUELINE ALVES DA SILVA",
+      "cpf": "481.484.348-83",
+      "cnpj": "49.828.686/0001-00",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "Jailton Derlei de Oliveira",
+      "cpf": "463.339.338-30",
+      "cnpj": "61.370.892/0001-07",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "JANAINA SANTANA",
+      "cpf": "389.479.298-16",
+      "cnpj": "44.783.334/0001-54",
+      "cargo": "Colorista",
+      "comissao": 0.13
+    },
+    {
+      "name": "JANDERSON DE SA BARROS",
+      "cpf": "445.188.068-83",
+      "cnpj": "42.834.137/0001-91",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "JAQUELINE RIBEIRO DOS SANTOS",
+      "cpf": "358.347.448-18",
+      "cnpj": "26.136.607/0001-97",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "JAYNE DA CRUZ NOBRE",
+      "cpf": "140.257.976-40",
+      "cnpj": "54.223.188/0001-66",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "JEFFERSON POLICARPO DOS SANTOS",
+      "cpf": "437.809.028-77",
+      "cnpj": "48.572.475/0001-89",
+      "cargo": "Multiplicador",
+      "comissao": 0.15
+    },
+    {
+      "name": "JESSICA SAMPAIO QUERINO",
+      "cpf": "431.359.528-78",
+      "cnpj": "45.077.367/0001-41",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "JOÃO BONICKE",
+      "cpf": "230.732.708-84",
+      "cnpj": "17.848.069/0001-72",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "JOHNATAN DE SOUZA SANTANA",
+      "cpf": "403.444.658-70",
+      "cnpj": "53.052.763/0001-42",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "JONAS NATHAN HENRIQUE ZAGO",
+      "cpf": "383.720.148-17",
+      "cnpj": "60.043.256/0001-08",
+      "cargo": "Assistente",
+      "comissao": 0.12
+    },
+    {
+      "name": "JONATHAN DIAS DOS SANTOS",
+      "cpf": "563.916.288-07",
+      "cnpj": "62.115.867/0001-40",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "JOSENILDO OLIVEIRA",
+      "cpf": "020.313.784-14",
+      "cnpj": "26.132.648/0001-05",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "KAIQUE DOS SANTOS SOUZA",
+      "cpf": "060.891.035-00",
+      "cnpj": "50.568.418/0001-78",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "LAUDENILVA DOS SANTOS SILVA",
+      "cpf": "337.291.198-93",
+      "cnpj": "38.154.333/0001-48",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "LUANA LARISSA PINHEIRO DE SOUSA",
+      "cpf": "073.477.813-96",
+      "cnpj": "51.538.647/0001-02",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "LUCAS CAMPOS DE MACEDO",
+      "cpf": "044.859.235-50",
+      "cnpj": "27.825.803/0001-31",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Lucas Gustavo de Sales e Sales",
+      "cpf": "383.731.948-27",
+      "cnpj": "69.439.109/0001-26",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "LUCAS RODRIGUES",
+      "cpf": "332.654.978-44",
+      "cnpj": "53.418.905/0001-42",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "LUCIMAR APARECIDA DE CARVALHO",
+      "cpf": "113.049.278-81",
+      "cnpj": "65.281.470/0001-16",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "LUIZA ANTONIA AMARO PINTO",
+      "cpf": "019.914.176-24",
+      "cnpj": "43.931.990/0001-94",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "MANOEL SERGIO GONÇALVES",
+      "cpf": "260.648.908-00",
+      "cnpj": "18.342.471/0001-43",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Marcela Roberta",
+      "cpf": "448.300.288-07",
+      "cnpj": "29.382.990/0001-51",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "MARCELLA DE ARAUJO GARCIA",
+      "cpf": "386.232.628-40",
+      "cnpj": "43.137.750/0001-12",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "MARCELO SABINO LUIS JUNIOR",
+      "cpf": "020.662.926-56",
+      "cnpj": "43.011.350/0001-66",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "MARCIA FERRONATO",
+      "cpf": "040.601.979-71",
+      "cnpj": "19.989.826/0001-53",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "MARCIEL DANTAS DE BRITO",
+      "cpf": "060.968.965-70",
+      "cnpj": "34.996.625/0001-77",
+      "cargo": "Assistente",
+      "comissao": 0.13
+    },
+    {
+      "name": "MARCO AURELIO OLIVEIRA CARNEIRO",
+      "cpf": "100.891.586-60",
+      "cnpj": "55.487.545/0001-66",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "MARCOS HENRIQUE DA SILVA BONFIM",
+      "cpf": "469.343.748-43",
+      "cnpj": "51.587.218/0001-25",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "Marcos Paulo Alves Soares",
+      "cpf": "119.685.053-42",
+      "cnpj": "66.082.388/0001-25",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "MARIA DA CONCEIÇÃO PEREIRA DIAS",
+      "cpf": "277.003.318-20",
+      "cnpj": "61.559.851/0001-63",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "MARIA DAS DORES DE SOUZA",
+      "cpf": "094.389.748-30",
+      "cnpj": "26.932.679/0001-40",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "MARIA EDUARDA TEIXEIRA DO AMARAL",
+      "cpf": "514.745.718-67",
+      "cnpj": "63.940.572/0001-70",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "MARIA ELIANA NERES DE MOURA",
+      "cpf": "314.853.148-52",
+      "cnpj": "18.713.489/0001-04",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "Maria Lucia dos Santos",
+      "cpf": "858.124.808-00",
+      "cnpj": "64.369.378/0001-40",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "MARIA SAMILA NASCIMENTO DOS SANTOS",
+      "cpf": "071.715.803-93",
+      "cnpj": "30.187.219/0001-02",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "MARIA TEREZA LUIS DE PAIVA",
+      "cpf": "259.730.948-71",
+      "cnpj": "13.745.124/0001-48",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "MARIA VALQUIRIA DIOGO",
+      "cpf": "102.364.396-00",
+      "cnpj": "44.528.699/0001-32",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "Mauri Lima",
+      "cpf": "025.340.270-00",
+      "cnpj": "29.158.454/0001-77",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "MAURICIO DE CARVALHO LIMA",
+      "cpf": "068.382.443-06",
+      "cnpj": "31.003.229/0001-03",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "MAYARA MUNIZ PEREIRA",
+      "cpf": "451.074.098-06",
+      "cnpj": "33.581.188/0001-68",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "MELISSA SCHELOTAG DE MORAES",
+      "cpf": "475.021.258-09",
+      "cnpj": "60.197.337/0001-62",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "MONIQUE BORELLA COUTO",
+      "cpf": "365.441.178-97",
+      "cnpj": "15.327.894/0001-04",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "MONIQUE LIA BUNA CASTRO DOS SANTOS",
+      "cpf": "636.646.153-87",
+      "cnpj": "32.971.956/0001-27",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "NARCELHO ALVES SANTOS",
+      "cpf": "226.119.858-20",
+      "cnpj": "34.337.109/0001-30",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Nathan Elias Magalhães Lima",
+      "cpf": "391.896.458-20",
+      "cnpj": "31.628.208/0001-83",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.6
+    },
+    {
+      "name": "Nayara Maria Da Silva",
+      "cpf": "237.107.158-73",
+      "cnpj": "45.885.596/0001-92",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "NICOLE MOURA DE OLIVEIRA",
+      "cpf": "526.929.978-08",
+      "cnpj": "67.904.324/0001-25",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "PABLO MALAFAIA CAETANO",
+      "cpf": "168.028.607-24",
+      "cnpj": "38.167.061/0001-10",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Patricia Barbosa Paixao Lopes",
+      "cpf": "216.628.658-56",
+      "cnpj": "55.166.892/0001-97",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "PATRICK LEAL DE JESUS",
+      "cpf": "452.877.978-18",
+      "cnpj": "51.521.445/0001-58",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "PEDRO HENRIQUE SOUSA CARDI",
+      "cpf": "415.443.148-09",
+      "cnpj": "50.885.376/0001-07",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "PEDRO RICARDO GALDI",
+      "cpf": "007.992.088-84",
+      "cnpj": "64.955.114/0001-78",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.55
+    },
+    {
+      "name": "PIERRE TAWAN ALVES FRANCA",
+      "cpf": "077.874.915-07",
+      "cnpj": "32.265.561/0001-09",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "RAYANA SANTIAGO CAMPOS",
+      "cpf": "085.286.715-85",
+      "cnpj": "46.890.739/0001-17",
+      "cargo": "Assistente",
+      "comissao": 0.13
+    },
+    {
+      "name": "RODRIGO APOLINARIO PIRES SARAIVA",
+      "cpf": "317.298.268-81",
+      "cnpj": "21.205.180/0001-18",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "ROMEU FELIPE",
+      "cpf": "226.119.858-20",
+      "cnpj": "55.366.591/0001-07",
+      "cargo": "Cabeleireiro",
+      "comissao": 1.0
+    },
+    {
+      "name": "Sabrina Ferreira Jordao",
+      "cpf": "520.737.438-97",
+      "cnpj": "58.044.089/0001-78",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "SONIA TEIXEIRA CHAVES",
+      "cpf": "163.101.668-75",
+      "cnpj": "41.172.543/0001-73",
+      "cargo": "Multiplicador",
+      "comissao": 0.13
+    },
+    {
+      "name": "TALITA ALVES",
+      "cpf": "098.321.236-82",
+      "cnpj": "23.180.304/0001-83",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.3
+    },
+    {
+      "name": "TATIANE MONTEIRO SILVA",
+      "cpf": "233.629.178-95",
+      "cnpj": "20.036.170/0001-33",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "Thais Harumi Honda",
+      "cpf": "395.453.318-95",
+      "cnpj": "33.580.676/0001-50",
+      "cargo": "Colorista",
+      "comissao": 0.15
+    },
+    {
+      "name": "THALITA GABRIELLE BALBER RIBEIRO",
+      "cpf": "410.097.308-00",
+      "cnpj": "59.173.755/0001-30",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "THUANE BARROS DO VAL",
+      "cpf": "093.161.694-88",
+      "cnpj": "35.806.055/0001-78",
+      "cargo": "Multiplicador",
+      "comissao": 0.15
+    },
+    {
+      "name": "ULISSES SILVA JUNIOR",
+      "cpf": "008.210.759-93",
+      "cnpj": "15.381.446/0001-80",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.7
+    },
+    {
+      "name": "Vanessa Lopes dos Santos",
+      "cpf": "604.127.263-94",
+      "cnpj": "62.856.784/0001-01",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "VICTOR CHAVES SANTOS",
+      "cpf": "554.488.898-16",
+      "cnpj": "41.730.754/0001-84",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "VITALINO PEREIRA CAMPOS",
+      "cpf": "226.763.728-66",
+      "cnpj": "19.029.591/0001-58",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "WALTER MARTINHO LEAL FILHO CABELEIREIRO",
+      "cpf": "409.641.978-80",
+      "cnpj": "18.835.778/0001-86",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.6
+    },
+    {
+      "name": "WANDERLEY DELCIDIO DA SILVA",
+      "cpf": "306.937.578-25",
+      "cnpj": "14.334.053/0001-53",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.55
+    },
+    {
+      "name": "WILLIAN DA SILVA LEAL",
+      "cpf": "449.496.468-93",
+      "cnpj": "55.388.349/0001-34",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    },
+    {
+      "name": "WILLYAN THIAGO FRANCO SASS",
+      "cpf": "408.517.828-84",
+      "cnpj": "45.142.120/0001-61",
+      "cargo": "Multiplicador",
+      "comissao": 0.1
+    }
+  ],
+  "iguatemi": [
+    {
+      "name": "ALANA SOARES DE SOUSA",
+      "cpf": "070.586.823-05",
+      "cnpj": "69.025.335/0001-60",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "AMANDA DOS SANTOS ARAUJO",
+      "cpf": "865.828.245-70",
+      "cnpj": "61.838.489/0001-60",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "AMAURI BAPTISTA BEZERRA",
+      "cpf": "046.218.238-09",
+      "cnpj": "10.627.702/0001-53",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "ANA CRISTINA MATSUMOTO",
+      "cpf": "157.547.478-61",
+      "cnpj": "27.667.980/0001-37",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "ANA LUIZA DUTRA VAZ",
+      "cpf": "430.869.968-11",
+      "cnpj": "46.401.324/0001-32",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "ANDERSON AUGUSTO",
+      "cpf": "312.161.498-36",
+      "cnpj": "51.414.049/0001-21",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "Andressa Erica Batista de Oliveira",
+      "cpf": "361.069.948-54",
+      "cnpj": "15.918.213/0001-74",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "ANGELA CRISTINA BARBOSA",
+      "cpf": "146.633.668-48",
+      "cnpj": "64.855.862/0001-89",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "ARIANE CRISTINA DOS SANTOS",
+      "cpf": "409.027.268-89",
+      "cnpj": "57.279.238/0001-15",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "BETO FORTES",
+      "cpf": "161.386.898-79",
+      "cnpj": "07.873.919/0001-39",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "BRIDA SOUZA PONTES",
+      "cpf": "428.073.668-56",
+      "cnpj": "67.090.588/0001-92",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "BRUNNA FABRICIO DA SILVA",
+      "cpf": "309.955.698-00",
+      "cnpj": "26.843.842/0001-07",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.7
+    },
+    {
+      "name": "CAIO DE LIMA CARVALHO",
+      "cpf": "622.133.083-14",
+      "cnpj": "57.067.488/0001-91",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.12
+    },
+    {
+      "name": "CAMILA LOPES DE SOUZA",
+      "cpf": "352.096.978-51",
+      "cnpj": "69.396.864/0001-70",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "CAMILA ORNELAS SANTOS",
+      "cpf": "480.541.118-00",
+      "cnpj": "33.819.282/0001-02",
+      "cargo": "Colorista",
+      "comissao": 0.13
+    },
+    {
+      "name": "CARINA FERNANDA DE FREITAS FERREIRA",
+      "cpf": "303.630.228-05",
+      "cnpj": "37.705.774/0001-28",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "CARLOS VINICIUS BORGES",
+      "cpf": "333.563.188-96",
+      "cnpj": "43.833.742/0001-00",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "CELIA DE CASTRO MENESES",
+      "cpf": "376.745.428-90",
+      "cnpj": "23.278.221/0001-21",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "CHARLES VEIYGA CONSULTORIA E TREINAMENTO DE MODA E BELEZA",
+      "cpf": "568.145.000-78",
+      "cnpj": "55.835.103/0001-63",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "CINTIA DA SILVA SANTOS",
+      "cpf": "357.793.888-90",
+      "cnpj": "42.474.090/0001-00",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "CLAUDIANA BEZERRA DA SILVA",
+      "cpf": "170.912.008-88",
+      "cnpj": "22.133.572/0001-81",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "CLAYTON MOZAR ALVES DE OLIVEIRA",
+      "cpf": "313.610.788-80",
+      "cnpj": "17.482.508/0001-76",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "DAILZA MAGALHAES DOS SANTOS",
+      "cpf": "135.805.378-22",
+      "cnpj": "65.847.630/0001-41",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "DANIEL CHABARIBERY",
+      "cpf": "060.221.658-30",
+      "cnpj": "62.284.007/0001-30",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "DANIEL SOUZA DA SILVA",
+      "cpf": "220.998.998-19",
+      "cnpj": "28.184.076/0001-33",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "DANIEL VIANA MARTINS",
+      "cpf": "498.617.478-93",
+      "cnpj": "56.984.803/0001-82",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "DANIELA MACHADO ROCHA",
+      "cpf": "148.857.428-62",
+      "cnpj": "07.192.371/0001-61",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.55
+    },
+    {
+      "name": "DAVID BARBOSA DA SILVA",
+      "cpf": "442.820.588-03",
+      "cnpj": "41.903.625/0001-40",
+      "cargo": "Assistente",
+      "comissao": 0.15
+    },
+    {
+      "name": "DEISE DE ARAUJO REIS",
+      "cpf": "385.694.408-71",
+      "cnpj": "36.628.757/0001-71",
+      "cargo": "Manicure",
+      "comissao": null
+    },
+    {
+      "name": "DEISE DE ASSIS SANTANA",
+      "cpf": "205.386.378-11",
+      "cnpj": "29.808.134/0001-15",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "DHANDARA VIEIRA GOMES",
+      "cpf": "458.811.278-38",
+      "cnpj": "47.972.614/0001-07",
+      "cargo": "Assistente",
+      "comissao": 0.0
+    },
+    {
+      "name": "DIANA DOS ANJOS SANTOS",
+      "cpf": "033.651.795-50",
+      "cnpj": "54.868.238/0001-62",
+      "cargo": "Manicure",
+      "comissao": 0.6
+    },
+    {
+      "name": "DIANA DOS SANTOS CAVALCANTI BELEZA DAS MÃOS",
+      "cpf": "220.730.158-32",
+      "cnpj": "10.904.728/0001-00",
+      "cargo": "Manicure",
+      "comissao": 0.6
+    },
+    {
+      "name": "DOUGLAS EDUARDO ROSSI",
+      "cpf": "391.554.778-60",
+      "cnpj": "31.783.011/0001-19",
+      "cargo": "Cabeleireiro",
+      "comissao": null
+    },
+    {
+      "name": "EDIJANE MARIA DE MACEDO",
+      "cpf": "090.834.954-85",
+      "cnpj": "56.193.069/0001-33",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "Ednilson Pantoja Filho",
+      "cpf": "041.449.342-76",
+      "cnpj": "49.515.824/0001-93",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "ELAINE DE OLIVEIRA",
+      "cpf": "066.833.119-43",
+      "cnpj": "56.084.739/0001-83",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "EMANUEL ANTONIO MODENA",
+      "cpf": "089.480.559-25",
+      "cnpj": "27.839.272/0001-36",
+      "cargo": "Cabeleireiro",
+      "comissao": null
+    },
+    {
+      "name": "EVANDRO CARLOS PIRES",
+      "cpf": "237.273.538-13",
+      "cnpj": "28.133.659/0001-35",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "EWERTON EMANUEL COSTA SCREMIM",
+      "cpf": "096.256.419-20",
+      "cnpj": "45.004.377/0001-57",
+      "cargo": "Assistente",
+      "comissao": 0.0
+    },
+    {
+      "name": "F. Roberval de S. Monteiro Serviços Cabeleireiros",
+      "cpf": "379.874.698-23",
+      "cnpj": "27.880.938/0001-08",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "FERNANDA DOS SANTOS CERQUEIRA",
+      "cpf": "058.151.485-80",
+      "cnpj": "44.273.055/0001-40",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "FERNANDA PATRICIA CEZAR DE ANDRADE",
+      "cpf": "484.527.538-45",
+      "cnpj": "33.176.541/0001-24",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "Francisca Meireles do Nascimento",
+      "cpf": "493.611.393-04",
+      "cnpj": "54.375.147/0001-95",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "FRANCYELE DE SOUZA OLIVEIRA SANTOS",
+      "cpf": "478.528.418-80",
+      "cnpj": "63.608.259/0001-30",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "GABRIEL DE JESUS SANTANA FARIAS",
+      "cpf": "054.045.442-79",
+      "cnpj": "68.624.941/0001-30",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "GABRIEL JOHN DOS SANTOS",
+      "cpf": "452.672.468-83",
+      "cnpj": "41.995.884/0001-49",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "GABRIELA DA SILVA SANTOS",
+      "cpf": "326.361.668-40",
+      "cnpj": "34.368.298/0001-09",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.13
+    },
+    {
+      "name": "GABRIELA MARTINS DA SILVA",
+      "cpf": "428.450.658-76",
+      "cnpj": "61.450.022/0001-48",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "GEORGE HENRIQUE DA SILVA",
+      "cpf": "289.404.618-94",
+      "cnpj": "19.905.107/0001-07",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "GILDENICE TEIXEIRA DE MEDEIROS",
+      "cpf": "262.023.308-99",
+      "cnpj": "18.344.394/0001-60",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "GIOVANI MIRANDA GARCIA",
+      "cpf": "075.444.415-55",
+      "cnpj": "51.810.645/0001-20",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "GISELE MARIANO DA SILVA",
+      "cpf": "389.429.048-07",
+      "cnpj": "22.443.756/0001-48",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "GRACIELE DA SILVA SANTOS",
+      "cpf": "102.125.524-65",
+      "cnpj": "39.420.667/0001-89",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.13
+    },
+    {
+      "name": "GUILHERME MACHADO SOUZA",
+      "cpf": "329.850.658-36",
+      "cnpj": "36.286.511/0001-69",
+      "cargo": "Colorista",
+      "comissao": 0.15
+    },
+    {
+      "name": "GUSTAVO FONTES DE OLIVEIRA",
+      "cpf": "429.546.598-40",
+      "cnpj": "52.164.580/0001-56",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "HIGOR VINICIUS PINTO SILVA",
+      "cpf": "016.743.344-00",
+      "cnpj": "53.130.655/0001-40",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "IBRAHIM ISRAEL FREIRE PADILHA",
+      "cpf": "306.248.588-47",
+      "cnpj": "60.312.001/0001-01",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "INGRID SILVA BARRETO",
+      "cpf": "440.349.658-00",
+      "cnpj": "56.981.958/0001-65",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.13
+    },
+    {
+      "name": "ISABELA GARCIA HONORATO DA SILVA",
+      "cpf": "439.300.568-60",
+      "cnpj": "68.992.113/0001-54",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "ISABELLY SOUSA DA SILVA",
+      "cpf": "445.306.218-47",
+      "cnpj": "66.968.552/0001-04",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "JANAINA CRISTINA ALVES DA SILVA",
+      "cpf": "384.887.218-89",
+      "cnpj": "33.177.241/0001-60",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "JANAINA SANTANA PERREIRA",
+      "cpf": "389.479.298-16",
+      "cnpj": "44.783.334/0001-54",
+      "cargo": "Colorista",
+      "comissao": 0.0
+    },
+    {
+      "name": "JANALI DO NASCIMENTO CRUZ",
+      "cpf": "760.369.793-04",
+      "cnpj": "27.322.476/0001-03",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "JAQUELINE FERNANDES DE MELO",
+      "cpf": "462.174.238-80",
+      "cnpj": "40.136.138/0001-37",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "JAYNE FERNANDES DE MELO",
+      "cpf": "462.174.498-46",
+      "cnpj": "36.580.944/0001-22",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "JEFFERSON POLICARPO DOS SANTOS",
+      "cpf": "437.809.028-77",
+      "cnpj": "48.572.475/0001-89",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.15
+    },
+    {
+      "name": "JEFFERSON SCARAFICCI GOIABEIRA",
+      "cpf": "402.003.728-07",
+      "cnpj": "57.471.683/0001-82",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "JOANIDES MENDES PONTES JUNIOR",
+      "cpf": "355.910.838-11",
+      "cnpj": "28.430.034/0001-35",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.6
+    },
+    {
+      "name": "JOHNATAN DE SOUZA SANTANA",
+      "cpf": "403.444.658-70",
+      "cnpj": "53.052.763/0001-42",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "JONATHAN ARAUJO NUNES",
+      "cpf": "031.969.831-96",
+      "cnpj": "45.178.750/0001-96",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.0
+    },
+    {
+      "name": "JONATHAN DIAS DOS SANTOS",
+      "cpf": "563.916.288-07",
+      "cnpj": "62.115.867/0001-40",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "JOSEILMA CORREIA DE BARROS DE OLIVEIRA",
+      "cpf": "985.353.075-91",
+      "cnpj": "50.470.862/0001-56",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "JULIANE VIZONI",
+      "cpf": "525.394.358-74",
+      "cnpj": "44.106.314/0001-49",
+      "cargo": "MULTIPLICADOR",
+      "comissao": null
+    },
+    {
+      "name": "Júnior Santos",
+      "cpf": "311.284.728-80",
+      "cnpj": "59.284.077/0001-83",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "KAMILLA FERNANDES LEITE",
+      "cpf": "431.242.438-11",
+      "cnpj": "52.776.955/0001-39",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "KATERYNE DOS SANTOS PAIM",
+      "cpf": "044.801.021-67",
+      "cnpj": "53.695.077/0001-90",
+      "cargo": "Assistente",
+      "comissao": null
+    },
+    {
+      "name": "LAUDENILVA DOS SANTOS SILVA",
+      "cpf": "337.291.198-93",
+      "cnpj": "38.154.333/0001-48",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.0
+    },
+    {
+      "name": "LEANDRO SANTOS MARQUES",
+      "cpf": "234.288.848-17",
+      "cnpj": "55.459.399/0001-65",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.13
+    },
+    {
+      "name": "LEDA MARIA ROCHA CAVALCANTI SILVA",
+      "cpf": "377.333.538-58",
+      "cnpj": "63.438.137/0001-42",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "LEIANE CORREIA LEITÃO ÁVILA",
+      "cpf": "084.369.174-30",
+      "cnpj": "35.586.793/0001-57",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Leiliane Luz dos Santos",
+      "cpf": "403.513.158-02",
+      "cnpj": "27.322.425/0001-73",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "LETICIA CUSTODIO PEREIRA",
+      "cpf": "462.398.278-51",
+      "cnpj": "46.016.422/0001-56",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "LETICIA FIRMINO DA SILVA",
+      "cpf": "454.280.618-98",
+      "cnpj": "61.695.181/0001-02",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "LIRIA PEREIRA COLMAN",
+      "cpf": "284.450.698-45",
+      "cnpj": "33.674.330/0001-11",
+      "cargo": "Esteticista",
+      "comissao": 0.5
+    },
+    {
+      "name": "LUANA TEIXEIRA JESUS DOS SANTOS",
+      "cpf": "354.862.588-60",
+      "cnpj": "61.450.911/0001-05",
+      "cargo": "MULTIPLICADOR",
+      "comissao": null
+    },
+    {
+      "name": "LUCAS RODRIGUES DE SOUZA",
+      "cpf": "332.654.978-44",
+      "cnpj": "53.418.905/0001-42",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "LUZIENE SUELY MATEUS",
+      "cpf": "332.654.978-44",
+      "cnpj": "55.488.228/0001-64",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.13
+    },
+    {
+      "name": "MARCELA DE ARAUJO GUEDES",
+      "cpf": "305.056.858-50",
+      "cnpj": "30.021.692/0001-15",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.55
+    },
+    {
+      "name": "MARCELO HARPA",
+      "cpf": "249.591.068-83",
+      "cnpj": "10.963.631/0001-60",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "MARCO AURELIO OLIVEIRA CARNEIRO",
+      "cpf": "100.891.586-60",
+      "cnpj": "55.487.545/0001-66",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "MARIA APARECIDA RODRIGUES",
+      "cpf": "319.623.428-24",
+      "cnpj": "33.581.108/0001-74",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Maria Auxiliadora Ribeiro Alves Alci Bella",
+      "cpf": "442.736.653-87",
+      "cnpj": "07.038.057/0001-29",
+      "cargo": "Manicure",
+      "comissao": 0.6
+    },
+    {
+      "name": "MARIA DAS DORES DE LIMA",
+      "cpf": "277.941.258-55",
+      "cnpj": "63.037.757/0001-70",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "MARIA EDUARDA CORDEIRO GOMES",
+      "cpf": "493.807.698-57",
+      "cnpj": "63.429.933/0001-19",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "MARIA ROSEANE FERREIRA DUARTE",
+      "cpf": "065.765.104-46",
+      "cnpj": "35.619.847/0001-33",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "MARILIA CARNEIRO DE BRITO",
+      "cpf": "227.910.338-90",
+      "cnpj": "15.404.182/0001-33",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "MARINA ALVES DA SILVA",
+      "cpf": "064.067.549-21",
+      "cnpj": "60.348.812/0001-54",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "MATHEUS LEMOS LESSA",
+      "cpf": "574.463.338-39",
+      "cnpj": "59.328.040/0001-00",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "MAYARA MUNIZ PEREIRA",
+      "cpf": "451.074.098-06",
+      "cnpj": "33.581.188/0001-68",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.0
+    },
+    {
+      "name": "MAYKON LUIZ DOS SANTOS CARDOZO",
+      "cpf": "220.512.828-03",
+      "cnpj": "14.820.871/0001-66",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.55
+    },
+    {
+      "name": "MILLENA COSTA SANTOS DA CRUZ",
+      "cpf": "544.267.768-05",
+      "cnpj": "57.728.683/0001-15",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.0
+    },
+    {
+      "name": "MONIQUE EVELYN CORDEIRO GOMES",
+      "cpf": "412.296.828-30",
+      "cnpj": "51.013.219/0001-66",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "NICOLE MOURA DE OLIVEIRA",
+      "cpf": "526.929.978-08",
+      "cnpj": "67.904.324/0001-25",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "NICOLE SILVA PODESTAR",
+      "cpf": "455.976.048-99",
+      "cnpj": "42.050.156/0001-27",
+      "cargo": "Assistente",
+      "comissao": 0.13
+    },
+    {
+      "name": "ORLANDO LUCAS ROSA ALVES DA SILVA",
+      "cpf": "472.948.308-19",
+      "cnpj": "33.436.410/0001-39",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "PATRICIA AGUIAR PINTO",
+      "cpf": "341.043.768-17",
+      "cnpj": "31.348.756/0001-50",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "Pedro E F Diello",
+      "cpf": "432.885.258-28",
+      "cnpj": "39.473.787/0001-44",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "PEDRO HENRIQUE DE AVILA SOUSA",
+      "cpf": "563.035.608-90",
+      "cnpj": "62.140.717/0001-96",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.0
+    },
+    {
+      "name": "PEDRO HENRIQUE SOUSA CARDI",
+      "cpf": "415.443.148-09",
+      "cnpj": "50.885.376/0001-07",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "RAFAELE FONSECA",
+      "cpf": "420.324.028-07",
+      "cnpj": "33.178.797/0001-70",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "Rafaella Edwiges Bernardo Nunes",
+      "cpf": "471.388.808-71",
+      "cnpj": "36.023.829/0001-57",
+      "cargo": "Maquiador",
+      "comissao": 0.6
+    },
+    {
+      "name": "Ray da Silva Sousa",
+      "cpf": "573.165.518-95",
+      "cnpj": "67.878.543/0001-87",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "REJANE LUCIA MIYAKE",
+      "cpf": "297.249.848-85",
+      "cnpj": "67.281.164/0001-05",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "RENAN DA SILVA SANTOS",
+      "cpf": "467.950.628-80",
+      "cnpj": "52.201.760/0001-60",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.0
+    },
+    {
+      "name": "ROMEU FELIPE",
+      "cpf": "226.119.858-20",
+      "cnpj": "55.366.591/0001-07",
+      "cargo": "Cabeleireiro",
+      "comissao": 1.0
+    },
+    {
+      "name": "RONEKELLY FARIAS DA SILVA",
+      "cpf": "229.371.018-10",
+      "cnpj": "28.402.848/0001-66",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Rosangela Aparecida dos Santos",
+      "cpf": "162.953.438-21",
+      "cnpj": "30.759.213/0001-62",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "RUTH DO NASCIMENTO ABADE",
+      "cpf": "397.941.828-69",
+      "cnpj": "48.909.655/0001-03",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "SAMANTA UIARA BARBOSA SILVA",
+      "cpf": "341.196.568-10",
+      "cnpj": "31.720.555/0001-31",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "SANDRA NOVAES NASCIMENTO DOS SANTOS",
+      "cpf": "143.872.298-29",
+      "cnpj": "22.269.475/0001-10",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "SARA MARTINS RAMOS",
+      "cpf": "480.323.908-80",
+      "cnpj": "61.960.937/0001-01",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "SHIRLEY BATISTA RIBEIRO",
+      "cpf": "228.172.548-05",
+      "cnpj": "52.083.828/0001-54",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "SONIA LEMOS LESSA",
+      "cpf": "116.947.478-08",
+      "cnpj": "07.986.937/0001-27",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "STEFHANI FONSECA GARCIA",
+      "cpf": "441.730.698-20",
+      "cnpj": "65.600.604/0001-14",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "TAMIRES MARQUES DE OLIVEIRA DA COSTA",
+      "cpf": "400.857.558-85",
+      "cnpj": "27.966.882/0001-09",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "TATIANA CRISTINA DOS SANTOS MOURA",
+      "cpf": "224.730.448-64",
+      "cnpj": "22.361.753/0001-65",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.13
+    },
+    {
+      "name": "TAYNA DE SOUZA OLIVEIRA ALMEIDA",
+      "cpf": "412.112.628-98",
+      "cnpj": "62.031.555/0001-58",
+      "cargo": "Assistente",
+      "comissao": null
+    },
+    {
+      "name": "TIAGO MATSUMOTO CASTELLANI",
+      "cpf": "423.676.318-40",
+      "cnpj": "60.525.687/0001-00",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "VANESSA LOPES DOS SANTOS",
+      "cpf": "604.127.263-94",
+      "cnpj": "62.856.784/0001-01",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "VILMA ARAUJO DA SILVA",
+      "cpf": "310.972.988-17",
+      "cnpj": "25.969.847/0001-00",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "VIRGINIA BERNARDO DE MELO",
+      "cpf": "808.970.534-00",
+      "cnpj": "33.537.429/0001-71",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "VITOR MOREIRA DE ALVARENGA MORAIS",
+      "cpf": "110.380.536-33",
+      "cnpj": "36.705.299/0001-27",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "Vitor Santos Lopes",
+      "cpf": "471.945.778-95",
+      "cnpj": "44.231.416/0001-96",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.5
+    },
+    {
+      "name": "VITORIA CAROLINA FARIAS LAVRADOR",
+      "cpf": "476.491.718-17",
+      "cnpj": "44.154.610/0001-15",
+      "cargo": "Assistente",
+      "comissao": 0.13
+    },
+    {
+      "name": "VIVIANE DE SOUZA MORENO",
+      "cpf": "365.315.438-33",
+      "cnpj": "39.974.920/0001-46",
+      "cargo": "Manicure",
+      "comissao": 0.5
+    },
+    {
+      "name": "WALTER MARTINHO LEAL FILHO CABELEIREIRO",
+      "cpf": "409.641.978-80",
+      "cnpj": "18.835.778/0001-86",
+      "cargo": "Cabeleireiro",
+      "comissao": 0.0
+    },
+    {
+      "name": "WESLEY SANTOS DE MOURA",
+      "cpf": "444.727.788-31",
+      "cnpj": "35.296.442/0001-01",
+      "cargo": "MULTIPLICADOR",
+      "comissao": 0.1
+    },
+    {
+      "name": "WILLIAN AXL TROYANO",
+      "cpf": "395.441.488-09",
+      "cnpj": "66.832.849/0001-30",
+      "cargo": "Assistente",
+      "comissao": null
+    },
+    {
+      "name": "YARA PAIVA FERREIRA",
+      "cpf": "412.667.668-63",
+      "cnpj": "32.776.606/0001-00",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    },
+    {
+      "name": "YONARA LUIZA CRISTINA MARIANO",
+      "cpf": "448.387.298-20",
+      "cnpj": "60.123.208/0001-20",
+      "cargo": "Assistente",
+      "comissao": 0.1
+    }
+  ]
+}

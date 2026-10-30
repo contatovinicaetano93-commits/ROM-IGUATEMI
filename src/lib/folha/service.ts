@@ -46,13 +46,7 @@ import {
   type FolhaLineExtrasPatch,
 } from '@/lib/folha/workflow'
 import {
-  fetchZigDetailedTransactions,
-  zigWindowForQuinzenaDays,
-} from '@/lib/folha/zig-client'
-import {
-  aggregateZigEmployeeConsumo,
   isZigFolhaConfigured,
-  planZigConsumoBaruExtras,
   type ApplyZigConsumoResult,
 } from '@/lib/folha/zig-consumo'
 import { resolveFolhaTaxLineName } from '@/lib/folha/tax-cnpj'
@@ -516,83 +510,20 @@ export async function runFolhaDailyRefresh(
 
 /**
  * Puxa consumo funcionário no Baru (Zig) e preenche `consumo_baru` nas linhas.
- * Não sobrescreve valor já lançado; não reabate se Baru já veio no 8123.
+ * Motor FOPAG ROM: Baru é lançamento manual — esta via fica desligada.
  */
 export async function applyZigConsumoBaruToPeriod(
-  panel: RomPanelId,
-  args: { periodId: string; actor?: string | null },
+  _panel: RomPanelId,
+  _args: { periodId: string; actor?: string | null },
 ): Promise<{
   draft: FolhaDraft
   period: FolhaPeriodRow
   report: ApplyZigConsumoResult
   zig: { placeId: string; txs: number; pages: number; skipped?: string }
 }> {
-  if (!isZigFolhaConfigured()) {
-    throw new Error(
-      'Zig não configurado — defina ZIG_API_TOKEN (e opcional ZIG_TRANSACTIONS_RPC)',
-    )
-  }
-  const period = await getFolhaPeriod(args.periodId)
-  if (!period) throw new Error('Período da Folha não encontrado')
-  if (period.status === 'paid') throw new Error('Período já pago — reabra para editar')
-  if (period.lines.length === 0) {
-    throw new Error('Rascunho vazio — atualize do 8123 antes de puxar o Baru')
-  }
-
-  const quinzena = parseFolhaPeriodId(period.id)
-  if (!quinzena) throw new Error(`Período inválido: ${period.id}`)
-  const { sinceIso, untilIso } = zigWindowForQuinzenaDays(
-    quinzena.from,
-    quinzena.to,
+  throw new Error(
+    'Baru é lançamento manual no motor FOPAG ROM — digite consumo_baru na Folha (Zig auto desligado).',
   )
-  const fetched = await fetchZigDetailedTransactions({
-    panel,
-    sinceIso,
-    untilIso,
-  })
-  if (fetched.skipped === 'not_configured') {
-    throw new Error('Zig não configurado — defina ZIG_API_TOKEN')
-  }
-
-  const spends = aggregateZigEmployeeConsumo(fetched.transactions, {
-    fromIso: quinzena.from,
-    toIso: quinzena.to,
-  })
-  const draftView = periodRowToDraft(panel, period)
-  const { patches, report } = planZigConsumoBaruExtras(draftView.lines, spends)
-
-  const applyTax = acceptsFolhaTaxExtras(quinzena.half)
-  let lines = period.lines
-  for (const patch of patches) {
-    const result = applyExtrasToDraftLines({
-      panel,
-      lines,
-      sourceProfessionals: period.source_professionals,
-      professionalName: patch.professionalName,
-      extras: patch.extras,
-      applyTaxExtras: applyTax,
-    })
-    lines = result.lines
-  }
-
-  const updated = await saveFolhaPeriodLines({
-    id: period.id,
-    lines,
-    totalProposedPay: sumProposedPay(lines),
-    updatedBy: args.actor ?? null,
-  })
-  if (!updated) throw new Error('Falha ao salvar consumo Baru')
-
-  return {
-    draft: periodRowToDraft(panel, updated),
-    period: updated,
-    report,
-    zig: {
-      placeId: fetched.placeId,
-      txs: fetched.transactions.length,
-      pages: fetched.pages,
-    },
-  }
 }
 
 export async function patchFolhaLine(
@@ -913,7 +844,8 @@ export async function ingestFolhaTaxEmail(
 
   let applied = false
   let current = period
-  if (args.applyToLine !== false) {
+  // Default: não aplica na linha (impostos manuais no motor FOPAG ROM).
+  if (args.applyToLine === true) {
     const result = await applyFolhaTaxParsedToPeriod(panel, {
       periodId: args.periodId,
       kind: parsed.kind,

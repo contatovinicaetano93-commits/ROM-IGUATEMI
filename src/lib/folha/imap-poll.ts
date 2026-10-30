@@ -108,7 +108,8 @@ async function ingestMessage(
       filenames: msg.filenames,
       source,
       actor: 'imap-cron',
-      applyToLine: true,
+      // FOPAG ROM: impostos só manuais — IMAP arquiva o doc, não aplica na linha.
+      applyToLine: false,
     })
     const canRetry =
       !result.applied &&

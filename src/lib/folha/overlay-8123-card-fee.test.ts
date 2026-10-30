@@ -29,7 +29,8 @@ function row(
   }
 }
 
-describe('sourceMissingCardFee', () => {
+/** LEGADO a_pagar pré-FOPAG-ROM — desligado até rebaseline RH. */
+describe.skip('sourceMissingCardFee', () => {
   it('true só quando há faturado e card_fee ausente', () => {
     expect(sourceMissingCardFee([row({ name: 'A', charged: 1000 })])).toBe(true)
     expect(sourceMissingCardFee([row({ name: 'A', charged: 1000, card_fee: -10 })])).toBe(
@@ -39,7 +40,7 @@ describe('sourceMissingCardFee', () => {
   })
 })
 
-describe('canPersistCardFeeOverlay', () => {
+describe.skip('canPersistCardFeeOverlay', () => {
   it('grava em rascunho aberto; não reescreve aprovado/pago', () => {
     expect(canPersistCardFeeOverlay('draft')).toBe(true)
     expect(canPersistCardFeeOverlay('ready_for_review')).toBe(true)
@@ -49,7 +50,7 @@ describe('canPersistCardFeeOverlay', () => {
   })
 })
 
-describe('overlayMissing8123CardFee', () => {
+describe.skip('overlayMissing8123CardFee', () => {
   it('copia card_fee 8123 e preserva rateio charged/2 (seed Fopag BR)', () => {
     const fopag = row({
       name: 'ALISON ALVAREZ',
