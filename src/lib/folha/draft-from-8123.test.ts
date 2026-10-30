@@ -116,6 +116,57 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
     })
     expect(pay).toBeNull()
   })
+
+  it('029 desconto assistente: −K + 50% crédito (não confundir com cartão)', () => {
+    const emptyExtras = {
+      parc: null,
+      darf: null,
+      das: null,
+      div_ativa: null,
+      mensalidade_contabilidade: null,
+      descontos_diversos: null,
+      consumo_baru: null,
+      produtos_black: null,
+      servicos_assistente_como_pro: null,
+      valor_a_pagar_profissional: null,
+      taxa_servicos: null,
+      taxa_administrativa: null,
+      esteticista_bonus: null,
+      romeu_comissao_parcela: null,
+      devolucao_taxa_adm_q1: null,
+      acumulado_mes: null,
+      faturado_mes: null,
+      faturado_mesmo_periodo_ano_anterior: null,
+      taxa_adm_q1: null,
+      liquido_referencia: null,
+      fat_liquido_referencia: null,
+      faturado_referencia: null,
+    }
+    // Adriana 50%: LP=10000 sem assistente
+    const without = proposePayFromFopagRom({
+      panel: 'brasil',
+      name: 'ADRIANA ROSA DE JESUS ABRANCHES',
+      charged: 20_000,
+      productShare: 100,
+      cardFee: -400,
+      productSpend: -300,
+      assistantDiscount: null,
+      extras: emptyExtras,
+    })
+    expect(roundFopagRom(without, 2)).toBe(10_000)
+    // Com K=1000 → 10000 − 1000 + 500 = 9500
+    const withAssist = proposePayFromFopagRom({
+      panel: 'brasil',
+      name: 'ADRIANA ROSA DE JESUS ABRANCHES',
+      charged: 20_000,
+      productShare: 100,
+      cardFee: -400,
+      productSpend: -300,
+      assistantDiscount: -1_000,
+      extras: emptyExtras,
+    })
+    expect(roundFopagRom(withAssist, 2)).toBe(9_500)
+  })
 })
 
 describe('buildFolhaDraftLine — FOPAG ROM', () => {
@@ -219,7 +270,8 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
         net_payable: 1,
       }),
     )
-    expect(brunna.proposed_pay).toBeCloseTo(125_630 * 0.7, 2)
+    // LP 70%×125630; 029 assistente −14313.44 + 50%; residual olerite não entra.
+    expect(brunna.proposed_pay).toBeCloseTo(125_630 * 0.7 - 14313.44 * 0.5, 2)
 
     const diana = buildFolhaDraftLine(
       'iguatemi',

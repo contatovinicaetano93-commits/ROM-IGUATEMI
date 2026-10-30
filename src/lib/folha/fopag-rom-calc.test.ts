@@ -52,6 +52,30 @@ describe('FOPAG ROM calc — PDF exemplo ilustrativo (50%)', () => {
     expect(roundFopagRom(y, 2)).toBe(9_890)
   })
 
+  it('029 desconto assistente: −K + 50%×K crédito', () => {
+    // Daniela: LP 31058.10; K=7721.58 → −7721.58 + 3860.79 = 27197.31
+    const y = applyFopagRomManualExtras(31_058.1, {
+      descontoAssistente: 7_721.58,
+    })
+    expect(roundFopagRom(y, 2)).toBe(27_197.31)
+  })
+
+  it('029: taxa cartão (passos 4/6) ≠ desconto assistente (−K+meio)', () => {
+    const r = calculateFopagRom({
+      report0123: 20_000,
+      report041: 2_000,
+      report029: 400, // só cartão
+      report026: 300,
+      comissaoProfissional: 0.5,
+    })
+    expect(roundFopagRom(r.liquidoPadrao, 2)).toBe(10_000)
+    const y = applyFopagRomManualExtras(r.liquidoPadrao, {
+      descontoAssistente: 1_000,
+    })
+    // 10000 − 1000 + 500 = 9500
+    expect(roundFopagRom(y, 2)).toBe(9_500)
+  })
+
   it('sem alíquota → liquido null (não inventa)', () => {
     const r = calculateFopagRom({
       report0123: 20_000,

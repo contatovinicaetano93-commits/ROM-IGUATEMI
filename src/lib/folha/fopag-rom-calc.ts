@@ -2,16 +2,21 @@
  * Motor FOPAG ROM — especificação das apresentações RH (PDF + infográfico +
  * Planilha Base, 27/10/2026 @Rodrigo).
  *
- * Automático (IA) — passos 1 a 6:
- *   FL = R_0123 − [(R_0123 − R_041)×%salão + R_041×5%] − R_029
- *   LP = FL − R_026 − 50%×R_029
+ * Automático (IA) — passos 1 a 6 (taxa de cartão do 029):
+ *   FL = R_0123 − [(R_0123 − R_041)×%salão + R_041×5%] − taxa_cartão_029
+ *   LP = FL − R_026 − 50%×taxa_cartão_029
+ *
+ * Relatório 029 traz **duas** informações distintas:
+ *   1) Desconto Assistente (total) → −K + 50%×K como crédito ao pro
+ *   2) Taxa de cartão (débito + crédito) → entra nos passos 4 e 6 acima
  *
  * Planilha Base traz a alíquota do **profissional**. Na fórmula do PDF a
  * dedução do passo 3 é a comissão do **salão** = 1 − alíquota do pro
  * (no exemplo 50%/50% coincidem). Assim Romeu 100% e Brunna 70% fecham.
  *
- * Manual (não calculado aqui): passo 7 (0186), ZIG/Baru, impostos,
- * adiantamento, campanhas e regras variáveis da Parte 3.
+ * Manual (não no LP padrão): passo 7 (0186 / U×20%), ZIG/Baru, impostos,
+ * adiantamento, campanhas e regras variáveis da Parte 3. O desconto
+ * assistente do 029 entra via `applyFopagRomManualExtras` (−K + meio).
  *
  * KPI ausente = null (não inventa 0).
  */
@@ -24,7 +29,11 @@ export type FopagRomAvecInputs = {
   report0123: number | null
   /** AVEC 041 — produtos vendidos (bruto). */
   report041: number | null
-  /** AVEC 029 — taxa de cartão (valor absoluto). */
+  /**
+   * AVEC 029 — **só** a taxa de cartão (débito+crédito), valor absoluto.
+   * O desconto assistente do mesmo relatório NÃO entra aqui — ver
+   * `descontoAssistente` em `applyFopagRomManualExtras`.
+   */
   report029: number | null
   /** AVEC 026 — produto consumido (valor absoluto). */
   report026: number | null
@@ -43,13 +52,26 @@ export type FopagRomCalcResult = {
   /** Passos 1–4. */
   fatLiquido: number | null
   produtoConsumido: number | null
-  /** Passo 6: 50% × R_029 (PDF). */
+  /** Passo 6: 50% × taxa de cartão do 029 (PDF). */
   meioAMeio: number | null
   /**
-   * Líquido padrão após passos 1–6 (antes do passo 7 e manuais).
+   * Líquido padrão após passos 1–6 (antes do assistente 029, passo 7 e manuais).
    * null se faltar base Avec ou alíquota.
    */
   liquidoPadrao: number | null
+}
+
+/**
+ * Crédito meio a meio do desconto assistente (029).
+ * Default 50%; exceções nomeadas (ex. Walter 60%) passam `rate`.
+ */
+export function meioAMeioAssistenteCredito(
+  descontoAssistente: number | null | undefined,
+  rate: number = FOPAG_ROM_MEIO_A_MEIO_RATE,
+): number | null {
+  const k = mag(descontoAssistente)
+  if (k == null) return null
+  return k * rate
 }
 
 function present(v: number | null | undefined): v is number {
@@ -135,15 +157,27 @@ export function calculateFopagRom(input: FopagRomAvecInputs): FopagRomCalcResult
 }
 
 /**
- * Aplica só inclusões manuais (após passo 6). Null não move a conta.
- * Sinais: débitos positivos abatem; créditos (bonus0186, campanhas) somam.
+ * Aplica desconto assistente do 029 + inclusões manuais (após passo 6).
+ * Null não move a conta.
+ *
+ * Desconto Assistente (029): −K + (rate×K) crédito ao profissional
+ * (padrão rate=50%; planilha Fopag: −K + L com L=K/2).
+ *
+ * Sinais demais: débitos positivos abatem; créditos (bonus0186, campanhas) somam.
  */
 export function applyFopagRomManualExtras(
   liquidoPadrao: number | null,
   extras: {
-    /** Passo 7 — débito (quem devolve). */
+    /**
+     * 029 — Desconto Assistente (total). Motor: −K + meio×K.
+     * Distinto da taxa de cartão (passos 4/6) e do passo 7 (0186).
+     */
+    descontoAssistente?: number | null
+    /** Fração do desconto assistente creditada de volta (default 0.5). */
+    meioAMeioAssistenteRate?: number | null
+    /** Passo 7 — débito/taxa serviços W (quem devolve). */
     servicoAssistenteDebito?: number | null
-    /** Passo 7 — crédito/bônus (quem recebe). */
+    /** Passo 7 — crédito/bônus 0186 (quem recebe). */
     servicoAssistenteBonus?: number | null
     consumoBaru?: number | null
     darf?: number | null
@@ -169,6 +203,16 @@ export function applyFopagRomManualExtras(
   const add = (v: number | null | undefined) => {
     if (v == null || Number.isNaN(v)) return
     y += v
+  }
+  const k = mag(extras.descontoAssistente)
+  if (k != null) {
+    const rate =
+      extras.meioAMeioAssistenteRate != null &&
+      !Number.isNaN(extras.meioAMeioAssistenteRate)
+        ? extras.meioAMeioAssistenteRate
+        : FOPAG_ROM_MEIO_A_MEIO_RATE
+    y -= k
+    y += k * rate
   }
   sub(extras.servicoAssistenteDebito)
   add(extras.servicoAssistenteBonus)
