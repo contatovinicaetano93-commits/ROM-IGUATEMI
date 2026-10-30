@@ -48,6 +48,7 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
     const pay = proposePayFromFopagRom({
       panel: 'brasil',
       name: 'ADRIANA ROSA DE JESUS ABRANCHES', // 50% na Planilha Base
+      cargo: 'Cabeleireiro',
       charged: 20_000,
       productShare: 100,
       cardFee: -400,
@@ -77,8 +78,8 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
         faturado_referencia: null,
       },
     })
-    // LP padrão 10000 − DAS 100 − Baru 50 = 9850
-    expect(roundFopagRom(pay, 2)).toBe(9_850)
+    // FL 10500 − 026 300 − adm 5%×20000 − DAS 100 − Baru 50 = 9050
+    expect(roundFopagRom(pay, 2)).toBe(9_050)
   })
 
   it('sem alíquota RH → null', () => {
@@ -142,10 +143,11 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
       fat_liquido_referencia: null,
       faturado_referencia: null,
     }
-    // Adriana 50%: LP=10000 sem assistente
+    // Adriana 50%: FL 10500 − 026 300 − adm 1000 = 9200
     const without = proposePayFromFopagRom({
       panel: 'brasil',
       name: 'ADRIANA ROSA DE JESUS ABRANCHES',
+      cargo: 'Cabeleireiro',
       charged: 20_000,
       productShare: 100,
       cardFee: -400,
@@ -153,11 +155,12 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
       assistantDiscount: null,
       extras: emptyExtras,
     })
-    expect(roundFopagRom(without, 2)).toBe(10_000)
-    // Com K=1000 → 10000 − 1000 + 500 = 9500
+    expect(roundFopagRom(without, 2)).toBe(9_200)
+    // Com K=1000 → 9200 − 1000 + 500 = 8700
     const withAssist = proposePayFromFopagRom({
       panel: 'brasil',
       name: 'ADRIANA ROSA DE JESUS ABRANCHES',
+      cargo: 'Cabeleireiro',
       charged: 20_000,
       productShare: 100,
       cardFee: -400,
@@ -165,7 +168,7 @@ describe('proposePayFromFopagRom — PDF exemplo via 8123', () => {
       assistantDiscount: -1_000,
       extras: emptyExtras,
     })
-    expect(roundFopagRom(withAssist, 2)).toBe(9_500)
+    expect(roundFopagRom(withAssist, 2)).toBe(8_700)
   })
 })
 
@@ -183,8 +186,8 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
         net_payable: 1, // a_pagar ignorado pelo motor novo
       }),
     )
-    // salão 45% → FL 11400 − 300 − 200 = 10900
-    expect(line.proposed_pay).toBeCloseTo(10_900, 2)
+    // FL 11400 − 026 300 − adm 5%×20000 = 10100
+    expect(line.proposed_pay).toBeCloseTo(10_100, 2)
   })
 
   it('assistente com U não recebe passo 7 automático', () => {
@@ -270,8 +273,11 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
         net_payable: 1,
       }),
     )
-    // LP 70%×125630; 029 assistente −14313.44 + 50%; residual olerite não entra.
-    expect(brunna.proposed_pay).toBeCloseTo(125_630 * 0.7 - 14313.44 * 0.5, 2)
+    // FL 70%×125630 − K+meio − adm Brunna 5%×C; residual olerite não entra.
+    expect(brunna.proposed_pay).toBeCloseTo(
+      125_630 * 0.7 - 14313.44 * 0.5 - 125_630 * 0.05,
+      2,
+    )
 
     const diana = buildFolhaDraftLine(
       'iguatemi',
@@ -314,8 +320,8 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
       }),
       { das: 200, consumo_baru: 50 },
     )
-    // FL 11400 − meio 200 = 11200 − 200 − 50 = 10950
-    expect(line.proposed_pay).toBeCloseTo(10_950, 2)
+    // FL 11400 − adm 1000 − DAS 200 − Baru 50 = 10150
+    expect(line.proposed_pay).toBeCloseTo(10_150, 2)
   })
 })
 

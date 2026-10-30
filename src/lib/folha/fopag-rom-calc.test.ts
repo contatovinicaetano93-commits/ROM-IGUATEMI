@@ -23,7 +23,7 @@ describe('FOPAG ROM calc — PDF exemplo ilustrativo (50%)', () => {
     expect(roundFopagRom(r.fatLiquido, 2)).toBe(10_500)
   })
 
-  it('passos 1–6: −026 e −50%×029', () => {
+  it('LP = FL − 026 (sem meio a meio no cartão)', () => {
     const r = calculateFopagRom({
       report0123: 20_000,
       report041: 2_000,
@@ -31,9 +31,9 @@ describe('FOPAG ROM calc — PDF exemplo ilustrativo (50%)', () => {
       report026: 300,
       comissaoProfissional: 0.5,
     })
-    // FL 10500 − 300 − 200 = 10000
-    expect(roundFopagRom(r.meioAMeio, 2)).toBe(200)
-    expect(roundFopagRom(r.liquidoPadrao, 2)).toBe(10_000)
+    // FL 10500 − 300 = 10200; cartão já saiu no FL
+    expect(r.meioAMeio).toBeNull()
+    expect(roundFopagRom(r.liquidoPadrao, 2)).toBe(10_200)
   })
 
   it('manuais (impostos/Baru/0186) só depois do LP padrão', () => {
@@ -49,18 +49,22 @@ describe('FOPAG ROM calc — PDF exemplo ilustrativo (50%)', () => {
       das: 100,
       servicoAssistenteBonus: 40,
     })
-    expect(roundFopagRom(y, 2)).toBe(9_890)
+    // 10200 − 50 − 100 + 40 = 10090
+    expect(roundFopagRom(y, 2)).toBe(10_090)
   })
 
-  it('029 desconto assistente: −K + 50%×K crédito', () => {
-    // Daniela: LP 31058.10; K=7721.58 → −7721.58 + 3860.79 = 27197.31
-    const y = applyFopagRomManualExtras(31_058.1, {
+  it('Daniela: FL − K + 50%K − 026 − adm 7%', () => {
+    // FL 32311.74; K=7721.58; 026=778.34; adm=60477×7%=4233.39
+    const fl = 32_311.74
+    const lp = fl - 778.34
+    const y = applyFopagRomManualExtras(lp, {
       descontoAssistente: 7_721.58,
+      taxaAdministrativa: 4_233.39,
     })
-    expect(roundFopagRom(y, 2)).toBe(27_197.31)
+    expect(roundFopagRom(y, 2)).toBe(23_439.22)
   })
 
-  it('029: taxa cartão (passos 4/6) ≠ desconto assistente (−K+meio)', () => {
+  it('029: cartão só no FL; assistente −K+meio depois', () => {
     const r = calculateFopagRom({
       report0123: 20_000,
       report041: 2_000,
@@ -68,12 +72,13 @@ describe('FOPAG ROM calc — PDF exemplo ilustrativo (50%)', () => {
       report026: 300,
       comissaoProfissional: 0.5,
     })
-    expect(roundFopagRom(r.liquidoPadrao, 2)).toBe(10_000)
+    expect(roundFopagRom(r.liquidoPadrao, 2)).toBe(10_200)
     const y = applyFopagRomManualExtras(r.liquidoPadrao, {
       descontoAssistente: 1_000,
+      taxaAdministrativa: 1_000, // 5%×20000
     })
-    // 10000 − 1000 + 500 = 9500
-    expect(roundFopagRom(y, 2)).toBe(9_500)
+    // 10200 − 1000 + 500 − 1000 = 8700
+    expect(roundFopagRom(y, 2)).toBe(8_700)
   })
 
   it('sem alíquota → liquido null (não inventa)', () => {

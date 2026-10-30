@@ -1,22 +1,21 @@
 /**
- * Motor FOPAG ROM — especificação das apresentações RH (PDF + infográfico +
- * Planilha Base, 27/10/2026 @Rodrigo).
+ * Motor FOPAG ROM — apresentações RH + validação na mão (out/2026).
  *
- * Automático (IA) — passos 1 a 6 (taxa de cartão do 029):
+ * Automático a partir do faturamento líquido (passos 1–4):
  *   FL = R_0123 − [(R_0123 − R_041)×%salão + R_041×5%] − taxa_cartão_029
- *   LP = FL − R_026 − 50%×taxa_cartão_029
+ *   LP = FL − R_026
  *
  * Relatório 029 traz **duas** informações distintas:
- *   1) Desconto Assistente (total) → −K + 50%×K como crédito ao pro
- *   2) Taxa de cartão (débito + crédito) → entra nos passos 4 e 6 acima
+ *   1) Desconto Assistente (total K) → −K + 50%×K crédito ao pro
+ *   2) Taxa de cartão (débito + crédito) → só no FL (passo 4); NÃO há
+ *      meio a meio extra sobre o cartão
  *
- * Planilha Base traz a alíquota do **profissional**. Na fórmula do PDF a
- * dedução do passo 3 é a comissão do **salão** = 1 − alíquota do pro
- * (no exemplo 50%/50% coincidem). Assim Romeu 100% e Brunna 70% fecham.
+ * Depois do LP: −taxa adm (IG 7% / BR 5% sobre R_0123) + manuais
+ * (0186, Baru, impostos…). Validado com Daniela: FL 32.311,74 − K + meio
+ * − 026 − adm 7% = 23.439,22.
  *
- * Manual (não no LP padrão): passo 7 (0186 / U×20%), ZIG/Baru, impostos,
- * adiantamento, campanhas e regras variáveis da Parte 3. O desconto
- * assistente do 029 entra via `applyFopagRomManualExtras` (−K + meio).
+ * Planilha Base traz a alíquota do **profissional**. Na fórmula a dedução
+ * do passo 3 é a comissão do **salão** = 1 − alíquota do pro.
  *
  * KPI ausente = null (não inventa 0).
  */
@@ -49,13 +48,16 @@ export type FopagRomCalcResult = {
   comissaoSalao: number | null
   taxaProdutos: number | null
   resultadoPasso3: number | null
-  /** Passos 1–4. */
+  /** Passos 1–4 (base confiável antes de 026 / assistente / adm). */
   fatLiquido: number | null
   produtoConsumido: number | null
-  /** Passo 6: 50% × taxa de cartão do 029 (PDF). */
+  /**
+   * @deprecated Meio a meio do cartão foi removido. Campo fica null;
+   * crédito 50% do assistente vive em `applyFopagRomManualExtras`.
+   */
   meioAMeio: number | null
   /**
-   * Líquido padrão após passos 1–6 (antes do assistente 029, passo 7 e manuais).
+   * FL − R_026 (antes de assistente 029, taxa adm, passo 7 e manuais).
    * null se faltar base Avec ou alíquota.
    */
   liquidoPadrao: number | null
@@ -126,38 +128,35 @@ export function computeFopagRomFatLiquido(
 }
 
 /**
- * Passos 1–6 (IA). Passo 7 e manuais ficam de fora.
+ * FL − 026. Assistente (−K+meio), taxa adm e manuais ficam em
+ * `applyFopagRomManualExtras`.
  */
 export function calculateFopagRom(input: FopagRomAvecInputs): FopagRomCalcResult {
   const part1 = computeFopagRomFatLiquido(input)
   const produtoConsumido = mag(input.report026)
-  const cartao = mag(input.report029)
-  // PDF passo 6: 50% × R_029; sem 029 → meio 0.
-  const meioAMeio = (cartao ?? 0) * FOPAG_ROM_MEIO_A_MEIO_RATE
 
   if (part1.fatLiquido == null) {
     return {
       ...part1,
       produtoConsumido,
-      meioAMeio: cartao == null ? null : meioAMeio,
+      meioAMeio: null,
       liquidoPadrao: null,
     }
   }
 
   let liquido = part1.fatLiquido
   if (present(produtoConsumido)) liquido -= produtoConsumido
-  liquido -= meioAMeio
 
   return {
     ...part1,
     produtoConsumido,
-    meioAMeio,
+    meioAMeio: null,
     liquidoPadrao: liquido,
   }
 }
 
 /**
- * Aplica desconto assistente do 029 + inclusões manuais (após passo 6).
+ * Aplica desconto assistente do 029, taxa adm e inclusões manuais (após LP).
  * Null não move a conta.
  *
  * Desconto Assistente (029): −K + (rate×K) crédito ao profissional
@@ -170,11 +169,13 @@ export function applyFopagRomManualExtras(
   extras: {
     /**
      * 029 — Desconto Assistente (total). Motor: −K + meio×K.
-     * Distinto da taxa de cartão (passos 4/6) e do passo 7 (0186).
+     * Distinto da taxa de cartão (só no FL) e do passo 7 (0186).
      */
     descontoAssistente?: number | null
     /** Fração do desconto assistente creditada de volta (default 0.5). */
     meioAMeioAssistenteRate?: number | null
+    /** Taxa adm sobre faturado (IG 7% / BR 5% × R_0123). */
+    taxaAdministrativa?: number | null
     /** Passo 7 — débito/taxa serviços W (quem devolve). */
     servicoAssistenteDebito?: number | null
     /** Passo 7 — crédito/bônus 0186 (quem recebe). */
@@ -214,6 +215,7 @@ export function applyFopagRomManualExtras(
     y -= k
     y += k * rate
   }
+  sub(extras.taxaAdministrativa)
   sub(extras.servicoAssistenteDebito)
   add(extras.servicoAssistenteBonus)
   sub(extras.consumoBaru)

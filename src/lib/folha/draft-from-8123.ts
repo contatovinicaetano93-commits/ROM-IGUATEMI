@@ -511,6 +511,7 @@ export function proposePayFromFopagRom(args: {
     cargo: args.cargo,
   })
   const person = resolveFolhaPersonRules(args.name)
+  const cargo = normalizeFolhaCargo(args.cargo)
   const rom = calculateFopagRom({
     report0123: args.charged ?? null,
     report041: deriveReport041From8123(args.productShare),
@@ -521,9 +522,19 @@ export function proposePayFromFopagRom(args: {
   const vExplicit = args.extras.valor_a_pagar_profissional
   const bonus0186 =
     vExplicit != null && !Number.isNaN(vExplicit) ? vExplicit : null
+  /**
+   * Taxa adm automática: IG 7% / BR 5% × C (cargos isentos → null).
+   * Validação Daniela: FL − K + meio − 026 − C×7%.
+   */
+  const admRate = resolveGrossAdminFeeRate(args.panel, cargo, person)
+  const taxaAdministrativa =
+    admRate != null && args.charged != null && !Number.isNaN(args.charged)
+      ? Math.abs(args.charged) * admRate
+      : null
   return applyFopagRomManualExtras(rom.liquidoPadrao, {
     descontoAssistente: deductionMagnitude(args.assistantDiscount),
     meioAMeioAssistenteRate: resolveMeioAMeioRate(person),
+    taxaAdministrativa,
     servicoAssistenteBonus: bonus0186,
     servicoAssistenteDebito: args.extras.taxa_servicos,
     consumoBaru: args.extras.consumo_baru,
