@@ -156,6 +156,8 @@ export function applyFopagRomManualExtras(
     campanhas?: number | null
     /** Parte 3 — lançamentos manuais diversos (Luisa +1%, etc.). */
     regrasVariaveis?: number | null
+    /** Top-up de meta Romeu já calculado no rascunho (Q2). Crédito. */
+    romeuComissaoParcela?: number | null
   },
 ): number | null {
   if (liquidoPadrao == null) return null
@@ -180,6 +182,7 @@ export function applyFopagRomManualExtras(
   sub(extras.adiantamento)
   add(extras.campanhas)
   add(extras.regrasVariaveis)
+  add(extras.romeuComissaoParcela)
   return y
 }
 

@@ -136,6 +136,119 @@ describe('buildFolhaDraftLine — FOPAG ROM', () => {
     expect(line.proposed_pay).toBeCloseTo(10_900, 2)
   })
 
+  it('assistente com U não recebe passo 7 automático', () => {
+    const row = pro({
+      name: 'GABRIELA DA SILVA SANTOS',
+      role: 'MULTIPLICADOR',
+      charged: 12_000,
+      product_share: 0,
+      product_spend: -100,
+      card_fee: 0,
+      net_payable: 1,
+    })
+    const sem = buildFolhaDraftLine('iguatemi', row)
+    const com = buildFolhaDraftLine('iguatemi', row, {
+      servicos_assistente_como_pro: 4930.04,
+    })
+    expect(com.folha_extras.valor_a_pagar_profissional).toBeCloseTo(986.008, 2)
+    expect(com.proposed_pay).toBeCloseTo(sem.proposed_pay ?? 0, 2)
+  })
+
+  it('Auricaliane inclui V−W no líquido', () => {
+    const row = pro({
+      name: 'AURICALIANE DA SILVA DANTAS',
+      role: 'MULTIPLICADOR',
+      charged: 3438.72,
+      product_share: 0,
+      card_fee: 0,
+      product_spend: 0,
+      net_payable: 1,
+    })
+    const sem = buildFolhaDraftLine('brasil', row, undefined, {
+      applyTaxExtras: false,
+    })
+    const com = buildFolhaDraftLine(
+      'brasil',
+      row,
+      { servicos_assistente_como_pro: 3304 },
+      { applyTaxExtras: false },
+    )
+    expect(com.folha_extras.valor_a_pagar_profissional).toBeCloseTo(991.2, 1)
+    expect((com.proposed_pay ?? 0) - (sem.proposed_pay ?? 0)).toBeCloseTo(
+      991.2 - 99.12,
+      1,
+    )
+  })
+
+  it('Q2 soma a parcela de meta Romeu no proposed_pay', () => {
+    const row = pro({
+      name: 'GABRIELA DA SILVA SANTOS',
+      role: 'MULTIPLICADOR',
+      charged: 10_000,
+      product_share: 0,
+      card_fee: 0,
+      product_spend: 0,
+      net_payable: 1,
+    })
+    const sem = buildFolhaDraftLine('iguatemi', row, undefined, {
+      applyTaxExtras: false,
+    })
+    const com = buildFolhaDraftLine(
+      'iguatemi',
+      row,
+      { acumulado_mes: 10230.03 },
+      { applyTaxExtras: false },
+    )
+    expect(com.folha_extras.romeu_comissao_parcela).toBeCloseTo(1023.003, 3)
+    expect(com.proposed_pay).toBeCloseTo((sem.proposed_pay ?? 0) + 1023.003, 2)
+  })
+
+  it('crédito residual do olerite e delta de produto não abatem o LP', () => {
+    const brunna = buildFolhaDraftLine(
+      'iguatemi',
+      pro({
+        name: 'BRUNNA FABRICIO DA SILVA',
+        role: 'Cabeleireiro',
+        charged: 125_630,
+        product_share: 0,
+        card_fee: 0,
+        product_spend: 0,
+        admin_fee: 0,
+        assistant_discount: -14313.44,
+        other_discounts: 2118.54,
+        net_payable: 1,
+      }),
+    )
+    expect(brunna.proposed_pay).toBeCloseTo(125_630 * 0.7, 2)
+
+    const diana = buildFolhaDraftLine(
+      'iguatemi',
+      pro({
+        name: 'DIANA DOS ANJOS SANTOS',
+        role: 'Manicure',
+        charged: 10_000,
+        product_share: 0,
+        card_fee: 0,
+        product_spend: -100,
+        net_payable: 1,
+      }),
+      { produto_referencia: 500 },
+    )
+    const dianaSem = buildFolhaDraftLine(
+      'iguatemi',
+      pro({
+        name: 'DIANA DOS ANJOS SANTOS',
+        role: 'Manicure',
+        charged: 10_000,
+        product_share: 0,
+        card_fee: 0,
+        product_spend: -100,
+        net_payable: 1,
+      }),
+    )
+    expect(diana.proposed_pay).toBeCloseTo(dianaSem.proposed_pay ?? 0, 2)
+  })
+
   it('impostos/Baru digitados abatem', () => {
     const line = buildFolhaDraftLine(
       'brasil',

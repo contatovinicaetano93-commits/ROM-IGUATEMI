@@ -81,6 +81,33 @@ describe('Planilha Base RH — alíquotas', () => {
     ).toBe(0.55)
   })
 
+  it('alíquota em branco ou nome fora da planilha não inventa % de cargo', () => {
+    expect(
+      resolveRhCommissionRate({
+        panel: 'iguatemi',
+        name: 'DEISE DE ARAUJO REIS',
+        cargo: 'Manicure',
+      }),
+    ).toBeNull()
+    expect(
+      resolveRhCommissionRate({
+        panel: 'iguatemi',
+        name: 'PROFISSIONAL INEXISTENTE XYZ',
+        cargo: 'Cabeleireiro',
+      }),
+    ).toBeNull()
+  })
+
+  it('alíquota 0 explícita permanece 0', () => {
+    expect(
+      resolveRhCommissionRate({
+        panel: 'iguatemi',
+        name: 'DHANDARA VIEIRA GOMES',
+        cargo: 'Assistente',
+      }),
+    ).toBe(0)
+  })
+
   it('Romeu 100%: FL = serviço + 95% produtos − cartão', () => {
     const r = computeFopagRomFatLiquido({
       report0123: 10_000,

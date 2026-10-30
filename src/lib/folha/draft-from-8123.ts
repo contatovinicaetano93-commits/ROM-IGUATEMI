@@ -487,6 +487,7 @@ export function deriveReport041From8123(
 /**
  * proposed_pay = motor FOPAG ROM (1–6) + manuais digitados.
  * Impostos/Baru só entram se RH preencheu — sem auto Zig/IMAP.
+ * Passo 7 só com V explícito (não inventa U×20%). Meta Romeu soma a parcela.
  */
 export function proposePayFromFopagRom(args: {
   panel: RomPanelId
@@ -510,14 +511,9 @@ export function proposePayFromFopagRom(args: {
     report026: deductionMagnitude(args.productSpend),
     comissaoProfissional: rate,
   })
-  const u = args.extras.servicos_assistente_como_pro
   const vExplicit = args.extras.valor_a_pagar_profissional
   const bonus0186 =
-    vExplicit != null && !Number.isNaN(vExplicit)
-      ? vExplicit
-      : u != null && !Number.isNaN(u)
-        ? u * 0.2
-        : null
+    vExplicit != null && !Number.isNaN(vExplicit) ? vExplicit : null
   return applyFopagRomManualExtras(rom.liquidoPadrao, {
     servicoAssistenteBonus: bonus0186,
     servicoAssistenteDebito: args.extras.taxa_servicos,
@@ -528,6 +524,7 @@ export function proposePayFromFopagRom(args: {
     parc: args.extras.parc,
     divAtiva: args.extras.div_ativa,
     descontosDiversos: args.extras.descontos_diversos,
+    romeuComissaoParcela: args.extras.romeu_comissao_parcela,
   })
 }
 
@@ -755,7 +752,7 @@ export function buildFolhaDraftLine(
    * Líquido 0123/8123 já fechado nos componentes Avec.
    * `aPagarIsAvecLiquid` vale para todo cargo — o meio já está no a_pagar
    * (Guilherme colorista / Jefferson multiplicador Out Q1).
-   * `avecLiquidClosed` (pros) ainda suprime adm motor + leftover olerite;
+   * `avecLiquidClosed` (pros) ainda suprime adm motor;
    * assistente/multiplicador/colorista ficam de fora desse flag para o
    * path Baru/parc do olerite continuar decidindo com `embeddedInDescontos`.
    * Lucas Campos Q2 sem meta ainda cobra adm motor (caderno RH).
@@ -787,8 +784,7 @@ export function buildFolhaDraftLine(
     !assistantLikeCargo
   /**
    * Olerite “embutido” (residual/Baru) só com desmembramento real.
-   * `avecLiquidClosed` NÃO marca embedded — senão o path de leftover
-   * credita `outros` de novo no pay (Maykon IG Out Q1: +6k fantasma).
+   * `avecLiquidClosed` não marca embedded — o LP FOPAG não parte do a_pagar.
    */
   const embeddedInDescontos =
     olerite.embeddedAdminMeio || aPagarNetsAdminMeio
@@ -1243,21 +1239,17 @@ export function buildFolhaDraftLine(
    * a_pagar fica alto demais em W; ao abater taxa_servicos no pay, compensar.
    * Coluna W (taxa_servicos) permanece o valor verdadeiro U×alíquota.
    *
-   * Crédito residual (Brunna): descontos ≈ (meio − adm) + residual — a_pagar
-   * já somou o residual; estornar via descontos_diversos no pay **só se**
-   * o líquido Avec NÃO fecha (senão Romeu/Walter BR Out Q1: −13k/−2k
-   * fantasma vs 0123/Fopag). Crédito órfão sem meio/adm (Romeu remessa
-   * charged=0) continua estornando — `embeddedAdminMeio` falso.
-   *
    * Assistente/multiplicador: U/V/W na Fopag são conferência / repasse ao
    * profissional — não entram no líquido do assistente (só no pro).
    * Exceção: assistantEarnInPay (Auricaliane) — Y inclui V−W.
+   * Passo 7 não inventa U×20% quando V foi tirado da conta.
    */
   const assistantEarnInPay = person?.assistantEarnInPay === true
   let extrasForProposedPay: FolhaDraftLine['folha_extras'] =
     isAssistantLike && !assistantEarnInPay
       ? {
           ...folha_extras,
+          servicos_assistente_como_pro: null,
           valor_a_pagar_profissional: null,
           taxa_servicos: null,
         }
@@ -1277,28 +1269,12 @@ export function buildFolhaDraftLine(
     }
   }
 
-  const skipCreditResidualEstorno =
-    aPagarIsAvecLiquid && olerite.embeddedAdminMeio
-  if (
-    !skipCreditResidualEstorno &&
-    olerite.embeddedCreditResidual != null &&
-    olerite.embeddedCreditResidual > 0.02
-  ) {
-    extrasForProposedPay = {
-      ...extrasForProposedPay,
-      descontos_diversos: roundFolha(
-        (extrasForProposedPay.descontos_diversos ?? 0) +
-          olerite.embeddedCreditResidual,
-        4,
-      ),
-    }
-  }
-
   /**
    * Baru vs residual olerite (Fopag: colunas separadas).
    * Débito residual ≈ Baru embutido no a_pagar → coluna Baru, Outros null,
-   * sem reabater. Crédito residual (Brunna) NÃO é Baru — fica em Outros e
-   * já é estornado via descontos_diversos; Baru do RH ainda abate.
+   * sem reabater. Crédito residual (Brunna) NÃO é Baru — fica em Outros.
+   * O LP FOPAG não parte do a_pagar, então o residual não vira desconto.
+   * Baru digitado pelo RH ainda abate.
    *
    * Assistente/manicure: descontos 8123 já fecha a_pagar (Baru±parc embutidos).
    * Sem Baru RH/Zig: promove residual Avec → coluna (exceto Beto = W).
@@ -1355,40 +1331,8 @@ export function buildFolhaDraftLine(
   }
 
   /**
-   * Diana: Fopag produto (H) > product_spend Avec → delta ainda não no a_pagar.
-   * Abate só a diferença no pay (coluna produto continua a do 8123).
-   * Daniel Souza: produto Fopag já veio em `descontos` 8123 (other≈produto) —
-   * não reabater.
-   */
-  const produtoRef = folha_extras.produto_referencia
-  const avecProduto = n(deductionMagnitude(row.product_spend))
-  if (produtoRef != null && produtoRef > avecProduto + 0.5) {
-    const produtoDelta = roundFolha(produtoRef - avecProduto, 4)
-    const alreadyInOther =
-      otherDiscountsSigned != null &&
-      otherDiscountsSigned < -0.02 &&
-      otherDiscountsMag != null &&
-      produtoDelta != null &&
-      Math.abs(otherDiscountsMag - produtoDelta) <= 2
-    if (
-      produtoDelta != null &&
-      produtoDelta > 0.02 &&
-      !alreadyInOther
-    ) {
-      extrasForProposedPay = {
-        ...extrasForProposedPay,
-        descontos_diversos: roundFolha(
-          n(extrasForProposedPay.descontos_diversos) + produtoDelta,
-          4,
-        ),
-      }
-    }
-  }
-
-  /**
    * Beto: residual olerite ≈ descontos_diversos RH/Fopag (W) já no a_pagar.
-   * Coluna permanece; remove só a parcela RH do pay (não apagar estorno
-   * Brunna de crédito residual injetado em descontos_diversos).
+   * Coluna permanece; remove só a parcela RH do pay.
    */
   const rhDescDiversos = folha_extras.descontos_diversos
   if (
@@ -1404,40 +1348,6 @@ export function buildFolhaDraftLine(
         n(extrasForProposedPay.descontos_diversos) - rhDescDiversos,
         4,
       ),
-    }
-  }
-
-  /**
-   * Tamires: Avec descontos embutiu residual > Baru, mas Fopag só abate S=Baru
-   * (sem W). a_pagar ficou baixo demais em (residual − Baru) — creditar de volta
-   * o leftover não coberto por descontos_diversos.
-   *
-   * NÃO aplicar quando `avecLiquidClosed`: a_pagar 8123/0123 já é o líquido
-   * Avec (rateio+produto+assist+outros). Creditar residual de novo inventa
-   * fantasma (Maykon IG Out Q1: +R$6.031 em outros → pay 27.958 vs 21.926).
-   */
-  if (
-    embeddedInDescontos &&
-    !avecLiquidClosed &&
-    baruSplit.baruAlreadyInNet &&
-    olerite.outrosResiduais != null &&
-    baruSplit.consumoBaru != null &&
-    olerite.outrosResiduais > baruSplit.consumoBaru + 2
-  ) {
-    const leftover = roundFolha(
-      olerite.outrosResiduais -
-        baruSplit.consumoBaru -
-        n(folha_extras.descontos_diversos),
-      4,
-    )
-    if (leftover != null && leftover > 0.02) {
-      extrasForProposedPay = {
-        ...extrasForProposedPay,
-        descontos_diversos: roundFolha(
-          n(extrasForProposedPay.descontos_diversos) - leftover,
-          4,
-        ),
-      }
     }
   }
 

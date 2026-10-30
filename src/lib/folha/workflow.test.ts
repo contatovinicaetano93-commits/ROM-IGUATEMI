@@ -54,9 +54,8 @@ describe('applyExtrasToDraftLines', () => {
     expect(result.matched).toBe(true)
     expect(result.lines[0]?.folha_extras.valor_a_pagar_profissional).toBe(200)
     expect(result.lines[0]?.folha_extras.taxa_servicos).toBe(30)
-    // FOPAG ROM: LP passos 1–6 + V(200) − W(30) − DARF(50)
-    expect(result.lines[0]?.proposed_pay).not.toBeNull()
-    expect(result.lines[0]?.proposed_pay).toBeGreaterThan(1000)
+    // Multiplicador: U/V/W são conferência. Jefferson 15%: 12000×0.15 − 100 − DARF 50.
+    expect(result.lines[0]?.proposed_pay).toBeCloseTo(1650, 2)
     expect(result.lines[0]?.folha_extras.darf).toBe(50)
   })
 })
