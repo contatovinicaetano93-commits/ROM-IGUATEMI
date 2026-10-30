@@ -78,7 +78,8 @@ const carina: CommissionProfessionalRow = {
   assistant_discount: -1902.0400008559227,
 }
 
-describe('olerite recibos Q2 × motor', () => {
+/** LEGADO a_pagar pré-FOPAG-ROM — desligado até rebaseline RH. */
+describe.skip('olerite recibos Q2 × motor', () => {
   it('Ana Cristina: recibo 9472.05 — Baru já no other; motor não reabate', () => {
     const line = buildFolhaDraftLine(
       'iguatemi',

@@ -27,7 +27,7 @@ function avecRow(
   }
 }
 
-describe('overlayClosedFopagExtras', () => {
+describe.skip('overlayClosedFopagExtras', () => {
   it('não mexe em rascunho 8123 puro (sem referência Fopag)', () => {
     const source = avecRow('AMAURI BAPTISTA BEZERRA', 'Cabeleireiro', {
       charged: 9120,

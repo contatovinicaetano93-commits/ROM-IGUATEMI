@@ -1,14 +1,18 @@
 /**
- * Rascunho da Folha a partir do snapshot 8123 (salon_commissions_daily).
+ * Rascunho da Folha a partir do snapshot 8123/0123 (salon_commissions_daily).
  *
- * O 8123 é espelho do fechamento Avec — não recalculamos % de comissão.
- * `proposed_pay` começa em `a_pagar` (net_payable) e abate/acresce camadas Folha:
- * DARF/DAS/mensalidade (Q1), U/V/W, meio a meio, taxa adm motor (quando 8123
- * veio zerado — ex.: IG 7% sobre faturado bruto).
+ * Motor FOPAG ROM (apresentações RH 27/10/2026): recalcula passos 1–6 a partir
+ * dos componentes Avec + alíquota da Planilha Base. Impostos e Baru são
+ * manuais (não entram sozinhos). Passo 7 (0186/U) só se RH preencher.
  */
 
 import type { RomPanelId } from '@/lib/brand'
 import { calculateFolhaLine, roundFolha } from '@/lib/folha/calc'
+import {
+  applyFopagRomManualExtras,
+  calculateFopagRom,
+} from '@/lib/folha/fopag-rom-calc'
+import { resolveRhCommissionRate } from '@/lib/folha/rh-commission-rates'
 import {
   lucasCamposAdminRefundQ2,
   quinzenaMetaHit,
@@ -469,6 +473,65 @@ export function stripFolhaTaxExtras(
   }
 }
 
+/**
+ * 041 a partir do rateio de produtos 8123 (taxa 5% da apresentação).
+ * Sem rateio → 0 (só serviços).
+ */
+export function deriveReport041From8123(
+  productShare: number | null | undefined,
+): number | null {
+  if (productShare == null || Number.isNaN(productShare)) return 0
+  return Math.abs(productShare) / 0.05
+}
+
+/**
+ * proposed_pay = motor FOPAG ROM (1–6) + manuais digitados.
+ * Impostos/Baru só entram se RH preencheu — sem auto Zig/IMAP.
+ */
+export function proposePayFromFopagRom(args: {
+  panel: RomPanelId
+  name: string
+  cargo?: string | null
+  charged: number | null | undefined
+  productShare: number | null | undefined
+  cardFee: number | null | undefined
+  productSpend: number | null | undefined
+  extras: FolhaDraftLine['folha_extras']
+}): number | null {
+  const rate = resolveRhCommissionRate({
+    panel: args.panel,
+    name: args.name,
+    cargo: args.cargo,
+  })
+  const rom = calculateFopagRom({
+    report0123: args.charged ?? null,
+    report041: deriveReport041From8123(args.productShare),
+    report029: deductionMagnitude(args.cardFee),
+    report026: deductionMagnitude(args.productSpend),
+    comissaoProfissional: rate,
+  })
+  const u = args.extras.servicos_assistente_como_pro
+  const vExplicit = args.extras.valor_a_pagar_profissional
+  const bonus0186 =
+    vExplicit != null && !Number.isNaN(vExplicit)
+      ? vExplicit
+      : u != null && !Number.isNaN(u)
+        ? u * 0.2
+        : null
+  return applyFopagRomManualExtras(rom.liquidoPadrao, {
+    servicoAssistenteBonus: bonus0186,
+    servicoAssistenteDebito: args.extras.taxa_servicos,
+    consumoBaru: args.extras.consumo_baru,
+    darf: sanitizeTaxExtra(args.extras.darf),
+    das: sanitizeTaxExtra(args.extras.das),
+    mensalidade: sanitizeTaxExtra(args.extras.mensalidade_contabilidade),
+    parc: args.extras.parc,
+    divAtiva: args.extras.div_ativa,
+    descontosDiversos: args.extras.descontos_diversos,
+  })
+}
+
+/** @deprecated Legado a_pagar±extras — mantido para testes/preview. */
 function applyFolhaExtras(
   netPayable: number | null,
   extras: FolhaDraftLine['folha_extras'],
@@ -1539,7 +1602,16 @@ export function buildFolhaDraftLine(
     exception_id: person?.id ?? null,
     folha_extras,
     proposed_pay: roundFolha(
-      applyFolhaExtras(row.net_payable, extrasForProposedPay, meioForProposedPay),
+      proposePayFromFopagRom({
+        panel,
+        name: row.name,
+        cargo: row.role,
+        charged: row.charged,
+        productShare: row.product_share,
+        cardFee: row.card_fee,
+        productSpend: row.product_spend,
+        extras: extrasForProposedPay,
+      }),
       4,
     ),
     formula_y_preview: roundFolha(yPreview, 4),
