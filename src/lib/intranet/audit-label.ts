@@ -30,6 +30,9 @@ export function intranetAuditHref(resource: string): string | null {
     const id = resource.slice('flow:'.length)
     if (id && !id.startsWith('user:')) return `/flow/${id}`
   }
-  if (resource.startsWith('cms:')) return '/empresa'
+  if (resource.startsWith('cms:')) {
+    const id = resource.slice('cms:'.length).trim()
+    return id ? `/empresa/${id}` : '/empresa'
+  }
   return null
 }
