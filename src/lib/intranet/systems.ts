@@ -21,7 +21,7 @@ export const HOME_SHORTCUTS = [
 const INTRANET: IntranetSystem[] = [
   { href: '/flow', label: 'Rom Flow', description: 'Solicitações, aprovações e pagamentos.', group: 'intranet' },
   { href: '/pessoas', label: 'Gestão de usuário', description: 'Diretório e acessos da unidade.', group: 'intranet' },
-  { href: '/empresa', label: 'Notícias e eventos', description: 'Notícias, eventos e políticas.', group: 'intranet' },
+  { href: '/empresa', label: 'ROM News', description: 'Jornal digital: notícias, eventos e políticas.', group: 'intranet' },
   { href: '/onboarding', label: 'Onboarding', description: 'Vídeos e treinamento da casa.', group: 'intranet' },
   { href: '/ajuda', label: 'Suporte', description: 'Suporte da equipe.', group: 'intranet' },
   { href: '/auditoria', label: 'Auditoria', description: 'Quem publicou, aprovou ou mudou acesso.', group: 'intranet' },
