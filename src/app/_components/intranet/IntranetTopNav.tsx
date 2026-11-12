@@ -14,7 +14,7 @@ import { IntranetBell } from './IntranetBell'
 const SEARCH_TARGETS = [
   { href: '/', label: 'Home' },
   { href: '/pessoas', label: 'Gestão de usuário' },
-  { href: '/empresa', label: 'Notícias e eventos' },
+  { href: '/empresa', label: 'ROM News' },
   { href: '/rh', label: 'RH e benefícios' },
   { href: '/flow', label: 'Rom Flow · solicitações' },
   { href: '/resumo-do-dia', label: 'Resumo do dia' },
