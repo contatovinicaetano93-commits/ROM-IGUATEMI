@@ -125,8 +125,10 @@ export function IntranetHome() {
               <ul className="space-y-3">
                 {news.map((item) => (
                   <li key={item.id} className="text-sm">
-                    <p className="font-medium">{item.title}</p>
-                    <p className="text-muted">{item.excerpt || item.body.slice(0, 120)}</p>
+                    <Link href={`/empresa/${item.id}`} className="block hover:text-gold-strong">
+                      <p className="font-medium">{item.title}</p>
+                      <p className="text-muted">{item.excerpt || item.body.slice(0, 120)}</p>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -140,14 +142,16 @@ export function IntranetHome() {
             ) : (
               <ul className="space-y-3">
                 {events.map((item) => (
-                  <li key={item.id} className="flex gap-3">
-                    <span className="w-10 text-center font-serif text-lg leading-none text-gold-strong">
-                      {formatEventWhen(item.starts_at) || '—'}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium">{item.title}</p>
-                      <p className="text-xs text-muted">{item.location || item.excerpt}</p>
-                    </div>
+                  <li key={item.id}>
+                    <Link href={`/empresa/${item.id}`} className="flex gap-3 hover:text-gold-strong">
+                      <span className="w-10 text-center font-serif text-lg leading-none text-gold-strong">
+                        {formatEventWhen(item.starts_at) || '—'}
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium">{item.title}</p>
+                        <p className="text-xs text-muted">{item.location || item.excerpt}</p>
+                      </div>
+                    </Link>
                   </li>
                 ))}
               </ul>
