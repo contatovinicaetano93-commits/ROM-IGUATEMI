@@ -2,18 +2,27 @@ import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
 import { requirePublisher, requireSession } from '@/lib/auth'
 import { AuditLogger } from '@/lib/audit'
-import { createPost, listAllPosts, listPublishedPosts, notifyIntranet } from '@/lib/cms'
+import { createPost, getPostById, listAllPosts, listPublishedPosts, notifyIntranet } from '@/lib/cms'
 import { parseIntranetPostKind } from '@/lib/cms-kinds'
 
 export async function GET(req: NextRequest) {
   const auth = await requireSession(req)
   if (!auth.ok) return err(auth.message, auth.status)
   const url = new URL(req.url)
+  const id = url.searchParams.get('id')
   const kind = url.searchParams.get('kind')
   const all = url.searchParams.get('all') === '1'
   const parsedKind = kind == null || kind === '' ? undefined : parseIntranetPostKind(kind)
   const kindFilter = kind === parsedKind ? parsedKind : undefined
   try {
+    if (id) {
+      const post = await getPostById(id)
+      if (!post) return err('Publicação não encontrada', 404)
+      if (!post.published_at && !(auth.session.role === 'admin' || auth.session.role === 'mkt' || auth.session.canPublish)) {
+        return err('Publicação não encontrada', 404)
+      }
+      return ok({ post })
+    }
     if (all && (auth.session.role === 'admin' || auth.session.role === 'mkt' || auth.session.canPublish)) {
       return ok({ posts: await listAllPosts() })
     }
@@ -51,7 +60,7 @@ export async function POST(req: NextRequest) {
       await notifyIntranet({
         title: post.title,
         body: post.excerpt || `Nova publicação · ${kind}`,
-        href: '/empresa',
+        href: `/empresa/${post.id}`,
       })
       await AuditLogger.log(auth.session.user, auth.session.role, 'PUBLISH', `cms:${post.id}`, {
         kind,
