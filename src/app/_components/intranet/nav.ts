@@ -2,7 +2,7 @@
 export const INTRANET_NAV = [
   { href: '/', label: 'Home', short: 'Home' },
   { href: '/pessoas', label: 'Gestão de usuário', short: 'Usuários' },
-  { href: '/empresa', label: 'Notícias e eventos', short: 'Notícias' },
+  { href: '/empresa', label: 'ROM News', short: 'News' },
   { href: '/flow', label: 'Rom Flow', short: 'Rom Flow' },
   { href: '/resumo-do-dia', label: 'Resumo do dia', short: 'Dia' },
   { href: '/meu-faturamento', label: 'Meu faturamento', short: 'Faturamento' },
