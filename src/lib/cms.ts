@@ -82,6 +82,24 @@ export async function listAllPosts(): Promise<IntranetPost[]> {
   }
 }
 
+export async function getPostById(id: string): Promise<IntranetPost | null> {
+  const trimmed = id.trim()
+  if (!trimmed) return null
+  try {
+    const sql = getIntranetSql()
+    const rows = (await sql`
+      select * from intranet_posts
+      where id = ${trimmed}::uuid
+      limit 1
+    `) as Record<string, unknown>[]
+    const row = rows[0]
+    return row ? mapPost(row) : null
+  } catch (error) {
+    if (isMissingRelation(error)) return null
+    throw error
+  }
+}
+
 export async function createPost(input: {
   kind: IntranetPostKind
   title: string
