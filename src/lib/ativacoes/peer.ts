@@ -210,6 +210,7 @@ export async function createPeerBrandActivation(
 ): Promise<BrandActivation> {
   const { sql, peerUnit } = requirePeerSql()
   const notes = input.notes?.trim() ? input.notes.trim() : null
+  // Nunca gravar employee_id do painel local no Neon irmão (FK intranet_employees).
   const rows = (await sql`
     insert into unit_brand_activations (
       day, start_time, end_time, brand, condition, notes,
@@ -221,7 +222,7 @@ export async function createPeerBrandActivation(
       ${input.brand.trim()},
       ${input.condition},
       ${notes},
-      ${input.created_by_employee_id ?? null}::uuid,
+      null::uuid,
       ${input.created_by_name.trim()},
       ${input.created_by_role}
     )

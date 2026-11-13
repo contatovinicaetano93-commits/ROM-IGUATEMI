@@ -82,7 +82,8 @@ export default function AtivacoesPage() {
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [localUnit, setLocalUnit] = useState<AtivacaoUnit>('brasil')
-  const [createUnit, setCreateUnit] = useState<AtivacaoUnit>('brasil')
+  /** null até o GET (ou até o usuário escolher) — evita preso em 'brasil' no painel IG. */
+  const [createUnit, setCreateUnit] = useState<AtivacaoUnit | null>(null)
   const [crossUnitWrite, setCrossUnitWrite] = useState(false)
 
   const load = useCallback(async (m: string) => {
@@ -114,8 +115,8 @@ export default function AtivacoesPage() {
       setCrossUnitWrite(canCross)
       setCreateUnit((prev) => {
         if (!canCross) return nextLocal
-        if (prev === 'brasil' || prev === 'iguatemi') return prev
-        return nextLocal
+        // Só preserva escolha manual do usuário; senão alinha com a unidade logada.
+        return prev ?? nextLocal
       })
     } catch (err) {
       const timedOut =
@@ -169,7 +170,7 @@ export default function AtivacoesPage() {
           brand,
           condition,
           notes: notes.trim() || null,
-          unit: crossUnitWrite ? createUnit : localUnit,
+          unit: crossUnitWrite ? (createUnit ?? localUnit) : localUnit,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -391,7 +392,7 @@ export default function AtivacoesPage() {
                 <label className="block text-sm">
                   <span className="text-muted">Unidade</span>
                   <select
-                    value={createUnit}
+                    value={createUnit ?? localUnit}
                     onChange={(e) => setCreateUnit(e.target.value as AtivacaoUnit)}
                     className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
                   >

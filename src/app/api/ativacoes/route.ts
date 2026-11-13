@@ -117,7 +117,8 @@ export async function POST(req: NextRequest) {
     brand,
     condition,
     notes,
-    created_by_employee_id: auth.session.employeeId,
+    // Peer: FK aponta para intranet_employees do banco irmão — id local não existe lá.
+    created_by_employee_id: onPeer ? null : auth.session.employeeId,
     created_by_name: actorName,
     created_by_role: auth.session.role,
   }
