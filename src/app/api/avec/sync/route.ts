@@ -52,12 +52,12 @@ export async function GET(req: NextRequest) {
       base_url: getAvecBaseUrl(),
       deployment: getDeploymentContext(),
       cron: {
-        fast: { schedule: '45 10 * * *', mode: 'fast', path: '/api/avec/sync' },
+        fast: { schedule: '20,50 * * * *', mode: 'fast', path: '/api/avec/sync' },
         full: {
           schedule: 'ops 15 12 · agenda 40 12 · catalog 55 11 UTC (1×/dia, offset BR)',
           mode: 'full',
           path: '/api/avec/sync/full/{ops,agenda,catalog}',
-          note: 'pacote matinal lean; mid-day via botões admin por seção',
+          note: 'full/estoque/folha 1×/dia; mid-day full via botões admin por seção',
         },
         estoque_fast: { schedule: '15 11 * * *', path: '/api/estoque/sync' },
         estoque_full: { schedule: '35 11 * * *', path: '/api/estoque/sync?mode=full' },
@@ -66,9 +66,9 @@ export async function GET(req: NextRequest) {
           path: '/api/avec/purge-snapshots',
           note: '07:25 America/Sao_Paulo — offset vs BR (:10)',
         },
-        token: { schedule: '30 10 * * *', path: '/api/avec/refresh-token' },
+        token: { schedule: '30 */6 * * *', path: '/api/avec/refresh-token' },
         cadence:
-          '1×/dia matinal staggered (offset BR) — mid-day só botão; webhook só fast',
+          'fast 2×/hora (:20/:50 UTC, offset BR); full/estoque/folha 1×/dia — mid-day full só botão; webhook só fast',
       },
       last,
       ...(test ? { connection: await testAvecConnection() } : {}),

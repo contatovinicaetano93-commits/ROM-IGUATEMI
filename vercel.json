@@ -7,11 +7,11 @@
     },
     {
       "path": "/api/avec/refresh-token",
-      "schedule": "30 10 * * *"
+      "schedule": "30 */6 * * *"
     },
     {
       "path": "/api/avec/sync",
-      "schedule": "45 10 * * *"
+      "schedule": "20,50 * * * *"
     },
     {
       "path": "/api/financeiro/omie/sync",

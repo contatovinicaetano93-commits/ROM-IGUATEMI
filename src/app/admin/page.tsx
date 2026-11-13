@@ -570,9 +570,9 @@ export default function AdminPage() {
               </button>
               {connMsg && <p className="text-xs text-muted">{connMsg}</p>}
               <p className="rounded-xl border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground/80">
-                <span className="font-semibold text-gold">Cadência lean:</span> cron 1×/dia de manhã
-                (pacote staggered, offset BR). Mid-day: use os botões por seção. Webhook{' '}
-                <code className="text-[0.7rem]">/api/webhooks/avec</code> (header{' '}
+                <span className="font-semibold text-gold">Cadência:</span> sync fast 2×/hora (offset
+                BR); full / estoque / folha 1×/dia de manhã. Mid-day full: use os botões por seção.
+                Webhook <code className="text-[0.7rem]">/api/webhooks/avec</code> (header{' '}
                 <code className="text-[0.7rem]">x-avec-secret</code>) dispara só sync fast. Evite
                 disparar full em sequência — cada um consome egress Neon.
               </p>
