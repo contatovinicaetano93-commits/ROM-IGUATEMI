@@ -4,6 +4,7 @@ import { getBrand } from '@/lib/brand'
 import { listEmployees } from '@/lib/employees'
 import {
   conditionLabel,
+  unitLabel,
   type BrandActivation,
   type CreateBrandActivationInput,
 } from '@/lib/ativacoes/types'
@@ -104,8 +105,7 @@ function buildMessage(
   },
   actorName?: string,
 ): { subject: string; text: string; html: string } {
-  const brand = getBrand()
-  const unit = brand.displayName
+  const unit = getBrand().displayName
   const lines = formatActivationLines(primary)
 
   let title: string
@@ -154,6 +154,16 @@ export async function notifyAtivacoesEvent(input: {
     notes: 'notes' in input.activation ? input.activation.notes ?? null : null,
   }
   const msg = buildMessage(input.kind, primary, input.actorName)
+  // Cross-unit (Amanda): deixa claro no assunto/corpo qual unidade foi afetada.
+  if ('unit' in input.activation && input.activation.unit) {
+    const label = unitLabel(input.activation.unit)
+    msg.subject = msg.subject.replace(/^\[[^\]]+\]/, `[${label}]`)
+    msg.text = msg.text.replace(/^[^\n]+/, label)
+    msg.html = msg.html.replace(
+      /(<p style="font-size:12px;color:#666;text-transform:uppercase;letter-spacing:\.08em">)[^<]+(<\/p>)/,
+      `$1${label}$2`,
+    )
+  }
 
   let sent = 0
   await Promise.all(

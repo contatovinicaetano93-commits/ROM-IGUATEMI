@@ -8,6 +8,7 @@ import {
   normalizeClockTime,
   normalizeStartTime,
   parseAtivacaoCondition,
+  parseAtivacaoUnit,
   unitDisplayClasses,
   unitLabel,
 } from '@/lib/ativacoes/types'
@@ -17,6 +18,12 @@ describe('ativacoes types', () => {
     expect(parseAtivacaoCondition('comercial')).toBe('comercial')
     expect(parseAtivacaoCondition('servicos')).toBe('servicos')
     expect(parseAtivacaoCondition('outra')).toBeNull()
+  })
+
+  it('parseia unidade', () => {
+    expect(parseAtivacaoUnit('brasil')).toBe('brasil')
+    expect(parseAtivacaoUnit('iguatemi')).toBe('iguatemi')
+    expect(parseAtivacaoUnit('outra')).toBeNull()
   })
 
   it('normaliza horário', () => {

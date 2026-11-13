@@ -20,7 +20,7 @@ export type BrandActivation = {
   updated_at: string
   /** Unidade dona do registro. */
   unit: AtivacaoUnit
-  /** true só para a unidade do painel logado. */
+  /** true se o usuário atual pode criar/cancelar neste registro (local ou peer allowlist). */
   writable: boolean
 }
 
@@ -38,6 +38,11 @@ export type CreateBrandActivationInput = {
 
 export function parseAtivacaoCondition(value: unknown): AtivacaoCondition | null {
   if (value === 'comercial' || value === 'servicos') return value
+  return null
+}
+
+export function parseAtivacaoUnit(value: unknown): AtivacaoUnit | null {
+  if (value === 'brasil' || value === 'iguatemi') return value
   return null
 }
 
