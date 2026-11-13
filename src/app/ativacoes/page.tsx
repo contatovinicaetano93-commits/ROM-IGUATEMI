@@ -170,7 +170,8 @@ export default function AtivacoesPage() {
           brand,
           condition,
           notes: notes.trim() || null,
-          unit: crossUnitWrite ? (createUnit ?? localUnit) : localUnit,
+          // Sem cross-unit: omitir unit → API usa a unidade do painel (evita brasil hardcode no IG).
+          ...(crossUnitWrite ? { unit: createUnit ?? localUnit } : {}),
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -453,7 +454,7 @@ export default function AtivacoesPage() {
                   className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
                 />
               </label>
-              <PanelButton type="submit" disabled={saving || !brand.trim()}>
+              <PanelButton type="submit" disabled={saving || loading || !brand.trim()}>
                 {saving ? 'Salvando…' : 'Reservar'}
               </PanelButton>
             </form>
