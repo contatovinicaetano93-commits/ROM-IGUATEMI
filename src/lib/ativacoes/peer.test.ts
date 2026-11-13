@@ -87,7 +87,7 @@ const peerRow = {
 }
 
 function installPeerSql(mode: 'ok' | 'missing-column' | 'timeout' | 'other') {
-  const calls = { transaction: 0, query: 0 }
+  const calls = { begin: 0, unsafe: 0 }
   const sql = Object.assign(
     async (strings: TemplateStringsArray) => {
       const text = strings.join(' ')
@@ -103,20 +103,15 @@ function installPeerSql(mode: 'ok' | 'missing-column' | 'timeout' | 'other') {
       return [peerRow]
     },
     {
-      async query(query: string, params?: unknown[]) {
-        calls.query += 1
+      async unsafe(query: string, params?: unknown[]) {
+        calls.unsafe += 1
         expect(query).toContain("set_config('statement_timeout'")
         expect(params).toEqual(['3500'])
         return []
       },
-      async transaction(fn: (txn: typeof sql) => Array<Promise<unknown>>) {
-        calls.transaction += 1
-        const pending = fn(sql)
-        const results: unknown[] = []
-        for (const item of pending) {
-          results.push(await item)
-        }
-        return results
+      async begin(fn: (txn: typeof sql) => Promise<unknown>) {
+        calls.begin += 1
+        return fn(sql)
       },
     },
   )
@@ -137,15 +132,15 @@ describe('listPeerBrandActivationsForMonth', () => {
     vi.restoreAllMocks()
   })
 
-  it('lê o mês do peer com transaction + statement_timeout', async () => {
+  it('lê o mês do peer com begin + unsafe', async () => {
     process.env.ROM_PANEL = 'brasil'
     process.env.UNIT_IGUATEMI_DATABASE_URL = 'postgres://iguatemi/db'
     const calls = installPeerSql('ok')
 
     const result = await listPeerBrandActivationsForMonth('2026-09')
 
-    expect(calls.transaction).toBe(1)
-    expect(calls.query).toBe(1)
+    expect(calls.begin).toBe(1)
+    expect(calls.unsafe).toBe(1)
     expect(result.offline).toBe(false)
     expect(result.activations.map((row) => row.id)).toEqual(['peer-1'])
     expect(result.activations[0]?.writable).toBe(false)
@@ -170,8 +165,8 @@ describe('listPeerBrandActivationsForMonth', () => {
 
     const result = await listPeerBrandActivationsForMonth('2026-09')
 
-    expect(calls.transaction).toBe(2)
-    expect(calls.query).toBe(2)
+    expect(calls.begin).toBe(2)
+    expect(calls.unsafe).toBe(2)
     expect(result.offline).toBe(false)
     expect(result.activations).toHaveLength(1)
   })
@@ -184,8 +179,8 @@ describe('listPeerBrandActivationsForMonth', () => {
 
     const result = await listPeerBrandActivationsForMonth('2026-09')
 
-    expect(calls.transaction).toBe(1)
-    expect(calls.query).toBe(1)
+    expect(calls.begin).toBe(1)
+    expect(calls.unsafe).toBe(1)
     expect(result).toEqual({ activations: [], offline: true, unconfigured: false })
   })
 
@@ -197,8 +192,8 @@ describe('listPeerBrandActivationsForMonth', () => {
 
     const result = await listPeerBrandActivationsForMonth('2026-09')
 
-    expect(calls.transaction).toBe(1)
-    expect(calls.query).toBe(1)
+    expect(calls.begin).toBe(1)
+    expect(calls.unsafe).toBe(1)
     expect(result.offline).toBe(true)
   })
 })
