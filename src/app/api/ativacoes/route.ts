@@ -1,11 +1,15 @@
 import { NextRequest } from 'next/server'
 import { err, ok } from '@/lib/api-response'
 import { requireSession } from '@/lib/auth'
+import { getRomPanelId } from '@/lib/brand'
 import { hasPanelModule, parseGrantableModules } from '@/lib/intranet/modules'
+import { canWritePeerAtivacoes } from '@/lib/ativacoes/cross-unit-access'
 import { createBrandActivation, listBrandActivationsForMonth } from '@/lib/ativacoes/store'
 import {
+  createPeerBrandActivation,
   listPeerBrandActivationsForMonth,
   mergeSharedActivations,
+  peerUnitForLocal,
 } from '@/lib/ativacoes/peer'
 import { notifyAtivacoesEvent } from '@/lib/ativacoes/notify'
 import {
@@ -14,6 +18,8 @@ import {
   isIsoMonth,
   normalizeClockTime,
   parseAtivacaoCondition,
+  parseAtivacaoUnit,
+  type AtivacaoUnit,
 } from '@/lib/ativacoes/types'
 
 /** Calendário tem de responder rápido; peer/local lentos não podem ir a 300s. */
@@ -41,19 +47,24 @@ export async function GET(req: NextRequest) {
 
   const monthParam = new URL(req.url).searchParams.get('month')
   const month = isIsoMonth(monthParam) ? monthParam : todayMonthBr()
+  const localUnit = getRomPanelId() as AtivacaoUnit
+  const crossUnitWrite = canWritePeerAtivacoes(auth.session)
 
   try {
     const [local, peer] = await Promise.all([
       listBrandActivationsForMonth(month),
-      listPeerBrandActivationsForMonth(month),
+      listPeerBrandActivationsForMonth(month, { writable: crossUnitWrite }),
     ])
     const activations = mergeSharedActivations(local, peer.activations)
     return ok({
       month,
       activations,
+      local_unit: localUnit,
+      cross_unit_write: crossUnitWrite,
       peer: {
         offline: peer.offline,
         unconfigured: peer.unconfigured,
+        unit: peerUnitForLocal(localUnit),
       },
     })
   } catch (error) {
@@ -86,6 +97,18 @@ export async function POST(req: NextRequest) {
     return err('Horário de fim deve ser igual ou depois do início', 400)
   }
 
+  const localUnit = getRomPanelId() as AtivacaoUnit
+  const requestedUnit = parseAtivacaoUnit(body.unit) ?? localUnit
+  const peerUnit = peerUnitForLocal(localUnit)
+  const onPeer = requestedUnit === peerUnit
+
+  if (onPeer && !canWritePeerAtivacoes(auth.session)) {
+    return err('Sem permissão para criar ativação na outra unidade', 403)
+  }
+  if (requestedUnit !== localUnit && requestedUnit !== peerUnit) {
+    return err('Unidade inválida', 400)
+  }
+
   const actorName = auth.session.displayName || auth.session.user
   const input = {
     day,
@@ -94,13 +117,16 @@ export async function POST(req: NextRequest) {
     brand,
     condition,
     notes,
-    created_by_employee_id: auth.session.employeeId,
+    // Peer: FK aponta para intranet_employees do banco irmão — id local não existe lá.
+    created_by_employee_id: onPeer ? null : auth.session.employeeId,
     created_by_name: actorName,
     created_by_role: auth.session.role,
   }
 
   try {
-    const activation = await createBrandActivation(input)
+    const activation = onPeer
+      ? await createPeerBrandActivation(input)
+      : await createBrandActivation(input)
     void notifyAtivacoesEvent({ kind: 'created', activation, actorName }).catch(() => {})
     return ok({ activation }, undefined, 201)
   } catch (error) {

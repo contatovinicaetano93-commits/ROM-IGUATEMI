@@ -61,6 +61,11 @@ describe('ativacoes peer', () => {
     expect(PEER_LIST_SOFT_MS).toBeLessThan(10_000)
     expect(PEER_LIST_SOFT_MS).toBeGreaterThan(0)
   })
+
+  it('marca peer como writable quando solicitado', () => {
+    const peer = stub({ id: '2', day: '2026-09-28', unit: 'iguatemi', writable: true })
+    expect(peer.writable).toBe(true)
+  })
 })
 
 const peerRow = {
@@ -138,7 +143,19 @@ describe('listPeerBrandActivationsForMonth', () => {
     expect(calls.unsafe).toBe(1)
     expect(result.offline).toBe(false)
     expect(result.activations.map((row) => row.id)).toEqual(['peer-1'])
+    expect(result.activations[0]?.writable).toBe(false)
     expect(getSqlForUrl).toHaveBeenCalledWith('postgres://iguatemi/db')
+  })
+
+  it('permite marcar peer como writable (allowlist cross-unit)', async () => {
+    process.env.ROM_PANEL = 'brasil'
+    process.env.UNIT_IGUATEMI_DATABASE_URL = 'postgres://iguatemi/db'
+    installPeerSql('ok')
+
+    const result = await listPeerBrandActivationsForMonth('2026-09', { writable: true })
+
+    expect(result.activations[0]?.writable).toBe(true)
+    expect(result.activations[0]?.unit).toBe('iguatemi')
   })
 
   it('reconsulta só quando end_time não existe', async () => {

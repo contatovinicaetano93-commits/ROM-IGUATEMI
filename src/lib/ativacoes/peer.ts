@@ -2,7 +2,11 @@ import 'server-only'
 
 import { getRomPanelId, type RomPanelId } from '@/lib/brand'
 import { getSqlForUrl, type Sql } from '@/lib/db'
-import type { AtivacaoUnit, BrandActivation } from '@/lib/ativacoes/types'
+import type {
+  AtivacaoUnit,
+  BrandActivation,
+  CreateBrandActivationInput,
+} from '@/lib/ativacoes/types'
 import { mapActivationRow } from '@/lib/ativacoes/store'
 import { softTimeout } from '@/lib/ativacoes/soft-timeout'
 
@@ -119,13 +123,30 @@ async function selectPeerMonthRows(sql: Sql, start: string): Promise<Record<stri
   }
 }
 
+export function peerUnitForLocal(local: RomPanelId = getRomPanelId()): AtivacaoUnit {
+  return peerUnitOf(local)
+}
+
+function requirePeerSql(local: RomPanelId = getRomPanelId()): { sql: Sql; peerUnit: AtivacaoUnit } {
+  const url = peekPeerDatabaseUrl(local)
+  if (!url) {
+    throw new Error('Banco da outra unidade não configurado neste ambiente')
+  }
+  return { sql: getSqlForUrl(url), peerUnit: peerUnitOf(local) }
+}
+
 /**
- * Lê ativações do mês no banco da unidade irmã (somente leitura).
+ * Lê ativações do mês no banco da unidade irmã.
+ * Por padrão peer é só leitura; `writable: true` para allowlist cross-unit (ex.: Amanda).
  * Falha / atraso de peer não derruba o calendário local — devolve offline.
  */
-export async function listPeerBrandActivationsForMonth(month: string): Promise<PeerListResult> {
+export async function listPeerBrandActivationsForMonth(
+  month: string,
+  opts?: { writable?: boolean },
+): Promise<PeerListResult> {
   const local = getRomPanelId()
   const peerUnit = peerUnitOf(local)
+  const writable = Boolean(opts?.writable)
   const url = peekPeerDatabaseUrl(local)
   if (!url) {
     return { activations: [], offline: false, unconfigured: true }
@@ -140,7 +161,7 @@ export async function listPeerBrandActivationsForMonth(month: string): Promise<P
         const rows = await selectPeerMonthRows(sql, `${month}-01`)
         return {
           activations: rows.map((row) =>
-            mapActivationRow(row, { unit: peerUnit, writable: false }),
+            mapActivationRow(row, { unit: peerUnit, writable }),
           ),
           offline: false,
           unconfigured: false,
@@ -156,6 +177,109 @@ export async function listPeerBrandActivationsForMonth(month: string): Promise<P
       return offline
     },
   )
+}
+
+export async function getPeerBrandActivationById(id: string): Promise<BrandActivation | null> {
+  const { sql, peerUnit } = requirePeerSql()
+  const rows = (await sql`
+    select
+      id::text as id,
+      day::text as day,
+      start_time::text as start_time,
+      end_time::text as end_time,
+      brand,
+      condition,
+      notes,
+      status,
+      created_by_employee_id::text as created_by_employee_id,
+      created_by_name,
+      created_by_role,
+      cancelled_by_name,
+      cancelled_at,
+      created_at,
+      updated_at
+    from unit_brand_activations
+    where id = ${id}::uuid
+    limit 1
+  `) as Record<string, unknown>[]
+  return rows[0] ? mapActivationRow(rows[0], { unit: peerUnit, writable: true }) : null
+}
+
+export async function createPeerBrandActivation(
+  input: CreateBrandActivationInput,
+): Promise<BrandActivation> {
+  const { sql, peerUnit } = requirePeerSql()
+  const notes = input.notes?.trim() ? input.notes.trim() : null
+  // Nunca gravar employee_id do painel local no Neon irmão (FK intranet_employees).
+  const rows = (await sql`
+    insert into unit_brand_activations (
+      day, start_time, end_time, brand, condition, notes,
+      created_by_employee_id, created_by_name, created_by_role
+    ) values (
+      ${input.day}::date,
+      ${input.start_time}::time,
+      ${input.end_time}::time,
+      ${input.brand.trim()},
+      ${input.condition},
+      ${notes},
+      null::uuid,
+      ${input.created_by_name.trim()},
+      ${input.created_by_role}
+    )
+    returning
+      id::text as id,
+      day::text as day,
+      start_time::text as start_time,
+      end_time::text as end_time,
+      brand,
+      condition,
+      notes,
+      status,
+      created_by_employee_id::text as created_by_employee_id,
+      created_by_name,
+      created_by_role,
+      cancelled_by_name,
+      cancelled_at,
+      created_at,
+      updated_at
+  `) as Record<string, unknown>[]
+  const row = rows[0]
+  if (!row) throw new Error('Falha ao criar ativação na outra unidade')
+  return mapActivationRow(row, { unit: peerUnit, writable: true })
+}
+
+export async function cancelPeerBrandActivation(
+  id: string,
+  cancelledByName: string,
+): Promise<BrandActivation | null> {
+  const { sql, peerUnit } = requirePeerSql()
+  const rows = (await sql`
+    update unit_brand_activations
+    set
+      status = 'cancelled',
+      cancelled_by_name = ${cancelledByName.trim()},
+      cancelled_at = now(),
+      updated_at = now()
+    where id = ${id}::uuid
+      and status = 'confirmed'
+    returning
+      id::text as id,
+      day::text as day,
+      start_time::text as start_time,
+      end_time::text as end_time,
+      brand,
+      condition,
+      notes,
+      status,
+      created_by_employee_id::text as created_by_employee_id,
+      created_by_name,
+      created_by_role,
+      cancelled_by_name,
+      cancelled_at,
+      created_at,
+      updated_at
+  `) as Record<string, unknown>[]
+  return rows[0] ? mapActivationRow(rows[0], { unit: peerUnit, writable: true }) : null
 }
 
 export function mergeSharedActivations(

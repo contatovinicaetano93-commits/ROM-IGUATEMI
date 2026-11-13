@@ -81,6 +81,10 @@ export default function AtivacoesPage() {
   const [condition, setCondition] = useState<AtivacaoCondition>('comercial')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [localUnit, setLocalUnit] = useState<AtivacaoUnit>('brasil')
+  /** null até o GET (ou até o usuário escolher) — evita preso em 'brasil' no painel IG. */
+  const [createUnit, setCreateUnit] = useState<AtivacaoUnit | null>(null)
+  const [crossUnitWrite, setCrossUnitWrite] = useState(false)
 
   const load = useCallback(async (m: string) => {
     setLoading(true)
@@ -104,6 +108,16 @@ export default function AtivacoesPage() {
       setItems(json.data?.activations ?? [])
       setPeerOffline(Boolean(json.data?.peer?.offline))
       setPeerUnconfigured(Boolean(json.data?.peer?.unconfigured))
+      const nextLocal: AtivacaoUnit =
+        json.data?.local_unit === 'iguatemi' ? 'iguatemi' : 'brasil'
+      setLocalUnit(nextLocal)
+      const canCross = Boolean(json.data?.cross_unit_write)
+      setCrossUnitWrite(canCross)
+      setCreateUnit((prev) => {
+        if (!canCross) return nextLocal
+        // Só preserva escolha manual do usuário; senão alinha com a unidade logada.
+        return prev ?? nextLocal
+      })
     } catch (err) {
       const timedOut =
         (err instanceof DOMException && err.name === 'TimeoutError') ||
@@ -156,6 +170,8 @@ export default function AtivacoesPage() {
           brand,
           condition,
           notes: notes.trim() || null,
+          // Sem cross-unit: omitir unit → API usa a unidade do painel (evita brasil hardcode no IG).
+          ...(crossUnitWrite ? { unit: createUnit ?? localUnit } : {}),
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -174,16 +190,16 @@ export default function AtivacoesPage() {
     }
   }
 
-  async function onCancel(id: string) {
-    if (!window.confirm('Cancelar esta ativação nesta unidade?')) return
+  async function onCancel(item: BrandActivation) {
+    if (!window.confirm(`Cancelar esta ativação em ${unitLabel(item.unit)}?`)) return
     setSaving(true)
     setError(null)
     try {
-      const res = await fetch(`/api/ativacoes/${id}`, {
+      const res = await fetch(`/api/ativacoes/${item.id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ status: 'cancelled' }),
+        body: JSON.stringify({ status: 'cancelled', unit: item.unit }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -211,7 +227,11 @@ export default function AtivacoesPage() {
     <IntranetPage
       kicker="Unidade"
       title="Ativações"
-      subtitle="Calendário compartilhado Brasil + Iguatemi · reserva só na unidade logada · avisos por e-mail."
+      subtitle={
+        crossUnitWrite
+          ? 'Calendário compartilhado Brasil + Iguatemi · você pode reservar/cancelar nas duas unidades · avisos por e-mail.'
+          : 'Calendário compartilhado Brasil + Iguatemi · reserva só na unidade logada · avisos por e-mail.'
+      }
     >
       <SectionCard title="Calendário">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -353,7 +373,7 @@ export default function AtivacoesPage() {
                         type="button"
                         variant="outline"
                         disabled={saving}
-                        onClick={() => void onCancel(item.id)}
+                        onClick={() => void onCancel(item)}
                       >
                         Cancelar
                       </PanelButton>
@@ -366,7 +386,22 @@ export default function AtivacoesPage() {
             )}
 
             <form onSubmit={(e) => void onCreate(e)} className="space-y-3 rounded-xl border border-border p-4">
-              <p className="text-xs uppercase tracking-wide text-muted">Nova ativação nesta unidade</p>
+              <p className="text-xs uppercase tracking-wide text-muted">
+                {crossUnitWrite ? 'Nova ativação' : 'Nova ativação nesta unidade'}
+              </p>
+              {crossUnitWrite ? (
+                <label className="block text-sm">
+                  <span className="text-muted">Unidade</span>
+                  <select
+                    value={createUnit ?? localUnit}
+                    onChange={(e) => setCreateUnit(e.target.value as AtivacaoUnit)}
+                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+                  >
+                    <option value="brasil">Brasil</option>
+                    <option value="iguatemi">Iguatemi</option>
+                  </select>
+                </label>
+              ) : null}
               <label className="block text-sm">
                 <span className="text-muted">Marca</span>
                 <input
@@ -419,7 +454,7 @@ export default function AtivacoesPage() {
                   className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
                 />
               </label>
-              <PanelButton type="submit" disabled={saving || !brand.trim()}>
+              <PanelButton type="submit" disabled={saving || loading || !brand.trim()}>
                 {saving ? 'Salvando…' : 'Reservar'}
               </PanelButton>
             </form>
