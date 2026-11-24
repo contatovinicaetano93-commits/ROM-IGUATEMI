@@ -21,7 +21,14 @@ import posthog from 'posthog-js'
 import { Avatar, PrimaryButton } from '../_components/ui'
 import { useClientSession } from '../_components/SessionProvider'
 import { apiFetch } from '@/lib/api-client'
-import { fmtSchedule, fmtScheduleParts, toSalonDateIso, whatsAppUrl } from '@/lib/salon/format'
+import {
+  fmtSchedule,
+  fmtScheduleParts,
+  todayIso,
+  toSalonDateIso,
+  whatsAppUrl,
+} from '@/lib/salon/format'
+import { serviceFamilyLabel } from '@/lib/salon/service-family'
 import {
   CATEGORY_LABEL,
   DUE_SOON_DAYS,
@@ -46,6 +53,24 @@ interface Contact {
   top_action: string | null
   next_scheduled_at?: string | null
   outreach_at?: string | null
+  /** Presente quando a busca filtra por família de serviço. */
+  service_last_done_at?: string | null
+}
+
+type ServiceFamilyOption = { key: string; label: string; count: number }
+type ServiceDatePreset = 'any' | '30' | '60' | '90' | 'custom'
+
+function addIsoDaysLocal(isoDay: string, days: number): string {
+  const [y, m, d] = isoDay.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + days))
+  return dt.toISOString().slice(0, 10)
+}
+
+function rangeForServicePreset(preset: ServiceDatePreset): { from: string | null; to: string | null } {
+  if (preset === 'any' || preset === 'custom') return { from: null, to: null }
+  const to = todayIso()
+  const days = Number(preset)
+  return { from: addIsoDaysLocal(to, -days), to }
 }
 
 type ListMode = 'reactivate' | 'ativados' | 'novos' | 'sem_servicos' | 'search'
@@ -279,6 +304,11 @@ function ContatosPageContent() {
   const [formOpen, setFormOpen] = useState(false)
   const [query, setQuery] = useState(() => initialQueryFromSearch(searchParams))
   const [debouncedQuery, setDebouncedQuery] = useState(() => initialQueryFromSearch(searchParams))
+  const [serviceFamily, setServiceFamily] = useState<string | null>(null)
+  const [serviceOptions, setServiceOptions] = useState<ServiceFamilyOption[]>([])
+  const [serviceDatePreset, setServiceDatePreset] = useState<ServiceDatePreset>('any')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
 
   const dayParam = searchParams.get('day')
   const novosDay =
@@ -290,6 +320,16 @@ function ContatosPageContent() {
     !ignoreUrlFilters && URL_CHANNELS.has(channelParam) ? channelParam : null
   const urlStatus =
     !ignoreUrlFilters && URL_STATUSES.has(statusParam) ? statusParam : null
+
+  const isProWallet = Boolean(session?.professionalName?.trim())
+  const serviceDateRange =
+    serviceDatePreset === 'custom'
+      ? {
+          from: /^\d{4}-\d{2}-\d{2}$/.test(customFrom) ? customFrom : null,
+          to: /^\d{4}-\d{2}-\d{2}$/.test(customTo) ? customTo : null,
+        }
+      : rangeForServicePreset(serviceDatePreset)
+  const hasServiceFilter = Boolean(serviceFamily)
 
   function selectMode(next: ListMode) {
     setIgnoreUrlFilters(true)
@@ -304,11 +344,32 @@ function ContatosPageContent() {
   }, [query])
 
   useEffect(() => {
+    if (!isProWallet) {
+      setServiceOptions([])
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await apiFetch('/api/contacts?service_options=1', { cache: 'no-store' })
+        const json = await res.json()
+        if (cancelled) return
+        setServiceOptions(Array.isArray(json.data) ? (json.data as ServiceFamilyOption[]) : [])
+      } catch {
+        if (!cancelled) setServiceOptions([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isProWallet])
+
+  useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
         const hasUrlFilter = Boolean(urlChannel || urlStatus)
-        if (mode === 'search' && !debouncedQuery && !hasUrlFilter) {
+        if (mode === 'search' && !debouncedQuery && !hasUrlFilter && !hasServiceFilter) {
           // Ainda puxa contagem de novos para o card.
           const countsRes = await apiFetch('/api/contacts?counts=1', { cache: 'no-store' })
           const countsJson = await countsRes.json()
@@ -336,7 +397,7 @@ function ContatosPageContent() {
           sort:
             mode === 'novos' || mode === 'sem_servicos'
               ? 'name'
-              : mode === 'search' && hasUrlFilter
+              : mode === 'search' && (hasUrlFilter || hasServiceFilter)
                 ? 'name'
                 : 'urgency',
           limit: mode === 'search' ? '100' : '250',
@@ -357,6 +418,12 @@ function ContatosPageContent() {
           if (urlChannel) params.set('channel', urlChannel)
           if (urlStatus) params.set('status', urlStatus)
           if (hasUrlFilter) params.set('limit', '250')
+          if (serviceFamily) {
+            params.set('service', serviceFamily)
+            if (serviceDateRange.from) params.set('last_done_from', serviceDateRange.from)
+            if (serviceDateRange.to) params.set('last_done_to', serviceDateRange.to)
+            params.set('limit', '250')
+          }
         }
         // Badges: counts=1 em paralelo + queues no meta da lista.
         // Fila ativa: meta.total da lista filtrada é a fonte de verdade do badge.
@@ -419,20 +486,34 @@ function ContatosPageContent() {
     return () => {
       cancelled = true
     }
-  }, [mode, debouncedQuery, queue, novosDay, urlChannel, urlStatus])
+  }, [
+    mode,
+    debouncedQuery,
+    queue,
+    novosDay,
+    urlChannel,
+    urlStatus,
+    serviceFamily,
+    serviceDatePreset,
+    customFrom,
+    customTo,
+    hasServiceFilter,
+    serviceDateRange.from,
+    serviceDateRange.to,
+  ])
 
   const visible = contacts
   const hasUrlFilter = Boolean(urlChannel || urlStatus)
 
   const countLabel =
     mode === 'search'
-      ? debouncedQuery || hasUrlFilter
+      ? debouncedQuery || hasUrlFilter || hasServiceFilter
         ? `${visible.length} contato${visible.length === 1 ? '' : 's'}${
             totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
         : 'busque na base'
       : mode === 'novos'
-        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} · ${NOVOS_WINDOW_DAYS} dias${
+        ? `${visible.length} novo${visible.length === 1 ? '' : 's'} cliente${visible.length === 1 ? '' : 's'} · ${NOVOS_WINDOW_DAYS} dias${
             totalInBase != null && totalInBase > visible.length ? ` de ${totalInBase}` : ''
           }`
         : mode === 'sem_servicos'
@@ -449,9 +530,13 @@ function ContatosPageContent() {
 
   const emptyCopy =
     mode === 'search'
-      ? debouncedQuery || hasUrlFilter
-        ? 'Nenhum contato encontrado.'
-        : 'Digite um nome ou telefone para buscar na base.'
+      ? debouncedQuery || hasUrlFilter || hasServiceFilter
+        ? hasServiceFilter
+          ? `Ninguém da sua carteira fez ${serviceFamilyLabel(serviceFamily || '')} nesse período.`
+          : 'Nenhum contato encontrado.'
+        : isProWallet
+          ? 'Digite um nome/telefone ou escolha um serviço abaixo.'
+          : 'Digite um nome ou telefone para buscar na base.'
       : mode === 'novos'
         ? `Nenhum cadastro de novos clientes nos últimos ${NOVOS_WINDOW_DAYS} dias.`
         : mode === 'sem_servicos'
@@ -483,11 +568,21 @@ function ContatosPageContent() {
                 ? `Lead dos últimos ${NOVOS_WINDOW_DAYS} dias sem cliente cadastrado na Avec ainda (Novos clientes)`
                 : mode === 'sem_servicos'
                   ? 'Passou dos 30 dias e segue sem retorno previsto — triar ou marcar perdido'
-                  : hasUrlFilter
+                  : hasServiceFilter
+                    ? `Serviço ${serviceFamilyLabel(serviceFamily || '')}${
+                        serviceDatePreset === 'any'
+                          ? ''
+                          : serviceDatePreset === 'custom'
+                            ? ' · período personalizado'
+                            : ` · últimos ${serviceDatePreset} dias`
+                      }`
+                    : hasUrlFilter
                     ? `Filtro${urlChannel ? ` ${channelLabel(urlChannel)}` : ''}${
                         urlStatus ? ` · status ${urlStatus}` : ''
                       }`
-                    : 'Busque por nome ou telefone em toda a base'}
+                    : isProWallet
+                      ? 'Busque por nome, telefone ou serviço da sua carteira'
+                      : 'Busque por nome ou telefone em toda a base'}
             {' · '}
             {countLabel}
           </p>
@@ -650,29 +745,156 @@ function ContatosPageContent() {
       )}
 
       {mode === 'search' && (
-        <div className="relative">
-          <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            type="search"
-            inputMode="search"
-            enterKeyHint="search"
-            autoFocus
-            aria-label="Buscar por nome ou telefone"
-            placeholder="Nome ou telefone"
-            className="w-full rounded-2xl border border-border bg-card py-3.5 pl-12 pr-12 text-base outline-none focus:border-gold"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              aria-label="Limpar busca"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted active:text-foreground"
-            >
-              <X size={18} />
-            </button>
-          )}
+        <div className="flex flex-col gap-3">
+          <div className="relative">
+            <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
+              autoFocus
+              aria-label="Buscar por nome ou telefone"
+              placeholder="Nome ou telefone"
+              className="w-full rounded-2xl border border-border bg-card py-3.5 pl-12 pr-12 text-base outline-none focus:border-gold"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Limpar busca"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted active:text-foreground"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+
+          {isProWallet && serviceOptions.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <p className="px-0.5 text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-muted">
+                Serviço · última vez
+              </p>
+              <div className="no-scrollbar flex gap-2 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoading(true)
+                    setServiceFamily(null)
+                    setServiceDatePreset('any')
+                  }}
+                  aria-pressed={!serviceFamily}
+                  className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors ${
+                    !serviceFamily
+                      ? 'border-gold bg-gold/15 text-gold'
+                      : 'border-border bg-card text-muted active:text-foreground'
+                  }`}
+                >
+                  Todos
+                </button>
+                {serviceOptions.map((opt) => {
+                  const active = serviceFamily === opt.key
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => {
+                        setLoading(true)
+                        setServiceFamily(opt.key)
+                      }}
+                      aria-pressed={active}
+                      className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors ${
+                        active
+                          ? 'border-gold bg-gold/15 text-gold'
+                          : 'border-border bg-card text-muted active:text-foreground'
+                      }`}
+                    >
+                      {opt.label}
+                      <span className="ml-1.5 tabular-nums opacity-80">{opt.count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {serviceFamily ? (
+                <div className="flex flex-col gap-2">
+                  <div className="no-scrollbar flex gap-2 overflow-x-auto">
+                    {(
+                      [
+                        { id: 'any' as const, label: 'Qualquer data' },
+                        { id: '30' as const, label: '30 dias' },
+                        { id: '60' as const, label: '60 dias' },
+                        { id: '90' as const, label: '90 dias' },
+                        { id: 'custom' as const, label: 'Personalizado' },
+                      ] as const
+                    ).map((p) => {
+                      const active = serviceDatePreset === p.id
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setLoading(true)
+                            setServiceDatePreset(p.id)
+                          }}
+                          aria-pressed={active}
+                          className={`shrink-0 rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors ${
+                            active
+                              ? 'border-gold bg-gold/15 text-gold'
+                              : 'border-border bg-card text-muted active:text-foreground'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {serviceDatePreset === 'custom' ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex flex-col gap-1 text-[0.65rem] text-muted">
+                        De
+                        <input
+                          type="date"
+                          value={customFrom}
+                          onChange={(e) => {
+                            setLoading(true)
+                            setCustomFrom(e.target.value)
+                          }}
+                          className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-gold"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-[0.65rem] text-muted">
+                        Até
+                        <input
+                          type="date"
+                          value={customTo}
+                          onChange={(e) => {
+                            setLoading(true)
+                            setCustomTo(e.target.value)
+                          }}
+                          className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-gold"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                  <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
+                    Lista quem fez {serviceFamilyLabel(serviceFamily)} com você
+                    {serviceDatePreset === 'any'
+                      ? ' — ordenado pela última vez.'
+                      : serviceDatePreset === 'custom'
+                        ? ' no período escolhido.'
+                        : ` nos últimos ${serviceDatePreset} dias.`}
+                  </p>
+                </div>
+              ) : (
+                <p className="px-0.5 text-[0.7rem] leading-snug text-muted/80">
+                  Escolha um serviço para ver quem fez pela última vez — dá para limitar por
+                  período (30/60/90 dias).
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -753,8 +975,13 @@ function ContatosPageContent() {
               mode === 'novos' || mode === 'sem_servicos'
                 ? fmtScheduleParts(c.created_at)
                 : null
+            const serviceDoneParts = c.service_last_done_at
+              ? fmtScheduleParts(c.service_last_done_at)
+              : null
             const secondaryLine =
-              mode === 'ativados' && c.outreach_at
+              mode === 'search' && hasServiceFilter && serviceDoneParts
+                ? `${serviceFamilyLabel(serviceFamily || '')} · ${serviceDoneParts.date}`
+                : mode === 'ativados' && c.outreach_at
                 ? `Ativado há ${daysSinceOutreach(c.outreach_at)}d · ${serviceLine(c, q)}`
                 : mode === 'novos'
                 ? `${channelLabel(c.channel)}${createdParts ? ` · ${createdParts.date} ${createdParts.time}` : ''}`
