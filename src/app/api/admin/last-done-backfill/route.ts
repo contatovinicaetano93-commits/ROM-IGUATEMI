@@ -4,9 +4,11 @@ import { requireFinance } from '@/lib/auth'
 import { isCronAuthorized } from '@/lib/cron-auth'
 import { isAvecConfigured } from '@/lib/avec/client'
 import { runLastDoneBackfill } from '@/lib/avec/last-done-backfill'
+import { warnIfLongMaxDuration } from '@/lib/vercel-runtime'
 
-/** Backfill histórico de last_done_at via 0002 — pode paginar bastante. */
-export const maxDuration = 300
+/** Backfill 2 anos (fatias) — Fluid Compute permite até 800s. */
+export const maxDuration = 800
+warnIfLongMaxDuration('/api/admin/last-done-backfill', maxDuration)
 
 async function authorize(req: NextRequest) {
   if (isCronAuthorized(req)) return { ok: true as const }
@@ -16,9 +18,17 @@ async function authorize(req: NextRequest) {
 }
 
 /**
- * POST — preenche client_services.last_done_at com ultima_visita real (Avec 0002).
- * Body: { daysBack?: number (7–364, default 180), maxPages?: number, chunkDays?: number }
+ * POST — preenche last_done_at + client_service_visits via Avec 0002.
+ * Body: {
+ *   daysBack?: number (7–730, default 730),
+ *   maxPages?: number,
+ *   chunkDays?: number (default 30),
+ *   recordVisit?: boolean (default true),
+ *   maxChunks?: number,
+ *   resumeFrom?: string YYYY-MM-DD
+ * }
  * Não inventa visitas; só grava datas que a Avec reporta.
+ * Agenda histórica = atendimentos realizados (0002), não arquivo de slots 0051.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -41,13 +51,42 @@ export async function POST(req: NextRequest) {
         ? body.daysBack
         : typeof body.days_back === 'number'
           ? body.days_back
-          : 180
+          : 730
     const maxPages =
       typeof body.maxPages === 'number' && Number.isFinite(body.maxPages)
         ? body.maxPages
         : undefined
+    const chunkDays =
+      typeof body.chunkDays === 'number' && Number.isFinite(body.chunkDays)
+        ? body.chunkDays
+        : undefined
+    const recordVisit =
+      typeof body.recordVisit === 'boolean'
+        ? body.recordVisit
+        : typeof body.record_visit === 'boolean'
+          ? body.record_visit
+          : undefined
+    const maxChunks =
+      typeof body.maxChunks === 'number' && Number.isFinite(body.maxChunks)
+        ? body.maxChunks
+        : typeof body.max_chunks === 'number'
+          ? body.max_chunks
+          : undefined
+    const resumeFrom =
+      typeof body.resumeFrom === 'string'
+        ? body.resumeFrom
+        : typeof body.resume_from === 'string'
+          ? body.resume_from
+          : undefined
 
-    const stats = await runLastDoneBackfill({ daysBack, maxPages })
+    const stats = await runLastDoneBackfill({
+      daysBack,
+      maxPages,
+      chunkDays,
+      recordVisit,
+      maxChunks,
+      resumeFrom,
+    })
     return ok(stats)
   } catch (e) {
     return handleError(e)
