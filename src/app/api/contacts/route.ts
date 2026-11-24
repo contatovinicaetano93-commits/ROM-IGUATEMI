@@ -20,8 +20,14 @@ import { requirePanelModule } from '@/lib/auth'
 import { loadAvecSyncMeta } from '@/lib/avec/sync-meta'
 import {
   listContactIdsOwnedByProfessional,
+  listMatchingProfessionalNameVariants,
   resolveSessionProfessionalScope,
 } from '@/lib/intranet/professional-scope'
+import {
+  filterContactIdsByServiceLastDone,
+  listServiceFamilyOptions,
+} from '@/lib/contact-service-filter'
+import { normalizeServiceFamilyKey } from '@/lib/salon/service-family'
 import { z } from 'zod'
 
 // Contatos counts/list scan active client_services for urgency — prod 504'd at 25s.
@@ -80,6 +86,16 @@ export async function GET(req: NextRequest) {
     const activatedQueue = searchParams.get('queue') === 'ativados'
     const dayRaw = searchParams.get('day')
     const day = dayRaw && /^\d{4}-\d{2}-\d{2}$/.test(dayRaw) ? dayRaw : null
+    const serviceFamilyRaw = (searchParams.get('service') ?? searchParams.get('service_family') ?? '').trim()
+    const serviceFamily = serviceFamilyRaw ? normalizeServiceFamilyKey(serviceFamilyRaw) : ''
+    const lastDoneFromRaw = searchParams.get('last_done_from')
+    const lastDoneToRaw = searchParams.get('last_done_to')
+    const lastDoneFrom =
+      lastDoneFromRaw && /^\d{4}-\d{2}-\d{2}$/.test(lastDoneFromRaw) ? lastDoneFromRaw : null
+    const lastDoneTo =
+      lastDoneToRaw && /^\d{4}-\d{2}-\d{2}$/.test(lastDoneToRaw) ? lastDoneToRaw : null
+    const serviceOptionsOnly =
+      searchParams.get('service_options') === '1' || searchParams.get('service_options') === 'true'
 
     const rawLimit = Number(searchParams.get('limit') ?? 100)
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 500) : 100
@@ -94,6 +110,23 @@ export async function GET(req: NextRequest) {
 
     const proScope = await resolveSessionProfessionalScope(auth.session)
     const ownedIds = proScope ? await listContactIdsOwnedByProfessional(proScope) : null
+
+    if (serviceOptionsOnly) {
+      const variants = proScope
+        ? (await listMatchingProfessionalNameVariants(proScope)).filter(
+            (name) => !/[,;/|]/.test(name),
+          )
+        : null
+      const options = await listServiceFamilyOptions({
+        contactIds: ownedIds,
+        professionalNameVariants: variants,
+      })
+      return okCached(options, 60, {
+        professional_scope: proScope,
+        owned_total: ownedIds?.length ?? null,
+        sync: syncPayload,
+      })
+    }
 
     if (countsOnly) {
       if (proScope && ownedIds) {
@@ -259,28 +292,58 @@ export async function GET(req: NextRequest) {
     // Carteira do profissional (Reativar / busca / lista padrão).
     // Sempre devolve `queues` — a UI dos badges depende disso (sem queues = Atrasados 0).
     if (proScope && ownedIds) {
+      let scopedIds = ownedIds
+      let lastDoneById: Map<string, string> | null = null
+      if (serviceFamily) {
+        const variants = (await listMatchingProfessionalNameVariants(proScope)).filter(
+          (name) => !/[,;/|]/.test(name),
+        )
+        const filtered = await filterContactIdsByServiceLastDone(ownedIds, {
+          serviceFamily,
+          lastDoneFrom,
+          lastDoneTo,
+          professionalNameVariants: variants,
+        })
+        scopedIds = filtered.ids
+        lastDoneById = filtered.lastDoneById
+      }
+
       const [listed, urgency, no_cadence] = await Promise.all([
-        listContactsOwnedByIds(ownedIds, {
+        listContactsOwnedByIds(scopedIds, {
           limit,
           query,
-          pendingOnly,
-          orderBy: sort === 'name' ? 'name' : 'urgency',
-          urgencyQueue,
+          pendingOnly: serviceFamily ? false : pendingOnly,
+          orderBy: serviceFamily ? 'name' : sort === 'name' ? 'name' : 'urgency',
+          urgencyQueue: serviceFamily ? null : urgencyQueue,
         }),
         countOwnedUrgencyQueues(ownedIds),
         countContactsWithoutCadence({ contactIds: ownedIds }),
       ])
       let items = listed.items
-      if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
+      if (lastDoneById) {
+        items = items.map((row) => ({
+          ...row,
+          service_last_done_at: lastDoneById.get(row.id) ?? null,
+        }))
+        items = [...items].sort((a, b) => {
+          const aa = (a as { service_last_done_at?: string | null }).service_last_done_at ?? ''
+          const bb = (b as { service_last_done_at?: string | null }).service_last_done_at ?? ''
+          if (aa !== bb) return aa < bb ? 1 : -1
+          return (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' })
+        })
+      } else if (sort === 'urgency' && urgencyQueue !== 'scheduled') {
         items = [...items].sort(compareByOverdueThenName)
       }
-      return okCached(items, query ? 15 : 30, {
+      return okCached(items, query || serviceFamily ? 15 : 30, {
         total: listed.total,
         limit,
         status: status ?? 'all',
         channel: channel ?? 'all',
         pending: pendingOnly,
         queue: urgencyQueue ?? 'all',
+        service: serviceFamily || null,
+        last_done_from: lastDoneFrom,
+        last_done_to: lastDoneTo,
         queues: {
           ...urgency,
           no_cadence,
